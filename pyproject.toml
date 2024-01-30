@@ -1,0 +1,43 @@
+[tool.poetry]
+name = "pfund"
+version = "0.0.1.dev1"
+description = "Algo-Trading Framework for TradFi+CeFi+DeFi, supporting machine learning models, paper+live trading, vectorized+event-driven backtesting and hyperparameter tuning"
+license = "Apache-2.0"
+authors = ["Stephen Yau <softwareentrepreneer+pfund@gmail.com>"]
+readme = "README.md"
+homepage = "https://pfund.ai"
+repository = "https://github.com/PFund-Software-Ltd/pfund"
+documentation = "https://pfund.ai/docs"
+keywords = ["trading", "algo-trading", "TradFi", "CeFi", "DeFi", "portfolio management", "investment", "backtesting", "machine learning"]
+
+[tool.poetry.dependencies]
+python = "^3.10 <3.12"
+pfeed = "^0.0.1.dev1"
+pyzmq = "^25.1.2"
+pyyaml = "^6.0.1"
+psutil = "^5.9.8"
+orjson = "^3.9.12"
+rich = "^13.7.0"
+schedule = "^1.2.1"
+websocket-client = "^1.7.0"
+python-telegram-bot = "^20.7"
+torch = "^2.1.2"
+pandas = "^2.2.0"
+scikit-learn = "^1.4.0"
+ta = "^0.11.0"
+
+[tool.poetry.group.dev]
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+pybit = "^5.6.2"
+ta-lib = "^0.4.28"
+pytest = "^7.4.4"
+sphinx = "^7.2.6"
+autodocsumm = {git = "https://github.com/Chilipp/autodocsumm.git"}
+sphinxcontrib-napoleon = "^0.7"
+pfeed = {path = "../pfeed", develop = true}
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

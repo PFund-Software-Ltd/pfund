@@ -1,0 +1,87 @@
+version: 1
+filename_format: '%Y-%m-%d_UTC%z'
+loggers:
+  root:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_path_handler']
+    propagate: False
+  pfund:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  # _ means the logger name will change based on strategy/model/manager name
+  _strategy:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  _model:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  _manager:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  bybit:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  bybit_ws:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  ib:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  ibapi:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  orders:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  balances:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  positions:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+handlers:
+  file_handler:
+    class: 'logging.FileHandler'
+    level: 'DEBUG'
+    formatter: 'file'
+  compressed_timed_rotating_file_handler:
+    class: 'pfund.logging.handlers.CompressedTimedRotatingFileHandler'
+    level: 'DEBUG'
+    formatter: 'file'
+    kwargs: {'when': 'midnight', 'backupCount': 7, 'utc': True, 'encoding': 'utf-8'}
+  stream_handler:
+    class: 'logging.StreamHandler'
+    level: 'DEBUG'
+    formatter: 'console'
+  stream_path_handler:
+    class: 'logging.StreamHandler'
+    level: 'DEBUG'
+    formatter: 'path'
+  telegram_handler:
+    class: 'pfund.logging.handlers.TelegramHandler'
+    level: 'DEBUG'
+    formatter: 'console'
+    # TODO
+    token:
+    chat_id:
+formatters:
+  path:
+    format: '%(asctime)s.%(msecs)03d | %(levelname)s | %(name)s | %(message)s | %(shortpath)s fn:%(funcName)s ln:%(lineno)d'
+    datefmt: '%Y-%m-%dT%H:%M:%S%z'
+  file:
+    format: '%(asctime)s.%(msecs)03d | %(levelname)s | %(message)s | %(filename)s fn:%(funcName)s ln:%(lineno)d'
+    datefmt: '%H:%M:%S%z'
+  console:
+    format: '%(asctime)s.%(msecs)03d | %(levelname)s | %(name)s | %(message)s | fn:%(funcName)s ln:%(lineno)d'
+    datefmt: '%Y-%m-%dT%H:%M:%S%z'
