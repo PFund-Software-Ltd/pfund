@@ -1,5 +1,5 @@
 from pfund.engines.trade_engine import TradeEngine
-from pfund.config.config import Config
+from pfund.config_handler import Config
 
 
 class TestEngine(TradeEngine):

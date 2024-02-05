@@ -10,7 +10,7 @@ from pfund.strategies.strategy_base import BaseStrategy
 from pfund.brokers.broker_base import BaseBroker
 from pfund.managers.strategy_manager import StrategyManager
 from pfund.const.commons import *
-from pfund.config.config import Config
+from pfund.config_handler import Config
 from pfund.plogging import set_up_loggers
 
 

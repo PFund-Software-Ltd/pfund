@@ -1,4 +1,4 @@
-from pfund.config.config import configure
+from pfund.config_handler import configure
 from pfund.engines import BacktestEngine, TrainEngine, TestEngine, TradeEngine
 from pfund.strategies import Strategy
 from pfund.models import Feature, Model, PyTorchModel, SKLearnModel

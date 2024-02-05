@@ -23,7 +23,7 @@ from pfund.brokers.broker_base import BaseBroker
 from pfund.const.commons import *
 from pfund.utils.utils import flatten_dict
 from pfund.zeromq import ZeroMQ
-from pfund.config.config import Config
+from pfund.config_handler import Config
 
 
 class TradeEngine(BaseEngine):

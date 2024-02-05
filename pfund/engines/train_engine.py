@@ -1,7 +1,7 @@
 from pfund.engines.backtest_engine import BacktestEngine
 from pfund.data_tools.data_tool_base import DataTool
 from pfund.engines.backtest_engine import BacktestMode
-from pfund.config.config import Config
+from pfund.config_handler import Config
 
 
 class TrainEngine(BacktestEngine):

@@ -7,7 +7,7 @@ from pfund.brokers.broker_backtest import BacktestBroker
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.strategies.strategy_backtest import BacktestStrategy
 from pfund.const.commons import *
-from pfund.config.config import Config
+from pfund.config_handler import Config
 
 
 BacktestMode = Literal['vectorized', 'event_driven']

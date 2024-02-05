@@ -51,7 +51,7 @@ def import_strategies_models_features_or_indicators(path: Path):
 
 
 @dataclass
-class Config:
+class ConfigHandler:
     strategy_path: Path = STRATEGY_PATH
     model_path: Path = MODEL_PATH
     feature_path: Path = FEATURE_PATH
@@ -90,7 +90,7 @@ def configure(
 ):
     logging_config_file_path = Path(logging_config_file_path)
     assert logging_config_file_path.is_file(), f'{logging_config_file_path=} is not a file'
-    return Config(
+    return ConfigHandler(
         strategy_path=Path(strategy_path),
         model_path=Path(model_path),
         feature_path=Path(feature_path),
