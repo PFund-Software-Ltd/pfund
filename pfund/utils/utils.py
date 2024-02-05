@@ -1,5 +1,4 @@
 import os
-import sys
 import importlib
 import inspect
 import datetime
@@ -48,6 +47,16 @@ def lowercase(func):
         kwargs = {k: v.lower() if type(v) is str else v for k, v in kwargs.items()}
         return func(*args, **kwargs)
     return wrapper
+
+
+def convert_path_to_Path_obj(path: str | Path) -> Path:
+    if type(path) is str:
+        return Path(path)
+    elif type(path) is Path:
+        pass
+    else:
+        raise ValueError(f'path must be str or Path, not {type(path)}')
+    return path
 
 
 def flatten_dict(d, parent_key='', sep='.'):
@@ -110,33 +119,6 @@ def get_engine_class():
         from pfund import TradeEngine as Engine
     return Engine
 
-
-def import_user_defined_strategy_or_model(directory: str, type_: str):
-    '''Dynamically import UserStrategy() in strategy.py or UserModel() in model.py
-    Args:
-        directory: 'user_project_path/pfund/strategies' or 'user_project_path/pfund/models'
-        type_: strategy/model
-    '''
-    for item in os.listdir(directory):
-        item_path = os.path.join(directory, item)
-        if os.path.isdir(item_path) and '__pycache__' not in item_path:
-            if type_ == 'strategy':
-                module_space_name = 'pfund.strategies'
-                module_name = f'{module_space_name}.{item}.strategy'
-                module_path = os.path.join(item_path, 'strategy.py')
-            elif type_ == 'model':
-                module_space_name = 'pfund.models'
-                module_name = f'{module_space_name}.{item}.model'
-                module_path = os.path.join(item_path, 'model.py')
-            else:
-                raise Exception(f'Unsupported {type_=}')
-            if os.path.isfile(module_path):
-                module = importlib.import_module(module_name)
-                # print(f'loaded {module}')
-                for name, obj in inspect.getmembers(module):
-                    if inspect.isclass(obj):
-                        setattr(sys.modules[module_space_name], name, obj)
-                        
 
 def short_path(path: str, last_n_parts: int=3) -> Path:
     parts = Path(path).parts[-last_n_parts:]

@@ -2,14 +2,16 @@ import os
 import logging
 import importlib
 
+from rich.console import Console
+
 from pfund.utils.utils import Singleton
 from pfund.data_tools.data_tool_base import DataTool
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.brokers.broker_base import BaseBroker
 from pfund.managers.strategy_manager import StrategyManager
 from pfund.const.commons import *
-from pfund.const.paths import LOG_PATH, CONFIG_PATH
-from pfund.logging import set_up_loggers
+from pfund.config.config import Config
+from pfund.plogging import set_up_loggers
 
 
 ENV_COLORS = {
@@ -24,8 +26,7 @@ ENV_COLORS = {
 class BaseEngine(Singleton):
     _PROCESS_NO_PONG_TOLERANCE_IN_SECONDS = 30
 
-    def __new__(cls, env, data_tool: DataTool='pandas', **configs):
-        from pfund import cprint
+    def __new__(cls, env, data_tool: DataTool='pandas', config: Config | None=None, **settings):
         if not hasattr(cls, 'env'):
             cls.env = env.upper() if type(env) is str else str(env).upper()
             assert cls.env in SUPPORTED_ENVIRONMENTS, f'env={cls.env} is not supported'
@@ -34,20 +35,21 @@ class BaseEngine(Singleton):
             assert cls.env != 'LIVE', f"{cls.env} is not allowed for now, please use env='PAPER' instead"
             
             os.environ['env'] = cls.env
-            cprint(f"{cls.env} Engine is running", style=ENV_COLORS[cls.env])
+            Console().print(f"{cls.env} Engine is running", style=ENV_COLORS[cls.env])
         if not hasattr(cls, 'data_tool'):
             # TODO, now supports pandas only
             assert data_tool == 'pandas', f'{data_tool=} is not supported'
             cls.data_tool = data_tool
-        if not hasattr(cls, 'configs'):
-            cls.configs = configs
-        if not hasattr(cls, 'log_path') and not hasattr(cls, 'config_path'):
-            cls.log_path: str = f'{LOG_PATH}/{cls.env}' if 'log_path' not in configs else configs['log_path']
-            cls.config_path: str = str(CONFIG_PATH) if 'config_path' not in configs else configs['config_path']
-            set_up_loggers(log_path=cls.log_path, config_path=cls.config_path)
+        if not hasattr(cls, 'settings'):
+            cls.settings = settings
+        if not hasattr(cls, 'config'):
+            cls.config = config if config else Config()
+            log_path = cls.config.log_path / cls.env
+            logging_config_file_path = cls.config.logging_config_file_path
+            set_up_loggers(log_path, logging_config_file_path, user_logging_config=cls.config.logging_config)
         return super().__new__(cls)
     
-    def __init__(self, env, data_tool: DataTool='pandas', **configs):
+    def __init__(self, env, data_tool: DataTool='pandas', config: Config | None=None, **settings):
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):
             self.logger = logging.getLogger('pfund')

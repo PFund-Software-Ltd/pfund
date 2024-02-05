@@ -33,13 +33,13 @@ class LiveBroker(BaseBroker):
     def start(self, zmq=None):
         self._zmq = zmq
         self.connection_manager.connect()
-        if self._configs.get('cancel_all_at', {}).get('start', True):
+        if self._settings.get('cancel_all_at', {}).get('start', True):
             self.cancel_all_orders(reason='start')
         self.logger.debug(f'broker {self.name} started')
 
     def stop(self):
         self._zmq = None
-        if self._configs.get('cancel_all_at', {}).get('stop', True):
+        if self._settings.get('cancel_all_at', {}).get('stop', True):
             self.cancel_all_orders(reason='stop')
         self.connection_manager.disconnect()
         self.logger.debug(f'broker {self.name} stopped')
@@ -80,7 +80,7 @@ class LiveBroker(BaseBroker):
             self.pm.handle_msgs(topic, info)
         elif channel == 4:  # from api processes to connection manager 
             self.cm.handle_msgs(topic, info)
-            if topic == 3 and self._configs.get('cancel_all_at', {}).get('disconnect', True):  # on disconnected
+            if topic == 3 and self._settings.get('cancel_all_at', {}).get('disconnect', True):  # on disconnected
                 self.cancel_all_orders(reason='disconnect')
 
     def run_regular_tasks(self):

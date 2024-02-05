@@ -25,7 +25,7 @@ from pfund.risk_monitor import RiskMonitor
 from pfund.const.commons import SUPPORTED_CRYPTO_EXCHANGES
 from pfund.strategies.strategy_meta import MetaStrategy
 from pfund.utils.utils import convert_to_uppercases, get_engine_class
-from pfund.logging import create_dynamic_logger
+from pfund.plogging import create_dynamic_logger
 
 
 class BaseStrategy(ABC, metaclass=MetaStrategy):

@@ -25,6 +25,8 @@ torch = "^2.1.2"
 pandas = "^2.2.0"
 scikit-learn = "^1.4.0"
 ta = "^0.11.0"
+click = "^8.1.7"
+platformdirs = "^4.2.0"
 
 [tool.poetry.group.dev]
 optional = true

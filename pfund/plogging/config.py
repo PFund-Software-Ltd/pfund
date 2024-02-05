@@ -6,8 +6,8 @@ import logging
 from logging.config import DictConfigurator
 
 from pfund.utils.utils import Singleton
-from pfund.logging.filters import FullPathFilter
-from pfund.logging.formatter import ColoredFormatter
+from pfund.plogging.filters import FullPathFilter
+from pfund.plogging.formatter import ColoredFormatter
 
 
 LEVELS = {
@@ -19,11 +19,10 @@ LEVELS = {
 }
 
 
-def load_logging_config(log_path: str, config_path: str):
+def load_logging_config(logging_config_file_path):
     '''Load yaml file for logging config'''
-    with open(f'{config_path}/logging.yml', 'r') as f:
+    with open(logging_config_file_path, 'r') as f:
         logging_config = yaml.safe_load(f.read())
-        logging_config['log_path'] = log_path
         return logging_config
 
 

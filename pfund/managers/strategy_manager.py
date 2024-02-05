@@ -6,7 +6,7 @@ import psutil
 
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.utils.utils import get_engine_class
-from pfund.logging import create_dynamic_logger
+from pfund.plogging import create_dynamic_logger
 
 
 def _start_process(strategy: BaseStrategy, stop_flag: Value):

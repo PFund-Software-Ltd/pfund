@@ -1,12 +1,10 @@
 import os
 import logging
-import logging.config
 from pathlib import Path
 
 from typing import Literal
 
-from pfund.const.paths import LOG_PATH, CONFIG_PATH
-from pfund.logging.config import load_logging_config, LoggingDictConfigurator
+from pfund.plogging.config import load_logging_config, LoggingDictConfigurator
 
 
 def print_all_loggers():
@@ -15,17 +13,38 @@ def print_all_loggers():
             print(name, logger, logger.handlers)
 
 
-def set_up_loggers(log_path: str | Path=LOG_PATH, config_path: str | Path=CONFIG_PATH):
+def set_up_loggers(log_path: Path, logging_config_file_path: Path, user_logging_config: dict | None=None):
+    def deep_update(default_dict, override_dict, raise_if_key_not_exist=False):
+        '''Updates a default dictionary with an override dictionary, supports nested dictionaries.'''
+        for key, value in override_dict.items():
+            if raise_if_key_not_exist and key not in default_dict:
+                # Raise an exception if the key from override_dict doesn't exist in default_dict
+                raise KeyError(f"Key '{key}' is not supported in logging config.")
+            if isinstance(value, dict):
+                # Get the default_dict value for key, if not exist, create a new empty dict
+                default_value = default_dict.get(key, {})
+                if isinstance(default_value, dict):
+                    # Recursively update the dictionary
+                    deep_update(default_value, value)
+                else:
+                    # If the default value is not a dict, replace it with the override value
+                    default_dict[key] = value
+            else:
+                # Update the key with the override value
+                default_dict[key] = value
     print('Setting up loggers...')
-    logging_config: dict = load_logging_config(str(log_path), str(config_path))
-    log_path = logging_config['log_path']
-    if not os.path.exists(log_path):
+    if not log_path.exists():
         os.makedirs(log_path)
-        print(f'created {log_path=}')
+        print(f'created {str(log_path)}')
+    logging_config: dict = load_logging_config(logging_config_file_path)
+    if user_logging_config:
+        deep_update(logging_config, user_logging_config)
+    logging_config['log_path'] = log_path
     # ≈ logging.config.dictConfig(logging_config) with a custom configurator
     LoggingDictConfigurator(logging_config).configure()
     
-    
+
+# TODO: support 'feature', 'indicator'
 def create_dynamic_logger(name: str, type_: Literal['strategy', 'model', 'manager']):
     """Set up logger for strategy/model/manager
     

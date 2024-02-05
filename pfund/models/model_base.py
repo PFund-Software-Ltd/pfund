@@ -31,11 +31,11 @@ if TYPE_CHECKING:
         Any,
     ]
 from pfund.datas import *
-from pfund.const.paths import MODEL_PATH, PFUND_TRAINED_MODEL_PATH
+from pfund.const.paths import MODEL_PATH
 from pfund.models.model_meta import MetaModel
 from pfund.products.product_base import BaseProduct
 from pfund.utils.utils import short_path, get_engine_class
-from pfund.logging import create_dynamic_logger
+from pfund.plogging import create_dynamic_logger
 
 
 class BaseModel(ABC, metaclass=MetaModel):
@@ -183,7 +183,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         self.name = self.mdl = name
         
     def set_path(self, path: str):
-        self._path = path or str(PFUND_TRAINED_MODEL_PATH)
+        self._path = path or str(MODEL_PATH)
         
     def set_is_load(self, is_load: bool):
         self._is_load = is_load

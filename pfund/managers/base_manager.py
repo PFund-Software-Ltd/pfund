@@ -2,7 +2,7 @@ from collections import defaultdict
 
 from pfund.datas.data_base import BaseData
 from pfund.strategies.strategy_base import BaseStrategy
-from pfund.logging import create_dynamic_logger
+from pfund.plogging import create_dynamic_logger
 
 
 class BaseManager:

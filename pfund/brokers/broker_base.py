@@ -12,7 +12,7 @@ class BaseBroker:
         self.logger = logging.getLogger('pfund')
         assert self.env in SUPPORTED_ENVIRONMENTS, f'env={self.env} is not supported'
         Engine = get_engine_class()
-        self._configs = Engine.configs
+        self._settings = Engine.settings
         self.name = self.bkr = name.upper()
         self.products = defaultdict(dict)
         self.accounts = defaultdict(dict)

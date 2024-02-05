@@ -23,18 +23,19 @@ from pfund.brokers.broker_base import BaseBroker
 from pfund.const.commons import *
 from pfund.utils.utils import flatten_dict
 from pfund.zeromq import ZeroMQ
+from pfund.config.config import Config
 
 
 class TradeEngine(BaseEngine):
     zmq_ports = {}
 
-    def __new__(cls, *, env: str='PAPER', data_tool: DataTool='pandas', zmq_port=5557, **configs):
+    def __new__(cls, *, env: str='PAPER', data_tool: DataTool='pandas', zmq_port=5557, config: Config | None=None, **settings):
         if not hasattr(cls, 'zmq_port'):
             assert type(zmq_port) is int, f'{zmq_port=} must be an integer'
             cls._zmq_port = zmq_port
-        return super().__new__(cls, env, data_tool=data_tool, **configs)
+        return super().__new__(cls, env, data_tool=data_tool, config=config, **settings)
 
-    def __init__(self, *, env: str='PAPER', data_tool: DataTool='pandas', zmq_port=5557, **configs):
+    def __init__(self, *, env: str='PAPER', data_tool: DataTool='pandas', zmq_port=5557, config: Config | None=None, **settings):
         super().__init__(env, data_tool=data_tool)
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):

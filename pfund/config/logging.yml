@@ -56,7 +56,7 @@ handlers:
     level: 'DEBUG'
     formatter: 'file'
   compressed_timed_rotating_file_handler:
-    class: 'pfund.logging.handlers.CompressedTimedRotatingFileHandler'
+    class: 'pfund.plogging.handlers.CompressedTimedRotatingFileHandler'
     level: 'DEBUG'
     formatter: 'file'
     kwargs: {'when': 'midnight', 'backupCount': 7, 'utc': True, 'encoding': 'utf-8'}
@@ -69,7 +69,7 @@ handlers:
     level: 'DEBUG'
     formatter: 'path'
   telegram_handler:
-    class: 'pfund.logging.handlers.TelegramHandler'
+    class: 'pfund.plogging.handlers.TelegramHandler'
     level: 'DEBUG'
     formatter: 'console'
     # TODO
