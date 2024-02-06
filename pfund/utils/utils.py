@@ -4,6 +4,8 @@ import inspect
 import datetime
 from pathlib import Path
 
+import yaml
+
 from typing import Any
 
 import requests
@@ -49,14 +51,9 @@ def lowercase(func):
     return wrapper
 
 
-def convert_path_to_Path_obj(path: str | Path) -> Path:
-    if type(path) is str:
-        return Path(path)
-    elif type(path) is Path:
-        pass
-    else:
-        raise ValueError(f'path must be str or Path, not {type(path)}')
-    return path
+def load_yaml_file(file_path):
+    with open(file_path, 'r') as f:
+        return yaml.safe_load(f)
 
 
 def flatten_dict(d, parent_key='', sep='.'):

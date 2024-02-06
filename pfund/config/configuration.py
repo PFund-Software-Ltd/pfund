@@ -2,7 +2,7 @@ import os
 
 import yaml
 
-from pfund.const.paths import CONFIG_PATH
+from pfund.const.paths import PROJ_CONFIG_PATH
 from pfund.utils.utils import short_path
 
 
@@ -13,7 +13,7 @@ class Configuration:
     def __init__(self, config_dir, config_name):
         self.config_dir = config_dir.lower()
         self.config_name = config_name
-        self.config_path = f'{CONFIG_PATH}/{self.config_dir}'
+        self.config_path = f'{PROJ_CONFIG_PATH}/{self.config_dir}'
         self.configs = None
         self.reload()
 
@@ -34,7 +34,7 @@ class Configuration:
                 if not has_printed:
                     has_printed = True
                     print(f'loaded config {short_file_path}')
-                return list(yaml.safe_load_all(f.read()))
+                return list(yaml.safe_load_all(f))
 
     def write_config(self, config_name, content):
         with open(f'{self.config_path}/{config_name}.yml', 'w') as f:
@@ -47,7 +47,7 @@ class Configuration:
             raise Exception(f'could not find section {section} for config {self.config_name}')
 
     def check_if_config_exists_and_not_empty(self, config_name):
-        file_path = f'{CONFIG_PATH}/{self.config_dir}/{config_name}.yml'
+        file_path = f'{PROJ_CONFIG_PATH}/{self.config_dir}/{config_name}.yml'
         if os.path.exists(file_path) and os.stat(file_path).st_size != 0:
             return True
         else:

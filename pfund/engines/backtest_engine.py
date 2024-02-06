@@ -7,14 +7,14 @@ from pfund.brokers.broker_backtest import BacktestBroker
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.strategies.strategy_backtest import BacktestStrategy
 from pfund.const.commons import *
-from pfund.config_handler import Config
+from pfund.config_handler import ConfigHandler
 
 
 BacktestMode = Literal['vectorized', 'event_driven']
         
 
 class BacktestEngine(BaseEngine):
-    def __new__(cls, *, env: str='BACKTEST', data_tool: DataTool='pandas', mode: BacktestMode='vectorized', append_to_strategy_df=False, use_prepared_signals=True, config: Config | None=None, **settings):
+    def __new__(cls, *, env: str='BACKTEST', data_tool: DataTool='pandas', mode: BacktestMode='vectorized', append_to_strategy_df=False, use_prepared_signals=True, config: ConfigHandler | None=None, **settings):
         if not hasattr(cls, 'mode'):
             cls.mode = mode.lower()
         if not hasattr(cls, 'append_to_strategy_df'):
@@ -25,7 +25,7 @@ class BacktestEngine(BaseEngine):
             cls.use_prepared_signals = use_prepared_signals
         return super().__new__(cls, env, data_tool=data_tool, config=config, **settings)
 
-    def __init__(self, *, env: str='BACKTEST', data_tool: DataTool='pandas', mode: BacktestMode='vectorized', append_to_strategy_df=False, use_prepared_signals=True, config: Config | None=None, **settings):
+    def __init__(self, *, env: str='BACKTEST', data_tool: DataTool='pandas', mode: BacktestMode='vectorized', append_to_strategy_df=False, use_prepared_signals=True, config: ConfigHandler | None=None, **settings):
         super().__init__(env, data_tool=data_tool)
         # avoid re-initialization to implement singleton class correctly
         # if not hasattr(self, '_initialized'):

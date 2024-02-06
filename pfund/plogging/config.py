@@ -1,7 +1,6 @@
 import sys
 import time
 import copy
-import yaml
 import logging
 from logging.config import DictConfigurator
 
@@ -17,13 +16,6 @@ LEVELS = {
     'error': logging.ERROR,
     'critical': logging.CRITICAL,
 }
-
-
-def load_logging_config(logging_config_file_path):
-    '''Load yaml file for logging config'''
-    with open(logging_config_file_path, 'r') as f:
-        logging_config = yaml.safe_load(f.read())
-        return logging_config
 
 
 # override logging's DictConfigurator as it doesn't pass in logger names to file handlers to create filenames

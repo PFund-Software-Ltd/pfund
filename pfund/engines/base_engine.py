@@ -10,7 +10,7 @@ from pfund.strategies.strategy_base import BaseStrategy
 from pfund.brokers.broker_base import BaseBroker
 from pfund.managers.strategy_manager import StrategyManager
 from pfund.const.commons import *
-from pfund.config_handler import Config
+from pfund.config_handler import ConfigHandler
 from pfund.plogging import set_up_loggers
 
 
@@ -26,7 +26,7 @@ ENV_COLORS = {
 class BaseEngine(Singleton):
     _PROCESS_NO_PONG_TOLERANCE_IN_SECONDS = 30
 
-    def __new__(cls, env, data_tool: DataTool='pandas', config: Config | None=None, **settings):
+    def __new__(cls, env, data_tool: DataTool='pandas', config: ConfigHandler | None=None, **settings):
         if not hasattr(cls, 'env'):
             cls.env = env.upper() if type(env) is str else str(env).upper()
             assert cls.env in SUPPORTED_ENVIRONMENTS, f'env={cls.env} is not supported'
@@ -43,13 +43,13 @@ class BaseEngine(Singleton):
         if not hasattr(cls, 'settings'):
             cls.settings = settings
         if not hasattr(cls, 'config'):
-            cls.config = config if config else Config()
-            log_path = cls.config.log_path / cls.env
+            cls.config = config if config else ConfigHandler()
+            log_path = f'{cls.config.log_path}/{cls.env}'
             logging_config_file_path = cls.config.logging_config_file_path
             set_up_loggers(log_path, logging_config_file_path, user_logging_config=cls.config.logging_config)
         return super().__new__(cls)
     
-    def __init__(self, env, data_tool: DataTool='pandas', config: Config | None=None, **settings):
+    def __init__(self, env, data_tool: DataTool='pandas', config: ConfigHandler | None=None, **settings):
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):
             self.logger = logging.getLogger('pfund')

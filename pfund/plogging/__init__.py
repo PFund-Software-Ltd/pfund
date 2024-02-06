@@ -4,7 +4,8 @@ from pathlib import Path
 
 from typing import Literal
 
-from pfund.plogging.config import load_logging_config, LoggingDictConfigurator
+from pfund.plogging.config import LoggingDictConfigurator
+from pfund.utils.utils import load_yaml_file
 
 
 def print_all_loggers():
@@ -13,7 +14,7 @@ def print_all_loggers():
             print(name, logger, logger.handlers)
 
 
-def set_up_loggers(log_path: Path, logging_config_file_path: Path, user_logging_config: dict | None=None):
+def set_up_loggers(log_path, logging_config_file_path, user_logging_config: dict | None=None):
     def deep_update(default_dict, override_dict, raise_if_key_not_exist=False):
         '''Updates a default dictionary with an override dictionary, supports nested dictionaries.'''
         for key, value in override_dict.items():
@@ -33,10 +34,11 @@ def set_up_loggers(log_path: Path, logging_config_file_path: Path, user_logging_
                 # Update the key with the override value
                 default_dict[key] = value
     print('Setting up loggers...')
+    log_path, logging_config_file_path = Path(log_path), Path(logging_config_file_path)
     if not log_path.exists():
         os.makedirs(log_path)
         print(f'created {str(log_path)}')
-    logging_config: dict = load_logging_config(logging_config_file_path)
+    logging_config: dict = load_yaml_file(logging_config_file_path)
     if user_logging_config:
         deep_update(logging_config, user_logging_config)
     logging_config['log_path'] = log_path

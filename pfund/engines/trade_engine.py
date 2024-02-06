@@ -23,19 +23,19 @@ from pfund.brokers.broker_base import BaseBroker
 from pfund.const.commons import *
 from pfund.utils.utils import flatten_dict
 from pfund.zeromq import ZeroMQ
-from pfund.config_handler import Config
+from pfund.config_handler import ConfigHandler
 
 
 class TradeEngine(BaseEngine):
     zmq_ports = {}
 
-    def __new__(cls, *, env: str='PAPER', data_tool: DataTool='pandas', zmq_port=5557, config: Config | None=None, **settings):
+    def __new__(cls, *, env: str='PAPER', data_tool: DataTool='pandas', zmq_port=5557, config: ConfigHandler | None=None, **settings):
         if not hasattr(cls, 'zmq_port'):
             assert type(zmq_port) is int, f'{zmq_port=} must be an integer'
             cls._zmq_port = zmq_port
         return super().__new__(cls, env, data_tool=data_tool, config=config, **settings)
 
-    def __init__(self, *, env: str='PAPER', data_tool: DataTool='pandas', zmq_port=5557, config: Config | None=None, **settings):
+    def __init__(self, *, env: str='PAPER', data_tool: DataTool='pandas', zmq_port=5557, config: ConfigHandler | None=None, **settings):
         super().__init__(env, data_tool=data_tool)
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):
@@ -45,8 +45,8 @@ class TradeEngine(BaseEngine):
 
     @classmethod
     def assign_cpus(cls, name) -> list:
-        if 'cpu_affinity' in cls.configs and name in cls.configs['cpu_affinity']:
-            assigned_cpus = cls.configs['cpu_affinity'][name]
+        if 'cpu_affinity' in cls.settings and name in cls.settings['cpu_affinity']:
+            assigned_cpus = cls.settings['cpu_affinity'][name]
         else:
             assigned_cpus = []
         if not isinstance(assigned_cpus, list):
