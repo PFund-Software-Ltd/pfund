@@ -16,7 +16,7 @@ PFund allows traders to:
 
 It is created to enable trading for [PFund.ai](https://pfund.ai) - a trading platform that bridges algo-trading and manual trading using AI (LLM).
 
-Since PFund's sole purpose is trading only, for all the data work, there is a separate library to handle that: \
+Since PFund's sole purpose is for trading only, for all the data work, there is a separate library to handle that: \
 [PFeed](https://github.com/PFund-Software-Ltd/pfeed) - Data pipeline for algo-trading, helping traders in getting real-time and historical data, and storing them in a local data lake for quantitative research.
 
 
@@ -53,7 +53,7 @@ You are encouraged to play with the *dev* version, but only use it when a *stabl
 
 
 ## Mission
-As an algo-trader, if you aim to quickly try out some trading ideas to see if they work, and if they do, deploy them for live traidng. It is actually not a trivial task since it involves multiple stages:
+As an algo-trader, if you aim to quickly try out some trading ideas to see if they work, and if they do, deploy them for live traidng, it is actually not a trivial task since it involves multiple stages:
 - Ideation
 - Strategy development
 - Backtesting
@@ -65,8 +65,7 @@ As an algo-trader, if you aim to quickly try out some trading ideas to see if th
 
 This overview already omits some intricate steps, such as data handling and API integration.
 
-> PFund's mission is to **_enable traders to concentrate solely on strategy formulation_** while we manage the rest. \
-With PFund serving as the core trade engine, it empowers retail traders to have a fund management experience on [PFund.ai](https://pfund.ai) as if they are operating their personal hedge fund, hence the name *PFund*.
+> PFund's mission is to **_enable traders to concentrate solely on strategy formulation_** while the framework manages the rest. With PFund serving as the core trade engine, it empowers retail traders to have a fund management experience on [PFund.ai](https://pfund.ai) as if they are operating their personal hedge fund, hence the name *PFund*.
 
 
 ## Core Features
@@ -115,7 +114,7 @@ engine.run()
 
 
 ### Live Trading
-> Just change one line of code, from '**BacktestEngine**' to '**TradeEngine**', BOOM! you can now start live trading.
+> Just change one line of code, from '**BacktestEngine**' to '**TradeEngine**'. BOOM! you can now start live trading.
 ```python
 import pfund as pf
 
@@ -160,7 +159,7 @@ engine.run()
 ## Model Hub
 Imagine a space where algo-traders can share their machine learning models with one another.
 Strategy and model development could be so much faster since you can build on top of an existing working model.
-> Model Hub is coming soon in [PFund.ai](https://pfund.ai), stay tuned!
+> Model Hub is coming soon in [PFund.ai](https://pfund.ai), Stay Tuned!
 
 
 ## Supported Trading Venues
