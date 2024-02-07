@@ -1,14 +1,14 @@
 [tool.poetry]
 name = "pfund"
 version = "0.0.1.dev1"
-description = "Algo-Trading Framework for TradFi+CeFi+DeFi, supporting machine learning models, paper+live trading, vectorized+event-driven backtesting and hyperparameter tuning"
+description = "A Complete Algo-Trading Framework for Machine Learning, enabling trading across TradFi, CeFi and DeFi. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading"
 license = "Apache-2.0"
 authors = ["Stephen Yau <softwareentrepreneer+pfund@gmail.com>"]
 readme = "README.md"
 homepage = "https://pfund.ai"
 repository = "https://github.com/PFund-Software-Ltd/pfund"
 documentation = "https://pfund.ai/docs"
-keywords = ["trading", "algo-trading", "TradFi", "CeFi", "DeFi", "portfolio management", "investment", "backtesting", "machine learning"]
+keywords = ["trading", "algo-trading", "stocks", "cryptos", "cryptocurrencies", "TradFi", "CeFi", "DeFi", "portfolio management", "investment", "backtesting", "machine learning"]
 
 [tool.poetry.dependencies]
 python = "^3.10 <3.12"
