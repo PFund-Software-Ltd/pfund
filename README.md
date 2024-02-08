@@ -73,7 +73,7 @@ This overview already omits some intricate steps, such as data handling and API 
 - [x] Supports machine learning models, features, technical analysis indicators
 - [x] Both Strategy() and Model() are treated as first-class citizens
 - [x] Offers LEGO-style strategy and model building, allowing strategies to add other strategies, models to add other models
-- [x] Standardizes the algo-trading flow, from vectorized backtesting for strategy prototyping and event-driven backtesting for strategy development, to live trading for strategy deployment
+- [x] Streamlines the algo-trading flow, from vectorized backtesting for strategy prototyping and event-driven backtesting for strategy development, to live trading for strategy deployment
 - [x] Enables parallel data processing, e.g. Interactive Brokers and Binance each have their own process for receiving data feeds
 - [ ] Allows choosing your preferred data tool, e.g. pandas, polars, pyspark etc.
 - [ ] Features a modern frontend using [Mantine UI](https://ui.mantine.dev/) and TradingView's Charts library
