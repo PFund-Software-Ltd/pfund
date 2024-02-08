@@ -26,14 +26,14 @@ class Configuration:
     def read_config(self, config_name):
         global has_printed
         file_path = f'{self.config_path}/{config_name}.yml'
-        short_file_path = short_path(file_path)
+        # short_file_path = short_path(file_path)
         if not os.path.exists(file_path):
-            print(f'cannot find config {short_file_path}')
+            print(f'cannot find config {file_path}')
         else:
             with open(file_path, 'r') as f:
                 if not has_printed:
                     has_printed = True
-                    print(f'loaded config {short_file_path}')
+                    print(f'loaded config {file_path}')
                 return list(yaml.safe_load_all(f))
 
     def write_config(self, config_name, content):

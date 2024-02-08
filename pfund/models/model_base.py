@@ -8,13 +8,16 @@ from collections import defaultdict
 
 from typing import TYPE_CHECKING, Any, Union
 
-import joblib
-import torch
+try:
+    import joblib
+    import torch
+    import torch.nn as nn
+    from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
+    from sklearn.pipeline import Pipeline
+except ImportError:
+    pass
 import numpy as np
 import pandas as pd
-import torch.nn as nn
-from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
-from sklearn.pipeline import Pipeline
 
 if TYPE_CHECKING:
     from pfund.strategies.strategy_base import BaseStrategy

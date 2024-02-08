@@ -26,7 +26,7 @@ class Exchange(BaseExchange):
         super().__init__(env, 'BYBIT')
 
     @staticmethod
-    def categorize_product(ptype):
+    def categorize_product_type(ptype):
         is_spot = (ptype == 'SPOT')
         is_inverse = (ptype in ['IPERP', 'IFUT'])
         is_linear = not is_inverse and not is_spot

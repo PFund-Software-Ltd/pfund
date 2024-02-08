@@ -87,21 +87,10 @@ This overview already omits some intricate steps, such as data handling and API 
 poetry add pfund
 ```
 
-> To include the machine learning dependencies: \
-(Note that pytorch is not available in python 3.12)
-```bash
-poetry add pfund[ml]
-```
 
 ### Using Pip
 ```bash
 pip install pfund
-```
-
-> To include the machine learning dependencies: \
-(Note that pytorch is not available in python 3.12)
-```bash
-pip install pfund[ml]
 ```
 
 

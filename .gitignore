@@ -176,3 +176,6 @@ cython_debug/
 
 # gzipped logs
 *.log.*.gz
+
+# gzip files
+*.gz
