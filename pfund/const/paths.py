@@ -13,6 +13,7 @@ PROJ_CONFIG_PATH = PROJ_PATH / 'config'
 # user paths
 LOG_PATH = Path(user_log_dir()) / PROJ_NAME
 USER_CONFIG_PATH = Path(user_config_dir()) / PROJ_NAME
+USER_CONFIG_FILE_PATH = USER_CONFIG_PATH / f'{PROJ_NAME}_config.yml'
 DATA_PATH = Path(user_data_dir()) / PROJ_NAME
 STRATEGY_PATH = DATA_PATH / 'strategies'
 MODEL_PATH = DATA_PATH / 'models'

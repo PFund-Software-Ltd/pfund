@@ -1,0 +1,70 @@
+import os
+import yaml
+from pathlib import Path
+from pprint import pformat
+
+import click
+
+from pfund.const.paths import USER_CONFIG_FILE_PATH
+from pfund.config_handler import ConfigHandler
+
+
+def load_config(config_file_path: str | Path):
+    config_file_path = Path(config_file_path)
+    if config_file_path.is_file():
+        with open(config_file_path, 'r') as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
+def save_config(config: ConfigHandler, config_file_path: str | Path):
+    with open(config_file_path, 'w') as f:
+        yaml.dump(config.__dict__, f, default_flow_style=False)
+        
+
+def remove_config(config_file_path: str | Path):
+    config_file_path = Path(config_file_path)
+    if config_file_path.is_file():
+        os.remove(config_file_path)
+
+
+@click.command()
+@click.pass_context
+@click.option('--data-path', type=click.Path(resolve_path=True), help='Set the data path for storing strategies, models, features and indicators')
+@click.option('--log-path', type=click.Path(resolve_path=True), help='Set the log path')
+@click.option('--logging-file', 'logging_config_file_path', type=click.Path(resolve_path=True, exists=True), help='Set the logging config file path')
+@click.option('--logging-config', type=dict, help='Set the logging config')
+@click.option('--use-fork-process', type=bool, help='If True, multiprocessing.set_start_method("fork")')
+@click.option('--use-custom-excepthook', type=bool, help='If True, log uncaught exceptions to file')
+@click.option('--list', '-l', is_flag=True, is_eager=True, help='List all available options')
+@click.option('--reset', is_flag=True, is_eager=True, help='Reset the configuration to defaults') 
+def config(ctx, **kwargs):
+    """Configures pfund settings."""
+    config: ConfigHandler = ctx.obj['config']
+    
+    # Filter out options that were not provided by the user
+    provided_options = {k: v for k, v in kwargs.items() if v is not None and v is not False}
+    
+    if kwargs.get('list'):  # Check if --list was used
+        del provided_options['list']
+        assert not provided_options, "No options should be provided with --list"
+        click.echo(f"PFund's config:\n{pformat(config.__dict__)}")
+        return
+
+    if kwargs.get('reset'): # Check if --reset was used
+        del provided_options['reset']
+        assert not provided_options, "No options should be provided with --reset"
+        remove_config(USER_CONFIG_FILE_PATH)
+        click.echo("PFund;s config successfully reset.")
+        return
+    
+    # prints out current config if no options are provided
+    if not provided_options:
+        raise click.UsageError("No options provided. Use --list to see all available options.")
+    else:
+        for option, value in provided_options.items():
+            setattr(config, option, value)
+            click.echo(f"{option} set to: {value}")
+        
+        save_config(config, USER_CONFIG_FILE_PATH)
+        click.echo(f"config saved to {USER_CONFIG_FILE_PATH}.")

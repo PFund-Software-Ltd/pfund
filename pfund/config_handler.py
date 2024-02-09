@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 # from rich.traceback import install
 
-from pfund.const.paths import PROJ_NAME, PROJ_PATH, LOG_PATH, PROJ_CONFIG_PATH, STRATEGY_PATH, MODEL_PATH, FEATURE_PATH, INDICATOR_PATH
+from pfund.const.paths import PROJ_NAME, PROJ_PATH, LOG_PATH, PROJ_CONFIG_PATH, DATA_PATH
 # add python path so that for files like "ibapi" (official python code from IB)
 # can find their modules
 sys.path.append(f'{PROJ_PATH}/externals')
@@ -50,10 +50,7 @@ def import_strategies_models_features_or_indicators(path: str):
 
 @dataclass
 class ConfigHandler:
-    strategy_path: str = str(STRATEGY_PATH)
-    model_path: str = str(MODEL_PATH)
-    feature_path: str = str(FEATURE_PATH)
-    indicator_path: str = str(INDICATOR_PATH)
+    data_path: str = str(DATA_PATH),
     log_path: str = str(LOG_PATH)
     logging_config_file_path: str = f'{PROJ_CONFIG_PATH}/logging.yml'
     logging_config: dict | None = None
@@ -61,7 +58,11 @@ class ConfigHandler:
     use_custom_excepthook: bool = True
     
     def __post_init__(self):
-        for path in (self.strategy_path, self.model_path, self.feature_path, self.indicator_path):
+        self.logging_config = self.logging_config or {}
+        
+        strategy_path, model_path = f'{self.data_path}/strategies', f'{self.data_path}/models'
+        feature_path, indicator_path = f'{self.data_path}/features', f'{self.data_path}/indicators'
+        for path in (strategy_path, model_path, feature_path, indicator_path):
             if not os.path.exists(path):
                 os.makedirs(path)
                 print(f'created {path}')
@@ -76,10 +77,7 @@ class ConfigHandler:
             
 
 def configure(
-    strategy_path: str = str(STRATEGY_PATH),
-    model_path: str = str(MODEL_PATH),
-    feature_path: str = str(FEATURE_PATH),
-    indicator_path: str = str(INDICATOR_PATH),
+    data_path: str = str(DATA_PATH),
     log_path: str = str(LOG_PATH),
     logging_config_file_path: str = f'{PROJ_CONFIG_PATH}/logging.yml',
     logging_config: dict | None=None,
@@ -87,10 +85,7 @@ def configure(
     use_custom_excepthook: bool=True,
 ):
     return ConfigHandler(
-        strategy_path=strategy_path,
-        model_path=model_path,
-        feature_path=feature_path,
-        indicator_path=indicator_path,
+        data_path=data_path,
         log_path=log_path,
         logging_config_file_path=logging_config_file_path,
         logging_config=logging_config,

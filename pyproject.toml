@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pfund"
-version = "0.0.1.dev2"
+version = "0.0.1.dev3"
 description = "A Complete Algo-Trading Framework for Machine Learning, enabling trading across TradFi, CeFi and DeFi. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading"
 license = "Apache-2.0"
 authors = ["Stephen Yau <softwareentrepreneer+pfund@gmail.com>"]
@@ -27,6 +27,9 @@ click = "^8.1.7"
 platformdirs = "^4.2.0"
 torch = "^2.1.2"
 scikit-learn = "^1.4.0"
+
+[tool.poetry.scripts]
+pfund = "pfund.main:run_cli"
 
 [tool.poetry.group.dev]
 optional = true
