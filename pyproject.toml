@@ -12,7 +12,7 @@ keywords = ["trading", "algo-trading", "stocks", "cryptos", "cryptocurrencies", 
 
 [tool.poetry.dependencies]
 python = "^3.10 <3.12"
-pfeed = "^0.0.1.dev2"
+pfeed = "^0.0.1.dev3"
 pyzmq = "^25.1.2"
 pyyaml = "^6.0.1"
 psutil = "^5.9.8"
