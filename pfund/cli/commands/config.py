@@ -55,7 +55,7 @@ def config(ctx, **kwargs):
         del provided_options['reset']
         assert not provided_options, "No options should be provided with --reset"
         remove_config(USER_CONFIG_FILE_PATH)
-        click.echo("PFund;s config successfully reset.")
+        click.echo("PFund's config successfully reset.")
         return
     
     # prints out current config if no options are provided
