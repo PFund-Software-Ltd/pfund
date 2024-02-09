@@ -50,7 +50,7 @@ def import_strategies_models_features_or_indicators(path: str):
 
 @dataclass
 class ConfigHandler:
-    data_path: str = str(DATA_PATH),
+    data_path: str = str(DATA_PATH)
     log_path: str = str(LOG_PATH)
     logging_config_file_path: str = f'{PROJ_CONFIG_PATH}/logging.yml'
     logging_config: dict | None = None
@@ -62,7 +62,7 @@ class ConfigHandler:
         
         strategy_path, model_path = f'{self.data_path}/strategies', f'{self.data_path}/models'
         feature_path, indicator_path = f'{self.data_path}/features', f'{self.data_path}/indicators'
-        for path in (strategy_path, model_path, feature_path, indicator_path):
+        for path in [strategy_path, model_path, feature_path, indicator_path]:
             if not os.path.exists(path):
                 os.makedirs(path)
                 print(f'created {path}')
