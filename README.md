@@ -82,7 +82,6 @@ This overview already omits some intricate steps, such as data handling and API 
 
 ## Installation
 ### Using [Poetry](https://python-poetry.org) (Recommended)
-> If you don't have poetry installed, please visit https://python-poetry.org/docs/
 ```bash
 poetry add pfund
 ```
