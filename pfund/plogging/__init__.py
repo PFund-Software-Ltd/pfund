@@ -1,6 +1,5 @@
 import os
 import logging
-from pathlib import Path
 
 from typing import Literal
 
@@ -34,8 +33,7 @@ def set_up_loggers(log_path, logging_config_file_path, user_logging_config: dict
                 # Update the key with the override value
                 default_dict[key] = value
     print('Setting up loggers...')
-    log_path, logging_config_file_path = Path(log_path), Path(logging_config_file_path)
-    if not log_path.exists():
+    if not os.path.exists(log_path):
         os.makedirs(log_path)
         print(f'created {str(log_path)}')
     logging_config: dict = load_yaml_file(logging_config_file_path)
