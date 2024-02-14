@@ -12,7 +12,6 @@ if TYPE_CHECKING:
 
 from pfund.managers.data_manager import get_resolutions_from_kwargs
 from pfund.models.model_backtest import BacktestModel
-from pfund.strategies.strategy_base import BaseStrategy
 from pfund.models.model_base import BaseModel
 
 
@@ -25,7 +24,7 @@ class BacktestMixin:
         backtest_kwargs, train_kwargs = backtest or {}, train or {}
         
         if backtest_kwargs:
-            data_source = self._get_data_source(backtest_kwargs)
+            data_source = self._get_data_source(trading_venue, backtest_kwargs)
             feed = self.get_feed(data_source)
             kwargs = self._prepare_kwargs(feed, kwargs)
         
@@ -45,8 +44,12 @@ class BacktestMixin:
         model = BacktestModel(type(model), model.ml_model, *model._args, **model._kwargs)
         return super().add_model(model, name=name, model_path=model_path, is_load=is_load)
         
-    def _get_data_source(self, backtest_kwargs: dict):
+    def _get_data_source(self, trading_venue: str, backtest_kwargs: dict):
         from pfeed.const.commons import SUPPORTED_DATA_FEEDS
+        trading_venue = trading_venue.upper()
+        # if data_source is not defined, use trading_venue as data_source
+        if trading_venue in SUPPORTED_DATA_FEEDS and 'data_source' not in backtest_kwargs:
+            backtest_kwargs['data_source'] = trading_venue
         assert 'data_source' in backtest_kwargs, f"data_source must be defined"
         data_source = backtest_kwargs['data_source'].upper()
         assert data_source in SUPPORTED_DATA_FEEDS, f"{data_source=} not in {SUPPORTED_DATA_FEEDS}"
