@@ -40,7 +40,9 @@ def config(ctx, **kwargs):
     if kwargs.get('list'):  # Check if --list was used
         del provided_options['list']
         assert not provided_options, "No options should be provided with --list"
-        click.echo(f"PFund's config:\n{pformat(config.__dict__)}")
+        config_dict = config.__dict__
+        config_dict.update({'config_file_path': USER_CONFIG_FILE_PATH})
+        click.echo(f"PFund's config:\n{pformat(config_dict)}")
         return
 
     if kwargs.get('reset'): # Check if --reset was used
