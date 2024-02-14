@@ -32,7 +32,7 @@ def set_up_loggers(log_path, logging_config_file_path, user_logging_config: dict
             else:
                 # Update the key with the override value
                 default_dict[key] = value
-    print('Setting up loggers...')
+    # print('Setting up loggers...')
     if not os.path.exists(log_path):
         os.makedirs(log_path)
         print(f'created {str(log_path)}')
