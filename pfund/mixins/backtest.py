@@ -102,12 +102,12 @@ class BacktestMixin:
 
     @staticmethod
     def get_feed(data_source: str) -> BaseFeed:
-        import pfeed as pe
+        from pfeed.feeds import YahooFinanceFeed, BybitFeed
         data_source = data_source.upper()
         if data_source == 'YAHOO_FINANCE':
-            feed = pe.YahooFinanceFeed()
+            feed = YahooFinanceFeed()
         elif data_source == 'BYBIT':
-            feed = pe.BybitFeed()
+            feed = BybitFeed()
         # TODO: other feeds
         else:
             raise NotImplementedError
