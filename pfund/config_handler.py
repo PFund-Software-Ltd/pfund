@@ -12,7 +12,6 @@ from pfund.const.paths import PROJ_NAME, PROJ_PATH, LOG_PATH, PROJ_CONFIG_PATH, 
 # add python path so that for files like "ibapi" (official python code from IB)
 # can find their modules
 sys.path.append(f'{PROJ_PATH}/externals')
-
 # install(show_locals=False)  # rich will set its own sys.excepthook
 # rich_excepthook = sys.excepthook  # get rich's excepthook
 

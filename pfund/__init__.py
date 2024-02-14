@@ -1,3 +1,5 @@
+from importlib.metadata import version
+
 from pfund.config_handler import configure
 from pfund.engines import BacktestEngine, TrainEngine, TestEngine, TradeEngine
 from pfund.strategies import Strategy
@@ -11,7 +13,6 @@ try:
 except ImportError:
     pass
 from pfund.indicators import TAIndicator, TALibIndicator
-from importlib.metadata import version
 
 
 __version__ = version('pfund')
