@@ -2507,7 +2507,7 @@ ptyprocess = ">=0.5"
 
 [[package]]
 name = "pfeed"
-version = "0.0.1.dev3"
+version = "0.0.1.dev4"
 description = "Data pipeline for algo-trading, getting and storing both real-time and historical data made easy."
 optional = false
 python-versions = "^3.10 <3.12"
@@ -2517,10 +2517,9 @@ develop = true
 [package.dependencies]
 beautifulsoup4 = "^4.12.3"
 click = "^8.1.7"
-minio = "^7.2.3"
-orjson = "^3.9.12"
+minio = "^7.2.4"
 pandas = "^2.2.0"
-pfund = "^0.0.1.dev2"
+pfund = "^0.0.1.dev4"
 platformdirs = "^4.2.0"
 pyarrow = "^15.0.0"
 python-dotenv = "^1.0.1"
@@ -2528,7 +2527,7 @@ pyyaml = "^6.0.1"
 ray = "^2.9.2"
 requests = "^2.31.0"
 rich = "^13.7.0"
-tqdm = "^4.66.1"
+tqdm = "^4.66.2"
 yfinance = "^0.2.36"
 
 [package.source]
@@ -4631,4 +4630,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10 <3.12"
-content-hash = "370ed7268ed32e9c7f02e86a7845b9861b0c466684cc0cd5850b959d228f1450"
+content-hash = "3b5e00b4b15345682c269d03c47520e1fa629c3a47d236eeb93f31af7d65734c"
