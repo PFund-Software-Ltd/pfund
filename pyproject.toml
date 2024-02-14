@@ -16,7 +16,7 @@ pfeed = "^0.0.1.dev3"
 pyzmq = "^25.1.2"
 pyyaml = "^6.0.1"
 psutil = "^5.9.8"
-orjson = "^3.9.12"
+orjson = "^3.9.14"
 rich = "^13.7.0"
 schedule = "^1.2.1"
 websocket-client = "^1.7.0"
@@ -39,7 +39,7 @@ pfeed = {path = "../pfeed", develop = true}
 pybit = "^5.6.2"
 ta-lib = "^0.4.28"
 pytest = "^8.0.0"
-pre-commit = "^3.6.0"
+pre-commit = "^3.6.1"
 bandit = "^1.7.7"
 ruff = "^0.1.15"
 pyright = "^1.1.349"
@@ -49,7 +49,7 @@ optional = true
 
 [tool.poetry.group.doc.dependencies]
 jupyter-book = "^1.0.0"
-notebook = "^7.0.8"
+notebook = "^7.1.0"
 
 [build-system]
 requires = ["poetry-core"]
