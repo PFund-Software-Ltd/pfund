@@ -49,7 +49,7 @@ class BacktestMixin:
         from pfeed.const.commons import SUPPORTED_DATA_FEEDS
         assert 'data_source' in backtest_kwargs, f"data_source must be defined"
         data_source = backtest_kwargs['data_source'].upper()
-        assert backtest_kwargs['data_source'] in SUPPORTED_DATA_FEEDS, f"{data_source=} not in {SUPPORTED_DATA_FEEDS}"
+        assert data_source in SUPPORTED_DATA_FEEDS, f"{data_source=} not in {SUPPORTED_DATA_FEEDS}"
         return data_source
     
     def _prepare_kwargs(self, feed: BaseFeed, kwargs: dict):
