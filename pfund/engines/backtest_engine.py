@@ -79,8 +79,7 @@ class BacktestEngine(BaseEngine):
                     continue
                 if not hasattr(strategy, 'backtest'):
                     raise Exception(f'Strategy {strat} does not have backtest() method, cannot run vectorized backtesting')
-                df = strategy.get_df()
-                strategy.backtest(df.copy(deep=True))
+                strategy.backtest()
         elif self.mode == 'event_driven':
             for strat, strategy in self.strategy_manager.strategies.items():
                 if strat == '_dummy':
