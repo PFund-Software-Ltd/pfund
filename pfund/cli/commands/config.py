@@ -9,14 +9,6 @@ from pfund.const.paths import USER_CONFIG_FILE_PATH
 from pfund.config_handler import ConfigHandler
 
 
-def load_config(config_file_path: str | Path):
-    config_file_path = Path(config_file_path)
-    if config_file_path.is_file():
-        with open(config_file_path, 'r') as f:
-            return yaml.safe_load(f) or {}
-    return {}
-
-
 def save_config(config: ConfigHandler, config_file_path: str | Path):
     with open(config_file_path, 'w') as f:
         yaml.dump(config.__dict__, f, default_flow_style=False)

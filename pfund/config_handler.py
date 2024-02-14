@@ -6,9 +6,11 @@ import logging
 from types import TracebackType
 from dataclasses import dataclass
 
+import yaml
 # from rich.traceback import install
 
-from pfund.const.paths import PROJ_NAME, PROJ_PATH, LOG_PATH, PROJ_CONFIG_PATH, DATA_PATH
+from pfund.const.paths import PROJ_NAME, PROJ_PATH, LOG_PATH, PROJ_CONFIG_PATH, DATA_PATH, USER_CONFIG_FILE_PATH
+
 # add python path so that for files like "ibapi" (official python code from IB)
 # can find their modules
 sys.path.append(f'{PROJ_PATH}/externals')
@@ -56,6 +58,16 @@ class ConfigHandler:
     use_fork_process: bool = True
     use_custom_excepthook: bool = True
     
+    @classmethod
+    def load_config(cls):
+        config_file_path = USER_CONFIG_FILE_PATH
+        if config_file_path.is_file():
+            with open(config_file_path, 'r') as f:
+                config = yaml.safe_load(f) or {}
+        else:
+            config = {}
+        return cls(**config)
+    
     def __post_init__(self):
         self.logging_config = self.logging_config or {}
         
@@ -73,7 +85,7 @@ class ConfigHandler:
         
         if self.use_custom_excepthook:
             sys.excepthook = _custom_excepthook
-            
+    
 
 def configure(
     data_path: str = str(DATA_PATH),

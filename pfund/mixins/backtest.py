@@ -102,10 +102,12 @@ class BacktestMixin:
 
     @staticmethod
     def get_feed(data_source: str) -> BaseFeed:
-        import pfeed as dd
+        import pfeed as pe
         data_source = data_source.upper()
         if data_source == 'YAHOO_FINANCE':
-            feed = dd.YahooFinanceFeed()
+            feed = pe.YahooFinanceFeed()
+        elif data_source == 'BYBIT':
+            feed = pe.BybitFeed()
         # TODO: other feeds
         else:
             raise NotImplementedError
@@ -126,9 +128,9 @@ class BacktestMixin:
                     continue
             product = data.product
             resolution = data.resolution
-            symbol = product.symbol
-            df = feed.get_historical_data(symbol, rollback_period=rollback_period, start_date=start_date, end_date=end_date, resolution=repr(resolution), **backtest_kwargs)
-            assert not df.empty, f"dataframe is empty for {symbol=}"
+            pdt_or_symbol = product.symbol if feed.name == 'YAHOO_FINANCE' else product.pdt
+            df = feed.get_historical_data(pdt_or_symbol, rollback_period=rollback_period, start_date=start_date, end_date=end_date, resolution=repr(resolution), **backtest_kwargs)
+            assert not df.empty, f"dataframe is empty for {pdt_or_symbol=}"
             df.reset_index(inplace=True)
             latest_date = str(df['ts'][0])
             if feed.name == 'YAHOO_FINANCE' and latest_date == utcnow_date:

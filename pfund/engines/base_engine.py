@@ -43,7 +43,7 @@ class BaseEngine(Singleton):
         if not hasattr(cls, 'settings'):
             cls.settings = settings
         if not hasattr(cls, 'config'):
-            cls.config = config if config else ConfigHandler()
+            cls.config = config if config else ConfigHandler.load_config()
             log_path = f'{cls.config.log_path}/{cls.env}'
             logging_config_file_path = cls.config.logging_config_file_path
             set_up_loggers(log_path, logging_config_file_path, user_logging_config=cls.config.logging_config)
