@@ -12,6 +12,7 @@ from pfund.managers.strategy_manager import StrategyManager
 from pfund.const.commons import *
 from pfund.config_handler import ConfigHandler
 from pfund.plogging import set_up_loggers
+from pfund.plogging.config import LoggingDictConfigurator
 
 
 ENV_COLORS = {
@@ -46,7 +47,7 @@ class BaseEngine(Singleton):
             cls.config = config if config else ConfigHandler.load_config()
             log_path = f'{cls.config.log_path}/{cls.env}'
             logging_config_file_path = cls.config.logging_config_file_path
-            set_up_loggers(log_path, logging_config_file_path, user_logging_config=cls.config.logging_config)
+            cls.logging_configurator: LoggingDictConfigurator  = set_up_loggers(log_path, logging_config_file_path, user_logging_config=cls.config.logging_config)
         return super().__new__(cls)
     
     def __init__(self, env, data_tool: DataTool='pandas', config: ConfigHandler | None=None, **settings):

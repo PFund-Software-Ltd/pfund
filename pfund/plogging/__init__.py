@@ -4,7 +4,7 @@ import logging
 from typing import Literal
 
 from pfund.plogging.config import LoggingDictConfigurator
-from pfund.utils.utils import load_yaml_file
+from pfund.utils.utils import load_yaml_file, get_engine_class
 
 
 def print_all_loggers():
@@ -13,7 +13,7 @@ def print_all_loggers():
             print(name, logger, logger.handlers)
 
 
-def set_up_loggers(log_path, logging_config_file_path, user_logging_config: dict | None=None):
+def set_up_loggers(log_path, logging_config_file_path, user_logging_config: dict | None=None) -> LoggingDictConfigurator:
     def deep_update(default_dict, override_dict, raise_if_key_not_exist=False):
         '''Updates a default dictionary with an override dictionary, supports nested dictionaries.'''
         for key, value in override_dict.items():
@@ -41,8 +41,10 @@ def set_up_loggers(log_path, logging_config_file_path, user_logging_config: dict
         deep_update(logging_config, user_logging_config)
     logging_config['log_path'] = log_path
     # ≈ logging.config.dictConfig(logging_config) with a custom configurator
-    LoggingDictConfigurator(logging_config).configure()
-    
+    logging_configurator = LoggingDictConfigurator(logging_config)
+    logging_configurator.configure()
+    return logging_configurator
+
 
 # TODO: support 'feature', 'indicator'
 def create_dynamic_logger(name: str, type_: Literal['strategy', 'model', 'manager']):
@@ -55,8 +57,8 @@ def create_dynamic_logger(name: str, type_: Literal['strategy', 'model', 'manage
     assert name, "logger name cannot be empty/None"
     assert type_ in ['strategy', 'model', 'manager'], f"Unsupported {type_=}"
     
-    # NOTE: LoggingDictConfigurator is a singleton, since it has already configured in set_up_loggers(), no need to pass in config to it
-    config = LoggingDictConfigurator(config=None)
+    Engine = get_engine_class()
+    config = Engine.logging_configurator
     
     logging_config = config.config_orig
     loggers_config = logging_config['loggers']

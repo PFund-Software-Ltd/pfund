@@ -4,7 +4,6 @@ import copy
 import logging
 from logging.config import DictConfigurator
 
-from pfund.utils.utils import Singleton
 from pfund.plogging.filters import FullPathFilter
 from pfund.plogging.formatter import ColoredFormatter
 
@@ -19,7 +18,7 @@ LEVELS = {
 
 
 # override logging's DictConfigurator as it doesn't pass in logger names to file handlers to create filenames
-class LoggingDictConfigurator(Singleton, DictConfigurator):
+class LoggingDictConfigurator(DictConfigurator):
     _MANUALLY_CONFIGURED_HANDLERS = [
         'file_handler', 
         'compressed_timed_rotating_file_handler',
