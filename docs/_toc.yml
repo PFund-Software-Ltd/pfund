@@ -2,8 +2,17 @@
 # Learn more at https://jupyterbook.org/customize/toc.html
 
 format: jb-book
-root: intro
+root: overview
 chapters:
 - file: markdown
-- file: notebooks
+  sections: 
+  - file: notebooks
 - file: markdown-notebooks
+- file: getting-started/index
+  sections:
+  - file: getting-started/installation
+- file: tutorials/index
+- file: how-to-guides/index
+- file: concepts/index
+- file: comparisons/index
+- file: api-reference
