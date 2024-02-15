@@ -4,6 +4,7 @@ from pfund.config_handler import configure
 from pfund.engines import BacktestEngine, TrainEngine, TestEngine, TradeEngine
 from pfund.strategies import Strategy
 from pfund.models import Feature, Model
+from pfund.utils.aliases import ALIASES
 try:
     from pfund.models import PyTorchModel
 except ImportError:

@@ -22,7 +22,7 @@ import pandas as pd
 if TYPE_CHECKING:
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.models import PyTorchModel, SKLearnModel
-    from pfund.indicators.indicator_base import TAFunction, TALibFunction
+    from pfund.indicators.indicator_base import BaseIndicator, TAFunction, TALibFunction
     MachineLearningModel = Union[
         nn.Module,
         BaseEstimator,
@@ -319,6 +319,12 @@ class BaseModel(ABC, metaclass=MetaModel):
         self.models[mdl] = model
         self.logger.debug(f"added model '{mdl}'")
         return model
+    
+    def add_feature(self, feature: BaseFeature, name: str='', feature_path: str='', is_load: bool=True) -> BaseFeature:
+        return self.add_model(feature, name=name, model_path=feature_path, is_load=is_load)
+    
+    def add_indicator(self, indicator: BaseIndicator, name: str='', indicator_path: str='', is_load: bool=True) -> BaseIndicator:
+        return self.add_model(indicator, name=name, model_path=indicator_path, is_load=is_load)
     
     def update_quote(self, data: QuoteData, **kwargs):
         product, bids, asks, ts = data.product, data.bids, data.asks, data.ts

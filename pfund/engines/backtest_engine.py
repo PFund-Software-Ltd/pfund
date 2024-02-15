@@ -2,7 +2,8 @@ from typing import Literal
 
 from pfund.data_tools.data_tool_base import DataTool
 from pfund.engines.base_engine import BaseEngine
-from pfund.models.model_base import BaseModel
+from pfund.models.model_base import BaseModel, BaseFeature
+from pfund.indicators.indicator_base import BaseIndicator
 from pfund.brokers.broker_backtest import BacktestBroker
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.strategies.strategy_backtest import BacktestStrategy
@@ -55,6 +56,12 @@ class BacktestEngine(BaseEngine):
         assert not strategy.models, 'Adding more than 1 model to dummy strategy in backtesting is not supported, you should train and dump your models one by one'
         model = strategy.add_model(model, name=name, model_path=model_path, is_load=is_load)
         return model
+    
+    def add_feature(self, feature: BaseFeature, name: str='', feature_path: str='', is_load: bool=True) -> BaseFeature:
+        return self.add_model(feature, name=name, model_path=feature_path, is_load=is_load)
+    
+    def add_indicator(self, indicator: BaseIndicator, name: str='', indicator_path: str='', is_load: bool=True) -> BaseIndicator:
+        return self.add_model(indicator, name=name, model_path=indicator_path, is_load=is_load)
     
     def add_broker(self, bkr: str):
         bkr = bkr.upper()

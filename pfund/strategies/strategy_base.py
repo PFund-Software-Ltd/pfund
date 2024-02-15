@@ -14,7 +14,8 @@ if TYPE_CHECKING:
     from pfund.brokers.broker_base import BaseBroker
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.datas.data_bar import Bar
-from pfund.models.model_base import BaseModel
+from pfund.models.model_base import BaseModel, BaseFeature
+from pfund.indicators.indicator_base import BaseIndicator
 from pfund.datas import BaseData, BarData, TickData, QuoteData
 from pfund.products.product_base import BaseProduct
 from pfund.accounts.account_base import BaseAccount
@@ -157,7 +158,13 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         self.models[mdl] = model
         self.logger.debug(f"added model '{mdl}'")
         return model
-        
+    
+    def add_feature(self, feature: BaseFeature, name: str='', feature_path: str='', is_load: bool=True) -> BaseFeature:
+        return self.add_model(feature, name=name, model_path=feature_path, is_load=is_load)
+    
+    def add_indicator(self, indicator: BaseIndicator, name: str='', indicator_path: str='', is_load: bool=True) -> BaseIndicator:
+        return self.add_model(indicator, name=name, model_path=indicator_path, is_load=is_load)
+    
     # TODO
     def add_custom_data(self):
         pass

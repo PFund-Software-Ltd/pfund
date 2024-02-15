@@ -7,6 +7,13 @@ chapters:
 - file: getting-started/index
   sections:
   - file: getting-started/installation
+  - file: getting-started/conventions
+  - file: getting-started/basics
+  - file: getting-started/quickstart/index
+    sections:
+    - file: getting-started/quickstart/vectorized_backtesting
+    - file: getting-started/quickstart/event_driven_backtesting
+    - file: getting-started/quickstart/paper_live_trading
 - file: tutorials/index
 - file: how-to-guides/index
 - file: concepts/index

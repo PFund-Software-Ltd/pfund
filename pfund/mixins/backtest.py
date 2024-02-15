@@ -12,7 +12,8 @@ if TYPE_CHECKING:
 
 from pfund.managers.data_manager import get_resolutions_from_kwargs
 from pfund.models.model_backtest import BacktestModel
-from pfund.models.model_base import BaseModel
+from pfund.models.model_base import BaseModel, BaseFeature
+from pfund.indicators.indicator_base import BaseIndicator
 
 
 _PFUND_BACKTEST_KWARGS = ['data_source', 'rollback_period', 'start_date', 'end_date']
@@ -43,6 +44,12 @@ class BacktestMixin:
         name = name or model.__class__.__name__
         model = BacktestModel(type(model), model.ml_model, *model._args, **model._kwargs)
         return super().add_model(model, name=name, model_path=model_path, is_load=is_load)
+    
+    def add_feature(self, feature: BaseFeature, name: str='', feature_path: str='', is_load: bool=True) -> BaseFeature:
+        return self.add_model(feature, name=name, model_path=feature_path, is_load=is_load)
+        
+    def add_indicator(self, indicator: BaseIndicator, name: str='', indicator_path: str='', is_load: bool=True) -> BaseIndicator:
+        return self.add_model(indicator, name=name, model_path=indicator_path, is_load=is_load)
         
     def _get_data_source(self, trading_venue: str, backtest_kwargs: dict):
         from pfeed.const.commons import SUPPORTED_DATA_FEEDS
