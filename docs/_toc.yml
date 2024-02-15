@@ -14,5 +14,6 @@ chapters:
 - file: tutorials/index
 - file: how-to-guides/index
 - file: concepts/index
+- file: examples/index
 - file: comparisons/index
 - file: api-reference

@@ -3,7 +3,7 @@
 
 title: PFund's Documentation
 author: Stephen Yau
-logo: logo.png
+logo: images/logo.png
 copyright: "2024"
 
 # Force re-execution of notebooks on each build.
