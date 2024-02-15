@@ -1,6 +1,7 @@
 # PFund: Algo-Trading Framework for Machine Learning, TradFi, CeFi and DeFi ready.
 
-[![Jupyter Book Badge](docs/images/jupyterbook.svg)](https://jupyterbook.org)
+[![Jupyter Book Badge](https://raw.githubusercontent.com/PFund-Software-Ltd/pfund/main/docs/images/jupyterbook.svg
+)](https://jupyterbook.org)
 [![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/)
 [![PyPI](https://img.shields.io/pypi/v/pfund.svg)](https://pypi.org/project/pfund)
 ![PyPI - Support Python Versions](https://img.shields.io/pypi/pyversions/pfund)
