@@ -4,10 +4,6 @@
 format: jb-book
 root: overview
 chapters:
-- file: markdown
-  sections: 
-  - file: notebooks
-- file: markdown-notebooks
 - file: getting-started/index
   sections:
   - file: getting-started/installation
