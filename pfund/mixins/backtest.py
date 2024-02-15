@@ -144,6 +144,9 @@ class BacktestMixin:
                 print(f'To avoid non-deterministic metrics, Yahoo Finance data on {latest_date} is removed since it might be being updated in real-time')
                 df = df[:-1]
             
+            if 'symbol' in df.columns:
+                df = df.drop('symbol', axis=1) 
+            
             df['product'] = product
             df['resolution'] = resolution
             dfs.append(df)
