@@ -15,6 +15,7 @@ PFund allows traders to:
 - train machine learning models using their favorite frameworks, i.e. PFund is **ML-framework agnostic**
 - tune strategy (hyper)parameters by splitting data into training sets, development sets and test sets
 - go from backtesting to live trading by just changing **ONE line of code!!**
+- execute trades manually/semi-manually via a trading app (frontend+backend)
 
 It is created to enable trading for [PFund.ai](https://pfund.ai) - a trading platform that bridges algo-trading and manual trading using AI (LLM).
 
@@ -79,7 +80,7 @@ This overview already omits some intricate steps, such as data handling and API 
 - [x] Enables parallel data processing, e.g. Interactive Brokers and Binance each have their own process for receiving data feeds
 - [ ] Allows choosing your preferred data tool, e.g. pandas, polars, pyspark etc.
 - [ ] Features a modern frontend using [Mantine UI](https://ui.mantine.dev/) and TradingView's Charts library
-
+- [ ] Supports manual/semi-manual trading using the frontend
 
 
 ## Installation
