@@ -57,7 +57,7 @@ class BaseExchange:
             self.categories.append(category)
 
     def create_product(self, bccy, qccy, ptype, *args, **kwargs) -> CryptoProduct:
-        if category := self.categorize_product_type(ptype) if hasattr(self, 'categorize_product_type') else '':
+        if category := self.PTYPE_TO_CATEGORY[ptype] if hasattr(self, 'PTYPE_TO_CATEGORY') else '':
             self.add_category(category)
         product = CryptoProduct(self.exch, bccy, qccy, ptype, *args, category=category, **kwargs)
         product.load_configs(self.configs)

@@ -18,28 +18,21 @@ class Exchange(BaseExchange):
     # TODO, come back to this if bybit supports more
     # SUPPORT_PLACE_BATCH_ORDERS = True
     # SUPPORT_CANCEL_BATCH_ORDERS = True
+    
+    PTYPE_TO_CATEGORY = {
+        'PERP': 'linear',
+        'FUT': 'linear',
+        'IPERP': 'inverse',
+        'IFUT': 'inverse',
+        'SPOT': 'spot',
+        'OPT': 'option',
+    }
 
     _MAX_NUM_OF_PLACE_BATCH_ORDERS = 20
     _MAX_NUM_OF_CANEL_BATCH_ORDERS = 20
 
     def __init__(self, env):
         super().__init__(env, 'BYBIT')
-
-    @staticmethod
-    def categorize_product_type(ptype):
-        is_spot = (ptype == 'SPOT')
-        is_inverse = (ptype in ['IPERP', 'IFUT'])
-        is_linear = not is_inverse and not is_spot
-        is_option = (ptype == 'OPT')
-        if is_linear:
-            category = 'linear'
-        elif is_inverse:
-            category = 'inverse'
-        elif is_spot:
-            category = 'spot'
-        elif is_option:
-            category = 'option'
-        return category
     
     def _create_pdt_matchings_config(
             # general to exchanges

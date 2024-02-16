@@ -65,7 +65,7 @@ adapter:
     CF--: 'Filled'
     C-C-: 'Cancelled'
   offset: {}
-  px_directions: {
+  price_directions: {
     # internal definitions:
     # PlusTick: ...,
     # ZeroPlusTick: ...,
