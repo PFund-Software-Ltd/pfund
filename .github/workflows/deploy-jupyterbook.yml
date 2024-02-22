@@ -1,0 +1,50 @@
+name: Deploy Jupyter Book to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
+    - name: Install Dependencies
+      run: |
+        pip install jupyter-book
+
+    - name: Build Jupyter Book
+      run: jupyter-book build docs/
+
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: ./docs/_build/html
+
+  deploy:
+    environment:
+      name: github-pages
+      # This will dynamically generate the deployment URL
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Publish to GitHub Pages 
+        id: deployment
+        uses: actions/deploy-pages@v4
