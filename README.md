@@ -1,10 +1,12 @@
 # PFund: Algo-Trading Framework for Machine Learning, TradFi, CeFi and DeFi ready.
 
+![GitHub stars](https://img.shields.io/github/stars/PFund-Software-Ltd/pfund?style=social)
+![PyPI downloads](https://img.shields.io/pypi/dm/pfund)
+[![PyPI](https://img.shields.io/pypi/v/pfund.svg)](https://pypi.org/project/pfund)
+![PyPI - Support Python Versions](https://img.shields.io/pypi/pyversions/pfund)
 [![Jupyter Book Badge](https://raw.githubusercontent.com/PFund-Software-Ltd/pfund/main/docs/images/jupyterbook.svg
 )](https://jupyterbook.org)
 [![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/)
-[![PyPI](https://img.shields.io/pypi/v/pfund.svg)](https://pypi.org/project/pfund)
-![PyPI - Support Python Versions](https://img.shields.io/pypi/pyversions/pfund)
 
 PFund (/piː fʌnd/), which stands for "Personal Fund", is an algo-trading framework designed for using machine learning models to trade across TradFi (Traditional Finance, e.g. Interactive Brokers), CeFi (Centralized Finance, e.g. Binance) and DeFi (Decentralized Finance, e.g. [dYdX](https://dydx.exchange)), or in simple terms, **Stocks** and **Cryptos**.
 
@@ -90,9 +92,6 @@ This overview already omits some intricate steps, such as data handling and API 
 ```bash
 poetry add pfund
 
-# if you are a contributor/maintainer:
-poetry add pfund --with dev,doc
-
 # update to the latest version:
 poetry update pfund
 ```
@@ -130,9 +129,17 @@ class YourStrategy(pf.Strategy):
         # write your trading logic here
         pass
 
-engine = pf.BacktestEngine(...)
-strategy = engine.add_strategy(YourStrategy())
-strategy.add_data(...)
+engine = pf.BacktestEngine(mode='vectorized')
+strategy = engine.add_strategy(YourStrategy(), name='your_strategy')
+strategy.add_data(
+  'IB', 'AAPL', 'USD', 'STK', resolutions=['1d'],
+  backtest={
+    # NOTE: since IB does not provide any historical data for backtesting purpose, use data from 'YAHOO_FINANCE'
+    'data_source': 'YAHOO_FINANCE',
+    'start_date': '2024-01-01',
+    'end_date': '2024-02-01',
+  }
+)
 strategy.add_model(...)
 engine.run()
 ```
@@ -145,7 +152,15 @@ import pfund as pf
 
 engine = pf.TradeEngine(env='LIVE')
 strategy = engine.add_strategy(YourStrategy())
-strategy.add_data(...)
+strategy.add_data(
+  'IB', 'AAPL', 'USD', 'STK', resolutions=['1d'],
+  backtest={
+    # NOTE: since IB does not provide any historical data for backtesting purpose, use data from 'YAHOO_FINANCE'
+    'data_source': 'YAHOO_FINANCE',
+    'start_date': '2024-01-01',
+    'end_date': '2024-02-01',
+  }
+)
 strategy.add_model(...)
 engine.run()
 ```
@@ -184,19 +199,21 @@ engine.run()
 ## Model Hub
 Imagine a space where algo-traders can share their machine learning models with one another.
 Strategy and model development could be so much faster since you can build on top of an existing working model.
-> Model Hub is coming soon in [PFund.ai](https://pfund.ai), Stay Tuned!
+> Model Hub is coming soon on [PFund.ai](https://pfund.ai), Stay Tuned!
 
 
 ## Supported Trading Venues
-| Trading Venue                   | Vectorized Backtesting | Event-Driven Backtesting | Paper Trading | Live Trading |
-| ------------------------------- | ---------------------- | ------------------------ | ------------- | ------------ |
-| Bybit                           | 🟢                     | 🟡                       | 🟡            | 🟡           |
-| *Interactive Brokers (IB)       | 🟡                     | 🟡                       | 🟡            | 🟡           |
-| Binance                         | 🔴                     | 🔴                       | 🔴            | 🔴           |
-| OKX                             | 🔴                     | 🔴                       | 🔴            | 🔴           |
-| *Alpaca                         | 🔴                     | 🔴                       | 🔴            | 🔴           |
-| *[Futu](https://www.futunn.com) | 🔴                     | 🔴                       | 🔴            | 🔴           |
-| dYdX                            | 🔴                     | 🔴                       | 🔴            | 🔴           |
+| Trading Venue             | Vectorized Backtesting | Event-Driven Backtesting | Paper Trading | Live Trading |
+| ------------------------- | ---------------------- | ------------------------ | ------------- | ------------ |
+| Bybit                     | 🟢                     | 🟡                       | 🟡            | 🟡           |
+| *Interactive Brokers (IB) | 🟡                     | 🟡                       | 🟡            | 🟡           |
+| Binance                   | 🔴                     | 🔴                       | 🔴            | 🔴           |
+| OKX                       | 🔴                     | 🔴                       | 🔴            | 🔴           |
+| *Alpaca                   | 🔴                     | 🔴                       | 🔴            | 🔴           |
+| *[Futu]                   | 🔴                     | 🔴                       | 🔴            | 🔴           |
+| dYdX                      | 🔴                     | 🔴                       | 🔴            | 🔴           |
+
+[Futu]: https://www.futunn.com
 
 🟢 = finished \
 🟡 = in progress \
@@ -206,6 +223,7 @@ Strategy and model development could be so much faster since you can build on to
 
 ## Related Projects
 - [PFeed](https://github.com/PFund-Software-Ltd/pfeed) — Data pipeline for algo-trading, helping traders in getting real-time and historical data, and storing them in a local data lake for quantitative research.
+- [PyTrade.org](https://pytrade.org) - A curated list of Python libraries and resources for algorithmic trading.
 
 
 ## Disclaimer

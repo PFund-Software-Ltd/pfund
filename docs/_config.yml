@@ -4,7 +4,7 @@
 title: PFund's Documentation
 author: Stephen Yau
 logo: images/logo.png
-copyright: "2024"
+copyright: "2024, PFund.ai"
 
 # Force re-execution of notebooks on each build.
 # See https://jupyterbook.org/content/execute.html
@@ -24,11 +24,13 @@ bibtex_bibfiles:
 repository:
   url: https://github.com/PFund-Software-Ltd/pfund  # Online location of your book
   path_to_book: docs  # Optional path to your book, relative to the repository root
-  branch: master  # Which branch of the repository should be used when creating links (optional)
+  branch: main  # Which branch of the repository should be used when creating links (optional)
 
 # Add GitHub buttons to your book
 # See https://jupyterbook.org/customize/config.html#add-a-link-to-your-repository
 html:
+  home_page_in_navbar: true
+  favicon: images/favicon.ico
   # use_issues_button: true
   use_repository_button: true
   use_edit_page_button: true
