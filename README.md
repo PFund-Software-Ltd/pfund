@@ -8,21 +8,36 @@
 )](https://jupyterbook.org)
 [![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/)
 
-PFund (/piː fʌnd/), which stands for "Personal Fund", is an algo-trading framework designed for using machine learning models to trade across TradFi (Traditional Finance, e.g. Interactive Brokers), CeFi (Centralized Finance, e.g. Binance) and DeFi (Decentralized Finance, e.g. [dYdX](https://dydx.exchange)), or in simple terms, **Stocks** and **Cryptos**.
+[TradFi]: https://www.techopedia.com/definition/traditional-finance-tradfi
+[CeFi]: https://www.techopedia.com/definition/centralized-finance-cefi
+[DeFi]: https://www.coinbase.com/learn/crypto-basics/what-is-defi
+[pytrade.org]: https://pytrade.org
+[dYdX]: https://dydx.exchange
+[polars]: https://pola.rs/
+[PFund.ai]: https://pfund.ai
+[PFeed]: https://github.com/PFund-Software-Ltd/pfeed
+[Bybit]: https://bybit.com/
+[PyTorch]: https://pytorch.org/
+[Poetry]: https://python-poetry.org
+[Futu]: https://www.futunn.com
+[FirstRate Data]: https://firstratedata.com
+[Mantine UI]: https://ui.mantine.dev/
+
+PFund (/piː fʌnd/), which stands for "**Personal Fund**", is an **algo-trading framework** designed for using **machine learning** models to trade across [TradFi] (Traditional Finance, e.g. **Interactive Brokers**), [CeFi] (Centralized Finance, e.g. Binance) and [DeFi] (Decentralized Finance, e.g. [dYdX]), or in simple terms, **Stocks** and **Cryptos**.
 
 PFund allows traders to:
 - perform vectorized or event-driven backtesting with
   - different resolutions of data, e.g. orderbook data, tick data, bar data etc.
-  - different data tools, e.g. pandas, [polars](https://pola.rs/) etc.
+  - different data tools, e.g. pandas, [polars] etc.
 - train machine learning models using their favorite frameworks, i.e. PFund is **ML-framework agnostic**
 - tune strategy (hyper)parameters by splitting data into training sets, development sets and test sets
 - go from backtesting to live trading by just changing **ONE line of code!!**
 - execute trades manually/semi-manually via a trading app (frontend+backend)
 
-It is created to enable trading for [PFund.ai](https://pfund.ai) - a trading platform that bridges algo-trading and manual trading using AI (LLM).
+It is created to enable trading for [PFund.ai] - a trading platform that bridges algo-trading and manual trading using AI (LLM).
 
 Since PFund's sole purpose is for trading only, for all the data work, there is a separate library to handle that: \
-[PFeed](https://github.com/PFund-Software-Ltd/pfeed) - Data pipeline for algo-trading, helping traders in getting real-time and historical data, and storing them in a local data lake for quantitative research.
+[PFeed] - Data pipeline for algo-trading, helping traders in getting real-time and historical data, and storing them in a local data lake for quantitative research.
 
 
 <details>
@@ -49,12 +64,12 @@ Since PFund's sole purpose is for trading only, for all the data work, there is 
 **_Caution: PFund is at a VERY EARLY stage, use it at your own risk._**
 
 PFund is currently under active development, the framework design will be prioritized first over
-stability and scalability. 
+stability and scalability.
 
 Please note that the available version is a *dev* version, not a *stable* one. \
 You are encouraged to play with the *dev* version, but only use it when a *stable* version is released.
 
-> PFund for the time being **_only supports vectorized backtesting_** using [Bybit](https://bybit.com/) and Yahoo Finance data for testing purpose.
+> PFund for the time being **_only supports vectorized backtesting_** using [Bybit] and Yahoo Finance data for testing purpose.
 
 
 ## Mission
@@ -70,7 +85,7 @@ As an algo-trader, if you aim to quickly try out some trading ideas to see if th
 
 This overview already omits some intricate steps, such as data handling and API integration.
 
-> PFund's mission is to **_enable traders to concentrate solely on strategy formulation_** while the framework manages the rest. With PFund serving as the core trade engine, it empowers retail traders to have a fund management experience on [PFund.ai](https://pfund.ai) as if they are operating their personal hedge fund, hence the name *PFund*.
+> PFund's mission is to **_enable traders to concentrate solely on strategy formulation_** while the framework manages the rest. With PFund serving as the core trade engine, it empowers retail traders to have a fund management experience on [PFund.ai] as if they are operating their personal hedge fund, hence the name *PFund*.
 
 
 ## Core Features
@@ -81,14 +96,14 @@ This overview already omits some intricate steps, such as data handling and API 
 - [x] Streamlines the algo-trading flow, from vectorized backtesting for strategy prototyping and event-driven backtesting for strategy development, to live trading for strategy deployment
 - [x] Enables parallel data processing, e.g. Interactive Brokers and Binance each have their own process for receiving data feeds
 - [ ] Allows choosing your preferred data tool, e.g. pandas, polars, pyspark etc.
-- [ ] Features a modern frontend using [Mantine UI](https://ui.mantine.dev/) and TradingView's Charts library
+- [ ] Features a modern frontend using [Mantine UI] and TradingView's Charts library
 - [ ] Supports manual/semi-manual trading using the frontend
 
 
 ## Installation
-> Python 3.12 is not supported until [PyTorch](https://pytorch.org/) supports it
+> Python 3.12 is not supported until [PyTorch]supports it
 
-### Using [Poetry](https://python-poetry.org) (Recommended)
+### Using [Poetry] (Recommended)
 ```bash
 poetry add pfund
 
@@ -100,9 +115,6 @@ poetry update pfund
 ### Using Pip
 ```bash
 pip install pfund
-
-# if you are a contributor/maintainer:
-pip install "pfund[dev,doc]"
 
 # install the latest version:
 pip install -U pfund
@@ -129,6 +141,7 @@ class YourStrategy(pf.Strategy):
         # write your trading logic here
         pass
 
+
 engine = pf.BacktestEngine(mode='vectorized')
 strategy = engine.add_strategy(YourStrategy(), name='your_strategy')
 strategy.add_data(
@@ -140,7 +153,6 @@ strategy.add_data(
     'end_date': '2024-02-01',
   }
 )
-strategy.add_model(...)
 engine.run()
 ```
 
@@ -151,9 +163,10 @@ engine.run()
 import pfund as pf
 
 engine = pf.TradeEngine(env='LIVE')
-strategy = engine.add_strategy(YourStrategy())
+strategy = engine.add_strategy(YourStrategy(), name='your_strategy')
 strategy.add_data(
   'IB', 'AAPL', 'USD', 'STK', resolutions=['1d'],
+  # for convenience, you can keep the kwarg `backtest`, `TradeEngine` will ignore it
   backtest={
     # NOTE: since IB does not provide any historical data for backtesting purpose, use data from 'YAHOO_FINANCE'
     'data_source': 'YAHOO_FINANCE',
@@ -161,7 +174,6 @@ strategy.add_data(
     'end_date': '2024-02-01',
   }
 )
-strategy.add_model(...)
 engine.run()
 ```
 
@@ -199,7 +211,7 @@ engine.run()
 ## Model Hub
 Imagine a space where algo-traders can share their machine learning models with one another.
 Strategy and model development could be so much faster since you can build on top of an existing working model.
-> Model Hub is coming soon on [PFund.ai](https://pfund.ai), Stay Tuned!
+> Model Hub is coming soon on [PFund.ai], Stay Tuned!
 
 
 ## Supported Trading Venues
@@ -213,17 +225,15 @@ Strategy and model development could be so much faster since you can build on to
 | *[Futu]                   | 🔴                     | 🔴                       | 🔴            | 🔴           |
 | dYdX                      | 🔴                     | 🔴                       | 🔴            | 🔴           |
 
-[Futu]: https://www.futunn.com
-
 🟢 = finished \
 🟡 = in progress \
 🔴 = todo \
-\* = use a **_separate data source_** (e.g. [FirstRate Data](https://firstratedata.com)) for backtesting
+\* = use a **_separate data source_** (e.g. [FirstRate Data]) for backtesting
 
 
 ## Related Projects
-- [PFeed](https://github.com/PFund-Software-Ltd/pfeed) — Data pipeline for algo-trading, helping traders in getting real-time and historical data, and storing them in a local data lake for quantitative research.
-- [PyTrade.org](https://pytrade.org) - A curated list of Python libraries and resources for algorithmic trading.
+- [PFeed] — Data pipeline for algo-trading, helping traders in getting real-time and historical data, and storing them in a local data lake for quantitative research.
+- [PyTrade.org] - A curated list of Python libraries and resources for algorithmic trading.
 
 
 ## Disclaimer
