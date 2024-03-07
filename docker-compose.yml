@@ -1,0 +1,29 @@
+version: '3.8'
+name: pfund
+volumes:
+  redis_data: null
+services:
+  redis:
+    image: redis/redis-stack-server:7.2.0-v6
+    ports:
+      - ${REDIS_PORT:6379}:${REDIS_PORT:6379}
+    volumes:
+      - redis_data:/data
+  # ws_server:
+  #   build: 
+  #     context: ./servers/ws_server
+  #     dockerfile: Dockerfile
+  #   environment:
+  #     - REDIS_HOST=redis
+  #     - REDIS_PORT=${REDIS_PORT:-6379}
+  #   depends_on:
+  #     - redis
+  #   ports:
+  #     - ${WS_SERVER_PORT:-8002}:${WS_SERVER_PORT:-8002}
+  #   volumes:
+  #     - ./logs/ws_server:/ws_server/logs
+  # frontend:
+  #   ports:
+  #     - ${FRONTEND_PORT:-3000}:${FRONTEND_PORT:-3000}
+  #   depends_on:
+  #     - ws_server
