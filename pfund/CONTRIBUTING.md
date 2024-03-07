@@ -8,3 +8,9 @@ poetry add pfund with dev,doc
 # at the root directory, run:
 jb build docs/
 ```
+
+## Update submodules
+```bash
+# run this to see if the version a submodule is using has been changed.
+git submodule update
+```
