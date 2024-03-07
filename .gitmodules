@@ -4,3 +4,6 @@
 [submodule "ws_server"]
 	path = ws_server
 	url = git@github.com:PFund-Software-Ltd/ws_server.git
+[submodule "rest_server"]
+	path = rest_server
+	url = git@github.com:PFund-Software-Ltd/rest_server.git
