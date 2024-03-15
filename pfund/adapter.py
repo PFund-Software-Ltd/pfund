@@ -25,7 +25,7 @@ class Adapter:
         return pdt
 
     def load_pdt_matchings(self):
-        file_path = f'{PROJ_CONFIG_PATH}/{self._trading_venue}'
+        file_path = f'{PROJ_CONFIG_PATH}/{self._trading_venue.lower()}'
         config_name = 'pdt_matchings'
         for file_name in os.listdir(file_path):
             if not file_name.startswith(config_name):
