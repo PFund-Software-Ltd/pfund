@@ -27,9 +27,6 @@ poetry update pfund
 ```bash
 pip install pfund
 
-# if you are a contributor/maintainer:
-pip install "pfund[dev,doc]"
-
 # install the latest version:
 pip install -U pfund
 ```
