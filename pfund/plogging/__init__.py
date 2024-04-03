@@ -17,6 +17,11 @@ def set_up_loggers(log_path, logging_config_file_path, user_logging_config: dict
     def deep_update(default_dict, override_dict, raise_if_key_not_exist=False):
         '''Updates a default dictionary with an override dictionary, supports nested dictionaries.'''
         for key, value in override_dict.items():
+            
+            # make sure log level is in uppercase, 'debug' -> 'DEBUG'
+            if key == 'level':
+                value = value.upper()
+                
             if raise_if_key_not_exist and key not in default_dict:
                 # Raise an exception if the key from override_dict doesn't exist in default_dict
                 raise KeyError(f"Key '{key}' is not supported in logging config.")

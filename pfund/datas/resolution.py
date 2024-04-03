@@ -6,6 +6,7 @@ from pfund.const.commons import SUPPORTED_TIMEFRAMES
 
 class Resolution:
     def __init__(self, resolution: str):
+        assert re.match(r"^\d+[a-zA-Z]+$", resolution), f"Invalid {resolution=}, pattern should be e.g. '1d', '2m', '3h' etc."
         self._resolution = self._standardize(resolution)
         # split resolution (e.g. '1m') into period (e.g. '1') and timeframe (e.g. 'm')
         self.period, timeframe = re.split('(\d+)', self._resolution.strip())[1:]

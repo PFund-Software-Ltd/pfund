@@ -1,6 +1,6 @@
 # Setup
 
-The following setup is used across examples unless further specified:
+The following setup is used across examples in [Getting Started] unless further specified:
 ```python
 import pfund as pf
 

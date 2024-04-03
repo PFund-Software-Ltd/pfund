@@ -143,3 +143,5 @@ pprint(SUPPORTED_CRYPTO_PRODUCT_TYPES)
 | ------------- | -------------------------- | --------------------------- | -------------------- |
 | AAPL_USD_STK  | AAPL                       | USD                         | STK (stock)          |
 | BTC_USDT_PERP | BTC                        | USDT                        | PERP (perpetual)     |
+
+### Resolutions (TODO)

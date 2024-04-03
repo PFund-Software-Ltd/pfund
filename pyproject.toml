@@ -1,18 +1,18 @@
 [tool.poetry]
 name = "pfund"
-version = "0.0.1.dev4"
+version = "0.0.1.dev5"
 description = "A Complete Algo-Trading Framework for Machine Learning, enabling trading across TradFi, CeFi and DeFi. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading"
 license = "Apache-2.0"
 authors = ["Stephen Yau <softwareentrepreneer+pfund@gmail.com>"]
 readme = "README.md"
 homepage = "https://pfund.ai"
 repository = "https://github.com/PFund-Software-Ltd/pfund"
-documentation = "https://pfund.ai/docs"
+documentation = "https://pfund-docs.pfund.ai"
 keywords = ["trading", "algo-trading", "stocks", "cryptos", "cryptocurrencies", "TradFi", "CeFi", "DeFi", "portfolio management", "investment", "backtesting", "machine learning"]
 
 [tool.poetry.dependencies]
 python = "^3.10 <3.12"
-pfeed = "^0.0.1.dev4"
+pfeed = "^0.0.1.dev5"
 pyzmq = "^25.1.2"
 pyyaml = "^6.0.1"
 psutil = "^5.9.8"
@@ -21,15 +21,19 @@ rich = "^13.7.0"
 schedule = "^1.2.1"
 websocket-client = "^1.7.0"
 python-telegram-bot = "^20.7"
-pandas = "^2.2.0"
 ta = "^0.11.0"
 click = "^8.1.7"
 platformdirs = "^4.2.0"
-torch = "^2.1.2"
-scikit-learn = "^1.4.0"
 
 [tool.poetry.scripts]
 pfund = "pfund.main:run_cli"
+
+[tool.poetry.group.ml]
+optional = true
+
+[tool.poetry.group.ml.dependencies]
+torch = "^2.1.2"
+scikit-learn = "^1.4.0"
 
 [tool.poetry.group.dev]
 optional = true
@@ -44,6 +48,9 @@ bandit = "^1.7.7"
 ruff = "^0.1.15"
 pyright = "^1.1.349"
 grayskull = "^2.5.3"
+pytest-xdist = "^3.5.0"
+faker = "^24.4.0"
+tox = "^4.14.2"
 
 [tool.poetry.group.doc]
 optional = true

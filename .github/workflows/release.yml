@@ -1,0 +1,35 @@
+name: Publish Python Package
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Trigger the workflow on push of tags like v1.0.0
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+    contents: write
+    pages: write
+    id-token: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install poetry
+        run: pip install poetry
+
+      - name: Build and publish to PyPI
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          poetry config pypi-token.pypi $PYPI_API_TOKEN
+          poetry build
+          poetry publish

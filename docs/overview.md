@@ -21,7 +21,7 @@ There are many algo-trading frameworks written in Python (for details, please re
 - Modern frontend for monitoring and backend for tasks such as storing trade history
 
 That is why `pfund` is created.
-> The goal for it is to become the go-to algo-trading framework for Python traders, no more  reinventing the wheel!
+> The goal for it is to become the go-to algo-trading framework for Python traders, no more reinventing the wheel!
 
 
 ## What is `pfund`
@@ -43,7 +43,6 @@ Since PFund's sole purpose is for trading only, for all the data work, there is 
 
 
 ## Why use `pfund`
-
 You should use `pfund` if you want to:
 - Join [PFund.ai]'s ecosystem, which includes:
     - **AI** (LLM) capable of analyzing your `pfund` strategies

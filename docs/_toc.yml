@@ -15,9 +15,9 @@ chapters:
     - file: getting-started/quickstart/vectorized_backtesting
     - file: getting-started/quickstart/event_driven_backtesting
     - file: getting-started/quickstart/paper_live_trading
+- file: concepts/index
 - file: tutorials/index
 - file: how-to-guides/index
-- file: concepts/index
 - file: examples/index
 - file: comparisons/index
 - file: api-reference
