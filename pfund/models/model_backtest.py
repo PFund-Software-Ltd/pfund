@@ -38,9 +38,9 @@ def BacktestModel(Model: BaseModel, ml_model: MachineLearningModel, *args, **kwa
                 return False
             else:
                 return (
-                    self._Engine.mode == 'vectorized' or \
-                    (self._Engine.mode == 'event_driven' and \
-                        self._Engine.use_prepared_signals)
+                    self.engine.mode == 'vectorized' or \
+                    (self.engine.mode == 'event_driven' and \
+                        self.engine.use_prepared_signals)
                 )
         
         def start(self):
@@ -53,7 +53,7 @@ def BacktestModel(Model: BaseModel, ml_model: MachineLearningModel, *args, **kwa
                 self.set_signal(None)
         
         def _prepare_df_with_models(self, *args, **kwargs):
-            if self._Engine.mode == 'vectorized':
+            if self.engine.mode == 'vectorized':
                 self.data_tool._prepare_df_with_models(*args, **kwargs)
                 
         def _append_to_df(self, *args, **kwargs):

@@ -236,7 +236,7 @@ class Exchange(BaseExchange):
         """
         def _convert_to_date(time_):
             if type(time_) is float:
-                date = datetime.datetime.fromtimestamp(tz=datetime.timezone.utc)
+                date = datetime.datetime.fromtimestamp(time_, tz=datetime.timezone.utc)
             elif type(time_) is str:
                 date = datetime.datetime.strptime(time_, date_format)
                 date = date.replace(tzinfo=datetime.timezone.utc)

@@ -25,11 +25,12 @@ def _custom_excepthook(exception_class: type[BaseException], exception: BaseExce
         logging.getLogger(PROJ_NAME).exception('Uncaught exception:')
         
         
-def import_strategies_models_features_or_indicators(path: str):
+def dynamic_import(path: str):
     for item in os.listdir(path):
         item_path = os.path.join(path, item)
         if os.path.isdir(item_path) and '__pycache__' not in item_path:
-            for type_ in ['strategies', 'models', 'features', 'indicators']:
+            for type_ in ['strategies', 'models', 'features', 'indicators', 
+                          'backtests', 'notebooks', 'spreadsheets', 'dashboards']:
                 if type_ in path:
                     break
             else:
@@ -65,17 +66,48 @@ class ConfigHandler:
             config = {}
         return cls(**config)
     
+    @property
+    def strategy_path(self):
+        return f'{self.data_path}/strategies'
+    
+    @property
+    def model_path(self):
+        return f'{self.data_path}/models'
+    
+    @property
+    def feature_path(self):
+        return f'{self.data_path}/features'
+    
+    @property
+    def indicator_path(self):
+        return f'{self.data_path}/indicators'
+    
+    @property
+    def backtest_path(self):
+        return f'{self.data_path}/backtests'
+    
+    @property
+    def notebook_path(self):
+        return f'{self.data_path}/notebooks'
+    
+    @property
+    def spreadsheet_path(self):
+        return f'{self.data_path}/spreadsheets'
+    
+    @property
+    def dashboard_path(self):
+        return f'{self.data_path}/dashboards'
+    
     def __post_init__(self):
         self.logging_config = self.logging_config or {}
         
-        strategy_path, model_path = f'{self.data_path}/strategies', f'{self.data_path}/models'
-        feature_path, indicator_path = f'{self.data_path}/features', f'{self.data_path}/indicators'
-        for path in [strategy_path, model_path, feature_path, indicator_path]:
+        for path in [self.strategy_path, self.model_path, self.feature_path, self.indicator_path,
+                     self.backtest_path, self.notebook_path, self.spreadsheet_path, self.dashboard_path]:
             if not os.path.exists(path):
                 os.makedirs(path)
                 print(f'created {path}')
             sys.path.append(path)
-            import_strategies_models_features_or_indicators(path)
+            dynamic_import(path)
         
         if self.use_fork_process and sys.platform != 'win32':
             multiprocessing.set_start_method('fork', force=True)

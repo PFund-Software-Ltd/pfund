@@ -46,8 +46,9 @@ class BaseModel(ABC, metaclass=MetaModel):
         self._args = args
         self._kwargs = kwargs
         self.name = self.mdl = self.__class__.__name__
-        self._Engine = get_engine_class()
-        data_tool: str = self._Engine.data_tool
+        self.Engine = get_engine_class()
+        self.engine = self.Engine()
+        data_tool: str = self.Engine.data_tool
         DataTool = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool}'), f'{data_tool.capitalize()}DataTool')
         self.data_tool = DataTool()
         self.logger = None

@@ -34,9 +34,9 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         self._args = args
         self._kwargs = kwargs
         self.name = self.strat = self.__class__.__name__
-        self._Engine = get_engine_class()
-        self._engine = self._Engine()
-        data_tool: str = self._Engine.data_tool
+        self.Engine = get_engine_class()
+        self.engine = self.Engine()
+        data_tool: str = self.Engine.data_tool
         DataTool = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool}'), f'{data_tool.capitalize()}DataTool')
         self.data_tool = DataTool()
         self.logger = None
@@ -116,7 +116,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         return self._zmq
 
     def start_zmq(self):
-        zmq_ports = self._engine.zmq_ports
+        zmq_ports = self.engine.zmq_ports
         self._zmq = ZeroMQ(self.name)
         self._zmq.start(
             logger=self.logger,
@@ -184,6 +184,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         trading_venue, base_currency, quote_currency, ptype = convert_to_uppercases(trading_venue, base_currency, quote_currency, ptype)
         bkr = 'CRYPTO' if trading_venue in SUPPORTED_CRYPTO_EXCHANGES else trading_venue
         broker = self.add_broker(bkr) if bkr not in self.brokers else self.get_broker(bkr)
+        
         if bkr == 'CRYPTO':
             exch = trading_venue
             datas = broker.add_data(exch, base_currency, quote_currency, ptype, *args, **kwargs)
@@ -303,7 +304,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         return self.brokers[bkr.upper()]
 
     def add_broker(self, bkr: str) -> BaseBroker:
-        broker = self._engine.add_broker(bkr)
+        broker = self.engine.add_broker(bkr)
         self.brokers[bkr] = broker
         return broker
 

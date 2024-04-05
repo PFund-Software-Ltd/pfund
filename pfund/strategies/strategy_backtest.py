@@ -20,11 +20,11 @@ def BacktestStrategy(Strategy: BaseStrategy, *args, **kwargs) -> BaseStrategy:
                 return self.data_tool._prepare_df()
             
         def _prepare_df_with_models(self, *args, **kwargs):
-            if self.name != '_dummy' and self._Engine.mode == 'vectorized':
+            if self.name != '_dummy' and self.engine.mode == 'vectorized':
                 self.data_tool._prepare_df_with_models(*args, **kwargs)
         
         def _append_to_df(self, *args, **kwargs):
-            if self._Engine.append_to_strategy_df and self.name != '_dummy':
+            if self.engine.append_to_strategy_df and self.name != '_dummy':
                 return self.data_tool._append_to_df(*args, **kwargs)
             
         def add_account(self, trading_venue: str, acc: str='', initial_balances: dict[str, int|float]|None=None, **kwargs):

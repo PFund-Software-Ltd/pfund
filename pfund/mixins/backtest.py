@@ -5,7 +5,7 @@ import time
 import datetime
 import copy
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING 
 if TYPE_CHECKING:
     from pfeed.feeds.base_feed import BaseFeed
     from pfund.datas.data_base import BaseData
@@ -28,7 +28,7 @@ class BacktestMixin:
             data_source = self._get_data_source(trading_venue, backtest_kwargs)
             feed = self.get_feed(data_source)
             kwargs = self._prepare_kwargs(feed, kwargs)
-        
+            
         datas = super().add_data(trading_venue, base_currency, quote_currency, ptype, *args, **kwargs)
         
         if train_kwargs:
@@ -65,14 +65,14 @@ class BacktestMixin:
     def _prepare_kwargs(self, feed: BaseFeed, kwargs: dict):
         assert 'resolution' in kwargs or 'resolutions' in kwargs, f"data resolution(s) must be defined for {feed.name}"
         
-        if self._Engine.mode == 'vectorized':
+        if self.engine.mode == 'vectorized':
             # clear kwargs that are only for event driven backtesting
             for k in _EVENT_DRIVEN_BACKTEST_KWARGS:
                 if k == 'auto_resample':
                     kwargs[k] = {'by_official_resolution': False, 'by_highest_resolution': False}
                 else:
                     kwargs[k] = {}
-        elif self._Engine.mode == 'event_driven':
+        elif self.engine.mode == 'event_driven':
             if 'is_skip_first_bar' not in kwargs:
                 kwargs['is_skip_first_bar'] = False
         

@@ -6,9 +6,6 @@ from pfund.const.paths import PROJ_CONFIG_PATH
 from pfund.utils.utils import short_path
 
 
-has_printed = False
-
-
 class Configuration:
     def __init__(self, config_dir, config_name):
         self.config_dir = config_dir.lower()
@@ -24,16 +21,12 @@ class Configuration:
         return self.config_dir
 
     def read_config(self, config_name):
-        global has_printed
         file_path = f'{self.config_path}/{config_name}.yml'
         # short_file_path = short_path(file_path)
         if not os.path.exists(file_path):
             print(f'cannot find config {file_path}')
         else:
             with open(file_path, 'r') as f:
-                if not has_printed:
-                    has_printed = True
-                    print(f'loaded config {file_path}')
                 return list(yaml.safe_load_all(f))
 
     def write_config(self, config_name, content):
