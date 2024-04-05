@@ -68,19 +68,19 @@ class ConfigHandler:
     
     @property
     def strategy_path(self):
-        return f'{self.data_path}/strategies'
+        return f'{self.data_path}/hub/strategies'
     
     @property
     def model_path(self):
-        return f'{self.data_path}/models'
+        return f'{self.data_path}/hub/models'
     
     @property
     def feature_path(self):
-        return f'{self.data_path}/features'
+        return f'{self.data_path}/hub/features'
     
     @property
     def indicator_path(self):
-        return f'{self.data_path}/indicators'
+        return f'{self.data_path}/hub/indicators'
     
     @property
     def backtest_path(self):
@@ -88,15 +88,15 @@ class ConfigHandler:
     
     @property
     def notebook_path(self):
-        return f'{self.data_path}/notebooks'
+        return f'{self.data_path}/templates/notebooks'
     
     @property
     def spreadsheet_path(self):
-        return f'{self.data_path}/spreadsheets'
+        return f'{self.data_path}/templates/spreadsheets'
     
     @property
     def dashboard_path(self):
-        return f'{self.data_path}/dashboards'
+        return f'{self.data_path}/templates/dashboards'
     
     def __post_init__(self):
         self.logging_config = self.logging_config or {}
