@@ -8,19 +8,19 @@ components at the highest level such as:
     strategies (your trading strategies)
 In order to communicate with other processes, it uses ZeroMQ as the core 
 message queue.
-
-Please refer to #TODO for more examples.
 """
 import time
 from threading import Thread
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.types.common_literals import tSUPPORTED_DATA_TOOLS
+
 import schedule
 import psutil
 
-from pfund.data_tools.data_tool_base import DataTool
 from pfund.engines.base_engine import BaseEngine
 from pfund.brokers.broker_base import BaseBroker
-from pfund.const.commons import *
 from pfund.utils.utils import flatten_dict
 from pfund.zeromq import ZeroMQ
 from pfund.config_handler import ConfigHandler
@@ -29,13 +29,13 @@ from pfund.config_handler import ConfigHandler
 class TradeEngine(BaseEngine):
     zmq_ports = {}
 
-    def __new__(cls, *, env: str='PAPER', data_tool: DataTool='pandas', zmq_port=5557, config: ConfigHandler | None=None, **settings):
+    def __new__(cls, *, env: str='PAPER', data_tool: 'tSUPPORTED_DATA_TOOLS'='pandas', zmq_port=5557, config: ConfigHandler | None=None, **settings):
         if not hasattr(cls, 'zmq_port'):
-            assert type(zmq_port) is int, f'{zmq_port=} must be an integer'
+            assert isinstance(zmq_port, int), f'{zmq_port=} must be an integer'
             cls._zmq_port = zmq_port
         return super().__new__(cls, env, data_tool=data_tool, config=config, **settings)
 
-    def __init__(self, *, env: str='PAPER', data_tool: DataTool='pandas', zmq_port=5557, config: ConfigHandler | None=None, **settings):
+    def __init__(self, *, env: str='PAPER', data_tool: 'tSUPPORTED_DATA_TOOLS'='pandas', zmq_port=5557, config: ConfigHandler | None=None, **settings):
         super().__init__(env, data_tool=data_tool)
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):
@@ -157,7 +157,7 @@ class TradeEngine(BaseEngine):
         schedule.run_all()  # run all tasks at start
         self._background_thread = Thread(target=self._run_background_tasks, daemon=True)
         self._background_thread.start()
-        self.logger.debug(f'background thread started')
+        self.logger.debug('background thread started')
 
         # TEMP, zeromq examples
         # self._zmq.send(
@@ -174,7 +174,6 @@ class TradeEngine(BaseEngine):
         # )
 
         while self._is_running:
-            lats = []
             if msg := self._zmq.recv():
                 channel, topic, info = msg
                 # TODO
@@ -193,7 +192,7 @@ class TradeEngine(BaseEngine):
         schedule.clear()
         self._is_running = False
         while self._background_thread.is_alive():
-            self.logger.debug(f'waiting for background thread to finish')
+            self.logger.debug('waiting for background thread to finish')
             time.sleep(1)
         else:
-            self.logger.debug(f'background thread is finished')
+            self.logger.debug('background thread is finished')

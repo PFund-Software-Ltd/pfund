@@ -2,19 +2,22 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
-    from pfund.models.model_base import BaseModel, MachineLearningModel
+    from pfund.models.model_base import MachineLearningModel
     from pfund.datas.data_base import BaseData
 
-from pfund.strategies.strategy_base import BaseStrategy
+from pfund.types.core import tModel
 from pfund.models.model_base import BaseFeature
+from pfund.strategies.strategy_base import BaseStrategy
+from pfund.mixins.backtest import BacktestMixin
 
 
-def BacktestModel(Model: BaseModel, ml_model: MachineLearningModel, *args, **kwargs):
-    from pfund.mixins.backtest import BacktestMixin
-    
+def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **kwargs) -> BacktestMixin | tModel:
     class _BacktestModel(BacktestMixin, Model):
+        def __init__(self, *args, **kwargs):
+            Model.__init__(self, *args, **kwargs)
+            self.initialize_mixin()
+
         # __getattr__ at this level to get the correct model name
         def __getattr__(self, attr):
             '''gets triggered only when the attribute is not found'''

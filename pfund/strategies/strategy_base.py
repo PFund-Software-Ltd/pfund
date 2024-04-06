@@ -9,13 +9,13 @@ from collections import defaultdict, deque
 from abc import ABC
 
 from typing import Literal, TYPE_CHECKING
-
 if TYPE_CHECKING:
     from pfund.brokers.broker_base import BaseBroker
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.datas.data_bar import Bar
-from pfund.models.model_base import BaseModel, BaseFeature
-from pfund.indicators.indicator_base import BaseIndicator
+    from pfund.types.core import tStrategy, tModel, tIndicator, tFeature, tProduct
+
+from pfund.models.model_base import BaseModel
 from pfund.datas import BaseData, BarData, TickData, QuoteData
 from pfund.products.product_base import BaseProduct
 from pfund.accounts.account_base import BaseAccount
@@ -134,7 +134,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         return time.time() - ts
     
     # TODO
-    def add_strategy(self, strategy: BaseStrategy, name: str='', is_parallel=False) -> BaseStrategy:
+    def add_strategy(self, strategy: tStrategy, name: str='', is_parallel=False) -> tStrategy:
         pass
         # if name in self.strategies:
         #     raise Exception(f"strategy '{name}' already exists in strategy '{self.name}'")
@@ -142,7 +142,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
     def get_model(self, name: str) -> BaseModel:
         return self.models[name]
     
-    def add_model(self, model: BaseModel, name: str='', model_path: str='', is_load: bool=True) -> BaseModel:
+    def add_model(self, model: tModel, name: str='', model_path: str='', is_load: bool=True) -> tModel:
         Model = model.get_model_type_of_ml_model()
         assert isinstance(model, Model), \
             f"model '{model.__class__.__name__}' is not an instance of {Model.__name__}. Please create your model using 'class {model.__class__.__name__}({Model.__name__})'"
@@ -159,10 +159,10 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         self.logger.debug(f"added model '{mdl}'")
         return model
     
-    def add_feature(self, feature: BaseFeature, name: str='', feature_path: str='', is_load: bool=True) -> BaseFeature:
+    def add_feature(self, feature: tFeature, name: str='', feature_path: str='', is_load: bool=True) -> tFeature:
         return self.add_model(feature, name=name, model_path=feature_path, is_load=is_load)
     
-    def add_indicator(self, indicator: BaseIndicator, name: str='', indicator_path: str='', is_load: bool=True) -> BaseIndicator:
+    def add_indicator(self, indicator: tIndicator, name: str='', indicator_path: str='', is_load: bool=True) -> tIndicator:
         return self.add_model(indicator, name=name, model_path=indicator_path, is_load=is_load)
     
     # TODO
@@ -180,7 +180,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
 
     def add_data(self, trading_venue, base_currency, quote_currency, ptype, *args, **kwargs) -> list[BaseData]:
         from pfund.managers.data_manager import get_resolutions_from_kwargs
-        assert not ('resolution' in kwargs and 'resolutions' in kwargs), f"Please use either 'resolution' or 'resolutions', not both"
+        assert not ('resolution' in kwargs and 'resolutions' in kwargs), "Please use either 'resolution' or 'resolutions', not both"
         trading_venue, base_currency, quote_currency, ptype = convert_to_uppercases(trading_venue, base_currency, quote_currency, ptype)
         bkr = 'CRYPTO' if trading_venue in SUPPORTED_CRYPTO_EXCHANGES else trading_venue
         broker = self.add_broker(bkr) if bkr not in self.brokers else self.get_broker(bkr)
@@ -261,7 +261,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             assert len(self.products[trading_venue.upper()]) == 1, f'{trading_venue} has more than one product, please specify the product name'
             return getattr(self, f'{trading_venue.lower()}_product')
 
-    def add_product(self, product: BaseProduct, pdt_key='') -> BaseProduct:
+    def add_product(self, product: tProduct, pdt_key='') -> tProduct:
         trading_venue = product.exch if product.bkr == 'CRYPTO' else product.bkr
         pdt_key = pdt_key or product.pdt
         if pdt_key not in self.products[trading_venue]:

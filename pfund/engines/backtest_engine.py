@@ -4,26 +4,23 @@ import datetime
 import json
 import uuid
 
-from typing import Literal
-
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.types.common_literals import tSUPPORTED_BACKTEST_MODES, tSUPPORTED_DATA_TOOLS
+    
 import pfund as pf
-from pfund.data_tools.data_tool_base import DataTool
+from pfund.types.core import tStrategy, tModel, tFeature, tIndicator
 from pfund.engines.base_engine import BaseEngine
-from pfund.models.model_base import BaseModel, BaseFeature
-from pfund.indicators.indicator_base import BaseIndicator
 from pfund.brokers.broker_backtest import BacktestBroker
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.strategies.strategy_backtest import BacktestStrategy
-from pfund.const.commons import *
 from pfund.config_handler import ConfigHandler
 from pfund.utils import utils
+from pfund.mixins.backtest import BacktestMixin
 
-
-BacktestMode = Literal['vectorized', 'event_driven']
-        
 
 class BacktestEngine(BaseEngine):
-    def __new__(cls, *, env: str='BACKTEST', data_tool: DataTool='pandas', mode: BacktestMode='vectorized', append_to_strategy_df=False, use_prepared_signals=True, config: ConfigHandler | None=None, **settings):
+    def __new__(cls, *, env: str='BACKTEST', data_tool: 'tSUPPORTED_DATA_TOOLS'='pandas', mode: 'tSUPPORTED_BACKTEST_MODES'='vectorized', append_to_strategy_df=False, use_prepared_signals=True, config: ConfigHandler | None=None, **settings):
         if not hasattr(cls, 'mode'):
             cls.mode = mode.lower()
         if not hasattr(cls, 'append_to_strategy_df'):
@@ -34,13 +31,15 @@ class BacktestEngine(BaseEngine):
             cls.use_prepared_signals = use_prepared_signals
         return super().__new__(cls, env, data_tool=data_tool, config=config, **settings)
 
-    def __init__(self, *, env: str='BACKTEST', data_tool: DataTool='pandas', mode: BacktestMode='vectorized', append_to_strategy_df=False, use_prepared_signals=True, config: ConfigHandler | None=None, **settings):
+    def __init__(self, *, env: str='BACKTEST', data_tool: 'tSUPPORTED_DATA_TOOLS'='pandas', mode: 'tSUPPORTED_BACKTEST_MODES'='vectorized', append_to_strategy_df=False, use_prepared_signals=True, config: ConfigHandler | None=None, **settings):
         super().__init__(env, data_tool=data_tool)
         # avoid re-initialization to implement singleton class correctly
         # if not hasattr(self, '_initialized'):
         #     pass
     
-    def add_strategy(self, strategy: BaseStrategy, name: str='', is_parallel=False) -> BaseStrategy:
+    # HACK: since python doesn't support dynamic typing, true return type should be subclass of BacktestMixin and tStrategy
+    # write -> BacktestMixin | tStrategy for better intellisense in IDEs
+    def add_strategy(self, strategy: tStrategy, name: str='', is_parallel=False) -> BacktestMixin | tStrategy:
         is_dummy_strategy_exist = '_dummy' in self.strategy_manager.strategies
         assert not is_dummy_strategy_exist, 'dummy strategy is being used for model backtesting, adding another strategy is not allowed'
         if is_parallel:
@@ -50,7 +49,7 @@ class BacktestEngine(BaseEngine):
         strategy = BacktestStrategy(type(strategy), *strategy._args, **strategy._kwargs)
         return super().add_strategy(strategy, name=name, is_parallel=is_parallel)
 
-    def add_model(self, model: BaseModel, name: str='', model_path: str='', is_load: bool=True) -> BaseModel:
+    def add_model(self, model: tModel, name: str='', model_path: str='', is_load: bool=True) -> BacktestMixin | tModel:
         '''Add model without creating a strategy (using dummy strategy)'''
         is_non_dummy_strategy_exist = bool([strat for strat in self.strategy_manager.strategies if strat != '_dummy'])
         assert not is_non_dummy_strategy_exist, 'Please use strategy.add_model(...) instead of engine.add_model(...) when a strategy is already created'
@@ -65,10 +64,10 @@ class BacktestEngine(BaseEngine):
         model = strategy.add_model(model, name=name, model_path=model_path, is_load=is_load)
         return model
     
-    def add_feature(self, feature: BaseFeature, name: str='', feature_path: str='', is_load: bool=True) -> BaseFeature:
+    def add_feature(self, feature: tFeature, name: str='', feature_path: str='', is_load: bool=True) -> BacktestMixin | tFeature:
         return self.add_model(feature, name=name, model_path=feature_path, is_load=is_load)
     
-    def add_indicator(self, indicator: BaseIndicator, name: str='', indicator_path: str='', is_load: bool=True) -> BaseIndicator:
+    def add_indicator(self, indicator: tIndicator, name: str='', indicator_path: str='', is_load: bool=True) -> BacktestMixin | tIndicator:
         return self.add_model(indicator, name=name, model_path=indicator_path, is_load=is_load)
     
     def add_broker(self, bkr: str):

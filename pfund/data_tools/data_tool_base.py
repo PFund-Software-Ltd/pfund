@@ -1,10 +1,5 @@
-from typing import Literal
-
 from pfund.datas.data_base import BaseData
 from pfund.utils.utils import convert_ts_to_dt
-
-
-DataTool = Literal['pandas']
 
 
 class BaseDataTool:

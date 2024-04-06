@@ -22,7 +22,12 @@ import pandas as pd
 if TYPE_CHECKING:
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.models import PyTorchModel, SKLearnModel
-    from pfund.indicators.indicator_base import BaseIndicator, TAFunction, TALibFunction
+    from pfund.indicators.indicator_base import TAFunction, TALibFunction
+    from pfund.datas.data_base import BaseData
+    from pfund.datas.data_quote import QuoteData
+    from pfund.datas.data_tick import TickData
+    from pfund.datas.data_bar import BarData
+    from pfund.types.core import tModel, tFeature, tIndicator
     MachineLearningModel = Union[
         nn.Module,
         BaseEstimator,
@@ -33,7 +38,6 @@ if TYPE_CHECKING:
         TALibFunction,
         Any,
     ]
-from pfund.datas import *
 from pfund.const.paths import MODEL_PATH
 from pfund.models.model_meta import MetaModel
 from pfund.products.product_base import BaseProduct
@@ -304,7 +308,7 @@ class BaseModel(ABC, metaclass=MetaModel):
     def get_model(self, name: str) -> BaseModel:
         return self.models[name]
     
-    def add_model(self, model: BaseModel, name: str='', model_path: str='', is_load=True) -> BaseModel:
+    def add_model(self, model: tModel, name: str='', model_path: str='', is_load=True) -> tModel:
         Model = model.get_model_type_of_ml_model()
         assert isinstance(model, Model), \
             f"model '{model.__class__.__name__}' is not an instance of {Model.__name__}. Please create your model using 'class {model.__class__.__name__}({Model.__name__})'"
@@ -321,10 +325,10 @@ class BaseModel(ABC, metaclass=MetaModel):
         self.logger.debug(f"added model '{mdl}'")
         return model
     
-    def add_feature(self, feature: BaseFeature, name: str='', feature_path: str='', is_load: bool=True) -> BaseFeature:
+    def add_feature(self, feature: tFeature, name: str='', feature_path: str='', is_load: bool=True) -> tFeature:
         return self.add_model(feature, name=name, model_path=feature_path, is_load=is_load)
     
-    def add_indicator(self, indicator: BaseIndicator, name: str='', indicator_path: str='', is_load: bool=True) -> BaseIndicator:
+    def add_indicator(self, indicator: tIndicator, name: str='', indicator_path: str='', is_load: bool=True) -> tIndicator:
         return self.add_model(indicator, name=name, model_path=indicator_path, is_load=is_load)
     
     def update_quote(self, data: QuoteData, **kwargs):

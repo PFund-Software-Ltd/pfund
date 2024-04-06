@@ -7,13 +7,12 @@ import copy
 
 from typing import TYPE_CHECKING 
 if TYPE_CHECKING:
+    from pfund.types.core import tModel, tFeature, tIndicator
+    from pfund.types.backtest import BacktestKwargs
     from pfeed.feeds.base_feed import BaseFeed
     from pfund.datas.data_base import BaseData
-
+    
 from pfund.managers.data_manager import get_resolutions_from_kwargs
-from pfund.models.model_backtest import BacktestModel
-from pfund.models.model_base import BaseModel, BaseFeature
-from pfund.indicators.indicator_base import BaseIndicator
 
 
 _PFUND_BACKTEST_KWARGS = ['data_source', 'rollback_period', 'start_date', 'end_date']
@@ -21,7 +20,21 @@ _EVENT_DRIVEN_BACKTEST_KWARGS = ['resamples', 'shifts', 'auto_resample']
 
 
 class BacktestMixin:
-    def add_data(self, trading_venue, base_currency, quote_currency, ptype, *args, backtest: dict | None=None, train: dict | None=None, **kwargs) -> list[BaseData]:
+    # avoid using __init__ in mixins to prevent complicated MRO (Method Resolution Order)
+    def initialize_mixin(self):
+        self._data_signatures = []
+        self._strategy_signatures = []
+        self._model_signatures = []
+        self._feature_signatures = []
+        self._indicator_signatures = []
+    
+    def add_data(self, trading_venue, base_currency, quote_currency, ptype, *args, backtest: BacktestKwargs | None=None, train: dict | None=None, **kwargs) -> list[BaseData]:
+        # TODO: use inspect?
+        self._data_signatures.append((
+            (*(trading_venue, base_currency, quote_currency, ptype), *args), 
+            {'backtest': backtest, 'train': train, **kwargs}
+        ))
+        
         backtest_kwargs, train_kwargs = backtest or {}, train or {}
         
         if backtest_kwargs:
@@ -40,15 +53,16 @@ class BacktestMixin:
                 self.add_raw_df(data, df)
         return datas
         
-    def add_model(self, model: BaseModel, name: str='', model_path: str='', is_load: bool=True) -> BaseModel:
+    def add_model(self, model: tModel, name: str='', model_path: str='', is_load: bool=True) -> BacktestMixin | tModel:
+        from pfund.models.model_backtest import BacktestModel
         name = name or model.__class__.__name__
         model = BacktestModel(type(model), model.ml_model, *model._args, **model._kwargs)
         return super().add_model(model, name=name, model_path=model_path, is_load=is_load)
     
-    def add_feature(self, feature: BaseFeature, name: str='', feature_path: str='', is_load: bool=True) -> BaseFeature:
+    def add_feature(self, feature: tFeature, name: str='', feature_path: str='', is_load: bool=True) -> BacktestMixin | tFeature:
         return self.add_model(feature, name=name, model_path=feature_path, is_load=is_load)
         
-    def add_indicator(self, indicator: BaseIndicator, name: str='', indicator_path: str='', is_load: bool=True) -> BaseIndicator:
+    def add_indicator(self, indicator: tIndicator, name: str='', indicator_path: str='', is_load: bool=True) -> BacktestMixin | tIndicator:
         return self.add_model(indicator, name=name, model_path=indicator_path, is_load=is_load)
         
     def _get_data_source(self, trading_venue: str, backtest_kwargs: dict):
@@ -57,7 +71,7 @@ class BacktestMixin:
         # if data_source is not defined, use trading_venue as data_source
         if trading_venue in SUPPORTED_DATA_FEEDS and 'data_source' not in backtest_kwargs:
             backtest_kwargs['data_source'] = trading_venue
-        assert 'data_source' in backtest_kwargs, f"data_source must be defined"
+        assert 'data_source' in backtest_kwargs, "data_source must be defined"
         data_source = backtest_kwargs['data_source'].upper()
         assert data_source in SUPPORTED_DATA_FEEDS, f"{data_source=} not in {SUPPORTED_DATA_FEEDS}"
         return data_source

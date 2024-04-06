@@ -2,14 +2,18 @@ import os
 import logging
 import importlib
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.types.core import tStrategy
+    from pfund.types.common_literals import tSUPPORTED_DATA_TOOLS
+    
 from rich.console import Console
 
 from pfund.utils.utils import Singleton
-from pfund.data_tools.data_tool_base import DataTool
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.brokers.broker_base import BaseBroker
 from pfund.managers.strategy_manager import StrategyManager
-from pfund.const.commons import *
+from pfund.const.commons import SUPPORTED_ENVIRONMENTS, SUPPORTED_BROKERS
 from pfund.config_handler import ConfigHandler
 from pfund.plogging import set_up_loggers
 from pfund.plogging.config import LoggingDictConfigurator
@@ -27,9 +31,9 @@ ENV_COLORS = {
 class BaseEngine(Singleton):
     _PROCESS_NO_PONG_TOLERANCE_IN_SECONDS = 30
 
-    def __new__(cls, env, data_tool: DataTool='pandas', config: ConfigHandler | None=None, **settings):
+    def __new__(cls, env, data_tool: 'tSUPPORTED_DATA_TOOLS'='pandas', config: ConfigHandler | None=None, **settings):
         if not hasattr(cls, 'env'):
-            cls.env = env.upper() if type(env) is str else str(env).upper()
+            cls.env = env.upper() if isinstance(env, str) else str(env).upper()
             assert cls.env in SUPPORTED_ENVIRONMENTS, f'env={cls.env} is not supported'
 
             # TODO, do NOT allow LIVE env for now
@@ -50,7 +54,7 @@ class BaseEngine(Singleton):
             cls.logging_configurator: LoggingDictConfigurator  = set_up_loggers(log_path, logging_config_file_path, user_logging_config=cls.config.logging_config)
         return super().__new__(cls)
     
-    def __init__(self, env, data_tool: DataTool='pandas', config: ConfigHandler | None=None, **settings):
+    def __init__(self, env, data_tool: 'tSUPPORTED_DATA_TOOLS'='pandas', config: ConfigHandler | None=None, **settings):
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):
             self.logger = logging.getLogger('pfund')
@@ -70,7 +74,7 @@ class BaseEngine(Singleton):
     def get_strategy(self, strat: str) -> BaseStrategy | None:
         return self.strategy_manager.get_strategy(strat)
 
-    def add_strategy(self, strategy: BaseStrategy, name: str='', is_parallel=False) -> BaseStrategy:
+    def add_strategy(self, strategy: 'tStrategy', name: str='', is_parallel=False) -> 'tStrategy':
         return self.strategy_manager.add_strategy(strategy, name=name, is_parallel=is_parallel)
 
     def remove_strategy(self, strat: str):
@@ -83,7 +87,7 @@ class BaseEngine(Singleton):
         bkr = bkr.upper()
         assert bkr in SUPPORTED_BROKERS, f'broker {bkr} is not supported'
         if bkr == 'CRYPTO':
-            Broker = getattr(importlib.import_module(f'pfund.brokers.broker_{bkr.lower()}'), f'CryptoBroker')
+            Broker = getattr(importlib.import_module(f'pfund.brokers.broker_{bkr.lower()}'), 'CryptoBroker')
         elif bkr == 'IB':
-            Broker = getattr(importlib.import_module(f'pfund.brokers.ib.broker_{bkr.lower()}'), f'IBBroker')
+            Broker = getattr(importlib.import_module(f'pfund.brokers.ib.broker_{bkr.lower()}'), 'IBBroker')
         return Broker

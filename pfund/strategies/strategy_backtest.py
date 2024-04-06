@@ -1,11 +1,16 @@
-from pfund.strategies.strategy_base import BaseStrategy
-from pfund.const.commons import *
+from pfund.types.core import tStrategy
+from pfund.const.commons import SUPPORTED_CRYPTO_EXCHANGES
+from pfund.mixins.backtest import BacktestMixin
 
-        
-def BacktestStrategy(Strategy: BaseStrategy, *args, **kwargs) -> BaseStrategy:
-    from pfund.mixins.backtest import BacktestMixin
-    
+
+# HACK: since python doesn't support dynamic typing, true return type should be subclass of BacktestMixin and tStrategy
+# write -> BacktestMixin | tStrategy for better intellisense in IDEs 
+def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixin | tStrategy:
     class _BacktestStrategy(BacktestMixin, Strategy):
+        def __init__(self, *args, **kwargs):
+            Strategy.__init__(self, *args, **kwargs)
+            self.initialize_mixin()
+
         # __getattr__ at this level to get the correct strategy name
         def __getattr__(self, attr):
             '''gets triggered only when the attribute is not found'''

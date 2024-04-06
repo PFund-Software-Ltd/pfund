@@ -19,3 +19,5 @@ SUPPORTED_TIMEFRAMES = [
     'months', 'month', 'M',
 ]
 SUPPORTED_DATA_CHANNELS = ['orderbook', 'tradebook', 'kline']
+SUPPORTED_BACKTEST_MODES = ['vectorized', 'event_driven']
+SUPPORTED_DATA_TOOLS = ['pandas']
