@@ -56,8 +56,12 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         # NOTE: includes submitted orders and opened orders
         self.orders = {}  # {account: [order, ...]}
         self.trades = {}  # {account: [trade, ...]}
+        
         # TODO
         self.portfolio = Portfolio()
+        self.universe = None
+        self.investment_profile = None
+        
         self.risk_monitor = self.rm = RiskMonitor()
         self.models = {}
         self.strategies = {}

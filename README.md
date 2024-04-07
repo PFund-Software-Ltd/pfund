@@ -101,7 +101,6 @@ This overview already omits some intricate steps, such as data handling and API 
 
 
 ## Installation
-> Python 3.12 is not supported until [PyTorch]supports it
 
 ### Using [Poetry] (Recommended)
 ```bash

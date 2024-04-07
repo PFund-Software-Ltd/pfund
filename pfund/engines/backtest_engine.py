@@ -113,6 +113,7 @@ class BacktestEngine(BaseEngine):
                 'backtest_name': backtest_name,
                 'backtest_id': backtest_id,
                 # 'backtest_hash': self._generate_backtest_hash(strategy),
+                # 'backtest_iteration': '',  # TODO
                 'duration': duration,
                 'start_time': datetime.datetime.fromtimestamp(start_time, tz=local_tz).strftime('%Y-%m-%dT%H:%M:%S%z'),
                 'end_time': datetime.datetime.fromtimestamp(end_time, tz=local_tz).strftime('%Y-%m-%dT%H:%M:%S%z'),
