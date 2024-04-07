@@ -7,9 +7,10 @@ from pfund.mixins.backtest import BacktestMixin
 # write -> BacktestMixin | tStrategy for better intellisense in IDEs 
 def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixin | tStrategy:
     class _BacktestStrategy(BacktestMixin, Strategy):
-        def __init__(self, *args, **kwargs):
-            Strategy.__init__(self, *args, **kwargs)
+        def __init__(self, *_args, **_kwargs):
+            Strategy.__init__(self, *_args, **_kwargs)
             self.initialize_mixin()
+            self.add_strategy_signature(*_args, **_kwargs)
 
         # __getattr__ at this level to get the correct strategy name
         def __getattr__(self, attr):
@@ -19,6 +20,13 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
             except AttributeError:
                 class_name = Strategy.__name__
                 raise AttributeError(f"'{class_name}' object or '{class_name}.data_tool' has no attribute '{attr}', make sure super().__init__() is called in your strategy {class_name}.__init__()")
+        
+        def to_dict(self):
+            strategy_dict = super().to_dict()
+            strategy_dict['class'] = Strategy.__name__
+            strategy_dict['strategy_signature'] = self._strategy_signature
+            strategy_dict['data_signatures'] = self._data_signatures
+            return strategy_dict
         
         def _prepare_df(self):
             if self.name != '_dummy':

@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from pfund.types.common_literals import tSUPPORTED_PRODUCT_TYPES, tSUPPORTED_CRYPTO_PRODUCT_TYPES
 
 
+# TODO
 @dataclass
 class InvestmentProfile:
     investment_objectives: list[str]

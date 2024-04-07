@@ -14,9 +14,10 @@ from pfund.mixins.backtest import BacktestMixin
 
 def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **kwargs) -> BacktestMixin | tModel:
     class _BacktestModel(BacktestMixin, Model):
-        def __init__(self, *args, **kwargs):
-            Model.__init__(self, *args, **kwargs)
+        def __init__(self, *_args, **_kwargs):
+            Model.__init__(self, *_args, **_kwargs)
             self.initialize_mixin()
+            self.add_model_signature(*_args, **_kwargs)
 
         # __getattr__ at this level to get the correct model name
         def __getattr__(self, attr):
@@ -26,7 +27,14 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
             except AttributeError:
                 class_name = Model.__name__
                 raise AttributeError(f"'{class_name}' object or '{class_name}.ml_model' or '{class_name}.data_tool' has no attribute '{attr}', make sure super().__init__() is called in your strategy {class_name}.__init__()")
-                
+        
+        def to_dict(self):
+            model_dict = super().to_dict()
+            model_dict['class'] = Model.__name__
+            model_dict['model_signature'] = self._model_signature
+            model_dict['data_signatures'] = self._data_signatures
+            return model_dict
+
         def _add_consumer_datas_if_no_data(self) -> list[BaseData]:
             consumer_datas = super()._add_consumer_datas_if_no_data()
             for data in consumer_datas:

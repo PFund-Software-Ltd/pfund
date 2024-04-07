@@ -1,6 +1,9 @@
+# TODO
 class Universe:
     def __init__(self):
-        pass
+        self.stocks = {}
+        self.futures = {}
+        self.options = {}
     
     def add(self, pdt):
         pass

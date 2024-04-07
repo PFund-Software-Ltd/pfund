@@ -87,7 +87,16 @@ class BaseModel(ABC, metaclass=MetaModel):
         else:
             class_name = self.__class__.__name__
             raise AttributeError(f"'{class_name}' object or '{class_name}.ml_model' or '{class_name}.data_tool' has no attribute '{attr}', make sure super().__init__() is called in your model {class_name}.__init__()")
-        
+    
+    def to_dict(self):
+        return {
+            'class': self.__class__.__name__,
+            'name': self.name,
+            'ml_model': self.ml_model,
+            'datas': [repr(data) for product in self.datas for data in self.datas[product].values()],
+            'models': [model.to_dict() for model in self.models.values()],
+        }
+    
     # if not specified, features are just the original df
     def prepare_features(self) -> pd.DataFrame:
         return self.get_df()

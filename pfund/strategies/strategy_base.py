@@ -21,7 +21,6 @@ from pfund.products.product_base import BaseProduct
 from pfund.accounts.account_base import BaseAccount
 from pfund.orders.order_base import BaseOrder
 from pfund.zeromq import ZeroMQ
-from pfund.portfolio import Portfolio
 from pfund.risk_monitor import RiskMonitor
 from pfund.const.commons import SUPPORTED_CRYPTO_EXCHANGES
 from pfund.strategies.strategy_meta import MetaStrategy
@@ -58,11 +57,11 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         self.trades = {}  # {account: [trade, ...]}
         
         # TODO
-        self.portfolio = Portfolio()
+        self.portfolio = None
         self.universe = None
         self.investment_profile = None
-        
         self.risk_monitor = self.rm = RiskMonitor()
+        
         self.models = {}
         self.strategies = {}
         self.predictions = {}
@@ -92,6 +91,16 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             for backtesting: backfilling is finished
         """
         pass
+    
+    def to_dict(self):
+        return {
+            'class': self.__class__.__name__,
+            'name': self.name,
+            'accounts': [repr(account) for trading_venue in self.accounts for account in self.accounts[trading_venue].values()],
+            'datas': [repr(data) for product in self.datas for data in self.datas[product].values()],
+            'strategies': [strategy.to_dict() for strategy in self.strategies.values()],
+            'models': [model.to_dict() for model in self.models.values()],
+        }
     
     def set_name(self, name: str):
         self.name = self.strat = name

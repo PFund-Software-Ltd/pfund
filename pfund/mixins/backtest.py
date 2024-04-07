@@ -15,25 +15,29 @@ if TYPE_CHECKING:
 from pfund.managers.data_manager import get_resolutions_from_kwargs
 
 
+# FIXME: clean up, should add to types?
 _PFUND_BACKTEST_KWARGS = ['data_source', 'rollback_period', 'start_date', 'end_date']
 _EVENT_DRIVEN_BACKTEST_KWARGS = ['resamples', 'shifts', 'auto_resample']
 
 
 class BacktestMixin:
-    # avoid using __init__ in mixins to prevent complicated MRO (Method Resolution Order)
     def initialize_mixin(self):
+        # stores signatures for backtest history tracking
         self._data_signatures = []
-        self._strategy_signatures = []
-        self._model_signatures = []
-        self._feature_signatures = []
-        self._indicator_signatures = []
+        self._strategy_signature = None
+        self._model_signature = None
     
+    def add_data_signature(self, *args, **kwargs):
+        self._data_signatures.append((args, kwargs))
+    
+    def add_strategy_signature(self, *args, **kwargs):
+        self._strategy_signature = (args, kwargs)
+        
+    def add_model_signature(self, *args, **kwargs):
+        self._model_signature = (args, kwargs)
+
     def add_data(self, trading_venue, base_currency, quote_currency, ptype, *args, backtest: BacktestKwargs | None=None, train: dict | None=None, **kwargs) -> list[BaseData]:
-        # TODO: use inspect?
-        self._data_signatures.append((
-            (*(trading_venue, base_currency, quote_currency, ptype), *args), 
-            {'backtest': backtest, 'train': train, **kwargs}
-        ))
+        self.add_data_signature(trading_venue, base_currency, quote_currency, ptype, *args, backtest=backtest, train=train, **kwargs)
         
         backtest_kwargs, train_kwargs = backtest or {}, train or {}
         
