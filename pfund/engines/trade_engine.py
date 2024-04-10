@@ -17,7 +17,6 @@ if TYPE_CHECKING:
     from pfund.types.common_literals import tSUPPORTED_DATA_TOOLS
 
 import schedule
-import psutil
 
 from pfund.engines.base_engine import BaseEngine
 from pfund.brokers.broker_base import BaseBroker
@@ -113,18 +112,6 @@ class TradeEngine(BaseEngine):
                 connection_manager.reconnect(reconnect_trading_venues, reason='process not responding')
         if restart_strats := [strat for strat, strategy in self.strategy_manager.strategies.items() if strategy.is_parallel() and not self.strategy_manager.is_process_healthy(strat)]:
             self.strategy_manager.restart(restart_strats, reason='process not responding')
-
-    # TODO, should be called by dashboard
-    def monitor_cpu_usage(self):
-        pcts = psutil.cpu_percent(interval=1, percpu=True)
-        for cpu_num in range(len(pcts)):
-            pct = pcts[cpu_num]
-            if pct > 0:
-                self.logger.warning(f'cpu {cpu_num} has {pct}% usage')
-
-    # TODO, in case no more space for logs
-    def monitor_memory_usage():
-        pass
 
     def run_regular_tasks(self):
         for broker in self.brokers.values():

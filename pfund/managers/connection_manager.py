@@ -2,7 +2,10 @@ import time
 from collections import defaultdict
 from multiprocessing import Process, Value
 
-import psutil
+try:
+    import psutil
+except ImportError:
+    pass
 
 from pfund.managers.base_manager import BaseManager
 
@@ -16,7 +19,7 @@ def _start_process(api, stop_flag: Value):
         if hasattr(current_process, 'cpu_affinity') and assigned_cpus:
             current_process.cpu_affinity(assigned_cpus)
         else:
-            api.logger.debug(f'cpu affinity is not supported')
+            api.logger.debug('cpu affinity is not supported')
         
         api.start_zmqs()
         api.connect()

@@ -1,7 +1,10 @@
 import urllib
 import hmac
 import hashlib
-import orjson
+try:
+    import orjson as json
+except ImportError:
+    import json
 
 from requests import Response
 
@@ -49,7 +52,7 @@ class RestApi(BaseRestApi):
         recv_window = '5000'
         query_str = timestamp + account.key + recv_window
         if req.method == 'POST':
-            query_str += orjson.dumps(req.json)
+            query_str += json.dumps(req.json)
         elif req.method == 'GET':
             query_str += urllib.parse.urlencode(req.params)
         else:

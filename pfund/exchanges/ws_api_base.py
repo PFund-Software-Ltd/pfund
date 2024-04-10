@@ -1,6 +1,9 @@
 import os
 import time
-import orjson
+try:
+    import orjson as json
+except ImportError:
+    import json
 import logging
 from abc import ABC, abstractmethod
 from contextlib import suppress
@@ -344,7 +347,7 @@ class BaseWebsocketApi(ABC):
     def _send(self, ws, msg):
         try:
             with suppress(WebSocketConnectionClosedException):
-                ws.send(orjson.dumps(msg))
+                ws.send(json.dumps(msg))
         except:
             self.logger.exception(f'ws={ws.name} exception:')
 

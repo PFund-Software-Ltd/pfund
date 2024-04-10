@@ -1,5 +1,8 @@
 import time
-import orjson
+try:
+    import orjson as json
+except ImportError:
+    import json
 import hmac
 from decimal import Decimal
 
@@ -186,7 +189,7 @@ class WebsocketApi(BaseWebsocketApi):
     
     def _on_message(self, ws, msg: bytes):
         ws_name = ws.name
-        msg = orjson.loads(msg)
+        msg = json.loads(msg)
         self.logger.debug(f'ws={ws_name} {msg=}')
         try:
             if 'op' in msg:

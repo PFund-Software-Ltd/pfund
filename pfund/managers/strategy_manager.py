@@ -2,7 +2,10 @@ import time
 from collections import defaultdict
 from multiprocessing import Process, Value
 
-import psutil
+try:
+    import psutil
+except ImportError:
+    pass
 
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.utils.utils import get_engine_class
