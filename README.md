@@ -104,12 +104,18 @@ This overview already omits some intricate steps, such as data handling and API 
 
 ### Using [Poetry] (Recommended)
 ```bash
+# [RECOMMENDED]: trading + backtest
+poetry add "pfund[data]"
+
+# [Machine Learning]: trading + backtest + machine learning/technical analysis
+poetry add "pfund[data,ml]"
+
+# only trading
 poetry add pfund
 
 # update to the latest version:
 poetry update pfund
 ```
-
 
 ### Using Pip
 ```bash
@@ -119,12 +125,9 @@ pip install pfund
 pip install -U pfund
 ```
 
-
 ### Checking your installation
 ```bash
 $ pfund --version
-
-pfund, version 0.0.1.dev4
 ```
 
 

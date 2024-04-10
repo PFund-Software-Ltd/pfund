@@ -14,9 +14,6 @@
 ```bash
 poetry add pfund
 
-# if you are a contributor/maintainer:
-poetry add pfund --with dev,doc
-
 # update to the latest version:
 poetry update pfund
 ```

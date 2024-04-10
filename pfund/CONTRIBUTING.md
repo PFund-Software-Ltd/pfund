@@ -1,16 +1,19 @@
 ## Installation
 ```bash
-poetry add pfund --with dev,doc
+git clone git@github.com:PFund-Software-Ltd/pfund.git
+cd pfund
+git submodule update --init --recursive
+poetry install --all-extras
+```
+
+## Pull updates
+```bash
+# --recurse-submodules also updates each submodule to the commit specified by the main repository,
+git pull --recurse-submodules  # = git pull + git submodule update --recursive
 ```
 
 ## Build Documentation using [jupyterbook](https://jupyterbook.org/)
 ```bash
 # at the root directory, run:
 jb build docs/ [--all]
-```
-
-## Update submodules
-```bash
-# run this to see if the version a submodule is using has been changed.
-git submodule update
 ```
