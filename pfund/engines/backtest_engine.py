@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import hashlib
 import os
 import time
@@ -8,9 +10,9 @@ import uuid
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.types.common_literals import tSUPPORTED_BACKTEST_MODES, tSUPPORTED_DATA_TOOLS
+    from pfund.types.core import tStrategy, tModel, tFeature, tIndicator
     
 import pfund as pf
-from pfund.types.core import tStrategy, tModel, tFeature, tIndicator
 from pfund.engines.base_engine import BaseEngine
 from pfund.brokers.broker_backtest import BacktestBroker
 from pfund.strategies.strategy_base import BaseStrategy
@@ -21,7 +23,7 @@ from pfund.mixins.backtest import BacktestMixin
 
 
 class BacktestEngine(BaseEngine):
-    def __new__(cls, *, env: str='BACKTEST', data_tool: 'tSUPPORTED_DATA_TOOLS'='pandas', mode: 'tSUPPORTED_BACKTEST_MODES'='vectorized', append_to_strategy_df=False, use_prepared_signals=True, config: ConfigHandler | None=None, **settings):
+    def __new__(cls, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', append_to_strategy_df=False, use_prepared_signals=True, config: ConfigHandler | None=None, **settings):
         if not hasattr(cls, 'mode'):
             cls.mode = mode.lower()
         if not hasattr(cls, 'append_to_strategy_df'):
@@ -32,7 +34,7 @@ class BacktestEngine(BaseEngine):
             cls.use_prepared_signals = use_prepared_signals
         return super().__new__(cls, env, data_tool=data_tool, config=config, **settings)
 
-    def __init__(self, *, env: str='BACKTEST', data_tool: 'tSUPPORTED_DATA_TOOLS'='pandas', mode: 'tSUPPORTED_BACKTEST_MODES'='vectorized', append_to_strategy_df=False, use_prepared_signals=True, config: ConfigHandler | None=None, **settings):
+    def __init__(self, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', append_to_strategy_df=False, use_prepared_signals=True, config: ConfigHandler | None=None, **settings):
         super().__init__(env, data_tool=data_tool)
         # avoid re-initialization to implement singleton class correctly
         # if not hasattr(self, '_initialized'):

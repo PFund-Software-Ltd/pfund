@@ -9,6 +9,8 @@ components at the highest level such as:
 In order to communicate with other processes, it uses ZeroMQ as the core 
 message queue.
 """
+from __future__ import annotations
+
 import time
 from threading import Thread
 
@@ -28,13 +30,13 @@ from pfund.config_handler import ConfigHandler
 class TradeEngine(BaseEngine):
     zmq_ports = {}
 
-    def __new__(cls, *, env: str='PAPER', data_tool: 'tSUPPORTED_DATA_TOOLS'='pandas', zmq_port=5557, config: ConfigHandler | None=None, **settings):
+    def __new__(cls, *, env: str='PAPER', data_tool: tSUPPORTED_DATA_TOOLS='pandas', zmq_port=5557, config: ConfigHandler | None=None, **settings):
         if not hasattr(cls, 'zmq_port'):
             assert isinstance(zmq_port, int), f'{zmq_port=} must be an integer'
             cls._zmq_port = zmq_port
         return super().__new__(cls, env, data_tool=data_tool, config=config, **settings)
 
-    def __init__(self, *, env: str='PAPER', data_tool: 'tSUPPORTED_DATA_TOOLS'='pandas', zmq_port=5557, config: ConfigHandler | None=None, **settings):
+    def __init__(self, *, env: str='PAPER', data_tool: tSUPPORTED_DATA_TOOLS='pandas', zmq_port=5557, config: ConfigHandler | None=None, **settings):
         super().__init__(env, data_tool=data_tool)
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):

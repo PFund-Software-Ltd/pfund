@@ -1,4 +1,9 @@
-from pfund.types.core import tStrategy
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.types.core import tStrategy
+    
 from pfund.const.commons import SUPPORTED_CRYPTO_EXCHANGES
 from pfund.mixins.backtest import BacktestMixin
 

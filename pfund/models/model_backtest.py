@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.models.model_base import MachineLearningModel
     from pfund.datas.data_base import BaseData
-
-from pfund.types.core import tModel
+    from pfund.types.core import tModel
+    
 from pfund.models.model_base import BaseFeature
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.mixins.backtest import BacktestMixin
