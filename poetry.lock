@@ -3706,7 +3706,7 @@ ptyprocess = ">=0.5"
 
 [[package]]
 name = "pfeed"
-version = "0.0.1.dev8"
+version = "0.0.1.dev9"
 description = "Data pipeline for algo-trading, getting and storing both real-time and historical data made easy."
 optional = false
 python-versions = ">=3.10 <3.13"
@@ -3718,8 +3718,9 @@ beautifulsoup4 = "^4.12.3"
 connectorx = {version = "^0.3.2", optional = true}
 minio = {version = "^7.2.5", optional = true}
 pandas = {version = "^2.2.0", optional = true}
-pfund = "^0.0.1.dev8"
+pfund = "^0.0.1.dev9"
 polars = {version = "^0.20.16", optional = true}
+psutil = {version = "^5.9.8", optional = true}
 pyarrow = {version = "^15.0.0", optional = true}
 ray = {version = "^2.10.0", optional = true}
 s3fs = {version = "^2024.3.1", optional = true}
@@ -3727,7 +3728,7 @@ yfinance = "^0.2.37"
 
 [package.extras]
 boost = ["connectorx (>=0.3.2,<0.4.0)", "pyarrow (>=15.0.0,<16.0.0)", "ray (>=2.10.0,<3.0.0)"]
-data = ["minio (>=7.2.5,<8.0.0)", "s3fs (>=2024.3.1,<2025.0.0)"]
+data = ["minio (>=7.2.5,<8.0.0)", "psutil (>=5.9.8,<6.0.0)", "s3fs (>=2024.3.1,<2025.0.0)"]
 df = ["pandas (>=2.2.0,<3.0.0)", "polars (>=0.20.16,<0.21.0)"]
 
 [package.source]
@@ -6600,10 +6601,10 @@ docs = ["furo", "jaraco.packaging (>=9.3)", "jaraco.tidelift (>=1.4)", "rst.link
 testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=2.2)", "pytest-ignore-flaky", "pytest-mypy", "pytest-ruff (>=0.2.1)"]
 
 [extras]
-data = ["orjson", "pfeed", "psutil", "pyzmq"]
+data = ["orjson", "pfeed", "pyzmq"]
 ml = ["mlflow", "scikit-learn", "ta", "torch"]
 
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10 <3.13"
-content-hash = "77e851528c4c789e50dfea24a27ab3e1bc05b8d878961a0cb5ae2bb8abf02f30"
+content-hash = "493de5e8ebdf41e6c1ea5621743b78cb5d6751fb58eacb602177b4ccfa137301"
