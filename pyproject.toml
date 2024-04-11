@@ -30,16 +30,21 @@ ta = { version = "^0.11.0", optional = true }
 scikit-learn = { version = "^1.4.0", optional = true }
 torch = { version = "^2.1.2", optional = true }
 mlflow = { version = "^2.11.3", optional = true }
+pfolio = { version = "^0.0.1.dev4", optional = true, extras = ["bayesian", "data", "portfolio", "temporary"] }
+papermill = { version = "^2.5.0", optional = true }
+voila = { version = "^0.5.6", optional = true }
 
 [tool.poetry.extras]
 data = ["pfeed", "orjson", "pyzmq"]
 ml = ["ta", "scikit-learn", "torch", "mlflow"]
+analytics = ["pfolio", "papermill", "voila"]
 
 [tool.poetry.scripts]
 pfund = "pfund.main:run_cli"
 
 [tool.poetry.group.dev.dependencies]
-pfeed = {path = "../pfeed", develop = true}
+pfeed = { path = "../pfeed", develop = true, extras = ["df", "data", "boost"] }
+pfolio = { path = "../pfolio", develop = true, extras = ["bayesian", "data", "portfolio", "temporary"] }
 pybit = "^5.6.2"
 ta-lib = "^0.4.28"
 pytest = "^8.0.0"
@@ -56,7 +61,7 @@ pytest-cov = "^5.0.0"
 
 [tool.poetry.group.doc.dependencies]
 jupyter-book = "^1.0.0"
-notebook = "^7.1.0"
+notebook = "^7.1.2"
 
 [build-system]
 requires = ["poetry-core"]

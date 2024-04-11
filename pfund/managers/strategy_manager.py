@@ -20,7 +20,7 @@ def _start_process(strategy: BaseStrategy, stop_flag: Value):
         if hasattr(current_process, 'cpu_affinity') and assigned_cpus:
             current_process.cpu_affinity(assigned_cpus)
         else:
-            strategy.logger.debug(f'cpu affinity is not supported')
+            strategy.logger.debug('cpu affinity is not supported')
 
         strategy.start_zmq()
         strategy.start()

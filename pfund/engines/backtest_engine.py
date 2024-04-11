@@ -88,11 +88,11 @@ class BacktestEngine(BaseEngine):
     def _generate_backtest_id() -> str:
         return uuid.uuid4().hex
     
-    def _create_backtest_name(self, strat: str):
+    def _create_backtest_name(self, strat: str, backtest_id: str, backtest_id_length: int=12):
         local_tz = utils.get_local_timezone()
         utcnow = datetime.datetime.now(tz=local_tz).strftime('%Y-%m-%d_%H:%M:%S_UTC%z')
-        backtest_id = self._generate_backtest_id()
-        return '.'.join([strat, utcnow, backtest_id])
+        trimmed_backtest_id = backtest_id[:backtest_id_length]
+        return '.'.join([strat, utcnow, trimmed_backtest_id])
     
     @staticmethod 
     def _generate_backtest_hash(strategy: BaseStrategy):
@@ -144,47 +144,36 @@ class BacktestEngine(BaseEngine):
         self._write_json(file_name, backtest_json)
         return backtest_json[backtest_hash]
     
-    def _write_backtest_history(self, backtest_name: str, backtest_name_trimmed: str, start_time: float, end_time: float):
-        splits = backtest_name.split('.')
-        strat, backtest_id = splits[0], splits[-1]
+    def _output_backtest_results(self, strat: str, df, start_time: float, end_time: float):
         strategy = self.get_strategy(strat)
+        backtest_id = self._generate_backtest_id()
+        backtest_name = self._create_backtest_name(strat, backtest_id)
         local_tz = utils.get_local_timezone()
         duration = end_time - start_time
+        df_file_path = os.path.join(self.config.backtest_path, f'{backtest_name}.parquet')
         backtest_history = {
-            'settings': self.settings,
             'metadata': {
                 'pfund_version': pf.__version__,
-                'backtest_name': backtest_name,
                 'backtest_id': backtest_id,
                 'backtest_iteration': self._generate_backtest_iteration(strategy),
                 'duration': f'{duration:.2f}s' if duration > 1 else f'{duration*1000:.2f}ms',
                 'start_time': datetime.datetime.fromtimestamp(start_time, tz=local_tz).strftime('%Y-%m-%dT%H:%M:%S%z'),
                 'end_time': datetime.datetime.fromtimestamp(end_time, tz=local_tz).strftime('%Y-%m-%dT%H:%M:%S%z'),
+                'settings': self.settings,
             },
             'strategy': strategy.to_dict(),
-            'results': {
-                'df_file_path': os.path.join(self.config.backtest_path, f'{backtest_name_trimmed}.parquet'),
-            }
+            'result': df_file_path
         }
-        self._write_json(f'{backtest_name_trimmed}.json', backtest_history)
+        self.data_tool.output_df_to_parquet(df, df_file_path)
+        self._write_json(f'{backtest_name}.json', backtest_history)
+        return backtest_history
     
-    def trim_backtest_name(self, backtest_name: str) -> str:
-        splits = backtest_name.split('.')
-        backtest_id_len = 12
-        splits[-1] = splits[-1][:backtest_id_len]
-        return '.'.join(splits)
-    
-    def output_backtest_results(self, strat: str, df, start_time: float, end_time: float):
-        backtest_name = self._create_backtest_name(strat)
-        backtest_name_trimmed = self.trim_backtest_name(backtest_name)
-        self.data_tool.output_df_to_parquet(backtest_name_trimmed, df, self.config.backtest_path)
-        self._write_backtest_history(backtest_name, backtest_name_trimmed, start_time, end_time)
-        
     def run(self):
         for broker in self.brokers.values():
             broker.start()
         self.strategy_manager.start()
 
+        backtests = {}
         if self.mode == 'vectorized':
             for strat, strategy in self.strategy_manager.strategies.items():
                 # _dummy strategy is only created for model training, do nothing
@@ -196,7 +185,8 @@ class BacktestEngine(BaseEngine):
                 strategy.backtest()
                 end_time = time.time()
                 df = strategy.get_df()
-                self.output_backtest_results(strat, df, start_time, end_time)
+                backtest_history: dict = self._output_backtest_results(strat, df, start_time, end_time)
+                backtests[strat] = backtest_history
         elif self.mode == 'event_driven':
             for strat, strategy in self.strategy_manager.strategies.items():
                 if strat == '_dummy':
@@ -248,6 +238,7 @@ class BacktestEngine(BaseEngine):
         else:
             raise NotImplementedError(f'Backtesting mode {self.mode} is not supported')
         self.strategy_manager.stop(reason='finished backtesting')
+        return backtests
 
     def end(self):
         self.strategy_manager.stop(reason='finished backtesting')

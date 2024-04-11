@@ -98,6 +98,10 @@ class ConfigHandler:
     def dashboard_path(self):
         return f'{self.data_path}/templates/dashboards'
     
+    @property
+    def artifact_path(self):
+        return f'{self.data_path}/.artifacts'
+    
     def __post_init__(self):
         self.logging_config = self.logging_config or {}
         

@@ -151,12 +151,8 @@ class PandasDataTool(BaseDataTool):
             index=pd.MultiIndex(levels=[[]]*len(index_names), codes=[[]]*len(index_names), names=index_names)
         )
     
-    def output_df_to_parquet(self, name: str, df: pd.DataFrame,path: str | Path):
-        if '.parquet' not in name:
-            name = name + '.parquet'
-        if type(path) is str:
-            path = Path(path)
-        df.to_parquet(path / name)
+    def output_df_to_parquet(self, df: pd.DataFrame, file_path: str):
+        df.to_parquet(file_path)
     
     def _create_multi_index(self, index_data: dict, index_names: list[str]) -> pd.MultiIndex:
         return pd.MultiIndex.from_tuples([tuple(index_data[name] for name in index_names)], names=index_names)

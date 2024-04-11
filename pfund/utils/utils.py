@@ -30,6 +30,11 @@ def is_api_call(func):
     return func
 
 
+def is_command_available(cmd):
+    import shutil
+    return shutil.which(cmd) is not None
+
+
 def convert_to_uppercases(*args):
     return (s.upper() if type(s) is str else s for s in args)
 
