@@ -35,6 +35,12 @@ def is_command_available(cmd):
     return shutil.which(cmd) is not None
 
 
+def is_port_in_use(port):
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('localhost', port)) == 0
+
+
 def convert_to_uppercases(*args):
     return (s.upper() if type(s) is str else s for s in args)
 

@@ -56,32 +56,69 @@ class Analyzer:
         else:
             raise FileNotFoundError(f"Template {template} not found in pfund's templates or user's templates")
     
+    def _get_editor_cmd(self, editor: Literal['vscode', 'pycharm']) -> str:
+        if editor == 'vscode':
+            cmd = 'code'
+            if utils.is_command_available(cmd):
+                return cmd
+            else:
+                print("VSCode command 'code' is not available, cannot open the output notebook")
+        elif editor == 'pycharm':
+            for cmd in ['charm', 'pycharm']:
+                if utils.is_command_available(cmd):
+                    return cmd
+            else:
+                print("PyCharm commands 'charm'/'pycharm' are both not available, cannot open the output notebook")
+        else:
+            print(f"Editor '{editor}' is not supported, cannot open the output notebook")
+    
     def run_notebooks(
         self, 
         notebooks: list[str] | str,
-        display=True,
+        *voila_args,
         data: dict | None=None,
-        show_results_only=True,
-        open_output=False,
-        save_output=False,
-        output_path: str | None=None,
-        editor=Literal['vscode', 'pycharm']
-    ) -> list[str]:
+        display: bool=True,
+        port: int=8866,
+        show_results_only: bool=True,
+        open_outputs: bool=False,
+        outputs_path: str | None=None,
+        editor: Literal['vscode', 'pycharm']='vscode'
+    ) -> None:
         '''
         Args:
-            notebook: 
+            notebook:
                 - notebook_template's name
                 - notebook's full path in str or Path
-            display: if True, display the notebook in voila
+            voila_args: additional arguments to pass to voila
             data: data to be analyzed, if None, use the data passed to the Analyzer instance during initialization
+            display: if True, display the notebook in voila
             show_results_only: if True, display only the results (no source code) in voila
-            open_output: if True, open the output notebook in the editor
-            save_output: if True, save the output notebook
-            output_path: path to save the output notebooks
+            open_outputs: if True, open the output notebook in the editor
+            outputs_path: path to save the output notebooks, if None, do not save the output notebooks
         '''
         import subprocess
         import papermill as pm
         
+        def _find_available_port(_port):
+            retry_num = 100
+            while retry_num:
+                if not utils.is_port_in_use(_port):
+                    return _port
+                retry_num -= 1
+                _port += 1
+            else:
+                raise Exception(f"No available ports found starting from {_port - 100}, cannot display the notebook")
+        
+        def _assert_voila_args_are_valid():
+            for arg in voila_args:
+                if not arg.startswith('--'):
+                    raise ValueError(f"Voila argument '{arg}' should start with '--'")
+                if arg.startswith('--port='):
+                    raise ValueError(f"Voila argument '{arg}' should not be passed in, use the 'port' argument instead")
+                if arg.startswith('--strip_sources='):
+                    raise ValueError(f"Voila argument '{arg}' should not be passed in, use the 'show_results_only' argument instead")
+            
+        voila_processes = []
         nb_output_file_paths = []
         if isinstance(notebooks, str):
             notebooks = [notebooks]
@@ -89,50 +126,63 @@ class Analyzer:
         if not data:
             raise ValueError("No data passed in or stored in the Analyzer instance, please pass in the data to be analyzed.")
         
-        for notebook in notebooks:
-            if self._is_file(notebook):
-                nb_input_file_path: str = notebook
-                notebook = Path(notebook).name  # e.g. 'notebook.ipynb'
-            else:
-                nb_input_file_path: str = self._find_template(notebook)
-            nb_output_file_path = Path(output_path or '.').resolve() / f'{notebook.replace(".ipynb", "")}_output.ipynb'
-            nb_output_file_path = str(nb_output_file_path)
-            nb_output_file_paths.append(nb_output_file_path)
+        if open_outputs:
+            assert outputs_path is not None, f"{outputs_path=}, cannot open the output notebook without saving it."
+            editor_cmd = self._get_editor_cmd(editor)
+        
+        _assert_voila_args_are_valid()
+        is_theme_provided = any(arg.startswith('--theme=') for arg in voila_args)
+        if not is_theme_provided:
+            default_theme = 'dark'
+            voila_args = [f'--theme={default_theme}', *voila_args]
             
-            print(f"Executing notebook: {notebook}")
-            pm.execute_notebook(
-                nb_input_file_path,
-                nb_output_file_path,
-                parameters=data
-            )
-            return
-            
-            if open_output:
-                if editor == 'vscode':
-                    if utils.is_command_available('code'):
-                        subprocess.run(['code', nb_output_file_path])
-                    else:
-                        print("VSCode command 'code' is not available, cannot open the output notebook")
-                elif editor == 'pycharm':
-                    for cmd in ['charm', 'pycharm']:
-                        if utils.is_command_available(cmd):
-                            subprocess.run([cmd, nb_output_file_path])
-                            break
-                    else:
-                        print("PyCharm command 'charm'/'pycharm' are both not available, cannot open the output notebook")
+        try:
+            for notebook in notebooks:
+                if self._is_file(notebook):
+                    nb_input_file_path: str = notebook
+                    notebook = Path(notebook).name  # e.g. 'notebook.ipynb'
                 else:
-                    print(f"Editor '{editor}' is not supported, cannot open the output notebook")
-            
-            # TODO
-            # if display:
-            #     process = subprocess.Popen(['voila', f'--strip_sources={show_results_only}', nb_output_file_path])
-            
-            # TODO
-            # if not save_output:
-            #     print(f"Removing output notebook: {nb_output_file_path}")
-            #     os.remove(nb_output_file_path)
+                    nb_input_file_path: str = self._find_template(notebook)
+                nb_output_file_path = Path(outputs_path or '.').resolve() / f'{notebook.replace(".ipynb", "")}_output.ipynb'
+                nb_output_file_path = str(nb_output_file_path)
+                nb_output_file_paths.append(nb_output_file_path)
                 
-        return nb_output_file_paths
+                print(f"Executing notebook: {notebook}")
+                pm.execute_notebook(
+                    nb_input_file_path,
+                    nb_output_file_path,
+                    parameters=data
+                )
+                
+                if open_outputs:
+                    # e.g. code notebook_output.ipynb if using vscode
+                    if editor_cmd:
+                        subprocess.run([editor_cmd, nb_output_file_path])
+                
+                if display:
+                    port = _find_available_port(port)
+                    is_last_notebook = (notebook == notebooks[-1])
+                    subprocess_func = subprocess.run if is_last_notebook else subprocess.Popen
+                    process = subprocess_func([
+                        'voila',
+                        f'--port={port}',
+                        f'--strip_sources={show_results_only}',
+                        *voila_args,
+                        nb_output_file_path
+                    ])
+                    voila_processes.append(process)
+        except KeyboardInterrupt:
+            print("KeyboardInterrupt: Stopping the execution of the notebooks")
+        except Exception:
+            raise
+        finally:
+            if outputs_path is None:
+                for nb_output_file_path in nb_output_file_paths:
+                    print(f"{outputs_path=}, removing output notebook: {nb_output_file_path}")
+                    os.remove(nb_output_file_path)
+            for process in voila_processes:
+                process.terminate()
+                process.wait()
         
     def run_spreadsheets(
         self, 

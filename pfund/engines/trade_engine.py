@@ -22,7 +22,7 @@ import schedule
 
 from pfund.engines.base_engine import BaseEngine
 from pfund.brokers.broker_base import BaseBroker
-from pfund.utils.utils import flatten_dict
+from pfund.utils.utils import flatten_dict, is_port_in_use
 from pfund.zeromq import ZeroMQ
 from pfund.config_handler import ConfigHandler
 
@@ -57,15 +57,12 @@ class TradeEngine(BaseEngine):
     def _assign_zmq_ports(self) -> dict:
         _assigned_ports = []
         def _is_port_available(_port):
-            import socket
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                _is_port_in_use = (s.connect_ex(('localhost', _port)) == 0)
-                _is_port_assigned = (_port in _assigned_ports)
-                if _is_port_in_use or _is_port_assigned:
-                    return False
-                else:
-                    _assigned_ports.append(_port)
-                    return True
+            _is_port_assigned = (_port in _assigned_ports)
+            if is_port_in_use(_port) or _is_port_assigned:
+                return False
+            else:
+                _assigned_ports.append(_port)
+                return True
         def _get_port(start_port=None):
             _port = start_port or self._zmq_port
             if _is_port_available(_port):
