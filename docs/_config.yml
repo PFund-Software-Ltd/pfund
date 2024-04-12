@@ -29,6 +29,7 @@ repository:
 # Add GitHub buttons to your book
 # See https://jupyterbook.org/customize/config.html#add-a-link-to-your-repository
 html:
+  google_analytics_id: {GA_TRACKING_ID_PLACEHOLDER}
   home_page_in_navbar: true
   favicon: images/favicon.ico
   # use_issues_button: true

@@ -16,4 +16,7 @@ git pull --recurse-submodules  # = git pull + git submodule update --recursive
 ```bash
 # at the root directory, run:
 jb build docs/ [--all]
+
+# check if external links are broken:
+jb build docs/ --builder linkcheck
 ```

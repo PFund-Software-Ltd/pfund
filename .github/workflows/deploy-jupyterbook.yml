@@ -39,7 +39,9 @@ jobs:
         pip install pfund
 
     - name: Build Jupyter Book
-      run: jupyter-book build docs/
+      run: |
+        chmod +x ./docs/build.sh
+        bash ./docs/build.sh
 
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
