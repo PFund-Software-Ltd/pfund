@@ -1,12 +1,15 @@
+from __future__ import annotations
+
 import datetime
 from decimal import Decimal
+from pathlib import Path
 
-from typing import Callable, Any
-
-from websocket import WebSocket
+from typing import Callable, Any, TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.types.bybit import Category
+    from websocket import WebSocket
 
 from pfund.exchanges.exchange_base import BaseExchange
-from pfund.exchanges.bybit.types import Category
 from pfund.accounts import CryptoAccount
 from pfund.products import CryptoProduct
 from pfund.orders import CryptoOrder
@@ -31,8 +34,9 @@ class Exchange(BaseExchange):
     _MAX_NUM_OF_PLACE_BATCH_ORDERS = 20
     _MAX_NUM_OF_CANEL_BATCH_ORDERS = 20
 
-    def __init__(self, env):
-        super().__init__(env, 'BYBIT')
+    def __init__(self, env: str):
+        exch = Path(__file__).parent.name
+        super().__init__(env, exch)
     
     def _create_pdt_matchings_config(
             # general to exchanges

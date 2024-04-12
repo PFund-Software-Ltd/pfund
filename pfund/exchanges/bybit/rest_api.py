@@ -1,3 +1,4 @@
+from pathlib import Path
 import urllib
 import hmac
 import hashlib
@@ -44,7 +45,8 @@ class RestApi(BaseRestApi):
         'get_balances': ('GET', '/v5/account/wallet-balance'),
     }
     
-    def __init__(self, env, exch):
+    def __init__(self, env):
+        exch = Path(__file__).parent.name
         super().__init__(env, exch)
 
     def _authenticate(self, req, account):

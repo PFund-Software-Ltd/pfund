@@ -1,4 +1,5 @@
 import time
+from pathlib import Path
 try:
     import orjson as json
 except ImportError:
@@ -45,8 +46,9 @@ class WebsocketApi(BaseWebsocketApi):
         'spot': 10
     }
 
-    def __init__(self, env, name, adapter):
-        super().__init__(env, name, adapter)
+    def __init__(self, env, adapter):
+        exch = Path(__file__).parent.name
+        super().__init__(env, exch, adapter)
 
     def _ping(self):
         msg = {"op": "ping"}

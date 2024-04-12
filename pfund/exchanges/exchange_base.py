@@ -28,7 +28,11 @@ class BaseExchange:
         self.bkr = 'CRYPTO'
         self.name = self.exch = name.upper()
         self.logger = logging.getLogger(self.name.lower())
-        self.configs = Configuration(self.exch, 'config')
+        if hasattr(self, 'category'):
+            config_dir = self.exch + '/' + self.category
+        else:
+            config_dir = self.exch
+        self.configs = Configuration(config_dir, 'config')
         self.adapter = Adapter(self.exch, self.configs.load_config_section('adapter'))
         self.products = {}
         self.accounts = {}
@@ -36,9 +40,9 @@ class BaseExchange:
         
         # APIs
         RestApi = getattr(importlib.import_module(f'pfund.exchanges.{self.exch.lower()}.rest_api'), 'RestApi')
-        self._rest_api = RestApi(self.env, self.exch)
+        self._rest_api = RestApi(self.env)
         WebsocketApi = getattr(importlib.import_module(f'pfund.exchanges.{self.exch.lower()}.ws_api'), 'WebsocketApi')
-        self._ws_api = WebsocketApi(self.env, self.exch, self.adapter)
+        self._ws_api = WebsocketApi(self.env, self.adapter)
         self._load_settings()
 
         # used for REST API to send back results in threads to engine
