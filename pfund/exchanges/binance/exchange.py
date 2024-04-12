@@ -32,9 +32,6 @@ class Exchange(BaseExchange):
         super().__init__(env, exch)
         
     # FIXME: temporarily override the method, remove it later
-    def _load_settings(self):
+    def _setup_configs(self):
         pass
-
-    # FIXME: temporarily override the method, remove it later
-    def _is_all_configs_ready(self):
-        return True
+    

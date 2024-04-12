@@ -1,12 +1,10 @@
 import yaml
 import os
 
-from pfund.const.paths import PROJ_CONFIG_PATH
-
 
 class Adapter:
-    def __init__(self, trading_venue, adapter_dict):
-        self._trading_venue = trading_venue
+    def __init__(self, config_path, adapter_dict):
+        self.config_path = config_path
         self._adapter_dict = adapter_dict
         self._adapter = {}
         self._ref_keys = []
@@ -25,9 +23,8 @@ class Adapter:
         return pdt
 
     def load_pdt_matchings(self):
-        file_path = f'{PROJ_CONFIG_PATH}/{self._trading_venue.lower()}'
         config_name = 'pdt_matchings'
-        for file_name in os.listdir(file_path):
+        for file_name in os.listdir(self.config_path):
             if not file_name.startswith(config_name):
                 continue
             file_splits = file_name.split('_')
@@ -35,7 +32,7 @@ class Adapter:
                 category = file_splits[-1].split('.')[0]
             else:
                 category = ''
-            with open(file_path + '/' + file_name, 'r') as f:
+            with open(self.config_path + '/' + file_name, 'r') as f:
                 if pdt_macthings := yaml.safe_load(f):
                     for pdt, epdt in pdt_macthings.items():
                         self.update(pdt, epdt, ref_key=category)

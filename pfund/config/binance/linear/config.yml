@@ -1,4 +1,7 @@
-# TODO
+---
+settings:
+  private_channels: []
+...
 ---
 adapter:
   pdts: {}

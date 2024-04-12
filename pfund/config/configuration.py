@@ -2,23 +2,21 @@ import os
 
 import yaml
 
-from pfund.const.paths import PROJ_CONFIG_PATH
 from pfund.utils.utils import short_path
 
 
 class Configuration:
-    def __init__(self, config_dir, config_name):
-        self.config_dir = config_dir.lower()
+    def __init__(self, config_path, config_name):
+        self.config_path = config_path
         self.config_name = config_name
-        self.config_path = f'{PROJ_CONFIG_PATH}/{self.config_dir}'
         self.configs = None
         self.reload()
 
     def reload(self):
         self.configs = self.read_config(self.config_name)
     
-    def get_config_dir(self):
-        return self.config_dir
+    def get_config_path(self):
+        return self.config_path
 
     def read_config(self, config_name):
         file_path = f'{self.config_path}/{config_name}.yml'
@@ -40,7 +38,7 @@ class Configuration:
             raise Exception(f'could not find section {section} for config {self.config_name}')
 
     def check_if_config_exists_and_not_empty(self, config_name):
-        file_path = f'{PROJ_CONFIG_PATH}/{self.config_dir}/{config_name}.yml'
+        file_path = f'{self.config_path}/{config_name}.yml'
         if os.path.exists(file_path) and os.stat(file_path).st_size != 0:
             return True
         else:

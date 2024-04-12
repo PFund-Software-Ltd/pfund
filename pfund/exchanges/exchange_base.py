@@ -11,7 +11,7 @@ from pfund.managers.order_manager import OrderUpdateSource
 from pfund.adapter import Adapter
 from pfund.products import CryptoProduct
 from pfund.accounts import CryptoAccount
-from pfund.const.paths import EXCHANGE_PATH
+from pfund.const.paths import EXCHANGE_PATH, PROJ_CONFIG_PATH
 from pfund.config.configuration import Configuration
 from pfund.zeromq import ZeroMQ
 from pfund.utils.utils import step_into, convert_to_uppercases
@@ -28,12 +28,11 @@ class BaseExchange:
         self.bkr = 'CRYPTO'
         self.name = self.exch = name.upper()
         self.logger = logging.getLogger(self.name.lower())
+        config_path = f'{PROJ_CONFIG_PATH}/{self.exch.lower()}'
         if hasattr(self, 'category'):
-            config_dir = self.exch + '/' + self.category
-        else:
-            config_dir = self.exch
-        self.configs = Configuration(config_dir, 'config')
-        self.adapter = Adapter(self.exch, self.configs.load_config_section('adapter'))
+            config_path += '/' + self.category
+        self.configs = Configuration(config_path, 'config')
+        self.adapter = Adapter(config_path, self.configs.load_config_section('adapter'))
         self.products = {}
         self.accounts = {}
         self.categories = []
@@ -114,9 +113,9 @@ class BaseExchange:
                         self._create_tick_sizes_and_lot_sizes_config(markets, category)
                         break
                     else:
-                        config_dir = self.configs.get_config_dir()
+                        config_path = self.configs.get_config_path()
                         self.logger.warning(f'{self.exch} could not get_markets() for category={category} probably due to server issue/maintenance, keep retrying; '\
-                                    f'or you can create pdt_matchings.yml, tick_sizes.yml and lot_sizes.yml inside {config_dir} manually and re-run the program')
+                                    f'or you can create pdt_matchings.yml, tick_sizes.yml and lot_sizes.yml inside {config_path} manually and re-run the program')
                         time.sleep(3)
         else:
             markets = []
@@ -128,9 +127,9 @@ class BaseExchange:
                     self._create_tick_sizes_and_lot_sizes_config(markets)
                     break
                 else:
-                    config_dir = self.configs.get_config_dir()
+                    config_path = self.configs.get_config_path()
                     self.logger.warning(f'{self.exch} could not get_markets() probably due to server issue/maintenance, keep retrying; '\
-                                f'or you can create pdt_matchings.yml, tick_sizes.yml and lot_sizes.yml inside {config_dir} manually and re-run the program')
+                                f'or you can create pdt_matchings.yml, tick_sizes.yml and lot_sizes.yml inside {config_path} manually and re-run the program')
                     time.sleep(3)
                 
     def _create_pdt_matchings_config(self, schema, markets, category=''):
