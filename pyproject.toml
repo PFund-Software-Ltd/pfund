@@ -42,11 +42,16 @@ analytics = ["pfolio", "papermill", "voila"]
 [tool.poetry.scripts]
 pfund = "pfund.main:run_cli"
 
+[tool.poetry.group.dev]
+optional = true
+
 [tool.poetry.group.dev.dependencies]
 pfeed = { path = "../pfeed", develop = true, extras = ["df", "data", "boost"] }
 pfolio = { path = "../pfolio", develop = true, extras = ["bayesian", "data", "portfolio", "temporary"] }
 pybit = "^5.6.2"
 ta-lib = "^0.4.28"
+
+[tool.poetry.group.test.dependencies]
 pytest = "^8.0.0"
 pre-commit = "^3.6.1"
 bandit = "^1.7.7"
