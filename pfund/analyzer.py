@@ -1,7 +1,9 @@
 import os
 from pathlib import Path
 
-from typing import Literal
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.types.common_literals import tSUPPORTED_CODE_EDITORS, tSUPPORTED_TEMPLATE_TYPES
 
 from pfund.utils import utils
 from pfund.config_handler import ConfigHandler
@@ -30,7 +32,7 @@ class Analyzer:
         return False
     
     @staticmethod
-    def _derive_template_type(template: str) -> Literal['notebook', 'spreadsheet', 'dashboard']:
+    def _derive_template_type(template: str) -> tSUPPORTED_TEMPLATE_TYPES:
         if '.ipynb' in template:
             template_type = 'notebook'
         elif '.grid' in template:
@@ -56,7 +58,7 @@ class Analyzer:
         else:
             raise FileNotFoundError(f"Template {template} not found in pfund's templates or user's templates")
     
-    def _get_editor_cmd(self, editor: Literal['vscode', 'pycharm']) -> str:
+    def _get_editor_cmd(self, editor: tSUPPORTED_CODE_EDITORS) -> str:
         if editor == 'vscode':
             cmd = 'code'
             if utils.is_command_available(cmd):
@@ -82,7 +84,7 @@ class Analyzer:
         show_results_only: bool=True,
         open_outputs: bool=False,
         outputs_path: str | None=None,
-        editor: Literal['vscode', 'pycharm']='vscode'
+        editor: tSUPPORTED_CODE_EDITORS='vscode'
     ) -> None:
         '''
         Args:
@@ -183,7 +185,8 @@ class Analyzer:
             for process in voila_processes:
                 process.terminate()
                 process.wait()
-        
+    
+    # TODO:
     def run_spreadsheets(
         self, 
         spreadsheets: list[str] | str

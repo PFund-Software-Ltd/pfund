@@ -18,7 +18,7 @@ pygments = ">=1.5"
 name = "aiobotocore"
 version = "2.12.3"
 description = "Async client for aws services using botocore and aiohttp"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "aiobotocore-2.12.3-py3-none-any.whl", hash = "sha256:86737685f4625e8f05c4e7a608a07cc97607263279f66cf6b02b640c4eafd324"},
@@ -39,7 +39,7 @@ boto3 = ["boto3 (>=1.34.41,<1.34.70)"]
 name = "aiohttp"
 version = "3.9.0b0"
 description = "Async http client/server framework (asyncio)"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "aiohttp-3.9.0b0-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:50b550b5e317e40a017bab8b25995676af3aa66dd0ef562cd7dce7f1684cd376"},
@@ -134,7 +134,7 @@ speedups = ["Brotli", "aiodns", "brotlicffi"]
 name = "aioitertools"
 version = "0.11.0"
 description = "itertools and builtins for AsyncIO and mixed iterables"
-optional = true
+optional = false
 python-versions = ">=3.6"
 files = [
     {file = "aioitertools-0.11.0-py3-none-any.whl", hash = "sha256:04b95e3dab25b449def24d7df809411c10e62aab0cbe31a50ca4e68748c43394"},
@@ -145,7 +145,7 @@ files = [
 name = "aiosignal"
 version = "1.3.1"
 description = "aiosignal: a list of registered asynchronous callbacks"
-optional = true
+optional = false
 python-versions = ">=3.7"
 files = [
     {file = "aiosignal-1.3.1-py3-none-any.whl", hash = "sha256:f8376fb07dd1e86a584e4fcdec80b36b7f81aac666ebc724e2c090300dd83b17"},
@@ -189,7 +189,7 @@ tz = ["backports.zoneinfo"]
 name = "alphalens-reloaded"
 version = "0.4.3"
 description = "Performance analysis of predictive (alpha) stock factors"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "alphalens-reloaded-0.4.3.tar.gz", hash = "sha256:78985b5d502d5ab3e81d1bb77b08250fd0ece43b0fe3c696256f98154f44f7d0"},
@@ -251,7 +251,7 @@ trio = ["trio (>=0.23)"]
 name = "appdirs"
 version = "1.4.4"
 description = "A small Python module for determining appropriate platform-specific dirs, e.g. a \"user data dir\"."
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "appdirs-1.4.4-py2.py3-none-any.whl", hash = "sha256:a841dacd6b99318a741b166adb07e19ee71a274450e68237b4650ca1055ab128"},
@@ -273,7 +273,7 @@ files = [
 name = "arch"
 version = "6.3.0"
 description = "ARCH for Python"
-optional = true
+optional = false
 python-versions = ">=3.9"
 files = [
     {file = "arch-6.3.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:179ea15e96d1aafdf88c470f9d4cbda867e5a379b629dde282c1d85691d66598"},
@@ -389,7 +389,7 @@ test = ["dateparser (==1.*)", "pre-commit", "pytest", "pytest-cov", "pytest-mock
 name = "arviz"
 version = "0.18.0"
 description = "Exploratory analysis of Bayesian models"
-optional = true
+optional = false
 python-versions = ">=3.10"
 files = [
     {file = "arviz-0.18.0-py3-none-any.whl", hash = "sha256:6eaaaffff4fb90ed49bf5305c171e5c6848b2b18cc5db1537319d8fb67c4e8f5"},
@@ -416,7 +416,7 @@ all = ["bokeh (>=1.4.0,<3.0)", "contourpy", "dask[distributed]", "netcdf4", "num
 name = "astropy"
 version = "6.0.1"
 description = "Astronomy and astrophysics core library"
-optional = true
+optional = false
 python-versions = ">=3.9"
 files = [
     {file = "astropy-6.0.1-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:2b5ff962b0e586953f95b63ec047e1d7a3b6a12a13d11c6e909e0bcd3e05b445"},
@@ -468,7 +468,7 @@ test-all = ["astropy[test]", "coverage[toml]", "ipython (>=4.2)", "objgraph", "s
 name = "astropy-iers-data"
 version = "0.2024.4.8.0.32.4"
 description = "IERS Earth Rotation and Leap Second tables for the astropy core package"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "astropy-iers-data-0.2024.4.8.0.32.4.tar.gz", hash = "sha256:420afca681a63ef2fa9fa22f78b7629008bd8638ed0a73f9c9288a08dca08bc7"},
@@ -622,7 +622,7 @@ files = [
 name = "botocore"
 version = "1.34.69"
 description = "Low-level, data-driven core of boto 3."
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "botocore-1.34.69-py3-none-any.whl", hash = "sha256:d3802d076d4d507bf506f9845a6970ce43adc3d819dd57c2791f5c19ed6e5950"},
@@ -641,7 +641,7 @@ crt = ["awscrt (==0.19.19)"]
 name = "bottleneck"
 version = "1.3.8"
 description = "Fast NumPy array functions written in C"
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "Bottleneck-1.3.8-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:865c8ed5b798c0198b0b80553e09cc0d890c4f5feb3d81d31661517ca7819fa3"},
@@ -906,7 +906,7 @@ files = [
 name = "clarabel"
 version = "0.7.1"
 description = "Clarabel Conic Interior Point Solver for Rust / Python"
-optional = true
+optional = false
 python-versions = ">=3.7"
 files = [
     {file = "clarabel-0.7.1-cp37-abi3-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:32980b578842d17abe3d277df2d31a6b8bff3facf33b169c74d59b2ada10b61b"},
@@ -941,7 +941,7 @@ colorama = {version = "*", markers = "platform_system == \"Windows\""}
 name = "cloudpickle"
 version = "3.0.0"
 description = "Pickler class to extend the standard pickle.Pickler functionality"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "cloudpickle-3.0.0-py3-none-any.whl", hash = "sha256:246ee7d0c295602a036e86369c77fecda4ab17b506496730f2f576d9016fd9c7"},
@@ -998,7 +998,7 @@ testing = ["mock", "pytest", "pytest-cov"]
 name = "connectorx"
 version = "0.3.2"
 description = ""
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "connectorx-0.3.2-cp310-cp310-macosx_10_7_x86_64.whl", hash = "sha256:98274242c64a2831a8b1c86e0fa2c46a557dd8cbcf00c3adcf5a602455fb02d7"},
@@ -1023,7 +1023,7 @@ files = [
 name = "cons"
 version = "0.4.6"
 description = "An implementation of Lisp/Scheme-like cons in Python."
-optional = true
+optional = false
 python-versions = ">=3.6"
 files = [
     {file = "cons-0.4.6.tar.gz", hash = "sha256:669fe9d5ee916d5e42b9cac6acc911df803d04f2e945c1604982a04d27a29b47"},
@@ -1036,7 +1036,7 @@ logical-unification = ">=0.4.0"
 name = "contourpy"
 version = "1.2.1"
 description = "Python library for calculating contours of 2D quadrilateral grids"
-optional = true
+optional = false
 python-versions = ">=3.9"
 files = [
     {file = "contourpy-1.2.1-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:bd7c23df857d488f418439686d3b10ae2fbf9bc256cd045b37a8c16575ea1040"},
@@ -1166,7 +1166,7 @@ toml = ["tomli"]
 name = "cvxpy"
 version = "1.4.2"
 description = "A domain-specific language for modeling convex optimization problems in Python."
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "cvxpy-1.4.2-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:06231c0b2a65f7c8ba32c2772576c24e93e1ca964444b90c6bad366b9c0a5bdc"},
@@ -1224,7 +1224,7 @@ xpress = ["xpress"]
 name = "cycler"
 version = "0.12.1"
 description = "Composable style cycles"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "cycler-0.12.1-py3-none-any.whl", hash = "sha256:85cef7cff222d8644161529808465972e51340599459b8ac3ccbac5a854e0d30"},
@@ -1239,7 +1239,7 @@ tests = ["pytest", "pytest-cov", "pytest-xdist"]
 name = "datetime"
 version = "5.5"
 description = "This package provides a DateTime data type, as known from Zope. Unless you need to communicate with Zope APIs, you're probably better off using Python's built-in datetime module."
-optional = true
+optional = false
 python-versions = ">=3.7"
 files = [
     {file = "DateTime-5.5-py3-none-any.whl", hash = "sha256:0abf6c51cb4ba7cee775ca46ccc727f3afdde463be28dbbe8803631fefd4a120"},
@@ -1318,7 +1318,7 @@ files = [
 name = "dm-tree"
 version = "0.1.8"
 description = "Tree is a library for working with nested data structures."
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "dm-tree-0.1.8.tar.gz", hash = "sha256:0fcaabbb14e7980377439e7140bd05552739ca5e515ecb3119f234acee4b9430"},
@@ -1405,7 +1405,7 @@ files = [
 name = "ecos"
 version = "2.0.13"
 description = "This is the Python package for ECOS: Embedded Cone Solver. See Github page for more information."
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "ecos-2.0.13-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:a1c1acf33b70f8657c25f07ec8d7b59bb01dbad39f072fa61fc956c2166ed979"},
@@ -1437,7 +1437,7 @@ scipy = ">=0.9"
 name = "empyrial"
 version = "2.1.4"
 description = "An Open Source Portfolio Management Framework for Everyone 投资组合管理"
-optional = true
+optional = false
 python-versions = ">=3.0"
 files = [
     {file = "empyrial-2.1.4-py3-none-any.whl", hash = "sha256:b460128d68d0cebf8bb72676776f8807798042c9e3232f1aff91f5f49ff8972f"},
@@ -1459,7 +1459,7 @@ yfinance = "*"
 name = "empyrical"
 version = "0.5.5"
 description = "empyrical is a Python library with performance and risk statistics commonly used in quantitative finance"
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "empyrical-0.5.5.tar.gz", hash = "sha256:84320f36931496774e948d7ca9f03494ae2dd94451b320eeda378639e5eba950"},
@@ -1478,7 +1478,7 @@ dev = ["flake8 (==2.5.1)", "nose (==1.3.7)", "parameterized (==0.6.1)"]
 name = "empyrical-reloaded"
 version = "0.5.9"
 description = "empyrical computes performance and risk statistics commonly used in quantitative finance"
-optional = true
+optional = false
 python-versions = ">=3.7"
 files = [
     {file = "empyrical-reloaded-0.5.9.tar.gz", hash = "sha256:9d8163e301bdff411adef5e604547958a3a17122fc1274f6c9ae906f14ee5fb7"},
@@ -1513,7 +1513,7 @@ files = [
 name = "et-xmlfile"
 version = "1.1.0"
 description = "An implementation of lxml.xmlfile for the standard library"
-optional = true
+optional = false
 python-versions = ">=3.6"
 files = [
     {file = "et_xmlfile-1.1.0-py3-none-any.whl", hash = "sha256:a2ba85d1d6a74ef63837eed693bcb89c3f752169b0e3e7ae5b16ca5e1b3deada"},
@@ -1524,7 +1524,7 @@ files = [
 name = "etuples"
 version = "0.3.9"
 description = "Python S-expression emulation using tuple-like objects."
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "etuples-0.3.9.tar.gz", hash = "sha256:a474e586683d8ba8d842ba29305005ceed1c08371a4b4b0e0e232527137e5ea3"},
@@ -1608,7 +1608,7 @@ devel = ["colorama", "json-spec", "jsonschema", "pylint", "pytest", "pytest-benc
 name = "ffn"
 version = "1.0.1"
 description = "Financial functions for Python"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "ffn-1.0.1.tar.gz", hash = "sha256:e2609e32cb9030a9afc77aaa96ab37757d21864f2e1be2842438a6ac12030714"},
@@ -1649,7 +1649,7 @@ typing = ["typing-extensions (>=4.8)"]
 name = "financedatabase"
 version = "2.2.2"
 description = "This is a database of 300.000+ symbols containing Equities, ETFs, Funds, Indices, Currencies, Cryptocurrencies and Money Markets."
-optional = true
+optional = false
 python-versions = ">=3.10,<3.13"
 files = [
     {file = "financedatabase-2.2.2-py3-none-any.whl", hash = "sha256:281e2fce091d6363f199dd207953eb64f1788c36bf8f2abdeb4ea268023fbcf8"},
@@ -1664,7 +1664,7 @@ pandas = {version = ">=2.1.0,<3.0.0", extras = ["computation", "performance", "p
 name = "financetoolkit"
 version = "1.8.5"
 description = "Transparent and Efficient Financial Analysis"
-optional = true
+optional = false
 python-versions = "<3.13,>=3.10"
 files = [
     {file = "financetoolkit-1.8.5-py3-none-any.whl", hash = "sha256:d6b677d65740eaf203e0aacbba06b03bdfd9e3f2ae927e71f84e068882d8c214"},
@@ -1680,7 +1680,7 @@ scikit-learn = ">=1.3,<2.0"
 name = "finquant"
 version = "0.7.0"
 description = "A program for financial portfolio management, analysis and optimisation"
-optional = true
+optional = false
 python-versions = ">=3.10"
 files = [
     {file = "FinQuant-0.7.0-py3-none-any.whl", hash = "sha256:6a310e238888d0b106568b905ae627030772acaecc79b00d81f01ca4d2df5c83"},
@@ -1728,7 +1728,7 @@ dotenv = ["python-dotenv"]
 name = "fonttools"
 version = "4.51.0"
 description = "Tools to manipulate font files"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "fonttools-4.51.0-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:84d7751f4468dd8cdd03ddada18b8b0857a5beec80bce9f435742abc9a851a74"},
@@ -1793,7 +1793,7 @@ woff = ["brotli (>=1.0.1)", "brotlicffi (>=0.8.0)", "zopfli (>=0.1.4)"]
 name = "fpdf"
 version = "1.7.2"
 description = "Simple PDF generation for Python"
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "fpdf-1.7.2.tar.gz", hash = "sha256:125840783289e7d12552b1e86ab692c37322e7a65b96a99e0ea86cca041b6779"},
@@ -1814,7 +1814,7 @@ files = [
 name = "frozendict"
 version = "2.4.1"
 description = "A simple immutable dictionary"
-optional = true
+optional = false
 python-versions = ">=3.6"
 files = [
     {file = "frozendict-2.4.1-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:992cc157b6cdf788c1f24ab9531ba37104aba2d21f1520949a03bf3f9af7935e"},
@@ -1859,7 +1859,7 @@ files = [
 name = "frozenlist"
 version = "1.4.1"
 description = "A list-like structure which implements collections.abc.MutableSequence"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "frozenlist-1.4.1-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:f9aa1878d1083b276b0196f2dfbe00c9b7e752475ed3b682025ff20c1c1f51ac"},
@@ -1945,7 +1945,7 @@ files = [
 name = "fsspec"
 version = "2024.3.1"
 description = "File-system specification"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "fsspec-2024.3.1-py3-none-any.whl", hash = "sha256:918d18d41bf73f0e2b261824baeb1b124bcf771767e3a26425cd7dec3332f512"},
@@ -2192,7 +2192,7 @@ files = [
 name = "h5netcdf"
 version = "1.3.0"
 description = "netCDF4 via h5py"
-optional = true
+optional = false
 python-versions = ">=3.9"
 files = [
     {file = "h5netcdf-1.3.0-py3-none-any.whl", hash = "sha256:f2df69dcd3665dc9c4d43eb6529dedd113b2508090d12ac973573305a8406465"},
@@ -2210,7 +2210,7 @@ test = ["netCDF4", "pytest"]
 name = "h5py"
 version = "3.11.0"
 description = "Read and write HDF5 files from Python"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "h5py-3.11.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:1625fd24ad6cfc9c1ccd44a66dac2396e7ee74940776792772819fc69f3a3731"},
@@ -2243,7 +2243,7 @@ numpy = ">=1.17.3"
 name = "html5lib"
 version = "1.1"
 description = "HTML parser based on the WHATWG HTML specification"
-optional = true
+optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
 files = [
     {file = "html5lib-1.1-py2.py3-none-any.whl", hash = "sha256:0d78f8fde1c230e99fe37986a60526d7049ed4bf8a9fadbad5f00e22e58e041d"},
@@ -2364,7 +2364,7 @@ testing = ["flufl.flake8", "importlib-resources (>=1.3)", "jaraco.test (>=5.4)",
 name = "inflection"
 version = "0.5.1"
 description = "A port of Ruby on Rails inflector to Python"
-optional = true
+optional = false
 python-versions = ">=3.5"
 files = [
     {file = "inflection-0.5.1-py2.py3-none-any.whl", hash = "sha256:f38b2b640938a4f35ade69ac3d053042959b62a0f1076a5bbaa1b9526605a8a2"},
@@ -2518,7 +2518,7 @@ i18n = ["Babel (>=2.7)"]
 name = "jmespath"
 version = "1.0.1"
 description = "JSON Matching Expressions"
-optional = true
+optional = false
 python-versions = ">=3.7"
 files = [
     {file = "jmespath-1.0.1-py3-none-any.whl", hash = "sha256:02e2e4cc71b5bcab88332eebf907519190dd9e6e82107fa7f83b1003a6252980"},
@@ -2529,7 +2529,7 @@ files = [
 name = "joblib"
 version = "1.4.0"
 description = "Lightweight pipelining with Python functions"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "joblib-1.4.0-py3-none-any.whl", hash = "sha256:42942470d4062537be4d54c83511186da1fc14ba354961a2114da91efa9a4ed7"},
@@ -2874,7 +2874,7 @@ test = ["hatch", "ipykernel", "openapi-core (>=0.18.0,<0.19.0)", "openapi-spec-v
 name = "kiwisolver"
 version = "1.4.5"
 description = "A fast implementation of the Cassowary constraint solver"
-optional = true
+optional = false
 python-versions = ">=3.7"
 files = [
     {file = "kiwisolver-1.4.5-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:05703cf211d585109fcd72207a31bb170a0f22144d68298dc5e61b3c946518af"},
@@ -3018,7 +3018,7 @@ test = ["coverage", "pytest", "pytest-cov"]
 name = "llvmlite"
 version = "0.42.0"
 description = "lightweight wrapper around basic LLVM functionality"
-optional = true
+optional = false
 python-versions = ">=3.9"
 files = [
     {file = "llvmlite-0.42.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:3366938e1bf63d26c34fbfb4c8e8d2ded57d11e0567d5bb243d89aab1eb56098"},
@@ -3048,7 +3048,7 @@ files = [
 name = "logical-unification"
 version = "0.4.6"
 description = "Logical unification in Python"
-optional = true
+optional = false
 python-versions = ">=3.6"
 files = [
     {file = "logical-unification-0.4.6.tar.gz", hash = "sha256:908435123f8a106fa4dcf9bf1b75c7beb309fa2bbecf277868af8f1c212650a0"},
@@ -3062,7 +3062,7 @@ toolz = "*"
 name = "lxml"
 version = "4.9.4"
 description = "Powerful and Pythonic XML processing library combining libxml2/libxslt with the ElementTree API."
-optional = true
+optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, != 3.4.*"
 files = [
     {file = "lxml-4.9.4-cp27-cp27m-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:e214025e23db238805a600f1f37bf9f9a15413c7bf5f9d6ae194f84980c78722"},
@@ -3297,7 +3297,7 @@ files = [
 name = "matplotlib"
 version = "3.8.4"
 description = "Python plotting package"
-optional = true
+optional = false
 python-versions = ">=3.9"
 files = [
     {file = "matplotlib-3.8.4-cp310-cp310-macosx_10_12_x86_64.whl", hash = "sha256:abc9d838f93583650c35eca41cfcec65b2e7cb50fd486da6f0c49b5e1ed23014"},
@@ -3389,7 +3389,7 @@ files = [
 name = "minikanren"
 version = "1.0.3"
 description = "Relational programming in Python"
-optional = true
+optional = false
 python-versions = ">=3.6"
 files = [
     {file = "miniKanren-1.0.3.tar.gz", hash = "sha256:1ec8bdb01144ad5e8752c7c297fb8a122db920f859276d25a72d164e998d7f6e"},
@@ -3406,7 +3406,7 @@ toolz = "*"
 name = "minio"
 version = "7.2.5"
 description = "MinIO Python SDK for Amazon S3 Compatible Cloud Storage"
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "minio-7.2.5-py3-none-any.whl", hash = "sha256:ed9176c96d4271cb1022b9ecb8a538b1e55b32ae06add6de16425cab99ef2304"},
@@ -3487,7 +3487,7 @@ xethub = ["mlflow-xethub"]
 name = "more-itertools"
 version = "10.2.0"
 description = "More routines for operating on iterables, beyond itertools"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "more-itertools-10.2.0.tar.gz", hash = "sha256:8fccb480c43d3e99a00087634c06dd02b0d50fbf088b380de5a41a015ec239e1"},
@@ -3498,7 +3498,7 @@ files = [
 name = "mpmath"
 version = "1.3.0"
 description = "Python library for arbitrary-precision floating-point arithmetic"
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "mpmath-1.3.0-py3-none-any.whl", hash = "sha256:a0b2b9fe80bbcd81a6647ff13108738cfb482d481d826cc0e02f5b35e5c88d2c"},
@@ -3515,7 +3515,7 @@ tests = ["pytest (>=4.6)"]
 name = "msgpack"
 version = "1.0.8"
 description = "MessagePack serializer"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "msgpack-1.0.8-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:505fe3d03856ac7d215dbe005414bc28505d26f0c128906037e66d98c4e95868"},
@@ -3580,7 +3580,7 @@ files = [
 name = "multidict"
 version = "6.0.5"
 description = "multidict implementation"
-optional = true
+optional = false
 python-versions = ">=3.7"
 files = [
     {file = "multidict-6.0.5-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:228b644ae063c10e7f324ab1ab6b548bdf6f8b47f3ec234fef1093bc2735e5f9"},
@@ -3679,7 +3679,7 @@ files = [
 name = "multipledispatch"
 version = "1.0.0"
 description = "Multiple dispatch"
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "multipledispatch-1.0.0-py3-none-any.whl", hash = "sha256:0c53cd8b077546da4e48869f49b13164bebafd0c2a5afceb6bb6a316e7fb46e4"},
@@ -3690,7 +3690,7 @@ files = [
 name = "multitasking"
 version = "0.0.11"
 description = "Non-blocking Python methods using decorators"
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "multitasking-0.0.11-py3-none-any.whl", hash = "sha256:1e5b37a5f8fc1e6cfaafd1a82b6b1cc6d2ed20037d3b89c25a84f499bd7b3dd4"},
@@ -3904,7 +3904,7 @@ files = [
 name = "networkx"
 version = "3.3"
 description = "Python package for creating and manipulating graphs and networks"
-optional = true
+optional = false
 python-versions = ">=3.10"
 files = [
     {file = "networkx-3.3-py3-none-any.whl", hash = "sha256:28575580c6ebdaf4505b22c6256a2b9de86b316dc63ba9e93abde3d78dfdbcf2"},
@@ -3976,7 +3976,7 @@ test = ["pytest", "pytest-console-scripts", "pytest-jupyter", "pytest-tornasync"
 name = "numba"
 version = "0.59.1"
 description = "compiling Python code using LLVM"
-optional = true
+optional = false
 python-versions = ">=3.9"
 files = [
     {file = "numba-0.59.1-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:97385a7f12212c4f4bc28f648720a92514bee79d7063e40ef66c2d30600fd18e"},
@@ -4010,7 +4010,7 @@ numpy = ">=1.22,<1.27"
 name = "numexpr"
 version = "2.10.0"
 description = "Fast numerical expression evaluator for NumPy"
-optional = true
+optional = false
 python-versions = ">=3.9"
 files = [
     {file = "numexpr-2.10.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:1af6dc6b3bd2e11a802337b352bf58f30df0b70be16c4f863b70a3af3a8ef95e"},
@@ -4096,7 +4096,7 @@ files = [
 name = "nvidia-cublas-cu12"
 version = "12.1.3.1"
 description = "CUBLAS native runtime libraries"
-optional = true
+optional = false
 python-versions = ">=3"
 files = [
     {file = "nvidia_cublas_cu12-12.1.3.1-py3-none-manylinux1_x86_64.whl", hash = "sha256:ee53ccca76a6fc08fb9701aa95b6ceb242cdaab118c3bb152af4e579af792728"},
@@ -4107,7 +4107,7 @@ files = [
 name = "nvidia-cuda-cupti-cu12"
 version = "12.1.105"
 description = "CUDA profiling tools runtime libs."
-optional = true
+optional = false
 python-versions = ">=3"
 files = [
     {file = "nvidia_cuda_cupti_cu12-12.1.105-py3-none-manylinux1_x86_64.whl", hash = "sha256:e54fde3983165c624cb79254ae9818a456eb6e87a7fd4d56a2352c24ee542d7e"},
@@ -4118,7 +4118,7 @@ files = [
 name = "nvidia-cuda-nvrtc-cu12"
 version = "12.1.105"
 description = "NVRTC native runtime libraries"
-optional = true
+optional = false
 python-versions = ">=3"
 files = [
     {file = "nvidia_cuda_nvrtc_cu12-12.1.105-py3-none-manylinux1_x86_64.whl", hash = "sha256:339b385f50c309763ca65456ec75e17bbefcbbf2893f462cb8b90584cd27a1c2"},
@@ -4129,7 +4129,7 @@ files = [
 name = "nvidia-cuda-runtime-cu12"
 version = "12.1.105"
 description = "CUDA Runtime native Libraries"
-optional = true
+optional = false
 python-versions = ">=3"
 files = [
     {file = "nvidia_cuda_runtime_cu12-12.1.105-py3-none-manylinux1_x86_64.whl", hash = "sha256:6e258468ddf5796e25f1dc591a31029fa317d97a0a94ed93468fc86301d61e40"},
@@ -4140,7 +4140,7 @@ files = [
 name = "nvidia-cudnn-cu12"
 version = "8.9.2.26"
 description = "cuDNN runtime libraries"
-optional = true
+optional = false
 python-versions = ">=3"
 files = [
     {file = "nvidia_cudnn_cu12-8.9.2.26-py3-none-manylinux1_x86_64.whl", hash = "sha256:5ccb288774fdfb07a7e7025ffec286971c06d8d7b4fb162525334616d7629ff9"},
@@ -4153,7 +4153,7 @@ nvidia-cublas-cu12 = "*"
 name = "nvidia-cufft-cu12"
 version = "11.0.2.54"
 description = "CUFFT native runtime libraries"
-optional = true
+optional = false
 python-versions = ">=3"
 files = [
     {file = "nvidia_cufft_cu12-11.0.2.54-py3-none-manylinux1_x86_64.whl", hash = "sha256:794e3948a1aa71fd817c3775866943936774d1c14e7628c74f6f7417224cdf56"},
@@ -4164,7 +4164,7 @@ files = [
 name = "nvidia-curand-cu12"
 version = "10.3.2.106"
 description = "CURAND native runtime libraries"
-optional = true
+optional = false
 python-versions = ">=3"
 files = [
     {file = "nvidia_curand_cu12-10.3.2.106-py3-none-manylinux1_x86_64.whl", hash = "sha256:9d264c5036dde4e64f1de8c50ae753237c12e0b1348738169cd0f8a536c0e1e0"},
@@ -4175,7 +4175,7 @@ files = [
 name = "nvidia-cusolver-cu12"
 version = "11.4.5.107"
 description = "CUDA solver native runtime libraries"
-optional = true
+optional = false
 python-versions = ">=3"
 files = [
     {file = "nvidia_cusolver_cu12-11.4.5.107-py3-none-manylinux1_x86_64.whl", hash = "sha256:8a7ec542f0412294b15072fa7dab71d31334014a69f953004ea7a118206fe0dd"},
@@ -4191,7 +4191,7 @@ nvidia-nvjitlink-cu12 = "*"
 name = "nvidia-cusparse-cu12"
 version = "12.1.0.106"
 description = "CUSPARSE native runtime libraries"
-optional = true
+optional = false
 python-versions = ">=3"
 files = [
     {file = "nvidia_cusparse_cu12-12.1.0.106-py3-none-manylinux1_x86_64.whl", hash = "sha256:f3b50f42cf363f86ab21f720998517a659a48131e8d538dc02f8768237bd884c"},
@@ -4205,7 +4205,7 @@ nvidia-nvjitlink-cu12 = "*"
 name = "nvidia-nccl-cu12"
 version = "2.19.3"
 description = "NVIDIA Collective Communication Library (NCCL) Runtime"
-optional = true
+optional = false
 python-versions = ">=3"
 files = [
     {file = "nvidia_nccl_cu12-2.19.3-py3-none-manylinux1_x86_64.whl", hash = "sha256:a9734707a2c96443331c1e48c717024aa6678a0e2a4cb66b2c364d18cee6b48d"},
@@ -4215,7 +4215,7 @@ files = [
 name = "nvidia-nvjitlink-cu12"
 version = "12.4.127"
 description = "Nvidia JIT LTO Library"
-optional = true
+optional = false
 python-versions = ">=3"
 files = [
     {file = "nvidia_nvjitlink_cu12-12.4.127-py3-none-manylinux2014_x86_64.whl", hash = "sha256:06b3b9b25bf3f8af351d664978ca26a16d2c5127dbd53c0497e28d1fb9611d57"},
@@ -4226,7 +4226,7 @@ files = [
 name = "nvidia-nvtx-cu12"
 version = "12.1.105"
 description = "NVIDIA Tools Extension"
-optional = true
+optional = false
 python-versions = ">=3"
 files = [
     {file = "nvidia_nvtx_cu12-12.1.105-py3-none-manylinux1_x86_64.whl", hash = "sha256:dc21cf308ca5691e7c04d962e213f8a4aa9bbfa23d95412f452254c2caeb09e5"},
@@ -4237,7 +4237,7 @@ files = [
 name = "odfpy"
 version = "1.4.1"
 description = "Python API and tools to manipulate OpenDocument files"
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "odfpy-1.4.1.tar.gz", hash = "sha256:db766a6e59c5103212f3cc92ec8dd50a0f3a02790233ed0b52148b70d3c438ec"},
@@ -4250,7 +4250,7 @@ defusedxml = "*"
 name = "openpyxl"
 version = "3.1.2"
 description = "A Python library to read/write Excel 2010 xlsx/xlsm files"
-optional = true
+optional = false
 python-versions = ">=3.6"
 files = [
     {file = "openpyxl-3.1.2-py2.py3-none-any.whl", hash = "sha256:f91456ead12ab3c6c2e9491cf33ba6d08357d802192379bb482f1033ade496f5"},
@@ -4264,7 +4264,7 @@ et-xmlfile = "*"
 name = "opt-einsum"
 version = "3.3.0"
 description = "Optimizing numpys einsum function"
-optional = true
+optional = false
 python-versions = ">=3.5"
 files = [
     {file = "opt_einsum-3.3.0-py3-none-any.whl", hash = "sha256:2455e59e3947d3c275477df7f5205b30635e266fe6dc300e3d9f9646bfcea147"},
@@ -4337,7 +4337,7 @@ files = [
 name = "osqp"
 version = "0.6.4"
 description = "OSQP: The Operator Splitting QP Solver"
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "osqp-0.6.4-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:1c34dc340b4dc46ed86f811b1015bb2ece444d310b4bb638e509a02df88594c1"},
@@ -4402,7 +4402,7 @@ files = [
 name = "pandas"
 version = "2.2.2"
 description = "Powerful data structures for data analysis, time series, and statistics"
-optional = true
+optional = false
 python-versions = ">=3.9"
 files = [
     {file = "pandas-2.2.2-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:90c6fca2acf139569e74e8781709dccb6fe25940488755716d1d354d6bc58bce"},
@@ -4484,7 +4484,7 @@ xml = ["lxml (>=4.9.2)"]
 name = "pandas-datareader"
 version = "0.10.0"
 description = "Data readers extracted from the pandas codebase,should be compatible with recent pandas versions"
-optional = true
+optional = false
 python-versions = ">=3.6"
 files = [
     {file = "pandas-datareader-0.10.0.tar.gz", hash = "sha256:9fc3c63d39bc0c10c2683f1c6d503ff625020383e38f6cbe14134826b454d5a6"},
@@ -4560,7 +4560,7 @@ testing = ["docopt", "pytest"]
 name = "patsy"
 version = "0.5.6"
 description = "A Python package for describing statistical models and for building design matrices."
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "patsy-0.5.6-py2.py3-none-any.whl", hash = "sha256:19056886fd8fa71863fa32f0eb090267f21fb74be00f19f5c70b2e9d76c883c6"},
@@ -4589,7 +4589,7 @@ files = [
 name = "peewee"
 version = "3.17.1"
 description = "a little orm"
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "peewee-3.17.1.tar.gz", hash = "sha256:e009ac4227c4fdc0058a56e822ad5987684f0a1fbb20fed577200785102581c3"},
@@ -4613,7 +4613,7 @@ ptyprocess = ">=0.5"
 name = "pfeed"
 version = "0.0.1.dev10"
 description = "Data pipeline for algo-trading, getting and storing both real-time and historical data made easy."
-optional = true
+optional = false
 python-versions = "<3.13,>=3.10"
 files = [
     {file = "pfeed-0.0.1.dev10-py3-none-any.whl", hash = "sha256:36865fc93d97b730ceb7adc0fcc338c1503ff9879dbeac11c0a29c2ab2d518f4"},
@@ -4642,38 +4642,36 @@ df = ["pandas (>=2.2.0,<3.0.0)", "polars (>=0.20.16,<0.21.0)"]
 name = "pfolio"
 version = "0.0.1.dev4"
 description = "Portfolio Management Library, including analysis, analytics and optimization"
-optional = true
-python-versions = "<3.13,>=3.10"
-files = [
-    {file = "pfolio-0.0.1.dev4-py3-none-any.whl", hash = "sha256:351f8f7333d8f7c2346592360313c08e9ecb29472527551ca2a30ef4844453c3"},
-    {file = "pfolio-0.0.1.dev4.tar.gz", hash = "sha256:3aba9b8af58fbbf8ec968992d13fc14084fe565bd766ce8857c9e0668982871e"},
-]
+optional = false
+python-versions = ">=3.10 <3.13"
+files = []
+develop = true
 
 [package.dependencies]
-alphalens-reloaded = {version = ">=0.4.3,<0.5.0", optional = true, markers = "extra == \"temporary\""}
-arviz = {version = ">=0.18.0,<0.19.0", optional = true, markers = "extra == \"bayesian\""}
-cvxpy = {version = ">=1.4.2,<2.0.0", optional = true, markers = "extra == \"portfolio\""}
-empyrial = {version = ">=2.1.4,<3.0.0", optional = true, markers = "extra == \"temporary\""}
-empyrical-reloaded = {version = ">=0.5.9,<0.6.0", optional = true, markers = "extra == \"temporary\""}
-ffn = {version = ">=1.0.1,<2.0.0", optional = true, markers = "extra == \"temporary\""}
-financedatabase = {version = ">=2.2.2,<3.0.0", optional = true, markers = "extra == \"data\""}
-financetoolkit = {version = ">=1.8.5,<2.0.0", optional = true, markers = "extra == \"temporary\""}
-finquant = {version = ">=0.7.0,<0.8.0", optional = true, markers = "extra == \"temporary\""}
-pfeed = {version = ">=0.0.1.dev10,<0.0.2", extras = ["boost", "data", "df"], optional = true, markers = "extra == \"data\""}
-pfund = ">=0.0.1.dev10,<0.0.2"
-plotly = ">=5.20.0,<6.0.0"
-pyfolio-reloaded = {version = ">=0.9.5,<0.10.0", optional = true, markers = "extra == \"temporary\""}
-pymc = {version = ">=5.12.0,<6.0.0", optional = true, markers = "extra == \"bayesian\""}
-pyportfolioopt = {version = ">=1.5.5,<2.0.0", optional = true, markers = "extra == \"portfolio\""}
-pyro-ppl = {version = ">=1.9.0,<2.0.0", optional = true, markers = "extra == \"bayesian\""}
-quantstats = ">=0.0.62,<0.0.63"
-riskfolio-lib = {version = ">=6.0.0,<7.0.0", optional = true, markers = "extra == \"portfolio\""}
-rsome = {version = ">=1.2.6,<2.0.0", optional = true, markers = "extra == \"temporary\""}
-scikit-learn = ">=1.3.1,<2.0.0"
-seaborn = ">=0.13.2,<0.14.0"
-skfolio = {version = ">=0.1.3,<0.2.0", optional = true, markers = "extra == \"portfolio\""}
-statsmodels = ">=0.14.0,<0.15.0"
-thepassiveinvestor = {version = ">=1.2.2,<2.0.0", optional = true, markers = "extra == \"temporary\""}
+alphalens-reloaded = {version = "^0.4.3", optional = true}
+arviz = {version = "^0.18.0", optional = true}
+cvxpy = {version = "^1.4.2", optional = true}
+empyrial = {version = "^2.1.4", optional = true}
+empyrical-reloaded = {version = "^0.5.9", optional = true}
+ffn = {version = "^1.0.1", optional = true}
+financedatabase = {version = "^2.2.2", optional = true}
+financetoolkit = {version = "^1.8.5", optional = true}
+finquant = {version = "^0.7.0", optional = true}
+pfeed = {version = "^0.0.1.dev10", extras = ["boost", "data", "df"], optional = true}
+pfund = "^0.0.1.dev10"
+plotly = "^5.20.0"
+pyfolio-reloaded = {version = "^0.9.5", optional = true}
+pymc = {version = "^5.12.0", optional = true}
+pyportfolioopt = {version = "^1.5.5", optional = true}
+pyro-ppl = {version = "^1.9.0", optional = true}
+quantstats = "^0.0.62"
+riskfolio-lib = {version = "^6.0.0", optional = true}
+rsome = {version = "^1.2.6", optional = true}
+scikit-learn = "^1.3.1"
+seaborn = "^0.13.2"
+skfolio = {version = "^0.1.3", optional = true}
+statsmodels = "^0.14.0"
+thepassiveinvestor = {version = "^1.2.2", optional = true}
 
 [package.extras]
 bayesian = ["arviz (>=0.18.0,<0.19.0)", "pymc (>=5.12.0,<6.0.0)", "pyro-ppl (>=1.9.0,<2.0.0)"]
@@ -4681,11 +4679,15 @@ data = ["financedatabase (>=2.2.2,<3.0.0)", "pfeed[boost,data,df] (>=0.0.1.dev10
 portfolio = ["cvxpy (>=1.4.2,<2.0.0)", "pyportfolioopt (>=1.5.5,<2.0.0)", "riskfolio-lib (>=6.0.0,<7.0.0)", "skfolio (>=0.1.3,<0.2.0)"]
 temporary = ["alphalens-reloaded (>=0.4.3,<0.5.0)", "empyrial (>=2.1.4,<3.0.0)", "empyrical-reloaded (>=0.5.9,<0.6.0)", "ffn (>=1.0.1,<2.0.0)", "financetoolkit (>=1.8.5,<2.0.0)", "finquant (>=0.7.0,<0.8.0)", "pyfolio-reloaded (>=0.9.5,<0.10.0)", "rsome (>=1.2.6,<2.0.0)", "thepassiveinvestor (>=1.2.2,<2.0.0)"]
 
+[package.source]
+type = "directory"
+url = "../pfolio"
+
 [[package]]
 name = "pillow"
 version = "10.3.0"
 description = "Python Imaging Library (Fork)"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "pillow-10.3.0-cp310-cp310-macosx_10_10_x86_64.whl", hash = "sha256:90b9e29824800e90c84e4022dd5cc16eb2d9605ee13f05d47641eb183cd73d45"},
@@ -4811,7 +4813,7 @@ test = ["appdirs (==1.4.4)", "covdefaults (>=2.3)", "pytest (>=7.4.3)", "pytest-
 name = "plotly"
 version = "5.20.0"
 description = "An open-source, interactive data visualization library for Python"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "plotly-5.20.0-py3-none-any.whl", hash = "sha256:837a9c8aa90f2c0a2f0d747b82544d014dc2a2bdde967b5bb1da25b53932d1a9"},
@@ -4841,7 +4843,7 @@ testing = ["pytest", "pytest-benchmark"]
 name = "polars"
 version = "0.20.19"
 description = "Blazingly fast DataFrame library"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "polars-0.20.19-cp38-abi3-macosx_10_12_x86_64.whl", hash = "sha256:1d5a63001c8e47376f35b6e389e7f88e6984c721bd9468b01998807bad3c0f2f"},
@@ -4944,7 +4946,7 @@ wcwidth = "*"
 name = "protobuf"
 version = "4.25.3"
 description = ""
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "protobuf-4.25.3-cp310-abi3-win32.whl", hash = "sha256:d4198877797a83cbfe9bffa3803602bbe1625dc30d8a097365dbc762e5790faa"},
@@ -5017,7 +5019,7 @@ tests = ["pytest"]
 name = "pyarrow"
 version = "15.0.2"
 description = "Python library for Apache Arrow"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "pyarrow-15.0.2-cp310-cp310-macosx_10_15_x86_64.whl", hash = "sha256:88b340f0a1d05b5ccc3d2d986279045655b1fe8e41aba6ca44ea28da0d1455d8"},
@@ -5065,7 +5067,7 @@ numpy = ">=1.16.6,<2"
 name = "pybind11"
 version = "2.12.0"
 description = "Seamless operability between C++11 and Python"
-optional = true
+optional = false
 python-versions = ">=3.6"
 files = [
     {file = "pybind11-2.12.0-py3-none-any.whl", hash = "sha256:df8d60b94f9e714d81013db233393d430ebf9f3551642b82291cf1b14d1afdbd"},
@@ -5139,7 +5141,7 @@ files = [
 name = "pycryptodome"
 version = "3.20.0"
 description = "Cryptographic library for Python"
-optional = true
+optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
 files = [
     {file = "pycryptodome-3.20.0-cp27-cp27m-macosx_10_9_x86_64.whl", hash = "sha256:f0e6d631bae3f231d3634f91ae4da7a960f7ff87f2865b2d2b831af1dfb04e9a"},
@@ -5207,7 +5209,7 @@ test = ["pytest", "pytest-cov", "pytest-regressions"]
 name = "pyerfa"
 version = "2.0.1.3"
 description = "Python bindings for ERFA"
-optional = true
+optional = false
 python-versions = ">=3.9"
 files = [
     {file = "pyerfa-2.0.1.3-cp39-abi3-macosx_10_9_x86_64.whl", hash = "sha256:fc554151de564b567e391b7c9c3b545efac63674ab1954382d38f886254c01fb"},
@@ -5234,7 +5236,7 @@ test = ["pytest", "pytest-doctestplus (>=0.7)"]
 name = "pyfolio-reloaded"
 version = "0.9.5"
 description = "Performance and risk analysis of financial portfolios with Python"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "pyfolio-reloaded-0.9.5.tar.gz", hash = "sha256:e30d0631502ea57ed2e5f35fb0e50b1f5a779f9f67d5947d95cd5b746c3a03c0"},
@@ -5276,7 +5278,7 @@ windows-terminal = ["colorama (>=0.4.6)"]
 name = "pymc"
 version = "5.13.0"
 description = "Probabilistic Programming in Python: Bayesian Modeling and Probabilistic Machine Learning with PyTensor"
-optional = true
+optional = false
 python-versions = ">=3.10"
 files = [
     {file = "pymc-5.13.0-py3-none-any.whl", hash = "sha256:b10d454ca9177f9261af6ac03f898fc313af91fc2d5109426a98012b07918b61"},
@@ -5298,7 +5300,7 @@ typing-extensions = ">=3.7.4"
 name = "pyparsing"
 version = "3.1.2"
 description = "pyparsing module - Classes and methods to define and execute parsing grammars"
-optional = true
+optional = false
 python-versions = ">=3.6.8"
 files = [
     {file = "pyparsing-3.1.2-py3-none-any.whl", hash = "sha256:f9db75911801ed778fe61bb643079ff86601aca99fcae6345aa67292038fb742"},
@@ -5312,7 +5314,7 @@ diagrams = ["jinja2", "railroad-diagrams"]
 name = "pyportfolioopt"
 version = "1.5.5"
 description = "Financial portfolio optimization in python"
-optional = true
+optional = false
 python-versions = ">=3.8,<3.15"
 files = [
     {file = "pyportfolioopt-1.5.5-py3-none-any.whl", hash = "sha256:16dc6a09450a74610f88b10fa44fe83d400bdc45baadd68496f59bf4a0bf9d44"},
@@ -5351,7 +5353,7 @@ testing = ["covdefaults (>=2.3)", "pytest (>=7.4)", "pytest-cov (>=4.1)", "pytes
 name = "pyro-api"
 version = "0.1.2"
 description = "Generic API for dispatch to Pyro backends."
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "pyro-api-0.1.2.tar.gz", hash = "sha256:a1b900d9580aa1c2fab3b123ab7ff33413744da7c5f440bd4aadc4d40d14d920"},
@@ -5366,7 +5368,7 @@ test = ["flake8", "pytest (>=5.0)"]
 name = "pyro-ppl"
 version = "1.9.0"
 description = "A Python library for probabilistic modeling and inference"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "pyro-ppl-1.9.0.tar.gz", hash = "sha256:41f4c005159568280fbc511648960a98a2b1a410027d8bd0a43220ac9b102cdf"},
@@ -5393,7 +5395,7 @@ test = ["black (>=21.4b0)", "graphviz (>=0.8)", "jupyter (>=1.0.0)", "matplotlib
 name = "pytensor"
 version = "2.20.0"
 description = "Optimizing compiler for evaluating mathematical expressions on CPUs and GPUs."
-optional = true
+optional = false
 python-versions = "<3.13,>=3.10"
 files = [
     {file = "pytensor-2.20.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:1cd0e66fab98530b5159481b682d63a8bebc9ca10d631b0d71802f367a8a8cfd"},
@@ -5514,7 +5516,7 @@ testing = ["filelock"]
 name = "python-calamine"
 version = "0.2.0"
 description = "Python binding for Rust's library for reading excel and odf file - calamine"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "python_calamine-0.2.0-cp310-cp310-macosx_10_12_x86_64.whl", hash = "sha256:da0c64292f011853046e4ce833e3319d11ab4b0ac1dec5ace1887e1f1630a3e0"},
@@ -5693,7 +5695,7 @@ tests = ["flake8", "loguru", "pytest", "pytest-asyncio", "pytest-cov", "pytest-m
 name = "pytz"
 version = "2024.1"
 description = "World timezone definitions, modern and historical"
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "pytz-2024.1-py2.py3-none-any.whl", hash = "sha256:328171f4e3623139da4983451950b28e95ac706e13f3f2630a879749e7a8b319"},
@@ -5742,7 +5744,7 @@ files = [
 name = "pyxlsb"
 version = "1.0.10"
 description = "Excel 2007-2010 Binary Workbook (xlsb) parser"
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "pyxlsb-1.0.10-py2.py3-none-any.whl", hash = "sha256:87c122a9a622e35ca5e741d2e541201d28af00fb46bec492cfa9586890b120b4"},
@@ -5907,7 +5909,7 @@ cffi = {version = "*", markers = "implementation_name == \"pypy\""}
 name = "qdldl"
 version = "0.1.7.post1"
 description = "QDLDL, a free LDL factorization routine."
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "qdldl-0.1.7.post1-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:77311b7446be609cbdf23cc7e9f7494d2106b697cb874ba93692c08854c166aa"},
@@ -5939,7 +5941,7 @@ scipy = ">=0.13.2"
 name = "quandl"
 version = "3.7.0"
 description = "Package for quandl API access"
-optional = true
+optional = false
 python-versions = ">= 3.6"
 files = [
     {file = "Quandl-3.7.0-py2.py3-none-any.whl", hash = "sha256:0e3e5dc60fd057c73c67380b1b0f2e3dc0e4c500fb5e6e146ac3a3c0d992cd1d"},
@@ -5959,7 +5961,7 @@ six = "*"
 name = "quantstats"
 version = "0.0.62"
 description = "Portfolio analytics for quants"
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "QuantStats-0.0.62-py2.py3-none-any.whl", hash = "sha256:5b549d41d9edb2260ddc437440acfbb4e89cfe5388bc614247d61ec19bcdff10"},
@@ -6096,7 +6098,7 @@ full = ["numpy"]
 name = "ray"
 version = "2.10.0"
 description = "Ray provides a simple, universal API for building distributed applications."
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "ray-2.10.0-cp310-cp310-macosx_10_15_x86_64.whl", hash = "sha256:8a174268c7b6ca9826e4884b837395b695a45c17049927965d1b4cc370184ba2"},
@@ -6187,7 +6189,7 @@ use-chardet-on-py3 = ["chardet (>=3.0.2,<6)"]
 name = "requests-futures"
 version = "1.0.1"
 description = "Asynchronous Python HTTP for Humans."
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "requests-futures-1.0.1.tar.gz", hash = "sha256:f55a4ef80070e2858e7d1e73123d2bfaeaf25b93fd34384d8ddf148e2b676373"},
@@ -6247,7 +6249,7 @@ jupyter = ["ipywidgets (>=7.5.1,<9)"]
 name = "riskfolio-lib"
 version = "6.0.0"
 description = "Portfolio Optimization and Quantitative Strategic Asset Allocation in Python"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "Riskfolio-Lib-6.0.0.tar.gz", hash = "sha256:8e16aef019e166354ae24fa7da35943792edf78bd685331ef83465df7a30200e"},
@@ -6396,7 +6398,7 @@ files = [
 name = "rsome"
 version = "1.2.6"
 description = "Robust Stochastic Optimization Made Easy"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "rsome-1.2.6-py3-none-any.whl", hash = "sha256:2b7cde5058575cf7af2d653894d3ddf433ab60e655b9c0bce9c7d60479452e03"},
@@ -6531,7 +6533,7 @@ files = [
 name = "s3fs"
 version = "2024.3.1"
 description = "Convenient Filesystem interface over S3"
-optional = true
+optional = false
 python-versions = ">= 3.8"
 files = [
     {file = "s3fs-2024.3.1-py3-none-any.whl", hash = "sha256:f4566a5446c473740d272ec08e0b4aae8db1aa05f662c42ff0aa2c89bb5060ea"},
@@ -6562,7 +6564,7 @@ files = [
 name = "scikit-learn"
 version = "1.4.2"
 description = "A set of python modules for machine learning and data mining"
-optional = true
+optional = false
 python-versions = ">=3.9"
 files = [
     {file = "scikit-learn-1.4.2.tar.gz", hash = "sha256:daa1c471d95bad080c6e44b4946c9390a4842adc3082572c20e4f8884e39e959"},
@@ -6604,7 +6606,7 @@ tests = ["black (>=23.3.0)", "matplotlib (>=3.3.4)", "mypy (>=1.3)", "numpydoc (
 name = "scipy"
 version = "1.13.0"
 description = "Fundamental algorithms for scientific computing in Python"
-optional = true
+optional = false
 python-versions = ">=3.9"
 files = [
     {file = "scipy-1.13.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:ba419578ab343a4e0a77c0ef82f088238a93eef141b2b8017e46149776dfad4d"},
@@ -6646,7 +6648,7 @@ test = ["array-api-strict", "asv", "gmpy2", "hypothesis (>=6.30)", "mpmath", "po
 name = "scs"
 version = "3.2.4.post1"
 description = "Splitting conic solver"
-optional = true
+optional = false
 python-versions = ">=3.7"
 files = [
     {file = "scs-3.2.4.post1-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:51fed30d2a4a1e6fbfc1e52b4cb3adeecbe89d7c47f3539b49afbb852415fe19"},
@@ -6679,7 +6681,7 @@ scipy = "*"
 name = "seaborn"
 version = "0.13.2"
 description = "Statistical data visualization"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "seaborn-0.13.2-py3-none-any.whl", hash = "sha256:636f8336facf092165e27924f223d3c62ca560b1f2bb5dff7ab7fad265361987"},
@@ -6754,7 +6756,7 @@ files = [
 name = "skfolio"
 version = "0.1.3"
 description = "Portfolio optimization built on top of scikit-learn"
-optional = true
+optional = false
 python-versions = ">=3.10"
 files = [
     {file = "skfolio-0.1.3-py3-none-any.whl", hash = "sha256:a536d67911f7f1f90ea9502c25ae3edba724d5fd9267094fafe28670d2b6d6a4"},
@@ -7269,7 +7271,7 @@ tests = ["cython", "littleutils", "pygments", "pytest", "typeguard"]
 name = "statsmodels"
 version = "0.14.1"
 description = "Statistical computations and models for Python"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "statsmodels-0.14.1-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:43af9c0b07c9d72f275cf14ea54a481a3f20911f0b443181be4769def258fdeb"},
@@ -7354,7 +7356,7 @@ pbr = ">=2.0.0,<2.1.0 || >2.1.0"
 name = "sympy"
 version = "1.12"
 description = "Computer algebra system (CAS) in Python"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "sympy-1.12-py3-none-any.whl", hash = "sha256:c3588cd4295d0c0f603d0f2ae780587e64e2efeedb3521e46b9bb1d08d184fa5"},
@@ -7409,7 +7411,7 @@ widechars = ["wcwidth"]
 name = "tenacity"
 version = "8.2.3"
 description = "Retry code until it succeeds"
-optional = true
+optional = false
 python-versions = ">=3.7"
 files = [
     {file = "tenacity-8.2.3-py3-none-any.whl", hash = "sha256:ce510e327a630c9e1beaf17d42e6ffacc88185044ad85cf74c0a8887c6a0f88c"},
@@ -7444,7 +7446,7 @@ typing = ["mypy (>=1.6,<2.0)", "traitlets (>=5.11.1)"]
 name = "thepassiveinvestor"
 version = "1.2.2"
 description = "Passive Investing for the Average Joe."
-optional = true
+optional = false
 python-versions = ">=3.10,<3.13"
 files = [
     {file = "thepassiveinvestor-1.2.2-py3-none-any.whl", hash = "sha256:4acc4746e402b7012b191e6b425659fb7fa2c37a7acfd727f0164000c923daed"},
@@ -7460,7 +7462,7 @@ yahooquery = ">=2,<3"
 name = "threadpoolctl"
 version = "3.4.0"
 description = "threadpoolctl"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "threadpoolctl-3.4.0-py3-none-any.whl", hash = "sha256:8f4c689a65b23e5ed825c8436a92b818aac005e0f3715f6a1664d7c7ee29d262"},
@@ -7511,7 +7513,7 @@ files = [
 name = "toolz"
 version = "0.12.1"
 description = "List processing tools and functional utilities"
-optional = true
+optional = false
 python-versions = ">=3.7"
 files = [
     {file = "toolz-0.12.1-py3-none-any.whl", hash = "sha256:d22731364c07d72eea0a0ad45bafb2c2937ab6fd38a3507bf55eae8744aa7d85"},
@@ -7522,7 +7524,7 @@ files = [
 name = "torch"
 version = "2.2.2"
 description = "Tensors and Dynamic neural networks in Python with strong GPU acceleration"
-optional = true
+optional = false
 python-versions = ">=3.8.0"
 files = [
     {file = "torch-2.2.2-cp310-cp310-manylinux1_x86_64.whl", hash = "sha256:bc889d311a855dd2dfd164daf8cc903a6b7273a747189cebafdd89106e4ad585"},
@@ -7662,7 +7664,7 @@ test = ["argcomplete (>=3.0.3)", "mypy (>=1.7.0)", "pre-commit", "pytest (>=7.0,
 name = "triton"
 version = "2.2.0"
 description = "A language and compiler for custom Deep Learning operations"
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "triton-2.2.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a2294514340cfe4e8f4f9e5c66c702744c4a117d25e618bd08469d0bfed1e2e5"},
@@ -7707,7 +7709,7 @@ files = [
 name = "tzdata"
 version = "2024.1"
 description = "Provider of IANA time zone data"
-optional = true
+optional = false
 python-versions = ">=2"
 files = [
     {file = "tzdata-2024.1-py2.py3-none-any.whl", hash = "sha256:9068bc196136463f5245e51efda838afa15aaeca9903f49050dfa2679db4d252"},
@@ -7988,7 +7990,7 @@ test = ["pytest (>=6.0.0)", "setuptools (>=65)"]
 name = "wrapt"
 version = "1.16.0"
 description = "Module for decorators, wrappers and monkey patching."
-optional = true
+optional = false
 python-versions = ">=3.6"
 files = [
     {file = "wrapt-1.16.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:ffa565331890b90056c01db69c0fe634a776f8019c143a5ae265f9c6bc4bd6d4"},
@@ -8067,7 +8069,7 @@ files = [
 name = "xarray"
 version = "2024.3.0"
 description = "N-D labeled arrays and datasets in Python"
-optional = true
+optional = false
 python-versions = ">=3.9"
 files = [
     {file = "xarray-2024.3.0-py3-none-any.whl", hash = "sha256:ca2bc4da2bf2e7879e15862a7a7c3fc76ad19f6a08931d030220cef39a29118d"},
@@ -8091,7 +8093,7 @@ viz = ["matplotlib", "nc-time-axis", "seaborn"]
 name = "xarray-einstats"
 version = "0.7.0"
 description = "Stats, linear algebra and einops for xarray"
-optional = true
+optional = false
 python-versions = ">=3.9"
 files = [
     {file = "xarray_einstats-0.7.0-py3-none-any.whl", hash = "sha256:f39403341ebf5b634ab1f1bd0e1bb2dc51046e0df31aa908dfbe2fa6a493712e"},
@@ -8113,7 +8115,7 @@ test = ["hypothesis", "packaging", "pytest", "pytest-cov"]
 name = "xlrd"
 version = "2.0.1"
 description = "Library for developers to extract data from Microsoft Excel (tm) .xls spreadsheet files"
-optional = true
+optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*"
 files = [
     {file = "xlrd-2.0.1-py2.py3-none-any.whl", hash = "sha256:6a33ee89877bd9abc1158129f6e94be74e2679636b8a205b43b85206c3f0bbdd"},
@@ -8129,7 +8131,7 @@ test = ["pytest", "pytest-cov"]
 name = "xlsxwriter"
 version = "3.2.0"
 description = "A Python module for creating Excel XLSX files."
-optional = true
+optional = false
 python-versions = ">=3.6"
 files = [
     {file = "XlsxWriter-3.2.0-py3-none-any.whl", hash = "sha256:ecfd5405b3e0e228219bcaf24c2ca0915e012ca9464a14048021d21a995d490e"},
@@ -8140,7 +8142,7 @@ files = [
 name = "yahooquery"
 version = "2.3.7"
 description = "Python wrapper for an unofficial Yahoo Finance API"
-optional = true
+optional = false
 python-versions = ">=3.8.1,<4.0"
 files = [
     {file = "yahooquery-2.3.7-py3-none-any.whl", hash = "sha256:6b3808e515b3fa5e32cf7b72f9a13991cde7b212830879ed00851aad0b8f529e"},
@@ -8162,7 +8164,7 @@ premium = ["selenium (>=4.10.0,<5.0.0)"]
 name = "yarl"
 version = "1.9.4"
 description = "Yet another URL library"
-optional = true
+optional = false
 python-versions = ">=3.7"
 files = [
     {file = "yarl-1.9.4-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:a8c1df72eb746f4136fe9a2e72b0c9dc1da1cbd23b5372f94b5820ff8ae30e0e"},
@@ -8265,7 +8267,7 @@ multidict = ">=4.0"
 name = "yfinance"
 version = "0.2.37"
 description = "Download market data from Yahoo! Finance API"
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "yfinance-0.2.37-py2.py3-none-any.whl", hash = "sha256:3ac75fa1cd3496ee76b6df5d63d29679487ea9447123c5b935d1593240737a8f"},
@@ -8308,7 +8310,7 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 name = "zope-interface"
 version = "6.2"
 description = "Interfaces for Python"
-optional = true
+optional = false
 python-versions = ">=3.7"
 files = [
     {file = "zope.interface-6.2-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:506f5410b36e5ba494136d9fa04c548eaf1a0d9c442b0b0e7a0944db7620e0ab"},
@@ -8365,4 +8367,4 @@ ml = ["mlflow", "scikit-learn", "ta", "torch"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10 <3.13"
-content-hash = "59a8b4e6c18a32f11032744b3bbba960cd077544f6658aa32202e52eee2a9169"
+content-hash = "7e32b3921de78c7ab81b07c3e37e545d09938fcf80e3c99eabe0c859749efdd7"

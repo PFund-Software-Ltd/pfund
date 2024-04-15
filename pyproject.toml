@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pfund"
-version = "0.0.1.dev10"
+version = "0.0.1.dev11"
 description = "A Complete Algo-Trading Framework for Machine Learning, enabling trading across TradFi, CeFi and DeFi. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading"
 license = "Apache-2.0"
 authors = ["Stephen Yau <softwareentrepreneer+pfund@gmail.com>"]
@@ -47,7 +47,7 @@ optional = true
 
 [tool.poetry.group.dev.dependencies]
 # pfeed = { path = "../pfeed", develop = true, extras = ["df", "data", "boost"] }
-# pfolio = { path = "../pfolio", develop = true, extras = ["bayesian", "data", "portfolio", "temporary"] }
+pfolio = { path = "../pfolio", develop = true, extras = ["bayesian", "data", "portfolio", "temporary"] }
 pybit = "^5.6.2"
 ta-lib = "^0.4.28"
 
