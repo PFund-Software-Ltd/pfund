@@ -32,7 +32,7 @@ from pfund.plogging import create_dynamic_logger
 
 class BaseStrategy(ABC, metaclass=MetaStrategy):
 
-    dir_path: Path | None = None  # Get the directory path where the strategy was defined
+    _file_path: Path | None = None  # Get the file path where the strategy was defined
     config = {}
 
     @classmethod
@@ -41,7 +41,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             cls.config = config
         else:
             for file_name in ['config.yml', 'config.yaml']:
-                if config := load_yaml_file(cls.dir_path / file_name):
+                if config := load_yaml_file(cls._file_path.parent / file_name):
                     cls.config = config
                     break
     
@@ -50,15 +50,15 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             self.params = params
         else:
             for file_name in ['params.yml', 'params.yaml']:
-                if params := load_yaml_file(self.dir_path / file_name):
+                if params := load_yaml_file(self._file_path.parent / file_name):
                     self.params = params
                     break
     
     def __new__(cls, *args, **kwargs):
-        if not cls.dir_path:
+        if not cls._file_path:
             module = sys.modules[cls.__module__]
             if strategy_file_path := getattr(module, '__file__', None):
-                cls.dir_path = Path(strategy_file_path).parent
+                cls._file_path = Path(strategy_file_path)
                 cls.load_config()
         return super().__new__(cls)
     

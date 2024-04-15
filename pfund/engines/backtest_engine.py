@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import os
 import time
 import datetime
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
     from pfund.types.core import tStrategy, tModel, tFeature, tIndicator
     
 import pfund as pf
+from pfund.git_controller import GitController
 from pfund.engines.base_engine import BaseEngine
 from pfund.brokers.broker_backtest import BacktestBroker
 from pfund.strategies.strategy_base import BaseStrategy
@@ -23,7 +25,7 @@ from pfund.mixins.backtest import BacktestMixin
 
 
 class BacktestEngine(BaseEngine):
-    def __new__(cls, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', append_to_strategy_df=False, use_prepared_signals=True, config: ConfigHandler | None=None, **settings):
+    def __new__(cls, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', append_to_strategy_df=False, use_prepared_signals=True, config: ConfigHandler | None=None, auto_git_commit=False, **settings):
         if not hasattr(cls, 'mode'):
             cls.mode = mode.lower()
         if not hasattr(cls, 'append_to_strategy_df'):
@@ -32,13 +34,18 @@ class BacktestEngine(BaseEngine):
         # instead of recalculating the signals. This will make event-driven backtesting faster but less consistent with live trading
         if not hasattr(cls, 'use_prepared_signals'):
             cls.use_prepared_signals = use_prepared_signals
+        if not hasattr(cls, 'auto_git_commit'):
+            cls.auto_git_commit = auto_git_commit
         return super().__new__(cls, env, data_tool=data_tool, config=config, **settings)
 
-    def __init__(self, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', append_to_strategy_df=False, use_prepared_signals=True, config: ConfigHandler | None=None, **settings):
-        super().__init__(env, data_tool=data_tool)
+    def __init__(self, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', append_to_strategy_df=False, use_prepared_signals=True, config: ConfigHandler | None=None, auto_git_commit=False, **settings):
         # avoid re-initialization to implement singleton class correctly
-        # if not hasattr(self, '_initialized'):
-        #     pass
+        if not hasattr(self, '_initialized'):
+            # Get the current frame and then the outer frame (where the engine instance is created)
+            caller_frame = inspect.currentframe().f_back
+            file_path = caller_frame.f_code.co_filename  # Extract the file path from the frame
+            self._git = GitController(os.path.abspath(file_path))
+            super().__init__(env, data_tool=data_tool)
     
     # HACK: since python doesn't support dynamic typing, true return type should be subclass of BacktestMixin and tStrategy
     # write -> BacktestMixin | tStrategy for better intellisense in IDEs
@@ -131,23 +138,35 @@ class BacktestEngine(BaseEngine):
         except:
             self.logger.exception(f"Error writing to {file_path}:")
     
-    def _generate_backtest_iteration(self, strategy: BaseStrategy) -> int:
+    def _generate_backtest_iteration(self, backtest_hash: str) -> int:
         '''Generate backtest iteration number for the same backtest_hash.
         Read the existing backtest.json file to get the iteration number for the same strategy hash
         If the backtest hash is not found, create a new entry with iteration number 1
         else increment the iteration number by 1.
         '''
-        backtest_hash = self._generate_backtest_hash(strategy)
         file_name = 'backtest.json'
         backtest_json = self.read_json(file_name)
         backtest_json[backtest_hash] = backtest_json.get(backtest_hash, 0) + 1
         self._write_json(file_name, backtest_json)
         return backtest_json[backtest_hash]
     
-    def _output_backtest_results(self, strat: str, df, start_time: float, end_time: float):
+    def _commit_strategy(self, strategy: BaseStrategy) -> str | None:
+        engine_name = self.__class__.__name__
+        strat = strategy.name
+        commit_hash: str | None = self._git.commit(strategy._file_path, f'[PFund] {engine_name}: auto-commit strategy "{strat}"')
+        if commit_hash:
+            self.logger.debug(f"Strategy {strat} committed. {commit_hash=}")
+        else:
+            commit_hash = self._git.get_last_n_commit(n=1)[0]
+            self.logger.debug(f"Strategy {strat} has no changes to commit, return the last {commit_hash=}")
+        return commit_hash
+    
+    def _output_backtest_results(self, strat: str, df, start_time: float, end_time: float, commit_hash: str | None):
         strategy = self.get_strategy(strat)
         backtest_id = self._generate_backtest_id()
+        backtest_hash = self._generate_backtest_hash(strategy)
         backtest_name = self._create_backtest_name(strat, backtest_id)
+        backtest_iter = self._generate_backtest_iteration(backtest_hash)
         local_tz = utils.get_local_timezone()
         duration = end_time - start_time
         df_file_path = os.path.join(self.config.backtest_path, f'{backtest_name}.parquet')
@@ -155,7 +174,10 @@ class BacktestEngine(BaseEngine):
             'metadata': {
                 'pfund_version': pf.__version__,
                 'backtest_id': backtest_id,
-                'backtest_iteration': self._generate_backtest_iteration(strategy),
+                'backtest_hash': backtest_hash,
+                'backtest_name': backtest_name,
+                'backtest_iteration': backtest_iter,
+                'commit_hash': commit_hash,
                 'duration': f'{duration:.2f}s' if duration > 1 else f'{duration*1000:.2f}ms',
                 'start_time': datetime.datetime.fromtimestamp(start_time, tz=local_tz).strftime('%Y-%m-%dT%H:%M:%S%z'),
                 'end_time': datetime.datetime.fromtimestamp(end_time, tz=local_tz).strftime('%Y-%m-%dT%H:%M:%S%z'),
@@ -167,7 +189,7 @@ class BacktestEngine(BaseEngine):
         self.data_tool.output_df_to_parquet(df, df_file_path)
         self._write_json(f'{backtest_name}.json', backtest_history)
         return backtest_history
-    
+        
     def run(self):
         for broker in self.brokers.values():
             broker.start()
@@ -181,11 +203,15 @@ class BacktestEngine(BaseEngine):
                     continue
                 if not hasattr(strategy, 'backtest'):
                     raise Exception(f'Strategy {strat} does not have backtest() method, cannot run vectorized backtesting')
+                if self.auto_git_commit and self._git.is_git_repo():
+                    commit_hash = self._commit_strategy(strategy)
+                else:
+                    commit_hash = None
                 start_time = time.time()
                 strategy.backtest()
                 end_time = time.time()
                 df = strategy.get_df()
-                backtest_history: dict = self._output_backtest_results(strat, df, start_time, end_time)
+                backtest_history: dict = self._output_backtest_results(strat, df, start_time, end_time, commit_hash)
                 backtests[strat] = backtest_history
         elif self.mode == 'event_driven':
             for strat, strategy in self.strategy_manager.strategies.items():

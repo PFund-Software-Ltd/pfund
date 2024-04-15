@@ -49,7 +49,7 @@ from pfund.plogging import create_dynamic_logger
 
 class BaseModel(ABC, metaclass=MetaModel):
     
-    dir_path: Path | None = None  # Get the directory path where the model was defined
+    _file_path: Path | None = None  # Get the file path where the model was defined
     config = {}
     
     @classmethod
@@ -58,7 +58,7 @@ class BaseModel(ABC, metaclass=MetaModel):
             cls.config = config
         else:
             for file_name in ['config.yml', 'config.yaml']:
-                if config := load_yaml_file(cls.dir_path / file_name):
+                if config := load_yaml_file(cls._file_path.parent / file_name):
                     cls.config = config
                     break
     
@@ -67,15 +67,15 @@ class BaseModel(ABC, metaclass=MetaModel):
             self.params = params
         else:
             for file_name in ['params.yml', 'params.yaml']:
-                if params := load_yaml_file(self.dir_path / file_name):
+                if params := load_yaml_file(self._file_path.parent / file_name):
                     self.params = params
                     break
     
     def __new__(cls, *args, **kwargs):
-        if not cls.dir_path:
+        if not cls._file_path:
             module = sys.modules[cls.__module__]
             if strategy_file_path := getattr(module, '__file__', None):
-                cls.dir_path = Path(strategy_file_path).parent
+                cls._file_path = Path(strategy_file_path)
                 cls.load_config()
         return super().__new__(cls)
     
