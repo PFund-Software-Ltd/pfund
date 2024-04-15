@@ -132,6 +132,8 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         return {
             'class': self.__class__.__name__,
             'name': self.name,
+            'config': self.config,
+            'params': self.params,
             'accounts': [repr(account) for trading_venue in self.accounts for account in self.accounts[trading_venue].values()],
             'datas': [repr(data) for product in self.datas for data in self.datas[product].values()],
             'strategies': [strategy.to_dict() for strategy in self.strategies.values()],

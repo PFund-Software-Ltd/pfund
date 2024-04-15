@@ -128,6 +128,8 @@ class BaseModel(ABC, metaclass=MetaModel):
         return {
             'class': self.__class__.__name__,
             'name': self.name,
+            'config': self.config,
+            'params': self.params,
             'ml_model': self.ml_model,
             'datas': [repr(data) for product in self.datas for data in self.datas[product].values()],
             'models': [model.to_dict() for model in self.models.values()],
