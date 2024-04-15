@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import os
+import sys
 import importlib
+from pathlib import Path
 from abc import ABC, abstractmethod
 from collections import defaultdict
 
@@ -41,11 +43,42 @@ if TYPE_CHECKING:
 from pfund.const.paths import MODEL_PATH
 from pfund.models.model_meta import MetaModel
 from pfund.products.product_base import BaseProduct
-from pfund.utils.utils import short_path, get_engine_class
+from pfund.utils.utils import short_path, get_engine_class, load_yaml_file
 from pfund.plogging import create_dynamic_logger
 
 
 class BaseModel(ABC, metaclass=MetaModel):
+    
+    dir_path: Path | None = None  # Get the directory path where the model was defined
+    config = {}
+    
+    @classmethod
+    def load_config(cls, config: dict | None=None):
+        if config:
+            cls.config = config
+        else:
+            for file_name in ['config.yml', 'config.yaml']:
+                if config := load_yaml_file(cls.dir_path / file_name):
+                    cls.config = config
+                    break
+    
+    def load_params(self, params: dict | None=None):
+        if params:
+            self.params = params
+        else:
+            for file_name in ['params.yml', 'params.yaml']:
+                if params := load_yaml_file(self.dir_path / file_name):
+                    self.params = params
+                    break
+    
+    def __new__(cls, *args, **kwargs):
+        if not cls.dir_path:
+            module = sys.modules[cls.__module__]
+            if strategy_file_path := getattr(module, '__file__', None):
+                cls.dir_path = Path(strategy_file_path).parent
+                cls.load_config()
+        return super().__new__(cls)
+    
     def __init__(self, ml_model: MachineLearningModel, *args, **kwargs):
         self._args = args
         self._kwargs = kwargs
@@ -73,6 +106,9 @@ class BaseModel(ABC, metaclass=MetaModel):
         self.models = {}
         self.predictions = {}
         self.data = None  # last data
+        
+        self.params = {}
+        self.load_params()
 
     @abstractmethod
     def predict(self, *args, **kwargs) -> pd.DataFrame | torch.Tensor | np.ndarray:
