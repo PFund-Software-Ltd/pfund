@@ -64,9 +64,18 @@ def lowercase(func):
     return wrapper
 
 
-def load_yaml_file(file_path):
-    with open(file_path, 'r') as f:
-        return yaml.safe_load(f)
+def load_yaml_file(file_path) -> dict | list[dict]:
+    if os.path.exists(file_path):
+        with open(file_path, 'r') as f:
+            contents = list(yaml.safe_load_all(f))
+            if not contents:
+                return {}
+            elif len(contents) == 1:
+                return contents[0]
+            else:
+                return contents
+    else:
+        return {}
 
 
 def flatten_dict(d, parent_key='', sep='.'):
