@@ -1,10 +1,10 @@
 # Book settings
 # Learn more at https://jupyterbook.org/customize/config.html
 
-title: PFund's Documentation
+title: "/ PFund's Documentation"
 author: Stephen Yau
-logo: images/logo.png
-copyright: "2024, PFund.ai"
+logo: images/logo-dark.svg
+copyright: '2024, PFund.ai | Powered by "Awesome Sphinx Theme" | '
 
 # Force re-execution of notebooks on each build.
 # See https://jupyterbook.org/content/execute.html
@@ -32,11 +32,22 @@ html:
   google_analytics_id: {GA_TRACKING_ID_PLACEHOLDER}
   home_page_in_navbar: true
   favicon: images/favicon.ico
+  # NOTE: buttons will not work when using sphinxawesome_theme
   # use_issues_button: true
-  use_repository_button: true
-  use_edit_page_button: true
+  # use_repository_button: true
+  # use_edit_page_button: true
 
 sphinx:
+  config:
+    html_theme: sphinxawesome_theme
+    html_context:
+      default_mode: dark
+    html_css_files: ["custom.css"]
+  # NOTE: `html_theme_options` will not work when using sphinxawesome_theme
+    # html_theme_options:
+    #   pygment_light_style: "friendly"
+    #   pygment_dark_style: "lightbulb"
   extra_extensions:
   - 'sphinx.ext.autodoc'
   - 'sphinx.ext.napoleon'
+  - 'sphinxawesome_theme.highlighting'

@@ -1,0 +1,116 @@
+/* remove the default copy button */
+button.copybtn {
+  display: none; 
+}
+
+div.cell {
+  margin: 0.6rem 0 2.8rem 0 !important;
+  padding: 0 !important;
+}
+
+div.cell_input {
+  background: var(--background) !important;
+}
+
+div.cell_output {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+div.output span {
+  font-size: 0.7rem !important;
+  padding: 0 !important;
+  maring: 0 !important;
+}
+
+div.output pre {
+  padding: 0 !important;
+  maring: 0 !important;
+}
+
+div.output pre::-webkit-scrollbar {
+  height: 0px !important;
+}
+
+div.output pre:hover::-webkit-scrollbar {
+  height: 4px !important;
+}
+
+div.output pre::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+div.output pre::-webkit-scrollbar-thumb {
+  background-color: darkgrey;
+  border-radius: 1rem;
+}
+
+div.output button.copy {
+  display: none;
+}
+
+:root {
+  --dark-color: #151518;
+  --border-width: 0px;
+}
+
+.dark header, .dark body {
+  background: var(--dark-color) !important;
+}
+
+.dark summary {
+  background: #cdcdcd !important;
+  color: var(--dark-color) !important;
+}
+
+.cell_output .output.text_plain,
+.cell_output .output.stream,
+.cell_output .output.stderr,
+.cell_output .output.traceback {
+  margin: 0 !important;
+  background: var(--background);
+  border: var(--border-width) solid grey;
+  border-radius: var(--mystnb-source-border-radius);
+}
+
+/* Pandas tables. Pulled from the Jupyter / nbsphinx CSS */
+div.cell_output table {
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+  border: none;
+  border-collapse: collapse;
+  border-spacing: 0;
+  color: var(--foreground);
+  font-size: 0.9rem;
+  table-layout: fixed;
+}
+
+div.cell_output thead {
+  border-bottom: 1px solid black;
+  vertical-align: bottom;
+}
+
+div.cell_output tr,
+div.cell_output th,
+div.cell_output td {
+  text-align: right;
+  vertical-align: middle;
+  padding: 0.4rem 0.4rem;
+  line-height: normal;
+  white-space: normal;
+  max-width: none;
+  border: none;
+}
+
+div.cell_output th {
+  font-weight: bold;
+}
+
+div.cell_output tbody tr:nth-child(odd) {
+  background: var(--backgound);
+}
+
+div.cell_output tbody tr:hover {
+  background: rgba(66, 165, 245, 0.2);
+}

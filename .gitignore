@@ -68,9 +68,6 @@ instance/
 # Scrapy stuff:
 .scrapy
 
-# Sphinx documentation
-docs/_build/
-
 # PyBuilder
 .pybuilder/
 target/
@@ -181,4 +178,5 @@ cython_debug/
 *.gz
 
 # jupyter-book build
-**/_build/
+docs/_build/*
+!docs/_build/html/_static/custom.css
