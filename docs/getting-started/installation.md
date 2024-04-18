@@ -7,9 +7,6 @@
 [![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/)
 
 
-> Python 3.12 is not supported until [PyTorch](https://pytorch.org/) supports it
-
-
 ## Using [Poetry](https://python-poetry.org) (Recommended)
 ```bash
 poetry add pfund
