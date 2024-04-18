@@ -5,6 +5,7 @@ from collections import defaultdict
 
 from pfund.adapter import Adapter
 from pfund.config.configuration import Configuration
+from pfund.const.paths import PROJ_CONFIG_PATH
 from pfund.const.commons import SUPPORTED_PRODUCT_TYPES
 from pfund.products import IBProduct
 from pfund.accounts import IBAccount
@@ -19,8 +20,9 @@ from pfund.brokers.ib.ib_api import IBApi
 class IBBroker(LiveBroker):
     def __init__(self, env, **configs):
         super().__init__(env, 'IB', **configs)
-        self.configs = Configuration(self.bkr, 'config')
-        self.adapter = Adapter(self.bkr, self.configs.load_config_section('adapter'))
+        config_path = f'{PROJ_CONFIG_PATH}/{self.bkr.lower()}'
+        self.configs = Configuration(config_path, 'config')
+        self.adapter = Adapter(config_path, self.configs.load_config_section('adapter'))
         self.account = None
         
         # API

@@ -56,7 +56,7 @@ class BaseModel(ABC, metaclass=MetaModel):
     def load_config(cls, config: dict | None=None):
         if config:
             cls.config = config
-        else:
+        elif cls._file_path:
             for file_name in ['config.yml', 'config.yaml']:
                 if config := load_yaml_file(cls._file_path.parent / file_name):
                     cls.config = config
@@ -65,7 +65,7 @@ class BaseModel(ABC, metaclass=MetaModel):
     def load_params(self, params: dict | None=None):
         if params:
             self.params = params
-        else:
+        elif self._file_path:
             for file_name in ['params.yml', 'params.yaml']:
                 if params := load_yaml_file(self._file_path.parent / file_name):
                     self.params = params

@@ -1,6 +1,6 @@
 import os
 
-from git import Repo, InvalidGitRepositoryError, Commit
+from git import Repo, InvalidGitRepositoryError, NoSuchPathError, Commit
 
 
 class GitController:
@@ -9,7 +9,7 @@ class GitController:
         try:
             self._repo = Repo(file_path, search_parent_directories=True)
             self._repo_path = self._repo.git.rev_parse("--show-toplevel")
-        except InvalidGitRepositoryError:
+        except (InvalidGitRepositoryError, NoSuchPathError):
             self._repo = self._repo_path = None
             print(f'{file_path} is not a git repository')
 
