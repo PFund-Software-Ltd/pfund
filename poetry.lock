@@ -4825,34 +4825,32 @@ ptyprocess = ">=0.5"
 
 [[package]]
 name = "pfeed"
-version = "0.0.1.dev11"
+version = "0.0.1.dev12"
 description = "Data pipeline for algo-trading, getting and storing both real-time and historical data made easy."
 optional = false
-python-versions = ">=3.10 <3.13"
-files = []
-develop = true
+python-versions = "<3.13,>=3.10"
+files = [
+    {file = "pfeed-0.0.1.dev12-py3-none-any.whl", hash = "sha256:d8bf7e8d3f84be30e0cb389962014ff03567afbb20f8b4687972e9125d49184e"},
+    {file = "pfeed-0.0.1.dev12.tar.gz", hash = "sha256:5328f48a1a9dc52ad0d1f4657ff1140840b7d46fc2d45633f9bb5f3bfc4668ff"},
+]
 
 [package.dependencies]
-beautifulsoup4 = "^4.12.3"
-connectorx = {version = "^0.3.2", optional = true}
-minio = {version = "^7.2.5", optional = true}
-pandas = {version = "^2.2.0", optional = true}
-pfund = "^0.0.1.dev13"
-polars = {version = "^0.20.16", optional = true}
-psutil = {version = "^5.9.8", optional = true}
-pyarrow = {version = "^15.0.0", optional = true}
-ray = {version = "^2.10.0", optional = true}
-s3fs = {version = "^2024.3.1", optional = true}
-yfinance = "^0.2.37"
+beautifulsoup4 = ">=4.12.3,<5.0.0"
+connectorx = {version = ">=0.3.2,<0.4.0", optional = true, markers = "extra == \"boost\""}
+minio = {version = ">=7.2.5,<8.0.0", optional = true, markers = "extra == \"data\""}
+pandas = {version = ">=2.2.0,<3.0.0", optional = true, markers = "extra == \"df\""}
+pfund = ">=0.0.1.dev13,<0.0.2"
+polars = {version = ">=0.20.16,<0.21.0", optional = true, markers = "extra == \"df\""}
+psutil = {version = ">=5.9.8,<6.0.0", optional = true, markers = "extra == \"data\""}
+pyarrow = {version = ">=15.0.0,<16.0.0", optional = true, markers = "extra == \"boost\""}
+ray = {version = ">=2.10.0,<3.0.0", optional = true, markers = "extra == \"boost\""}
+s3fs = {version = ">=2024.3.1,<2025.0.0", optional = true, markers = "extra == \"data\""}
+yfinance = ">=0.2.37,<0.3.0"
 
 [package.extras]
 boost = ["connectorx (>=0.3.2,<0.4.0)", "pyarrow (>=15.0.0,<16.0.0)", "ray (>=2.10.0,<3.0.0)"]
 data = ["minio (>=7.2.5,<8.0.0)", "psutil (>=5.9.8,<6.0.0)", "s3fs (>=2024.3.1,<2025.0.0)"]
 df = ["pandas (>=2.2.0,<3.0.0)", "polars (>=0.20.16,<0.21.0)"]
-
-[package.source]
-type = "directory"
-url = "../pfeed"
 
 [[package]]
 name = "pfolio"
@@ -8637,4 +8635,4 @@ ml = ["mlflow", "scikit-learn", "ta", "torch"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10 <3.13"
-content-hash = "840ce8aa1a32085e88291e7f2bf337fbd86942959c2a7902a41897dec7ead522"
+content-hash = "8f1af66ccf5a7e1e5e26391a6723e2bfb13d32d536f3423fb86423e563e54925"

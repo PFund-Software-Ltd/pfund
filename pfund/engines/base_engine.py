@@ -22,11 +22,13 @@ from pfund.plogging.config import LoggingDictConfigurator
 
 
 ENV_COLORS = {
-    'BACKTEST': 'bold blue',
-    'TRAIN': 'bold cyan',
-    'TEST': 'bold black',
-    'PAPER': 'bold red',
-    'LIVE': 'bold green',
+    # 'yellow': 'bold yellow on #ffffe0',
+    # 'magenta': 'bold magenta on #fff0ff',
+    'BACKTEST': 'bold blue on #e0e0ff',
+    'TRAIN': 'bold cyan on #d0ffff',
+    'TEST': 'bold black on #f0f0f0',
+    'PAPER': 'bold red on #ffe0e0',
+    'LIVE': 'bold green on #e0ffe0',
 }
 
 
