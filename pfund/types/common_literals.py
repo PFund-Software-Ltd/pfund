@@ -1,7 +1,7 @@
 from typing import Literal
 
 # since Literal doesn't support variables as inputs, define variables in commons.py here with prefix 't'
-tSUPPORTED_ENVIRONMENTS = Literal['BACKTEST', 'TRAIN', 'TEST', 'PAPER', 'LIVE']
+tSUPPORTED_ENVIRONMENTS = Literal['BACKTEST', 'TRAIN', 'SANDBOX', 'PAPER', 'LIVE']
 tSUPPORTED_BROKERS = Literal['CRYPTO', 'IB']
 tSUPPORTED_CRYPTO_EXCHANGES = Literal['BYBIT']
 tSUPPORTED_CRYPTO_PRODUCT_TYPES = Literal['SPOT', 'PERP', 'IPERP', 'FUT', 'IFUT', 'OPT']

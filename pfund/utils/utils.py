@@ -132,8 +132,8 @@ def get_engine_class():
         from pfund import BacktestEngine as Engine
     elif env == 'TRAIN':
         from pfund import TrainEngine as Engine
-    elif env == 'TEST':
-        from pfund import TestEngine as Engine
+    elif env == 'SANDBOX':
+        from pfund import SandboxEngine as Engine
     else:
         from pfund import TradeEngine as Engine
     return Engine

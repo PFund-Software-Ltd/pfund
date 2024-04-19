@@ -18,7 +18,7 @@ def backtest(func):
 
 
 def trade(func):
-    return env_wrapper(func, envs=['TEST', 'PAPER', 'LIVE'])
+    return env_wrapper(func, envs=['SANDBOX', 'PAPER', 'LIVE'])
     
 
 def live(func):
