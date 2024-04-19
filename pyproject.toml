@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pfund"
-version = "0.0.1.dev12"
+version = "0.0.1.dev13"
 description = "A Complete Algo-Trading Framework for Machine Learning, enabling trading across TradFi, CeFi and DeFi. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading"
 license = "Apache-2.0"
 authors = ["Stephen Yau <softwareentrepreneer+pfund@gmail.com>"]
@@ -23,7 +23,7 @@ requests = "^2.31.0"
 websocket-client = "^1.7.0"
 python-telegram-bot = "^20.7"
 gitpython = "^3.1.43"
-pfeed = { version = "^0.0.1.dev10", optional = true, extras = ["df", "data", "boost"] }
+pfeed = { version = "^0.0.1.dev11", optional = true, extras = ["df", "data", "boost"] }
 orjson = { version = "^3.9.14", optional = true }
 pyzmq = { version = "^25.1.2", optional = true }
 ta = { version = "^0.11.0", optional = true }
@@ -50,6 +50,10 @@ optional = true
 pfolio = { path = "../pfolio", develop = true, extras = ["bayesian", "data", "portfolio", "temporary"] }
 pybit = "^5.6.2"
 ta-lib = "^0.4.28"
+commitizen = "^3.24.0"
+mypy = "^1.9.0"
+ruff = "^0.3.5"
+grayskull = "^2.5.3"
 
 [tool.poetry.group.test.dependencies]
 pytest = "^8.0.0"
@@ -58,11 +62,8 @@ pytest-cov = "^5.0.0"
 pytest-xdist = "^3.5.0"
 tox = "^4.14.2"
 faker = "^24.4.0"
-pre-commit = "^3.6.1"
 bandit = "^1.7.7"
-grayskull = "^2.5.3"
-mypy = "^1.9.0"
-ruff = "^0.3.5"
+pre-commit = "^3.6.1"
 
 [tool.poetry.group.doc.dependencies]
 jupyter-book = "^1.0.0"
