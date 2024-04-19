@@ -3,48 +3,68 @@ import pfund as pf
 
 
 def test_import_backtest_engine():
-    from pfund import BacktestEngine
-    assert BacktestEngine is not None, "Failed to import 'BacktestEngine'"
+    try:
+        from pfund import BacktestEngine
+    except ImportError:
+        pytest.fail("Failed to import 'BacktestEngine' package")
 
 def test_import_trade_engine():
-    from pfund import TradeEngine
-    assert TradeEngine is not None, "Failed to import 'TradeEngine'"
+    try:
+        from pfund import TradeEngine
+    except ImportError:
+        pytest.fail("Failed to import 'TradeEngine' package")
 
 def test_import_train_engine():
     from pfund import TrainEngine
     assert TrainEngine is not None, "Failed to import 'TrainEngine'"
 
-def test_import_test_engine():
-    from pfund import SandboxEngine
-    assert SandboxEngine is not None, "Failed to import 'SandboxEngine'"
+def test_import_sandbox_engine():
+    try:
+        from pfund import SandboxEngine
+    except ImportError:
+        pytest.fail("Failed to import 'SandboxEngine' package")
             
 def test_import_strategy():
-    from pfund import Strategy
-    assert Strategy is not None, "Failed to import 'Strategy'"
+    try:
+        from pfund import Strategy
+    except ImportError:
+        pytest.fail("Failed to import 'Strategy' package")
 
 def test_import_model():
-    from pfund import Model
-    assert Model is not None, "Failed to import 'Model'"
+    try:
+        from pfund import Model
+    except ImportError:
+        pytest.fail("Failed to import 'Model' package")
 
 def test_import_pytorch_model():
-    from pfund import PyTorchModel
-    assert PyTorchModel is not None, "Failed to import 'PyTorchModel'"
+    try:
+        from pfund import PyTorchModel
+    except ImportError:
+        pytest.fail("Failed to import 'PyTorchModel' package")
 
 def test_import_sklearn_model():
-    from pfund import SKLearnModel
-    assert SKLearnModel is not None, "Failed to import 'SKLearnModel'"
+    try:
+        from pfund import SKLearnModel
+    except ImportError:
+        pytest.fail("Failed to import 'SKLearnModel' package")
 
 def test_import_feature():
-    from pfund import Feature
-    assert Feature is not None, "Failed to import 'Feature'"
+    try:
+        from pfund import Feature
+    except ImportError:
+        pytest.fail("Failed to import 'Feature' package")
 
 def test_import_ta_indicator():
-    from pfund import TAIndicator
-    assert TAIndicator is not None, "Failed to import 'TAIndicator'"
+    try:
+        from pfund import TAIndicator
+    except ImportError:
+        pytest.fail("Failed to import 'TAIndicator' package")
 
 def test_import_talib_indicator():
-    from pfund import TALibIndicator
-    assert TALibIndicator is not None, "Failed to import 'TALibIndicator'"
+    try:
+        from pfund import TALibIndicator
+    except ImportError:
+        pytest.fail("Failed to import 'TALibIndicator' package")
 
 @pytest.mark.smoke
 def test_import_all():
