@@ -42,7 +42,6 @@ More Aliases:
 | strat          | strategy           |
 | mdl            | model              |
 | ws             | websocket          |
-| om             | order_manager      |
 
 
 ## Internal to External

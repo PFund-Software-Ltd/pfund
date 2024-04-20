@@ -15,7 +15,13 @@ from pfund.mixins.backtest import BacktestMixin
 def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **kwargs) -> BacktestMixin | tModel:
     class _BacktestModel(BacktestMixin, Model):
         def __init__(self, *_args, **_kwargs):
-            Model.__init__(self, *_args, **_kwargs)
+            try:
+                Model.__init__(self, *_args, **_kwargs)
+            except TypeError as e:
+                raise TypeError(
+                    f'if super().__init__() is called in {Model.__name__ }.__init__() (which is unnecssary), '
+                    'make sure it is called with args and kwargs, i.e. super().__init__(*args, **kwargs)'
+                ) from e
             self.initialize_mixin()
             self.add_model_signature(*_args, **_kwargs)
 
@@ -26,7 +32,7 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
                 return super().__getattr__(attr)
             except AttributeError:
                 class_name = Model.__name__
-                raise AttributeError(f"'{class_name}' object or '{class_name}.ml_model' or '{class_name}.data_tool' has no attribute '{attr}', make sure super().__init__() is called in your strategy {class_name}.__init__()")
+                raise AttributeError(f"'{class_name}' object or '{class_name}.ml_model' or '{class_name}.data_tool' has no attribute '{attr}'")
         
         def to_dict(self):
             model_dict = super().to_dict()

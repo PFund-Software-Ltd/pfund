@@ -109,7 +109,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             return getattr(self.data_tool, attr)
         else:
             class_name = self.__class__.__name__
-            raise AttributeError(f"'{class_name}' object or '{class_name}.data_tool' has no attribute '{attr}', make sure super().__init__() is called in your strategy {class_name}.__init__()")
+            raise AttributeError(f"'{class_name}' object or '{class_name}.data_tool' has no attribute '{attr}'")
     
     def create_logger(self):
         self.logger = create_dynamic_logger(self.name, 'strategy')

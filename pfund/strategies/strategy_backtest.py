@@ -13,7 +13,13 @@ from pfund.mixins.backtest import BacktestMixin
 def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixin | tStrategy:
     class _BacktestStrategy(BacktestMixin, Strategy):
         def __init__(self, *_args, **_kwargs):
-            Strategy.__init__(self, *_args, **_kwargs)
+            try:
+                Strategy.__init__(self, *_args, **_kwargs)
+            except TypeError as e:
+                raise TypeError(
+                    f'if super().__init__() is called in {Strategy.__name__ }.__init__() (which is unnecssary), '
+                    'make sure it is called with args and kwargs, i.e. super().__init__(*args, **kwargs)'
+                ) from e
             self.initialize_mixin()
             self.add_strategy_signature(*_args, **_kwargs)
 
@@ -24,7 +30,7 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
                 return super().__getattr__(attr)
             except AttributeError:
                 class_name = Strategy.__name__
-                raise AttributeError(f"'{class_name}' object or '{class_name}.data_tool' has no attribute '{attr}', make sure super().__init__() is called in your strategy {class_name}.__init__()")
+                raise AttributeError(f"'{class_name}' object or '{class_name}.data_tool' has no attribute '{attr}'")
         
         def to_dict(self):
             strategy_dict = super().to_dict()
