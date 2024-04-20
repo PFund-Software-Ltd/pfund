@@ -77,11 +77,13 @@ As an algo-trader, if you aim to quickly try out some trading ideas to see if th
 - Ideation
 - Strategy development
 - Backtesting
-- Model development (if using machine learning)
-- Model training (if using machine learning)
+- Model development (if use machine learning)
+- Model training (if use machine learning)
 - Parameter training / hyperparameter tuning
-- Strategy deployment
+- MLOps setup (if use machine learning)
+- Strategy & Model(s) deployment
 - Portfolio monitoring
+- Performance analysis
 
 This overview already omits some intricate steps, such as data handling and API integration.
 
