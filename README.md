@@ -80,6 +80,7 @@ As an algo-trader, if you aim to quickly try out some trading ideas to see if th
 - Model development (if using machine learning)
 - Model training (if using machine learning)
 - Parameter training / hyperparameter tuning
+- Strategy deployment
 - Portfolio monitoring
 
 This overview already omits some intricate steps, such as data handling and API integration.
