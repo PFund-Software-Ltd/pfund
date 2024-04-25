@@ -14,17 +14,6 @@ from pfund.mixins.backtest import BacktestMixin
 
 def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **kwargs) -> BacktestMixin | tModel:
     class _BacktestModel(BacktestMixin, Model):
-        def __init__(self, *_args, **_kwargs):
-            try:
-                Model.__init__(self, *_args, **_kwargs)
-            except TypeError as e:
-                raise TypeError(
-                    f'if super().__init__() is called in {Model.__name__ }.__init__() (which is unnecssary), '
-                    'make sure it is called with args and kwargs, i.e. super().__init__(*args, **kwargs)'
-                ) from e
-            self.initialize_mixin()
-            self.add_model_signature(*_args, **_kwargs)
-
         # __getattr__ at this level to get the correct model name
         def __getattr__(self, attr):
             '''gets triggered only when the attribute is not found'''
@@ -104,8 +93,13 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
             for col in vectorized_signal.columns:
                 pdt.assert_series_equal(vectorized_signal[col], event_driven_signal[col], check_exact=False, rtol=1e-5)
             
-                
-    if not issubclass(Model, BaseFeature):
-        return _BacktestModel(ml_model, *args, **kwargs)
-    else:
-        return _BacktestModel(*args, **kwargs)
+    try:       
+        if not issubclass(Model, BaseFeature):
+            return _BacktestModel(ml_model, *args, **kwargs)
+        else:
+            return _BacktestModel(*args, **kwargs)
+    except TypeError as e:
+        raise TypeError(
+            f'if super().__init__() is called in {Model.__name__ }.__init__() (which is unnecssary), '
+            'make sure it is called with args and kwargs, i.e. super().__init__(*args, **kwargs)'
+        ) from e

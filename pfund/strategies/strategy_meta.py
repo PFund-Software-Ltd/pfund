@@ -8,6 +8,7 @@ class MetaStrategy(ABCMeta):
         if is_backtest:
             # cls.__bases__ are (BacktestMixin, Strategy)
             _cls = cls.__bases__[1]
+            backtest_mixin_cls = cls.__bases__[0]
         else:
             _cls = cls
         instance = super().__call__(*args, **kwargs)
@@ -19,4 +20,14 @@ class MetaStrategy(ABCMeta):
             if _cls.__bases__:
                 BaseClass = _cls.__bases__[0]
             BaseClass.__init__(instance, *args, **kwargs)
+        
+        if is_backtest:
+            backtest_mixin_cls.__post_init__(instance, *args, **kwargs)
+        
         return instance
+    
+    def __init__(cls, name, bases, dct):
+        super().__init__(name, bases, dct)
+        
+        if name == '_BacktestStrategy':
+            assert '__init__' not in dct, '_BacktestStrategy should not have __init__()'

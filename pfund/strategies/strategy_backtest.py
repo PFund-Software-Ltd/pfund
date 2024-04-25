@@ -12,17 +12,6 @@ from pfund.mixins.backtest import BacktestMixin
 # write -> BacktestMixin | tStrategy for better intellisense in IDEs 
 def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixin | tStrategy:
     class _BacktestStrategy(BacktestMixin, Strategy):
-        def __init__(self, *_args, **_kwargs):
-            try:
-                Strategy.__init__(self, *_args, **_kwargs)
-            except TypeError as e:
-                raise TypeError(
-                    f'if super().__init__() is called in {Strategy.__name__ }.__init__() (which is unnecssary), '
-                    'make sure it is called with args and kwargs, i.e. super().__init__(*args, **kwargs)'
-                ) from e
-            self.initialize_mixin()
-            self.add_strategy_signature(*_args, **_kwargs)
-
         # __getattr__ at this level to get the correct strategy name
         def __getattr__(self, attr):
             '''gets triggered only when the attribute is not found'''
@@ -58,5 +47,11 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
             bkr = 'CRYPTO' if trading_venue in SUPPORTED_CRYPTO_EXCHANGES else trading_venue
             broker = self.get_broker(bkr)
             broker.initialize_balances(account, initial_balances)
-        
-    return _BacktestStrategy(*args, **kwargs)
+    
+    try: 
+        return _BacktestStrategy(*args, **kwargs)
+    except TypeError as e:
+        raise TypeError(
+            f'if super().__init__() is called in {Strategy.__name__ }.__init__() (which is unnecssary), '
+            'make sure it is called with args and kwargs, i.e. super().__init__(*args, **kwargs)'
+        ) from e

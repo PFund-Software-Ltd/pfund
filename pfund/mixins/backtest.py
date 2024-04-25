@@ -11,7 +11,6 @@ if TYPE_CHECKING:
     from pfund.types.backtest import BacktestKwargs
     from pfeed.feeds.base_feed import BaseFeed
     from pfund.datas.data_base import BaseData
-    
 from pfund.managers.data_manager import get_resolutions_from_kwargs
 
 
@@ -21,21 +20,25 @@ _EVENT_DRIVEN_BACKTEST_KWARGS = ['resamples', 'shifts', 'auto_resample']
 
 
 class BacktestMixin:
-    def initialize_mixin(self):
+    # NOTE: custom __post_init__ is called in MetaStrategy/MetaModel
+    # used to avoid confusing __init__ pattern in MetaStrategy/MetaModel
+    # end result: only the __init__ of a normal class (real strategy/model class, not _BacktestStrategy/_BacktestModel) is called in the end
+    def __post_init__(self, *args, **kwargs):
+        from pfund.strategies.strategy_base import BaseStrategy
+        from pfund.models.model_base import BaseModel
+        
         # stores signatures for backtest history tracking
         self._data_signatures = []
-        self._strategy_signature = None
-        self._model_signature = None
+        if isinstance(self, BaseStrategy):
+            self._strategy_signature = (args, kwargs)
+        elif isinstance(self, BaseModel):
+            self._model_signature = (args, kwargs)
+        else:
+            raise NotImplementedError('BacktestMixin should only be used in _BacktestStrategy or _BacktestModel')
     
     def add_data_signature(self, *args, **kwargs):
         self._data_signatures.append((args, kwargs))
     
-    def add_strategy_signature(self, *args, **kwargs):
-        self._strategy_signature = (args, kwargs)
-        
-    def add_model_signature(self, *args, **kwargs):
-        self._model_signature = (args, kwargs)
-
     def add_data(self, trading_venue, base_currency, quote_currency, ptype, *args, backtest: BacktestKwargs | None=None, train: dict | None=None, **kwargs) -> list[BaseData]:
         self.add_data_signature(trading_venue, base_currency, quote_currency, ptype, *args, backtest=backtest, train=train, **kwargs)
         

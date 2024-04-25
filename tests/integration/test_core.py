@@ -1,5 +1,7 @@
 import pytest
+
 import pfund as pf
+from talib import abstract as talib
 
 
 @pytest.mark.smoke
@@ -29,6 +31,11 @@ class TestCore:
                 'end_date': '2024-03-01',
             }
         )
+        
+        # add models and indicators:
+        indicator = strategy.add_indicator(pf.TALibIndicator(talib.SMA, timeperiod=3, price='close'), name='SMA', indicator_path='')
+        
+        
         engine.run()
         
         # check if datas are added to strategy correctly
