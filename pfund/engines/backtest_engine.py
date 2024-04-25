@@ -25,7 +25,15 @@ from pfund.mixins.backtest import BacktestMixin
 
 
 class BacktestEngine(BaseEngine):
-    def __new__(cls, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', append_to_strategy_df=False, use_prepared_signals=True, config: ConfigHandler | None=None, auto_git_commit=False, **settings):
+    def __new__(
+        cls, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
+        config: ConfigHandler | None=None, 
+        append_to_strategy_df=False, 
+        use_prepared_signals=True, 
+        auto_git_commit=False, 
+        save_backtests=True,
+        **settings
+    ):
         if not hasattr(cls, 'mode'):
             cls.mode = mode.lower()
         if not hasattr(cls, 'append_to_strategy_df'):
@@ -36,9 +44,19 @@ class BacktestEngine(BaseEngine):
             cls.use_prepared_signals = use_prepared_signals
         if not hasattr(cls, 'auto_git_commit'):
             cls.auto_git_commit = auto_git_commit
+        if not hasattr(cls, 'save_backtests'):
+            cls.save_backtests = save_backtests
         return super().__new__(cls, env, data_tool=data_tool, config=config, **settings)
 
-    def __init__(self, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', append_to_strategy_df=False, use_prepared_signals=True, config: ConfigHandler | None=None, auto_git_commit=False, **settings):
+    def __init__(
+        self, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
+        config: ConfigHandler | None=None,
+        append_to_strategy_df=False,
+        use_prepared_signals=True,
+        auto_git_commit=False,
+        save_backtests=True,
+        **settings
+    ):
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):
             # Get the current frame and then the outer frame (where the engine instance is created)
@@ -186,8 +204,9 @@ class BacktestEngine(BaseEngine):
             'strategy': strategy.to_dict(),
             'result': df_file_path
         }
-        self.data_tool.output_df_to_parquet(df, df_file_path)
-        self._write_json(f'{backtest_name}.json', backtest_history)
+        if self.save_backtests:
+            self.data_tool.output_df_to_parquet(df, df_file_path)
+            self._write_json(f'{backtest_name}.json', backtest_history)
         return backtest_history
         
     def run(self):
@@ -211,6 +230,7 @@ class BacktestEngine(BaseEngine):
                 strategy.backtest()
                 end_time = time.time()
                 df = strategy.get_df()
+                df = self.data_tool.process_df_after_vectorized_backtesting(df)
                 backtest_history: dict = self._output_backtest_results(strat, df, start_time, end_time, commit_hash)
                 backtests[strat] = backtest_history
         elif self.mode == 'event_driven':
@@ -222,7 +242,8 @@ class BacktestEngine(BaseEngine):
                 else:
                     strategy_or_model = strategy
                 df = strategy_or_model.get_df()
-                df = strategy_or_model._transform_df_for_event_driven_backtesting(df.copy(deep=True))
+                # FIXME: this should use backtest_engine's data_tool?
+                df = strategy_or_model.prepare_df_before_event_driven_backtesting(df.copy(deep=True))
                 # clear df so that strategy/model doesn't know anything about the incoming data
                 strategy_or_model._clear_df()
                 

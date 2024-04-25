@@ -14,21 +14,21 @@ from pfund.accounts.account_base import BaseAccount
 
 class BaseOrder:
     def __init__(
-            self, 
-            account: BaseAccount,
-            product: BaseProduct,
-            side: int | str,
-            qty: float | str,
-            px=None,
-            trigger_px=None,
-            target_px=None,  # used for slippage calculation
-            o_type='LIMIT',
-            tif='GTC',
-            is_reduce_only=False,
-            oid='',
-            remark='',  # user's remark, e.g. reason why placing this order
-            **kwargs
-        ):
+        self, 
+        account: BaseAccount,
+        product: BaseProduct,
+        side: int | str,
+        qty: float | str,
+        px=None,
+        trigger_px=None,
+        target_px=None,  # used for slippage calculation
+        o_type='LIMIT',
+        tif='GTC',
+        is_reduce_only=False,
+        oid='',
+        remark='',  # user's remark, e.g. reason why placing this order
+        **kwargs
+    ):
         self.logger = logging.getLogger('orders')
         self.strat = account.strat
         self.acc = account.acc

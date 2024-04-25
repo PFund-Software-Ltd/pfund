@@ -1,6 +1,5 @@
 from collections import defaultdict
 from decimal import Decimal
-from pathlib import Path
 
 import pandas as pd
 
@@ -23,7 +22,7 @@ class PandasDataTool(BaseDataTool):
     
     # NOTE: columns 'product' and 'resolution' are strings in the default df
     def _prepare_df(self):
-        assert self._raw_dfs, f"No data is found, make sure add_data(...) is called correctly"
+        assert self._raw_dfs, "No data is found, make sure add_data(...) is called correctly"
         self.df = pd.concat(self._raw_dfs.values())
         # sort first, so that product column is in order
         self.df.set_index(self._INDEX, inplace=True)
@@ -53,9 +52,32 @@ class PandasDataTool(BaseDataTool):
         df.set_index(self._INDEX, inplace=True)
         df.sort_index(level='ts', inplace=True)
         return df
-        
+    
     @backtest
-    def _transform_df_for_event_driven_backtesting(self, df: pd.DataFrame) -> pd.DataFrame:
+    def process_df_after_vectorized_backtesting(self, df: pd.DataFrame) -> pd.DataFrame:
+        '''Processes the df after vectorized backtesting, including:
+        if has 'orders' column:
+        - converts orders to trades
+        if no 'orders' column, then 'trade_size'/'position' must be in the df
+        - derives 'trade_size'/'position' from 'position'/'trade_size'
+        '''
+        cols = df.columns
+        if 'position' not in cols and 'trade_size' not in cols:
+            raise Exception("either 'position' or 'trade_size' must be in the dataframe columns")
+        # use 'position' to derive 'trade_size' and vice versa
+        elif 'position' in cols and 'trade_size' not in cols:
+            df['trade_size'] = df['position'].diff(1)
+            # fill the nan value in the first row with the initial position
+            df.iloc[0, df.columns.get_loc('trade_size')] = df.iloc[0, df.columns.get_loc('position')]
+        elif 'trade_size' in cols and 'position' not in cols:
+            df['position'] = df['trade_size'].cumsum()
+        
+        if 'trade_price' not in cols:
+            df.loc[df['trade_size'] != 0, 'trade_price'] = df['close']
+        return df
+
+    @backtest
+    def prepare_df_before_event_driven_backtesting(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self._convert_string_columns_to_objects(df)
         df.reset_index(inplace=True)
         # converts 'ts' from datetime to unix timestamp
@@ -119,7 +141,7 @@ class PandasDataTool(BaseDataTool):
     
     def get_df(self, df: pd.DataFrame | None=None, start_date: str | None=None, end_date: str | None=None, product: BaseProduct | None=None, resolution: str=''):
         df = self.df if df is None else df
-        assert df is not None, f"df is None, make sure strategy.start()/model.start() is called."
+        assert df is not None, "df is None, make sure strategy.start()/model.start() is called."
         product = product or slice(None)
         if resolution:
             if Engine.mode == 'event_driven':
