@@ -70,7 +70,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         self.engine = self.Engine()
         data_tool: str = self.Engine.data_tool
         DataTool = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool}'), f'{data_tool.capitalize()}DataTool')
-        self.data_tool = DataTool()
+        self._data_tool = DataTool()
         self.logger = None
         self._zmq = None
         self._is_parallel = False
@@ -102,14 +102,15 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         
         self.params = {}
         self.load_params()
-
-    def __getattr__(self, attr):
-        '''gets triggered only when the attribute is not found'''
-        if 'data_tool' in self.__dict__ and hasattr(self.data_tool, attr):
-            return getattr(self.data_tool, attr)
-        else:
-            class_name = self.__class__.__name__
-            raise AttributeError(f"'{class_name}' object or '{class_name}.data_tool' has no attribute '{attr}'")
+    
+    @property
+    def df(self):
+        return self._data_tool.get_df()
+   
+    @property
+    def data_tool(self):
+        return self._data_tool
+    dt = data_tool
     
     def create_logger(self):
         self.logger = create_dynamic_logger(self.name, 'strategy')
@@ -139,6 +140,9 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             'strategies': [strategy.to_dict() for strategy in self.strategies.values()],
             'models': [model.to_dict() for model in self.models.values()],
         }
+    
+    def output_df_to_parquet(self, df, file_path: str):
+        self._data_tool.output_df_to_parquet(df, file_path)
     
     def set_name(self, name: str):
         self.name = self.strat = name
@@ -427,6 +431,15 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         for broker in self.brokers.values():
             broker.add_listener(listener=self, listener_key=self.strat, event_type='private')
     
+    def _prepare_df(self):
+        return self._data_tool.prepare_df()
+        
+    def _prepare_df_with_models(self):
+        return self._data_tool.prepare_df_with_models(self.models)
+    
+    def _append_to_df(self, data, predictions, **kwargs):
+        return self._data_tool.append_to_df(data, predictions, **kwargs)
+    
     def start(self):
         if not self.is_running():
             self.add_datas()
@@ -435,7 +448,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             self.add_models()
             self._start_models()
             self._prepare_df()
-            self._prepare_df_with_models(self.models)
+            self._prepare_df_with_models()
             self._subscribe_to_private_channels()
             self._set_aliases()
             if self.is_parallel():

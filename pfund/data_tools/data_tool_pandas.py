@@ -21,17 +21,17 @@ class PandasDataTool(BaseDataTool):
     _DECIMAL_COLS = ['price', 'open', 'high', 'low', 'close', 'volume']
     
     # NOTE: columns 'product' and 'resolution' are strings in the default df
-    def _prepare_df(self):
+    def prepare_df(self):
         assert self._raw_dfs, "No data is found, make sure add_data(...) is called correctly"
         self.df = pd.concat(self._raw_dfs.values())
         # sort first, so that product column is in order
         self.df.set_index(self._INDEX, inplace=True)
         self.df.sort_index(level='ts', inplace=True)
         self._set_product_column(self.df.index.get_level_values('product').copy(deep=True))
-        self.df = self._convert_object_columns_to_strings(self.df)
+        self.df = self.convert_object_columns_to_strings(self.df)
         self._raw_dfs.clear()
 
-    def _convert_object_columns_to_strings(self, df: pd.DataFrame) -> pd.DataFrame:
+    def convert_object_columns_to_strings(self, df: pd.DataFrame) -> pd.DataFrame:
         '''Converts 'product' and 'resolution' columns from objects to strings'''
         if 'product' not in df.columns or 'resolution' not in df.columns:
             df.reset_index(inplace=True)
@@ -41,7 +41,7 @@ class PandasDataTool(BaseDataTool):
         df.sort_index(level='ts', inplace=True)
         return df
     
-    def _convert_string_columns_to_objects(self, df: pd.DataFrame) -> pd.DataFrame:
+    def convert_string_columns_to_objects(self, df: pd.DataFrame) -> pd.DataFrame:
         '''Converts 'product' and 'resolution' columns from strings to objects'''
         if 'product' not in df.columns or 'resolution' not in df.columns:
             df.reset_index(inplace=True)
@@ -78,7 +78,7 @@ class PandasDataTool(BaseDataTool):
 
     @backtest
     def prepare_df_before_event_driven_backtesting(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = self._convert_string_columns_to_objects(df)
+        df = self.convert_string_columns_to_objects(df)
         df.reset_index(inplace=True)
         # converts 'ts' from datetime to unix timestamp
         df['ts'] = df['ts'].astype(int) // 10**6  # in milliseconds
@@ -89,7 +89,7 @@ class PandasDataTool(BaseDataTool):
                 df[col] = df[col].apply(lambda x: Decimal(str(x)))
         return df
     
-    def _prepare_df_with_models(self, models):
+    def prepare_df_with_models(self, models):
         # NOTE: models can have different ts_ranges, need to store the original ts_range before concatenating
         ts_range = self.df.index.get_level_values('ts')
         for mdl, model in models.items():
@@ -166,7 +166,7 @@ class PandasDataTool(BaseDataTool):
         df.index = df.index.set_levels(dt_index, level='ts')
         return df
     
-    def _clear_df(self):
+    def clear_df(self):
         index_names = self.df.index.names
         self.df = pd.DataFrame(
             columns=self.df.columns,
@@ -176,11 +176,11 @@ class PandasDataTool(BaseDataTool):
     def output_df_to_parquet(self, df: pd.DataFrame, file_path: str):
         df.to_parquet(file_path)
     
-    def _create_multi_index(self, index_data: dict, index_names: list[str]) -> pd.MultiIndex:
+    def create_multi_index(self, index_data: dict, index_names: list[str]) -> pd.MultiIndex:
         return pd.MultiIndex.from_tuples([tuple(index_data[name] for name in index_names)], names=index_names)
         
     # OPTIMIZE
-    def _append_to_df(self, data: BaseData, predictions: dict, **kwargs):
+    def append_to_df(self, data: BaseData, predictions: dict, **kwargs):
         '''Appends new data to the df
         The flow is, the df is cleared in model's event-driven backtesting,
         data & prediction (single signal) will be gradually appended back to the df for model.next() to use.
@@ -199,16 +199,16 @@ class PandasDataTool(BaseDataTool):
         index_data = {'ts': data.dt, 'product': repr(data.product), 'resolution': repr(data.resolution)}
         new_row = pd.DataFrame(
             [row_data], 
-            index=self._create_multi_index(index_data, self.df.index.names)
+            index=self.create_multi_index(index_data, self.df.index.names)
         )
         self.df = pd.concat([self.df, new_row], ignore_index=False)
     
     def rescale_df(
-            self, 
-            window_size: int | None=None,
-            min_periods: int=20,
-            df: pd.DataFrame | None=None
-        ) -> pd.DataFrame:
+        self, 
+        window_size: int | None=None,
+        min_periods: int=20,
+        df: pd.DataFrame | None=None
+    ) -> pd.DataFrame:
         """Scales the data to z-score using a rolling window to avoid lookahead bias
         If window_size is None, then use expanding window
         """

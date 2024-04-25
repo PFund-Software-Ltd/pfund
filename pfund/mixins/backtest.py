@@ -36,6 +36,13 @@ class BacktestMixin:
         else:
             raise NotImplementedError('BacktestMixin should only be used in _BacktestStrategy or _BacktestModel')
     
+    def prepare_df_before_event_driven_backtesting(self):
+        assert self.engine.mode == 'event_driven'
+        df = self._data_tool.prepare_df_before_event_driven_backtesting(self.df)
+        # clear df so that strategy/model doesn't know anything about the incoming data
+        self._data_tool.clear_df()
+        return df
+         
     def add_data_signature(self, *args, **kwargs):
         self._data_signatures.append((args, kwargs))
     

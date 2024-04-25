@@ -48,7 +48,7 @@ class BaseIndicator(BaseModel):
         # which is not serializable, so make it None before dumping
         self.ml_model = None
         super().dump(signal, path=path)
-        
+    
     def to_signal(self, X: pd.DataFrame, pred_y: np.ndarray) -> pd.DataFrame:
         return super().to_signal(X, pred_y, columns=self._signal_columns)
     

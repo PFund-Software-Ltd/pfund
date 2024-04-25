@@ -205,7 +205,7 @@ class BacktestEngine(BaseEngine):
             'result': df_file_path
         }
         if self.save_backtests:
-            self.data_tool.output_df_to_parquet(df, df_file_path)
+            strategy.output_df_to_parquet(df, df_file_path)
             self._write_json(f'{backtest_name}.json', backtest_history)
         return backtest_history
         
@@ -229,8 +229,7 @@ class BacktestEngine(BaseEngine):
                 start_time = time.time()
                 strategy.backtest()
                 end_time = time.time()
-                df = strategy.get_df()
-                df = self.data_tool.process_df_after_vectorized_backtesting(df)
+                df = strategy.process_df_after_vectorized_backtesting()
                 backtest_history: dict = self._output_backtest_results(strat, df, start_time, end_time, commit_hash)
                 backtests[strat] = backtest_history
         elif self.mode == 'event_driven':
@@ -241,11 +240,7 @@ class BacktestEngine(BaseEngine):
                     strategy_or_model = model
                 else:
                     strategy_or_model = strategy
-                df = strategy_or_model.get_df()
-                # FIXME: this should use backtest_engine's data_tool?
-                df = strategy_or_model.prepare_df_before_event_driven_backtesting(df.copy(deep=True))
-                # clear df so that strategy/model doesn't know anything about the incoming data
-                strategy_or_model._clear_df()
+                df = strategy_or_model.prepare_df_before_event_driven_backtesting()
                 
                 # OPTIMIZE: critical loop
                 # FIXME: pandas specific, if BacktestEngine.data_tool == 'pandas':

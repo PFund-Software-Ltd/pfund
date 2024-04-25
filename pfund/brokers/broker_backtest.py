@@ -1,5 +1,4 @@
 from pfund.brokers.broker_base import BaseBroker
-from pfund.utils.utils import override
 
 
 def BacktestBroker(Broker) -> BaseBroker:
@@ -24,31 +23,25 @@ def BacktestBroker(Broker) -> BaseBroker:
             self._assert_no_apis()
             self.logger.debug(f'broker {self.name} started')
 
-        @override
         def stop(self):
             self.logger.debug(f'broker {self.name} stopped')
 
-        @override
         def add_data_channel(self, *args, **kwargs):
             pass
         
         # FIXME, what if a strategy needs to get_xxx before e.g. placing an order
-        @override
         def get_balances(self, *args, **kwargs):
             pass
         
         # FIXME, what if a strategy needs to get_xxx before e.g. placing an order
-        @override
         def get_positions(self, *args, **kwargs):
             pass
         
         # FIXME, what if a strategy needs to get_xxx before e.g. placing an order
-        @override
         def get_orders(self, *args, **kwargs):
             pass
         
         # FIXME, what if a strategy needs to get_xxx before e.g. placing an order
-        @override
         def get_trades(self, *args, **kwargs):
             pass
         

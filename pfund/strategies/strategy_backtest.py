@@ -28,17 +28,27 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
             strategy_dict['data_signatures'] = self._data_signatures
             return strategy_dict
         
-        def _prepare_df(self):
-            if self.name != '_dummy':
-                return self.data_tool._prepare_df()
-            
-        def _prepare_df_with_models(self, *args, **kwargs):
-            if self.name != '_dummy' and self.engine.mode == 'vectorized':
-                self.data_tool._prepare_df_with_models(*args, **kwargs)
+        def process_df_after_vectorized_backtesting(self):
+            if self.name == '_dummy':
+                return
+            return self._data_tool.process_df_after_vectorized_backtesting(self.df)
         
-        def _append_to_df(self, *args, **kwargs):
-            if self.engine.append_to_strategy_df and self.name != '_dummy':
-                return self.data_tool._append_to_df(*args, **kwargs)
+        def _prepare_df(self):
+            if self.name == '_dummy':
+                return
+            return self._data_tool.prepare_df()
+            
+        def _prepare_df_with_models(self):
+            if self.name == '_dummy':
+                return
+            if self.engine.mode == 'vectorized':
+                return self._data_tool.prepare_df_with_models(self.models)
+        
+        def _append_to_df(self, data, predictions, **kwargs):
+            if self.name == '_dummy':
+                return
+            if self.engine.append_to_strategy_df:
+                return self._data_tool.append_to_df(data, predictions, **kwargs)
             
         def add_account(self, trading_venue: str, acc: str='', initial_balances: dict[str, int|float]|None=None, **kwargs):
             # NOTE: do NOT pass in kwargs to super().add_account(),

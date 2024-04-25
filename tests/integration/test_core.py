@@ -37,7 +37,7 @@ class TestCore:
         
         # TODO: move to conftest.py as fixture
         mock_get_historical_data = mocker.patch.object(strategy, 'get_historical_data')
-        mock_data_tool = mocker.patch.object(strategy, 'data_tool')
+        mock_data_tool = mocker.patch.object(strategy, '_data_tool')
         mock_engine_run = mocker.patch.object(engine, 'run')
         
         yf_datas = strategy.add_data(

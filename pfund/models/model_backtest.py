@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from pfund.models.model_base import MachineLearningModel
     from pfund.datas.data_base import BaseData
     from pfund.types.core import tModel
-    
+
 from pfund.models.model_base import BaseFeature
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.mixins.backtest import BacktestMixin
@@ -51,20 +51,21 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
         
         def start(self):
             super().start()
-            is_dummy_strategy = isinstance(self._consumer, BaseStrategy) and self._consumer.name == '_dummy'
-            if not self._is_prepared_signal_required():
-                if not is_dummy_strategy:
-                    self.data_tool._clear_df()
-                # make loaded signal (if any) None
-                self.set_signal(None)
+            if not self.is_running():
+                is_dummy_strategy = isinstance(self._consumer, BaseStrategy) and self._consumer.name == '_dummy'
+                if not self._is_prepared_signal_required():
+                    if not is_dummy_strategy:
+                        self._data_tool.clear_df()
+                    # make loaded signal (if any) None
+                    self.set_signal(None)
         
         def _prepare_df_with_models(self, *args, **kwargs):
             if self.engine.mode == 'vectorized':
-                self.data_tool._prepare_df_with_models(*args, **kwargs)
-                
+                self._data_tool.prepare_df_with_models(*args, **kwargs)
+        
         def _append_to_df(self, *args, **kwargs):
             if not self._is_prepared_signal_required():
-                return self.data_tool._append_to_df(*args, **kwargs)
+                return self._data_tool.append_to_df(*args, **kwargs)
         
         def next(self):
             if not self._is_prepared_signal_required():

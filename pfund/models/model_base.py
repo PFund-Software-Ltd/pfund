@@ -87,7 +87,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         self.engine = self.Engine()
         data_tool: str = self.Engine.data_tool
         DataTool = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool}'), f'{data_tool.capitalize()}DataTool')
-        self.data_tool = DataTool()
+        self._data_tool = DataTool()
         self.logger = None
         self._path = ''
         self._is_load = True  # if True, load trained model from file_path
@@ -118,11 +118,18 @@ class BaseModel(ABC, metaclass=MetaModel):
         '''gets triggered only when the attribute is not found'''
         if 'ml_model' in self.__dict__ and hasattr(self.ml_model, attr):
             return getattr(self.ml_model, attr)
-        elif 'data_tool' in self.__dict__ and hasattr(self.data_tool, attr):
-            return getattr(self.data_tool, attr)
         else:
             class_name = self.__class__.__name__
             raise AttributeError(f"'{class_name}' object or '{class_name}.ml_model' or '{class_name}.data_tool' has no attribute '{attr}'")
+    
+    @property
+    def df(self):
+        return self._data_tool.get_df()
+    
+    @property
+    def data_tool(self):
+        return self._data_tool
+    dt = data_tool
     
     def to_dict(self):
         return {
@@ -135,9 +142,12 @@ class BaseModel(ABC, metaclass=MetaModel):
             'models': [model.to_dict() for model in self.models.values()],
         }
     
+    def output_df_to_parquet(self, df, file_path: str):
+        self._data_tool.output_df_to_parquet(df, file_path)
+    
     # if not specified, features are just the original df
     def prepare_features(self) -> pd.DataFrame:
-        return self.get_df()
+        return self.df
     
     def set_signal(self, signal: pd.DataFrame | None):
         self.signal = signal
@@ -162,7 +172,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         assert self.signal is not None
         # self.data is the lastest data passed in
         index_data = {'ts': self.data.dt, 'product': repr(self.data.product), 'resolution': repr(self.data.resolution)}
-        index = self._create_multi_index(index_data, X.index.names)
+        index = self._data_tool.create_multi_index(index_data, X.index.names)
         new_pred = new_pred.reshape(1, -1)
         signal = pd.DataFrame(new_pred, index=index, columns=self.signal.columns)
         signal = pd.concat([self.signal, signal], ignore_index=False)
@@ -267,7 +277,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         if os.path.exists(file_path):
             obj = joblib.load(file_path)
             signal = obj['signal']
-            signal = self._convert_object_columns_to_strings(signal)
+            signal = self._data_tool.convert_object_columns_to_strings(signal)
             self.set_signal(signal)
             self.ml_model = obj['ml_model']
             self._assert_no_missing_datas(obj)
@@ -276,7 +286,7 @@ class BaseModel(ABC, metaclass=MetaModel):
             self.logger.debug(f"no trained ml_model '{self.name}' found in {short_path(file_path)}")
     
     def dump(self, signal: pd.DataFrame, path: str=''):
-        signal = self._convert_string_columns_to_objects(signal)
+        signal = self._data_tool.convert_string_columns_to_objects(signal)
         obj = {
             'signal': signal,
             'ml_model': self.ml_model,
@@ -415,6 +425,15 @@ class BaseModel(ABC, metaclass=MetaModel):
     def _start_models(self):
         for model in self.models.values():
             model.start()
+
+    def _prepare_df(self):
+        return self._data_tool.prepare_df()
+        
+    def _prepare_df_with_models(self):
+        return self._data_tool.prepare_df_with_models(self.models)
+    
+    def _append_to_df(self, data, predictions, **kwargs):
+        return self._data_tool.append_to_df(data, predictions, **kwargs)
     
     def start(self):
         if not self.is_running():
@@ -432,7 +451,7 @@ class BaseModel(ABC, metaclass=MetaModel):
                     self.flow(is_dump=False)
                 else:
                     raise Exception(f"signal is None, please make sure model '{self.name}' is loaded or was dumped using 'model.dump(signal)' correctly.")
-            self._prepare_df_with_models(self.models)
+            self._prepare_df_with_models()
             self._adjust_min_data_points()
             self.on_start()
             self._is_running = True

@@ -62,19 +62,10 @@ class BaseEngine(Singleton):
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):
             self.logger = logging.getLogger('pfund')
-            DataTool = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool}'), f'{data_tool.capitalize()}DataTool')
-            self.data_tool = DataTool()
             self.brokers = {}
             self.strategy_manager = self.sm = StrategyManager()
             self._initialized = True
 
-    def __getattr__(self, attr):
-        '''gets triggered only when the attribute is not found'''
-        try:
-            return getattr(self.data_tool, attr)
-        except AttributeError:
-            raise AttributeError(f"'{self.__class__.__name__}' object or '{self.__class__.__name__}.data_tool' has no attribute '{attr}'")
-    
     def get_strategy(self, strat: str) -> BaseStrategy | None:
         return self.strategy_manager.get_strategy(strat)
 

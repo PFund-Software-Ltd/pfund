@@ -19,12 +19,6 @@ class Singleton:
         return cls._instance
 
 
-# @override = the function is only created to override 
-# to prevent from calling the parent class's function
-def override(fn):
-    return fn
-
-
 # used to explicitly mark a function that includes an api call
 def is_api_call(func):
     return func
