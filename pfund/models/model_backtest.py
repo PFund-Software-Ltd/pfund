@@ -33,8 +33,9 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
         def _add_consumer_datas_if_no_data(self) -> list[BaseData]:
             consumer_datas = super()._add_consumer_datas_if_no_data()
             for data in consumer_datas:
-                df = self._consumer.get_raw_df(data)
-                self.add_raw_df(data, df)
+                consumer_data_tool = self._consumer.data_tool
+                df = consumer_data_tool.get_raw_df(data)
+                self._data_tool.add_raw_df(data, df)
             return consumer_datas
         
         def _is_prepared_signal_required(self):

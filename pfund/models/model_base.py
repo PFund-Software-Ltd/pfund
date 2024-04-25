@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 from pfund.const.paths import MODEL_PATH
 from pfund.models.model_meta import MetaModel
 from pfund.products.product_base import BaseProduct
-from pfund.utils.utils import short_path, get_engine_class, load_yaml_file
+from pfund.utils.utils import short_path, get_engine_class, load_yaml_file, convert_ts_to_dt
 from pfund.plogging import create_dynamic_logger
 
 
@@ -129,7 +129,10 @@ class BaseModel(ABC, metaclass=MetaModel):
     @property
     def data_tool(self):
         return self._data_tool
-    dt = data_tool
+    
+    @staticmethod
+    def dt(ts: float):
+        return convert_ts_to_dt(ts)
     
     def to_dict(self):
         return {

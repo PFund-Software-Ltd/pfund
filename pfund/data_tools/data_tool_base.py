@@ -16,10 +16,6 @@ class BaseDataTool:
         # since it is hard to convert product string to product object
         self._product_column = None
     
-    @staticmethod
-    def dt(ts: float):
-        return convert_ts_to_dt(ts)
-    
     def _set_product_column(self, column):
         self._product_column = column
         

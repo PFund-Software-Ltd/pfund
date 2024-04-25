@@ -26,7 +26,7 @@ from pfund.zeromq import ZeroMQ
 from pfund.risk_monitor import RiskMonitor
 from pfund.const.commons import SUPPORTED_CRYPTO_EXCHANGES
 from pfund.strategies.strategy_meta import MetaStrategy
-from pfund.utils.utils import convert_to_uppercases, get_engine_class, load_yaml_file
+from pfund.utils.utils import convert_to_uppercases, get_engine_class, load_yaml_file, convert_ts_to_dt
 from pfund.plogging import create_dynamic_logger
 
 
@@ -110,7 +110,10 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
     @property
     def data_tool(self):
         return self._data_tool
-    dt = data_tool
+    
+    @staticmethod
+    def dt(ts: float):
+        return convert_ts_to_dt(ts)
     
     def create_logger(self):
         self.logger = create_dynamic_logger(self.name, 'strategy')

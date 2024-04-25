@@ -38,9 +38,9 @@ class BacktestMixin:
     
     def prepare_df_before_event_driven_backtesting(self):
         assert self.engine.mode == 'event_driven'
-        df = self._data_tool.prepare_df_before_event_driven_backtesting(self.df)
+        df = self.data_tool.prepare_df_before_event_driven_backtesting(self.df)
         # clear df so that strategy/model doesn't know anything about the incoming data
-        self._data_tool.clear_df()
+        self.data_tool.clear_df()
         return df
          
     def add_data_signature(self, *args, **kwargs):
@@ -59,12 +59,12 @@ class BacktestMixin:
         datas = super().add_data(trading_venue, base_currency, quote_currency, ptype, *args, **kwargs)
         
         if train_kwargs:
-            self.set_data_periods(datas, **train_kwargs)
+            self.data_tool.set_data_periods(datas, **train_kwargs)
 
         if backtest_kwargs:
             dfs = self.get_historical_data(feed, datas, kwargs, copy.deepcopy(backtest_kwargs))
             for data, df in zip(datas, dfs):
-                self.add_raw_df(data, df)
+                self.data_tool.add_raw_df(data, df)
         return datas
         
     def add_model(self, model: tModel, name: str='', model_path: str='', is_load: bool=True) -> BacktestMixin | tModel:

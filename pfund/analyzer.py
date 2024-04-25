@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 from pathlib import Path
 
 from typing import TYPE_CHECKING
@@ -23,9 +24,22 @@ class Analyzer:
     spreadsheet_path = Path(config.spreadsheet_path)
     dashboard_path = Path(config.dashboard_path)
     
-    def __init__(self, data: dict | None=None):
-        self.data = data or {}
+    def __init__(self, data: dict | None=None, backtest_name=''):
+        self._data = data or {}
+        if backtest_name:
+            self._data = self._load_backtest_history(backtest_name)
+            if data:
+                print('Warning: backtest_name is provided, but data is also provided, data will be ignored')
         
+    def _load_backtest_history(self, backtest_name: str) -> dict:
+        if '.json' not in backtest_name:
+            backtest_name += '.json'
+        file_path = os.path.join(self.config.backtest_path, backtest_name)
+        backtest_history = {}
+        with open(file_path, 'r') as f:
+            backtest_history = json.load(f)
+        return backtest_history
+    
     @staticmethod
     def _is_file(template: str) -> bool:
         if '\\' in template or '/' in template:
@@ -126,7 +140,7 @@ class Analyzer:
         nb_output_file_paths = []
         if isinstance(notebooks, str):
             notebooks = [notebooks]
-        data = data or self.data
+        data = data or self._data
         if not data:
             raise ValueError("No data passed in or stored in the Analyzer instance, please pass in the data to be analyzed.")
         
