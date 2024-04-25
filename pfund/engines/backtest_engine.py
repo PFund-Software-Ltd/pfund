@@ -8,6 +8,8 @@ import datetime
 import json
 import uuid
 
+from tqdm import tqdm
+
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.types.common_literals import tSUPPORTED_BACKTEST_MODES, tSUPPORTED_DATA_TOOLS
@@ -239,14 +241,16 @@ class BacktestEngine(BaseEngine):
                 if strat == '_dummy':
                     # dummy strategy has exactly one model
                     model = list(strategy.models.values())[0]
-                    strategy_or_model = model
+                    backtestee = model
+                    backtestee_type = 'model'
                 else:
-                    strategy_or_model = strategy
-                df = strategy_or_model.prepare_df_before_event_driven_backtesting()
-                
+                    backtestee = strategy
+                    backtestee_type = 'strategy'
+                df = backtestee.prepare_df_before_event_driven_backtesting()
+
                 # OPTIMIZE: critical loop
                 # FIXME: pandas specific, if BacktestEngine.data_tool == 'pandas':
-                for row in df.itertuples(index=False):
+                for row in tqdm(df.itertuples(index=False), total=df.shape[0], desc=f'Backtesting {backtestee_type} {backtestee.name}', colour='yellow'):
                     resolution = row.resolution
                     product = row.product
                     broker = self.brokers[product.bkr]
@@ -276,7 +280,7 @@ class BacktestEngine(BaseEngine):
                             },
                         }
                         data_manager.update_bar(product, bar, now=row.ts)
-                
+                        
                 if strat == '_dummy':
                     model.assert_consistent_signals()
         else:
