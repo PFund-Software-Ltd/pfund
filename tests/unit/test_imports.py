@@ -38,15 +38,15 @@ def test_import_model():
 
 def test_import_pytorch_model():
     try:
-        from pfund import PyTorchModel
+        from pfund import PytorchModel
     except ImportError:
-        pytest.fail("Failed to import 'PyTorchModel' package")
+        pytest.fail("Failed to import 'PytorchModel' package")
 
 def test_import_sklearn_model():
     try:
-        from pfund import SKLearnModel
+        from pfund import SklearnModel
     except ImportError:
-        pytest.fail("Failed to import 'SKLearnModel' package")
+        pytest.fail("Failed to import 'SklearnModel' package")
 
 def test_import_feature():
     try:

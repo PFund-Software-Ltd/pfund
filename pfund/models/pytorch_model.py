@@ -2,19 +2,14 @@ import os
 
 import torch
 import pandas as pd
-from abc import abstractmethod
 
 from pfund.models.model_base import BaseModel
 from pfund.utils.utils import short_path
 
 
-class PyTorchModel(BaseModel):
+class PytorchModel(BaseModel):
     def __call__(self, *args, **kwargs):
         return self.ml_model(*args, **kwargs)
-    
-    @abstractmethod
-    def prepare_target(self, *args, **kwargs) -> pd.DataFrame:
-        pass
     
     def load(self, path: str=''):
         file_path = self._get_file_path(path=path, extension='.pt')
@@ -56,6 +51,7 @@ class PyTorchModel(BaseModel):
         return pred_y
 
     def flow(self, is_dump=True, path: str='') -> pd.DataFrame:
+        assert hasattr(self, 'prepare_target'), "prepare_target() must be defined before calling flow()"
         X: pd.DataFrame = self.prepare_features()
         y: pd.DataFrame = self.prepare_target()
         if 'fit' not in self.__dict__:

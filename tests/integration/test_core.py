@@ -1,7 +1,31 @@
 import pytest
 
 import pfund as pf
+import ta
 from talib import abstract as talib
+import torch.nn as nn
+from sklearn.linear_model import LinearRegression as SklearnLinearRegression
+
+
+class PytorchLinearRegression(nn.Module):
+    '''Linear Regression for testing'''
+    def __init__(self):
+        super().__init__()
+        self.linear = nn.Linear(4, 1)
+        
+    def forward(self, x):
+        return self.linear(x)
+
+
+class TestPytorch(pf.PytorchModel):
+    def predict(self, *args, **kwargs):
+        pass
+    
+
+class TestSklearn(pf.SklearnModel):
+    def predict(self, *args, **kwargs):
+        pass
+    
 
 
 @pytest.mark.smoke
@@ -32,9 +56,23 @@ class TestCore:
             }
         )
         
-        # add models and indicators:
-        indicator = strategy.add_indicator(pf.TALibIndicator(talib.SMA, timeperiod=3, price='close'), name='SMA', indicator_path='')
+        # add pytorch model:
+        strategy.add_model(TestPytorch(ml_model=PytorchLinearRegression()), name='test_pytorch', model_path='')
         
+        # add sklearn model:
+        strategy.add_model(TestSklearn(ml_model=SklearnLinearRegression()), name='test_sklearn', model_path='')
+
+        # add ta indicators
+        ## type 1: ta class, e.g. ta.volatility.BollingerBands
+        indicator = lambda df: ta.volatility.BollingerBands(close=df['close'], window=3, window_dev=2)
+        funcs = ['bollinger_mavg', 'bollinger_hband', 'bollinger_lband']
+        strategy.add_indicator(pf.TAIndicator(indicator, funcs=funcs), name='BollingerBands', indicator_path='')
+        ## type 2: ta function, e.g. ta.volatility.bollinger_mavg
+        indicator2 = lambda df: ta.volatility.bollinger_mavg(close=df['close'], window=3)
+        strategy.add_indicator(pf.TAIndicator(indicator2), name='BollingerBands2', indicator_path='')
+        
+        # add talib indicator
+        strategy.add_indicator(pf.TALibIndicator(talib.SMA, timeperiod=3, price='close'), name='SMA', indicator_path='')
         
         engine.run()
         

@@ -23,7 +23,7 @@ import pandas as pd
 
 if TYPE_CHECKING:
     from pfund.strategies.strategy_base import BaseStrategy
-    from pfund.models import PyTorchModel, SKLearnModel
+    from pfund.models import PytorchModel, SklearnModel
     from pfund.indicators.indicator_base import TAFunction, TALibFunction
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_quote import QuoteData
@@ -214,12 +214,12 @@ class BaseModel(ABC, metaclass=MetaModel):
             self.append_to_signal(X, new_pred)
         return new_pred
             
-    def get_model_type_of_ml_model(self) -> PyTorchModel | SKLearnModel | BaseModel:
-        from pfund.models import PyTorchModel, SKLearnModel
+    def get_model_type_of_ml_model(self) -> PytorchModel | SklearnModel | BaseModel:
+        from pfund.models import PytorchModel, SklearnModel
         if isinstance(self.ml_model, nn.Module):
-            Model = PyTorchModel
+            Model = PytorchModel
         elif isinstance(self.ml_model, (BaseEstimator, ClassifierMixin, RegressorMixin, Pipeline)):
-            Model = SKLearnModel
+            Model = SklearnModel
         else:
             Model = BaseModel
         return Model
