@@ -5,7 +5,7 @@ def BacktestBroker(Broker) -> BaseBroker:
     class _BacktestBroker(Broker):
         def __init__(self):
             super().__init__(env='BACKTEST')
-            self.initial_balances = None
+            self._initial_balances = None
             # TODO?
             # self.initial_positions = None
         
@@ -49,13 +49,16 @@ def BacktestBroker(Broker) -> BaseBroker:
         def initialize_positions(self):
             pass
         
+        def get_initial_balances(self):
+            return self._initial_balances
+        
         # REVIEW
         def initialize_balances(self, account, initial_balances):
             if initial_balances is None:
                 initial_balances = {'BTC': 10, 'USD': 1_000_000}  
             else: 
                 initial_balances = {k.upper(): v for k, v in initial_balances.items()}
-            self.initial_balances = initial_balances
+            self._initial_balances = initial_balances
             updates = {'ts': None, 'data': {k: {'wallet': v, 'available': v, 'margin': v} for k, v in initial_balances.items()}}
             trading_venue = account.exch if account.bkr == 'CRYPTO' else account.bkr
             self.pm.update_balances(trading_venue, account.name, updates)

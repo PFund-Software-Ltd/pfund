@@ -28,6 +28,13 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
             strategy_dict['data_signatures'] = self._data_signatures
             return strategy_dict
         
+        def start(self):
+            super().start()
+            if not self.is_running():
+                if not self.accounts:
+                    for trading_venue in self.products:
+                        self.add_account(trading_venue)
+        
         def process_df_after_vectorized_backtesting(self):
             if self.name == '_dummy':
                 return

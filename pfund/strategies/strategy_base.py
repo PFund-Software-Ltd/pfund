@@ -83,7 +83,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         self._listeners = defaultdict(list)  # {data: model}
         self.orderbooks = {}  # {product: data}
         self.tradebooks = {}  # {product: data}
-        self.positions = {}  # {account: {pdt: position} }}
+        self.positions = {}  # {account: {pdt: position} }
         self.balances = {}  # {account: {ccy: balance}}
         # NOTE: includes submitted orders and opened orders
         self.orders = {}  # {account: [order, ...]}

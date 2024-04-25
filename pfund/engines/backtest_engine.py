@@ -181,6 +181,7 @@ class BacktestEngine(BaseEngine):
     
     def _output_backtest_results(self, strat: str, df, start_time: float, end_time: float, commit_hash: str | None):
         strategy = self.get_strategy(strat)
+        initial_balances = {bkr: broker.get_initial_balances() for bkr, broker in self.brokers.items()}
         backtest_id = self._generate_backtest_id()
         backtest_hash = self._generate_backtest_hash(strategy)
         backtest_name = self._create_backtest_name(strat, backtest_id)
@@ -195,6 +196,7 @@ class BacktestEngine(BaseEngine):
                 'backtest_hash': backtest_hash,
                 'backtest_name': backtest_name,
                 'backtest_iteration': backtest_iter,
+                'initial_balances': initial_balances,
                 'commit_hash': commit_hash,
                 'duration': f'{duration:.2f}s' if duration > 1 else f'{duration*1000:.2f}ms',
                 'start_time': datetime.datetime.fromtimestamp(start_time, tz=local_tz).strftime('%Y-%m-%dT%H:%M:%S%z'),

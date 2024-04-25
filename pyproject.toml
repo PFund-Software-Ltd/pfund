@@ -30,7 +30,7 @@ ta = { version = "^0.11.0", optional = true }
 scikit-learn = { version = "^1.4.0", optional = true }
 torch = { version = "^2.1.2", optional = true }
 mlflow = { version = "^2.11.3", optional = true }
-pfolio = { version = "^0.0.1.dev4", optional = true, extras = ["bayesian", "data", "portfolio", "temporary"] }
+pfolio = { version = "^0.0.1.dev4", optional = true }
 papermill = { version = "^2.5.0", optional = true }
 voila = { version = "^0.5.6", optional = true }
 
@@ -47,7 +47,8 @@ optional = true
 
 [tool.poetry.group.dev.dependencies]
 # pfeed = { path = "../pfeed", develop = true, extras = ["df", "data", "boost"] }
-pfolio = { path = "../pfolio", develop = true, extras = ["bayesian", "data", "portfolio", "temporary"] }
+# pfolio = { path = "../pfolio", develop = true, extras = ["bayesian", "data", "portfolio", "temporary"] }
+pfolio = { path = "../pfolio", develop = true }
 pybit = "^5.6.2"
 ta-lib = "^0.4.28"
 commitizen = "^3.24.0"

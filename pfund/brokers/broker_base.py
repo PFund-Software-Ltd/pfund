@@ -2,7 +2,6 @@ import logging
 from collections import defaultdict
 
 from pfund.const.commons import SUPPORTED_ENVIRONMENTS
-from pfund.managers import *
 from pfund.utils.utils import get_engine_class
 
 
