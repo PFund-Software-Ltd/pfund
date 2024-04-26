@@ -38,38 +38,55 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
                 self._data_tool.add_raw_df(data, df)
             return consumer_datas
         
-        def _is_prepared_signal_required(self):
-            # is_dummy_strategy=True means No actual strategy, only model is running in backtesting
-            is_dummy_strategy = isinstance(self._consumer, BaseStrategy) and self._consumer.name == '_dummy'
-            if is_dummy_strategy:
-                return False
-            else:
-                return (
-                    self.engine.mode == 'vectorized' or \
-                    (self.engine.mode == 'event_driven' and \
-                        self.engine.use_prepared_signals)
-                )
+        def _is_dummy_strategy(self):
+            return isinstance(self._consumer, BaseStrategy) and self._consumer.name == '_dummy'
         
         def start(self):
             super().start()
             if not self.is_running():
-                is_dummy_strategy = isinstance(self._consumer, BaseStrategy) and self._consumer.name == '_dummy'
-                if not self._is_prepared_signal_required():
-                    if not is_dummy_strategy:
-                        self._data_tool.clear_df()
-                    # make loaded signal (if any) None
-                    self.set_signal(None)
+                if self.engine.mode == 'event_driven':
+                    self._data_tool.prepare_df_before_event_driven_backtesting()
+                
+        def stop(self):
+            super().stop()
+            if self.is_running():
+                if self.engine.mode == 'event_driven' and self._is_dummy_strategy():
+                    self._assert_consistent_signals()
         
-        def _prepare_df_with_models(self, *args, **kwargs):
+        def get_df_iterable(self):
+            return self._data_tool.get_df_iterable()
+        
+        def clear_dfs(self):
+            assert self.engine.mode == 'event_driven'
+            if not self._is_signal_prepared():
+                self._data_tool.clear_df()
+            for model in self.models.values():
+                model.clear_dfs()
+        
+        def _add_raw_df(self, data, df):
+            return self._data_tool.add_raw_df(data, df)
+        
+        def _set_data_periods(self, datas, **kwargs):
+            return self._data_tool.set_data_periods(datas, **kwargs)
+        
+        def _prepare_df_with_signals(self):
             if self.engine.mode == 'vectorized':
-                self._data_tool.prepare_df_with_models(*args, **kwargs)
+                self._data_tool.prepare_df_with_signals(self.models)
         
-        def _append_to_df(self, *args, **kwargs):
-            if not self._is_prepared_signal_required():
-                return self._data_tool.append_to_df(*args, **kwargs)
+        def _append_to_df(self, **kwargs):
+            if not self._is_signal_prepared() and self.engine.append_signals:
+                return self._data_tool.append_to_df(self.data, self.predictions, **kwargs)
         
+        def _is_signal_prepared(self):
+            if self._is_dummy_strategy():
+                return False
+            elif self.engine.mode == 'vectorized':
+                return True
+            elif self.engine.mode == 'event_driven':
+                return self.engine.load_signals
+                
         def next(self):
-            if not self._is_prepared_signal_required():
+            if not self._is_signal_prepared():
                 return super().next()
             else:
                 # FIXME: pandas specific
@@ -78,7 +95,7 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
                 return new_pred.to_numpy()
         
         # FIXME: pandas specific
-        def assert_consistent_signals(self):
+        def _assert_consistent_signals(self):
             '''Asserts consistent model signals from vectorized and event-driven backtesting, triggered in event-driven backtesting'''
             import pandas.testing as pdt
             event_driven_signal = self.signal

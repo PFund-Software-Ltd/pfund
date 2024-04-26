@@ -17,12 +17,12 @@ class PytorchLinearRegression(nn.Module):
         return self.linear(x)
 
 
-class TestPytorch(pf.PytorchModel):
+class DummyPytorch(pf.PytorchModel):
     def predict(self, *args, **kwargs):
         pass
     
 
-class TestSklearn(pf.SklearnModel):
+class DummySklearn(pf.SklearnModel):
     def predict(self, *args, **kwargs):
         pass
     
@@ -57,10 +57,10 @@ class TestCore:
         )
         
         # add pytorch model:
-        strategy.add_model(TestPytorch(ml_model=PytorchLinearRegression()), name='test_pytorch', model_path='')
+        strategy.add_model(DummyPytorch(ml_model=PytorchLinearRegression()), name='dummy_pytorch', model_path='')
         
         # add sklearn model:
-        strategy.add_model(TestSklearn(ml_model=SklearnLinearRegression()), name='test_sklearn', model_path='')
+        strategy.add_model(DummySklearn(ml_model=SklearnLinearRegression()), name='dummy_sklearn', model_path='')
 
         # add ta indicators
         ## type 1: ta class, e.g. ta.volatility.BollingerBands

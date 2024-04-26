@@ -145,8 +145,8 @@ class BaseModel(ABC, metaclass=MetaModel):
             'models': [model.to_dict() for model in self.models.values()],
         }
     
-    def output_df_to_parquet(self, df, file_path: str):
-        self._data_tool.output_df_to_parquet(df, file_path)
+    def output_df_to_parquet(self, file_path: str):
+        self._data_tool.output_df_to_parquet(self.df, file_path)
     
     # if not specified, features are just the original df
     def prepare_features(self) -> pd.DataFrame:
@@ -279,8 +279,11 @@ class BaseModel(ABC, metaclass=MetaModel):
         file_path = self._get_file_path(path=path)
         if os.path.exists(file_path):
             obj = joblib.load(file_path)
-            signal = obj['signal']
-            self.set_signal(signal)
+            if self.engine.load_signals:
+                signal = obj['signal']
+                if not signal:
+                    self.logger.warning(f'failed to load signal, please make sure model {self.name} was dumped using "model.dump(signal)" correctly.')
+                self.set_signal(signal)
             self.ml_model = obj['ml_model']
             self._assert_no_missing_datas(obj)
             self.logger.debug(f"loaded trained ml_model '{self.name}' and its signal from {short_path(file_path)}")
@@ -317,7 +320,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         from pfund.indicators.indicator_base import BaseIndicator
         return isinstance(self, BaseIndicator)
     
-    def _is_prepared_signal_required(self):
+    def _is_signal_prepared(self):
         return True
     
     def get_datas(self) -> list[BaseData]:
@@ -396,7 +399,7 @@ class BaseModel(ABC, metaclass=MetaModel):
             model = listener
             model.update_quote(data, **kwargs)
             self.update_predictions(model)
-        self._append_to_df(data, **kwargs)
+        self._append_to_df(**kwargs)
         self.on_quote(product, bids, asks, ts, **kwargs)
         
     def update_tick(self, data: TickData, **kwargs):
@@ -406,7 +409,7 @@ class BaseModel(ABC, metaclass=MetaModel):
             model = listener
             model.update_tick(data, **kwargs)
             self.update_predictions(model)
-        self._append_to_df(data, **kwargs)
+        self._append_to_df(**kwargs)
         self.on_tick(product, px, qty, ts, **kwargs)
     
     def update_bar(self, data: BarData, **kwargs):
@@ -416,7 +419,7 @@ class BaseModel(ABC, metaclass=MetaModel):
             model = listener
             model.update_bar(data, **kwargs)
             self.update_predictions(model)
-        self._append_to_df(data, self.predictions, **kwargs)
+        self._append_to_df(**kwargs)
         self.on_bar(product, bar, ts, **kwargs)
     
     def update_predictions(self, model: BaseModel):
@@ -430,11 +433,11 @@ class BaseModel(ABC, metaclass=MetaModel):
     def _prepare_df(self):
         return self._data_tool.prepare_df()
         
-    def _prepare_df_with_models(self):
-        return self._data_tool.prepare_df_with_models(self.models)
+    def _prepare_df_with_signals(self):
+        return self._data_tool.prepare_df_with_signals(self.models)
     
-    def _append_to_df(self, data, predictions, **kwargs):
-        return self._data_tool.append_to_df(data, predictions, **kwargs)
+    def _append_to_df(self, **kwargs):
+        return self._data_tool.append_to_df(self.data, self.predictions, **kwargs)
     
     def start(self):
         if not self.is_running():
@@ -444,15 +447,15 @@ class BaseModel(ABC, metaclass=MetaModel):
             self._start_models()
             self._prepare_df()
             if self._is_load:
-                self.load()  # load trained model
+                self.load()  # load trained model, set signal
             # prepare indicator's signal on the fly if required
-            if self._is_prepared_signal_required() and self.signal is None:
+            if self._is_signal_prepared() and self.signal is None:
                 if self.is_indicator():
                     self.logger.debug(f'calculating indicator {self.name} signal(s) on the fly')
                     self.flow(is_dump=False)
                 else:
                     raise Exception(f"signal is None, please make sure model '{self.name}' is loaded or was dumped using 'model.dump(signal)' correctly.")
-            self._prepare_df_with_models()
+            self._prepare_df_with_signals()
             self._adjust_min_data_points()
             self.on_start()
             self._is_running = True

@@ -21,40 +21,38 @@ class PandasDataTool(BaseDataTool):
     _DECIMAL_COLS = ['price', 'open', 'high', 'low', 'close', 'volume']
     
     @backtest
-    def prepare_df_after_vectorized_backtesting(self, df: pd.DataFrame) -> pd.DataFrame:
+    def prepare_df_after_vectorized_backtesting(self):
         '''Prepares the df after vectorized backtesting, including:
         if has 'orders' column:
         - converts orders to trades
         if no 'orders' column, then 'trade_size'/'position' must be in the df
         - derives 'trade_size'/'position' from 'position'/'trade_size'
         '''
-        cols = df.columns
+        cols = self.df.columns
         if 'position' not in cols and 'trade_size' not in cols:
             raise Exception("either 'position' or 'trade_size' must be in the dataframe columns")
         # use 'position' to derive 'trade_size' and vice versa
         elif 'position' in cols and 'trade_size' not in cols:
-            df['trade_size'] = df['position'].diff(1)
+            self.df['trade_size'] = self.df['position'].diff(1)
             # fill the nan value in the first row with the initial position
-            df.iloc[0, df.columns.get_loc('trade_size')] = df.iloc[0, df.columns.get_loc('position')]
+            self.df.iloc[0, self.df.columns.get_loc('trade_size')] = self.df.iloc[0, self.df.columns.get_loc('position')]
         elif 'trade_size' in cols and 'position' not in cols:
-            df['position'] = df['trade_size'].cumsum()
+            self.df['position'] = self.df['trade_size'].cumsum()
         
         if 'trade_price' not in cols:
-            df.loc[df['trade_size'] != 0, 'trade_price'] = df['close']
-        return df
+            self.df.loc[self.df['trade_size'] != 0, 'trade_price'] = self.df['close']
 
     @backtest
-    def prepare_df_before_event_driven_backtesting(self, df: pd.DataFrame) -> pd.DataFrame:
+    def prepare_df_before_event_driven_backtesting(self):
         # converts 'ts' from datetime to unix timestamp
-        df['ts'] = df['ts'].astype(int) // 10**6  # in milliseconds
-        df['ts'] = df['ts'] / 10**3  # in seconds with milliseconds precision
+        self.df['ts'] = self.df['ts'].astype(int) // 10**6  # in milliseconds
+        self.df['ts'] = self.df['ts'] / 10**3  # in seconds with milliseconds precision
         # convert float columns to decimal for consistency with live trading
-        for col in df.columns:
+        for col in self.df.columns:
             if col in self._DECIMAL_COLS:
-                df[col] = df[col].apply(lambda x: Decimal(str(x)))
+                self.df[col] = self.df[col].apply(lambda x: Decimal(str(x)))
         # TODO: split 'broker' str column from 'product' str column
-        # df['broker'] = ...
-        return df
+        # self.df['broker'] = ...
     
     def prepare_df(self):
         assert self._raw_dfs, "No data is found, make sure add_data(...) is called correctly"
@@ -64,7 +62,7 @@ class PandasDataTool(BaseDataTool):
         self.df.sort_index(level='ts', inplace=True)
         self._raw_dfs.clear()
 
-    def prepare_df_with_models(self, models):
+    def prepare_df_with_signals(self, models):
         # NOTE: models can have different ts_ranges, need to store the original ts_range before concatenating
         ts_range = self.df.index.get_level_values('ts')
         for mdl, model in models.items():
@@ -100,6 +98,9 @@ class PandasDataTool(BaseDataTool):
                 self.val_set = self.validation_set = df
             elif type_ == 'test':
                 self.test_set = df
+    
+    def get_df_iterable(self) -> list:
+        return self.df.itertuples(index=False)
         
     def get_df_unstacked(self, df: pd.DataFrame | None=None):
         df = self.df if df is None else df

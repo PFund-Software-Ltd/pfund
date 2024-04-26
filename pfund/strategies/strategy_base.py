@@ -144,8 +144,8 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             'models': [model.to_dict() for model in self.models.values()],
         }
     
-    def output_df_to_parquet(self, df, file_path: str):
-        self._data_tool.output_df_to_parquet(df, file_path)
+    def output_df_to_parquet(self, file_path: str):
+        self._data_tool.output_df_to_parquet(self.df, file_path)
     
     def set_name(self, name: str):
         self.name = self.strat = name
@@ -373,7 +373,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             model = listener
             model.update_quote(data, **kwargs)
             self.update_predictions(model)
-        self._append_to_df(data, self.predictions, **kwargs)
+        self._append_to_df(**kwargs)
         self.on_quote(product, bids, asks, ts, **kwargs)
 
     def update_tick(self, data: TickData, **kwargs):
@@ -383,7 +383,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             model = listener
             model.update_tick(data, **kwargs)
             self.update_predictions(model)
-        self._append_to_df(data, self.predictions, **kwargs)
+        self._append_to_df(**kwargs)
         self.on_tick(product, px, qty, ts, **kwargs)
     
     def update_bar(self, data: BarData, **kwargs):
@@ -393,7 +393,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             model = listener
             model.update_bar(data, **kwargs)
             self.update_predictions(model)
-        self._append_to_df(data, self.predictions, **kwargs)
+        self._append_to_df(**kwargs)
         self.on_bar(product, bar, ts, **kwargs)
 
     def update_predictions(self, model: BaseModel):
@@ -437,11 +437,11 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
     def _prepare_df(self):
         return self._data_tool.prepare_df()
         
-    def _prepare_df_with_models(self):
-        return self._data_tool.prepare_df_with_models(self.models)
+    def _prepare_df_with_signals(self):
+        return self._data_tool.prepare_df_with_signals(self.models)
     
-    def _append_to_df(self, data, predictions, **kwargs):
-        return self._data_tool.append_to_df(data, predictions, **kwargs)
+    def _append_to_df(self, **kwargs):
+        return self._data_tool.append_to_df(self.data, self.predictions, **kwargs)
     
     def start(self):
         if not self.is_running():
@@ -451,7 +451,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             self.add_models()
             self._start_models()
             self._prepare_df()
-            self._prepare_df_with_models()
+            self._prepare_df_with_signals()
             self._subscribe_to_private_channels()
             self._set_aliases()
             if self.is_parallel():

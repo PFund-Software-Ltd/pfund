@@ -30,20 +30,22 @@ class BacktestEngine(BaseEngine):
     def __new__(
         cls, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
         config: ConfigHandler | None=None, 
-        append_to_strategy_df=False, 
-        use_prepared_signals=True, 
+        append_signals=False, 
+        load_signals=True,
         auto_git_commit=False, 
         save_backtests=True,
         **settings
     ):
         if not hasattr(cls, 'mode'):
             cls.mode = mode.lower()
-        if not hasattr(cls, 'append_to_strategy_df'):
-            cls.append_to_strategy_df = append_to_strategy_df
-        # NOTE: use_prepared_signals=True means model's prepared signals will be reused in model.next()
+        # NOTE: append_signals=False means signals from models won't be added to dfs.
+        # This will make event-driven backtesting faster but less consistent with live trading
+        if not hasattr(cls, 'append_signals'):
+            cls.append_signals = append_signals
+        # NOTE: load_signals=True means model's prepared signals will be reused in model.next()
         # instead of recalculating the signals. This will make event-driven backtesting faster but less consistent with live trading
-        if not hasattr(cls, 'use_prepared_signals'):
-            cls.use_prepared_signals = use_prepared_signals
+        if not hasattr(cls, 'load_signals'):
+            cls.load_signals = load_signals
         if not hasattr(cls, 'auto_git_commit'):
             cls.auto_git_commit = auto_git_commit
         if not hasattr(cls, 'save_backtests'):
@@ -53,8 +55,8 @@ class BacktestEngine(BaseEngine):
     def __init__(
         self, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
         config: ConfigHandler | None=None,
-        append_to_strategy_df=False,
-        use_prepared_signals=True,
+        append_signals=False,
+        load_signals=True,
         auto_git_commit=False,
         save_backtests=True,
         **settings
@@ -76,6 +78,7 @@ class BacktestEngine(BaseEngine):
             is_parallel = False
             self.logger.warning(f'Parallel strategy is not supported in backtesting, {strategy.__class__.__name__} will be run in sequential mode')
         name = name or strategy.__class__.__name__
+        assert name != '_dummy', 'dummy strategy is reserved for model backtesting, please use another name'
         strategy = BacktestStrategy(type(strategy), *strategy._args, **strategy._kwargs)
         return super().add_strategy(strategy, name=name, is_parallel=is_parallel)
 
@@ -181,7 +184,7 @@ class BacktestEngine(BaseEngine):
             self.logger.debug(f"Strategy {strat} has no changes to commit, return the last {commit_hash=}")
         return commit_hash
     
-    def _output_backtest_results(self, strat: str, df, start_time: float, end_time: float, commit_hash: str | None):
+    def _output_backtest_results(self, strat: str, start_time: float, end_time: float, commit_hash: str | None):
         strategy = self.get_strategy(strat)
         initial_balances = {bkr: broker.get_initial_balances() for bkr, broker in self.brokers.items()}
         backtest_id = self._generate_backtest_id()
@@ -209,7 +212,7 @@ class BacktestEngine(BaseEngine):
             'result': df_file_path
         }
         if self.save_backtests:
-            strategy.output_df_to_parquet(df, df_file_path)
+            strategy.output_df_to_parquet(df_file_path)
             self._write_json(f'{backtest_name}.json', backtest_history)
         return backtest_history
         
@@ -233,8 +236,8 @@ class BacktestEngine(BaseEngine):
                 start_time = time.time()
                 strategy.backtest()
                 end_time = time.time()
-                df = strategy.prepare_df_after_vectorized_backtesting()
-                backtest_history: dict = self._output_backtest_results(strat, df, start_time, end_time, commit_hash)
+                self.strategy_manager.stop(strats=strat, reason='finished backtesting')
+                backtest_history: dict = self._output_backtest_results(strat, start_time, end_time, commit_hash)
                 backtests[strat] = backtest_history
         elif self.mode == 'event_driven':
             for strat, strategy in self.strategy_manager.strategies.items():
@@ -246,11 +249,13 @@ class BacktestEngine(BaseEngine):
                 else:
                     backtestee = strategy
                     backtestee_type = 'strategy'
-                df = backtestee.prepare_df_before_event_driven_backtesting()
-
+                df_iter = backtestee.get_df_iterable()
+                # NOTE: clear dfs so that strategies/models don't know anything about the incoming data
+                backtestee.clear_dfs()
+                # TODO: get df_iter length for tqdm, df_iter.shape is wrong
+                
                 # OPTIMIZE: critical loop
-                # FIXME: pandas specific, if BacktestEngine.data_tool == 'pandas':
-                for row in tqdm(df.itertuples(index=False), total=df.shape[0], desc=f'Backtesting {backtestee_type} {backtestee.name}', colour='yellow'):
+                for row in tqdm(df_iter, total=df_iter.shape[0], desc=f'Backtesting {backtestee_type} {backtestee.name}', colour='yellow'):
                     resolution: str = row.resolution
                     product: str = row.product
                     broker = self.brokers[row.broker]
@@ -281,11 +286,9 @@ class BacktestEngine(BaseEngine):
                         }
                         data_manager.update_bar(product, bar, now=row.ts)
                         
-                if strat == '_dummy':
-                    model.assert_consistent_signals()
+                self.strategy_manager.stop(strats=strat, reason='finished backtesting')
         else:
             raise NotImplementedError(f'Backtesting mode {self.mode} is not supported')
-        self.strategy_manager.stop(reason='finished backtesting')
         return backtests
 
     def end(self):
