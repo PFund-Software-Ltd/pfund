@@ -175,8 +175,8 @@ class BacktestMixin:
             if 'symbol' in df.columns:
                 df = df.drop('symbol', axis=1) 
             
-            df['product'] = product
-            df['resolution'] = resolution
+            df['product'] = repr(product)
+            df['resolution'] = repr(resolution)
             dfs.append(df)
             
             # don't sleep on the last one loop, waste of time

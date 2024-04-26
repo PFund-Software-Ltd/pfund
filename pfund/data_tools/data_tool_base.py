@@ -1,5 +1,4 @@
 from pfund.datas.data_base import BaseData
-from pfund.utils.utils import convert_ts_to_dt
 
 
 class BaseDataTool:
@@ -12,15 +11,6 @@ class BaseDataTool:
         self.test_set = None
         self.df = None
         self._raw_dfs = {}  # {data: df}
-        # HACK, use this to store the product objects column
-        # since it is hard to convert product string to product object
-        self._product_column = None
-    
-    def _set_product_column(self, column):
-        self._product_column = column
-        
-    def _get_product_column(self):
-        return self._product_column
     
     def get_raw_df(self, data: BaseData):
         return self._raw_dfs[data]

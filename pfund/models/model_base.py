@@ -280,7 +280,6 @@ class BaseModel(ABC, metaclass=MetaModel):
         if os.path.exists(file_path):
             obj = joblib.load(file_path)
             signal = obj['signal']
-            signal = self._data_tool.convert_object_columns_to_strings(signal)
             self.set_signal(signal)
             self.ml_model = obj['ml_model']
             self._assert_no_missing_datas(obj)
@@ -289,7 +288,6 @@ class BaseModel(ABC, metaclass=MetaModel):
             self.logger.debug(f"no trained ml_model '{self.name}' found in {short_path(file_path)}")
     
     def dump(self, signal: pd.DataFrame, path: str=''):
-        signal = self._data_tool.convert_string_columns_to_objects(signal)
         obj = {
             'signal': signal,
             'ml_model': self.ml_model,

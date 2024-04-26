@@ -29,6 +29,7 @@ pyzmq = { version = "^25.1.2", optional = true }
 ta = { version = "^0.11.0", optional = true }
 scikit-learn = { version = "^1.4.0", optional = true }
 torch = { version = "^2.1.2", optional = true }
+feast = { git = "https://github.com/feast-dev/feast.git", optional = true }
 mlflow = { version = "^2.11.3", optional = true }
 pfolio = { version = "^0.0.1.dev4", optional = true }
 papermill = { version = "^2.5.0", optional = true }
@@ -36,7 +37,7 @@ voila = { version = "^0.5.6", optional = true }
 
 [tool.poetry.extras]
 data = ["pfeed", "orjson", "pyzmq"]
-ml = ["ta", "scikit-learn", "torch", "mlflow"]
+ml = ["ta", "scikit-learn", "torch", "mlflow", "feast"]
 analytics = ["pfolio", "papermill", "voila"]
 
 [tool.poetry.scripts]

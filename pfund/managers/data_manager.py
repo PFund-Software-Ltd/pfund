@@ -3,7 +3,7 @@ from collections import defaultdict
 import importlib
 
 from pfund.datas.resolution import Resolution
-from pfund.datas import *
+from pfund.datas import QuoteData, TickData, BarData, BaseData
 from pfund.products.product_base import BaseProduct
 from pfund.managers.base_manager import BaseManager
         
@@ -24,7 +24,7 @@ def get_resolutions_from_kwargs(kwargs: dict) -> list[Resolution]:
 class DataManager(BaseManager):
     def __init__(self, broker):
         super().__init__('data_manager', broker)
-        # datas = {pdt_key: {repr(resolution): data}}
+        # datas = {repr(product): {repr(resolution): data}}
         self._datas = defaultdict(dict)
 
     def _resample_to_official_resolution(self, product, resolution: Resolution, supported_timeframes_and_periods: dict | None=None) -> Resolution:
@@ -37,7 +37,7 @@ class DataManager(BaseManager):
             WebsocketApi = getattr(importlib.import_module(f'pfund.exchanges.{product.exch.lower()}.ws_api'), 'WebsocketApi')
             supported_timeframes_and_periods = supported_timeframes_and_periods or WebsocketApi.SUPPORTED_TIMEFRAMES_AND_PERIODS
         elif product.bkr == 'IB':
-            IBApi = getattr(importlib.import_module(f'pfund.brokers.ib.ib_api'), 'IBApi')
+            IBApi = getattr(importlib.import_module('pfund.brokers.ib.ib_api'), 'IBApi')
             supported_timeframes_and_periods = supported_timeframes_and_periods or IBApi.SUPPORTED_TIMEFRAMES_AND_PERIODS
         # EXTEND
         else:
@@ -88,9 +88,7 @@ class DataManager(BaseManager):
             # else:
             #     self._zmq
 
-    def _create_time_based_data(self, product, resolution: Resolution, **kwargs):
-        if resolution in self._datas[product].keys():
-            return self._datas[product][repr(resolution)]
+    def _create_time_based_data(self, product: BaseProduct, resolution: Resolution, **kwargs):
         if resolution.is_quote():
             data = QuoteData(product, resolution, **kwargs)
         elif resolution.is_tick():
@@ -152,11 +150,22 @@ class DataManager(BaseManager):
     # TODO
     def add_custom_data(self):
         pass
+    
+    def set_data(self, product: BaseProduct, resolution: Resolution, data: BaseData):
+        self._datas[repr(product)][repr(resolution)] = data
 
-    def get_data(self, product: BaseProduct, resolution: str | None=None) -> dict | BaseData | None:
+    def get_data(self, product: str | BaseProduct, resolution: str | Resolution | None=None) -> dict | BaseData | None:
+        if isinstance(product, BaseProduct):
+            product = repr(product)
+        if isinstance(resolution, Resolution):
+            resolution = repr(resolution)
         return self._datas[product] if not resolution else self._datas[product].get(resolution, None)
     
-    def remove_data(self, product: BaseProduct, resolution: str | None=None):
+    def remove_data(self, product: str | BaseProduct, resolution: str | Resolution | None=None):
+        if isinstance(product, BaseProduct):
+            product = repr(product)
+        if isinstance(resolution, Resolution):
+            resolution = repr(resolution)
         if not resolution:
             if product in self._datas:
                 del self._datas[product]
@@ -166,18 +175,19 @@ class DataManager(BaseManager):
             if product in self._datas and resolution in self._datas[product]:
                 del self._datas[product][resolution]
                 self.logger.debug(f'removed {product} {resolution=} data')
-            return list(self._datas[product].values())
+            datas: list[BaseData] = list(self.get_data(product).values())
+            return datas
 
-    def add_data(self, product, **kwargs) -> list:        
+    def add_data(self, product: BaseProduct, **kwargs) -> list:        
         # time-based data
         if 'resolution' in kwargs or 'resolutions' in kwargs:
-            resolutions = get_resolutions_from_kwargs(kwargs)
+            resolutions: list[Resolution] = get_resolutions_from_kwargs(kwargs)
             if 'resolution' in kwargs:
                 del kwargs['resolution']
             for resolution in resolutions:
-                if not (data := self.get_data(product, resolution=repr(resolution))):
+                if not (data := self.get_data(product, resolution=resolution)):
                     data = self._create_time_based_data(product, resolution, **kwargs)
-                    self._datas[product][repr(resolution)] = data
+                    self.set_data(product, resolution, data)
             
             resamples = {Resolution(resamplee_resolution): Resolution(resampler_resolution) for resamplee_resolution, resampler_resolution in kwargs.get('resamples', {}).items()}
             default_auto_resample = {'by_official_resolution': True, 'by_highest_resolution': True}
@@ -190,11 +200,11 @@ class DataManager(BaseManager):
                 assert resamplee_resolution in resolutions, f'Your target resolution {resamplee_resolution=} must be included in kwarg {resolutions=}'
                 if resampler_resolution <= resamplee_resolution:
                     raise Exception(f'Cannot use lower/equal resolution "{resampler_resolution}" to resample "{resamplee_resolution}"')
-                if not (data_resampler := self.get_data(product, resolution=repr(resampler_resolution))):
+                if not (data_resampler := self.get_data(product, resolution=resampler_resolution)):
                     data_resampler = self._create_time_based_data(product, resampler_resolution)
-                self._datas[product][repr(resampler_resolution)] = data_resampler
+                self.set_data(product, resampler_resolution, data_resampler)
                 self.logger.debug(f'added {product} data')
-                data_resamplee = self._datas[product][repr(resamplee_resolution)]
+                data_resamplee = self.get_data(product, resolution=resamplee_resolution)
                 data_resamplee.add_resampler(data_resampler)
                 data_resampler.add_resamplee(data_resamplee)
                 self.logger.debug(f'{product} {resampler_resolution} data added listener {resamplee_resolution} data')
@@ -203,9 +213,10 @@ class DataManager(BaseManager):
         #     pass
         else:
             raise Exception(f'{product} data resolution(s) must be defined')
-        return list(self._datas[product].values())
+        datas: list[BaseData] = list(self.get_data(product).values())
+        return datas
 
-    def update_quote(self, product, quote: dict):
+    def update_quote(self, product: BaseProduct | str, quote: dict):
         ts = quote['ts']
         update = quote['data']
         other_info = quote['other_info']
@@ -217,7 +228,7 @@ class DataManager(BaseManager):
             data_resamplee.on_quote(bids, asks, ts, **other_info)
             self.push(data_resamplee, event='quote', **other_info)
 
-    def update_tick(self, product, tick: dict):
+    def update_tick(self, product: BaseProduct | str, tick: dict):
         update = tick['data']
         other_info = tick['other_info']
         px, qty, ts = update['px'], update['qty'], update['ts']
@@ -228,7 +239,7 @@ class DataManager(BaseManager):
             data_resamplee.on_tick(px, qty, ts, **other_info)
             self.push(data_resamplee, event='tick', **other_info)
 
-    def update_bar(self, product, bar: dict, now: int):
+    def update_bar(self, product: BaseProduct | str, bar: dict, now: int):
         resolution: str = bar['resolution']
         update = bar['data']
         other_info = bar['other_info']

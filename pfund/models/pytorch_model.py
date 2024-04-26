@@ -23,7 +23,6 @@ class PytorchModel(BaseModel):
             self.logger.debug(f"no trained model '{self.name}' found in {short_path(file_path)}")
     
     def dump(self, signal: torch.Tensor, path: str=''):
-        signal = self._data_tool.convert_string_columns_to_objects(signal)
         obj = {
             'signal': signal,
             "state_dict": self.ml_model.state_dict(),

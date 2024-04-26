@@ -233,7 +233,7 @@ class BacktestEngine(BaseEngine):
                 start_time = time.time()
                 strategy.backtest()
                 end_time = time.time()
-                df = strategy.process_df_after_vectorized_backtesting()
+                df = strategy.prepare_df_after_vectorized_backtesting()
                 backtest_history: dict = self._output_backtest_results(strat, df, start_time, end_time, commit_hash)
                 backtests[strat] = backtest_history
         elif self.mode == 'event_driven':
@@ -251,9 +251,9 @@ class BacktestEngine(BaseEngine):
                 # OPTIMIZE: critical loop
                 # FIXME: pandas specific, if BacktestEngine.data_tool == 'pandas':
                 for row in tqdm(df.itertuples(index=False), total=df.shape[0], desc=f'Backtesting {backtestee_type} {backtestee.name}', colour='yellow'):
-                    resolution = row.resolution
-                    product = row.product
-                    broker = self.brokers[product.bkr]
+                    resolution: str = row.resolution
+                    product: str = row.product
+                    broker = self.brokers[row.broker]
                     data_manager = broker.dm
                     if resolution.is_quote():
                         # TODO
@@ -265,7 +265,7 @@ class BacktestEngine(BaseEngine):
                         data_manager.update_tick(product, tick)
                     else:
                         bar = {
-                            'resolution': repr(resolution),
+                            'resolution': resolution,
                             'data': {
                                 'ts': row.ts,
                                 'open': row.open,

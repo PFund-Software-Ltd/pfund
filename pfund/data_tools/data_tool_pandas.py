@@ -20,42 +20,9 @@ class PandasDataTool(BaseDataTool):
     _GROUP = ['product', 'resolution']
     _DECIMAL_COLS = ['price', 'open', 'high', 'low', 'close', 'volume']
     
-    # NOTE: columns 'product' and 'resolution' are strings in the default df
-    def prepare_df(self):
-        assert self._raw_dfs, "No data is found, make sure add_data(...) is called correctly"
-        self.df = pd.concat(self._raw_dfs.values())
-        # sort first, so that product column is in order
-        self.df.set_index(self._INDEX, inplace=True)
-        self.df.sort_index(level='ts', inplace=True)
-        self._set_product_column(self.df.index.get_level_values('product').copy(deep=True))
-        self.df = self.convert_object_columns_to_strings(self.df)
-        self._raw_dfs.clear()
-
-    def convert_object_columns_to_strings(self, df: pd.DataFrame) -> pd.DataFrame:
-        '''Converts 'product' and 'resolution' columns from objects to strings'''
-        if 'product' not in df.columns or 'resolution' not in df.columns:
-            df.reset_index(inplace=True)
-        df['product'] = df['product'].map(repr)
-        df['resolution'] = df['resolution'].map(repr)
-        df.set_index(self._INDEX, inplace=True)
-        df.sort_index(level='ts', inplace=True)
-        return df
-    
-    def convert_string_columns_to_objects(self, df: pd.DataFrame) -> pd.DataFrame:
-        '''Converts 'product' and 'resolution' columns from strings to objects'''
-        if 'product' not in df.columns or 'resolution' not in df.columns:
-            df.reset_index(inplace=True)
-        # HACK: if product column is not in correct order, it will mess up everything
-        # maybe use engine to get broker/exchange to convert strings to product objects
-        df['product'] = self._get_product_column().to_list()
-        df['resolution'] = df['resolution'].apply(lambda x: Resolution(x))
-        df.set_index(self._INDEX, inplace=True)
-        df.sort_index(level='ts', inplace=True)
-        return df
-    
     @backtest
-    def process_df_after_vectorized_backtesting(self, df: pd.DataFrame) -> pd.DataFrame:
-        '''Processes the df after vectorized backtesting, including:
+    def prepare_df_after_vectorized_backtesting(self, df: pd.DataFrame) -> pd.DataFrame:
+        '''Prepares the df after vectorized backtesting, including:
         if has 'orders' column:
         - converts orders to trades
         if no 'orders' column, then 'trade_size'/'position' must be in the df
@@ -78,8 +45,6 @@ class PandasDataTool(BaseDataTool):
 
     @backtest
     def prepare_df_before_event_driven_backtesting(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = self.convert_string_columns_to_objects(df)
-        df.reset_index(inplace=True)
         # converts 'ts' from datetime to unix timestamp
         df['ts'] = df['ts'].astype(int) // 10**6  # in milliseconds
         df['ts'] = df['ts'] / 10**3  # in seconds with milliseconds precision
@@ -87,8 +52,18 @@ class PandasDataTool(BaseDataTool):
         for col in df.columns:
             if col in self._DECIMAL_COLS:
                 df[col] = df[col].apply(lambda x: Decimal(str(x)))
+        # TODO: split 'broker' str column from 'product' str column
+        # df['broker'] = ...
         return df
     
+    def prepare_df(self):
+        assert self._raw_dfs, "No data is found, make sure add_data(...) is called correctly"
+        self.df = pd.concat(self._raw_dfs.values())
+        # sort first, so that product column is in order
+        self.df.set_index(self._INDEX, inplace=True)
+        self.df.sort_index(level='ts', inplace=True)
+        self._raw_dfs.clear()
+
     def prepare_df_with_models(self, models):
         # NOTE: models can have different ts_ranges, need to store the original ts_range before concatenating
         ts_range = self.df.index.get_level_values('ts')

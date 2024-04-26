@@ -35,10 +35,10 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
                     for trading_venue in self.products:
                         self.add_account(trading_venue)
         
-        def process_df_after_vectorized_backtesting(self):
+        def prepare_df_after_vectorized_backtesting(self):
             if self.name == '_dummy':
                 return
-            return self._data_tool.process_df_after_vectorized_backtesting(self.df)
+            return self._data_tool.prepare_df_after_vectorized_backtesting(self.df)
         
         def _prepare_df(self):
             if self.name == '_dummy':
