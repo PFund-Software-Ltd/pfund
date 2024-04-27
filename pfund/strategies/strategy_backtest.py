@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.types.core import tStrategy
     
-from pfund.const.commons import SUPPORTED_CRYPTO_EXCHANGES
 from pfund.mixins.backtest import BacktestMixin
 
 
@@ -29,34 +28,29 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
             return strategy_dict
         
         def add_account(self, trading_venue: str, acc: str='', initial_balances: dict[str, int|float]|None=None, **kwargs):
-            # NOTE: do NOT pass in kwargs to super().add_account(),
-            # this can prevent any accidental credential leak during backtesting
-            account = super().add_account(trading_venue, acc=acc)
-            bkr = 'CRYPTO' if trading_venue in SUPPORTED_CRYPTO_EXCHANGES else trading_venue
-            broker = self.get_broker(bkr)
-            broker.initialize_balances(account, initial_balances)
+            return super().add_account(trading_venue, acc=acc, initial_balances=initial_balances, **kwargs)
             
         def _is_dummy_strategy(self):
             return self.name == '_dummy'
         
         def start(self):
             super().start()
-            if self._is_dummy_strategy():
-                return
-            if not self.is_running():
-                if self.engine.mode == 'event_driven':
-                    self._data_tool.prepare_df_before_event_driven_backtesting()
-                if not self.accounts:
-                    for trading_venue in self.products:
-                        self.add_account(trading_venue)
+            if not self.accounts:
+                for trading_venue in self.products:
+                    if trading_venue == 'BYBIT':
+                        kwargs = {'account_type': 'UNIFIED'}
+                    else:
+                        kwargs = {}
+                    account = self.add_account(trading_venue, **kwargs)
+                    broker = self.get_broker(account.bkr)
+                    broker.initialize_balances()
+            if self.engine.mode == 'event_driven' and not self._is_dummy_strategy():
+                self._data_tool.prepare_df_before_event_driven_backtesting()
         
         def stop(self):
             super().stop()
-            if self._is_dummy_strategy():
-                return
-            if self.is_running():
-                if self.engine.mode == 'vectorized':
-                    self._data_tool.prepare_df_after_vectorized_backtesting()
+            if self.engine.mode == 'vectorized' and not self._is_dummy_strategy():
+                self._data_tool.prepare_df_after_vectorized_backtesting()
         
         def get_df_iterable(self):
             return self._data_tool.get_df_iterable()
@@ -71,30 +65,23 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
                 model.clear_dfs()
         
         def _add_raw_df(self, data, df):
-            if self._is_dummy_strategy():
-                return
-            return self._data_tool.add_raw_df(data, df)
+            if not self._is_dummy_strategy():
+                return self._data_tool.add_raw_df(data, df)
         
         def _set_data_periods(self, datas, **kwargs):
-            if self._is_dummy_strategy():
-                return
-            return self._data_tool.set_data_periods(datas, **kwargs)
+            if not self._is_dummy_strategy():
+                return self._data_tool.set_data_periods(datas, **kwargs)
         
         def _prepare_df(self):
-            if self._is_dummy_strategy():
-                return
-            return self._data_tool.prepare_df()
+            if not self._is_dummy_strategy():
+                return self._data_tool.prepare_df()
             
         def _prepare_df_with_signals(self):
-            if self._is_dummy_strategy():
-                return
-            if self.engine.mode == 'vectorized':
+            if self.engine.mode == 'vectorized' and not self._is_dummy_strategy():
                 return self._data_tool.prepare_df_with_signals(self.models)
         
         def _append_to_df(self, **kwargs):
-            if self._is_dummy_strategy():
-                return
-            if self.engine.append_signals:
+            if self.engine.append_signals and not self._is_dummy_strategy():
                 return self._data_tool.append_to_df(self.data, self.predictions, **kwargs)
     
     try: 

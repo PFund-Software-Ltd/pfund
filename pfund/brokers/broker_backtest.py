@@ -1,30 +1,39 @@
+from collections import defaultdict
+
 from pfund.brokers.broker_base import BaseBroker
 
 
 def BacktestBroker(Broker) -> BaseBroker:
     class _BacktestBroker(Broker):
+        _DEFAULT_INITIAL_BALANCES = {'BTC': 10, 'USD': 1_000_000}
+        
         def __init__(self):
             super().__init__(env='BACKTEST')
-            self._initial_balances = None
+            self._initial_balances = defaultdict(dict)  # {trading_venue: {acc1: balances_dict, acc2: balances_dict} }
             # TODO?
             # self.initial_positions = None
         
-        # NOTE: in backtesting, although it allows to use the same broker and exchange objects,
-        # it should take away their apis to prevent from calling them accidentally
-        def _assert_no_apis(self):
-            if hasattr(self, '_api'):
-                self._api = None
-            if hasattr(self, "exchanges"):
-                for exchange in self.exchanges.values():
-                    exchange._rest_api = None
-                    exchange._ws_api = None
-
         def start(self):
-            self._assert_no_apis()
             self.logger.debug(f'broker {self.name} started')
-
+            self.initialize_balances()
+            
         def stop(self):
             self.logger.debug(f'broker {self.name} stopped')
+
+        def add_account(self, acc: str='', initial_balances: dict[str, int|float]|None=None, **kwargs):
+            # NOTE: do NOT pass in kwargs to super().add_account(),
+            # this can prevent any accidental credential leak during backtesting
+            exch = kwargs.get('exch', '')
+            strat = kwargs.get('strat', '')
+            account_type = kwargs.get('account_type', '')
+            account = super().add_account(acc=acc, exch=exch, strat=strat, account_type=account_type)
+            if initial_balances is None:
+                initial_balances = self._DEFAULT_INITIAL_BALANCES
+            else: 
+                initial_balances = {k.upper(): v for k, v in initial_balances.items()}
+            trading_venue = account.exch if self.bkr == 'CRYPTO' else self.bkr
+            self._initial_balances[trading_venue][account.name] = initial_balances
+            return account
 
         def add_data_channel(self, *args, **kwargs):
             pass
@@ -45,23 +54,14 @@ def BacktestBroker(Broker) -> BaseBroker:
         def get_trades(self, *args, **kwargs):
             pass
         
-        # TODO
-        def initialize_positions(self):
-            pass
-        
         def get_initial_balances(self):
             return self._initial_balances
         
-        # REVIEW
-        def initialize_balances(self, account, initial_balances):
-            if initial_balances is None:
-                initial_balances = {'BTC': 10, 'USD': 1_000_000}  
-            else: 
-                initial_balances = {k.upper(): v for k, v in initial_balances.items()}
-            self._initial_balances = initial_balances
-            updates = {'ts': None, 'data': {k: {'wallet': v, 'available': v, 'margin': v} for k, v in initial_balances.items()}}
-            trading_venue = account.exch if account.bkr == 'CRYPTO' else account.bkr
-            self.pm.update_balances(trading_venue, account.name, updates)
+        def initialize_balances(self):
+            for trading_venue in self._initial_balances:
+                for acc, initial_balances in self._initial_balances[trading_venue].items():
+                    updates = {'ts': None, 'data': {k: {'wallet': v, 'available': v, 'margin': v} for k, v in initial_balances.items()}}
+                    self.portfolio_manager.update_balances(trading_venue, acc, updates)
         
         # TODO
         def place_orders(self, account, product, orders):

@@ -21,3 +21,6 @@ class BaseAccount:
 
     def __repr__(self):
         return f'{self.bkr}-{self.name}'
+
+    def __hash__(self):
+        return hash((self.env, self.bkr, self.name))

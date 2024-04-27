@@ -24,7 +24,7 @@ import pandas as pd
 if TYPE_CHECKING:
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.models import PytorchModel, SklearnModel
-    from pfund.indicators.indicator_base import TAFunction, TALibFunction
+    from pfund.indicators.indicator_base import TaFunction, TalibFunction
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_quote import QuoteData
     from pfund.datas.data_tick import TickData
@@ -36,8 +36,8 @@ if TYPE_CHECKING:
         ClassifierMixin,
         RegressorMixin, 
         Pipeline,
-        TAFunction,  # ta.utils.IndicatorMixin
-        TALibFunction,
+        TaFunction,  # ta.utils.IndicatorMixin
+        TalibFunction,
         Any,
     ]
 from pfund.models.model_meta import MetaModel
@@ -341,8 +341,8 @@ class BaseModel(ABC, metaclass=MetaModel):
     # IMPROVE: current issue is in next(), when the df has multiple products and resolutions,
     # don't know how to determine the exact minimum amount of data points for predict()
     def _adjust_min_data_points(self):
-        num_products = len(self.get_df_products())
-        num_resolutions = len(self.get_df_resolutions())
+        num_products = len(self._data_tool.get_df_products())
+        num_resolutions = len(self._data_tool.get_df_resolutions())
         assert num_products and num_resolutions, f"{num_products=} and/or {num_resolutions=} are invalid, please check your dataframe"
         adj_min_data_points = self.min_data_points * num_products * num_resolutions
         adj_max_data_points = self.max_data_points * num_products * num_resolutions

@@ -43,15 +43,13 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
         
         def start(self):
             super().start()
-            if not self.is_running():
-                if self.engine.mode == 'event_driven':
-                    self._data_tool.prepare_df_before_event_driven_backtesting()
+            if self.engine.mode == 'event_driven':
+                self._data_tool.prepare_df_before_event_driven_backtesting()
                 
         def stop(self):
             super().stop()
-            if self.is_running():
-                if self.engine.mode == 'event_driven' and self._is_dummy_strategy():
-                    self._assert_consistent_signals()
+            if self.engine.mode == 'event_driven' and self._is_dummy_strategy():
+                self._assert_consistent_signals()
        
         def load(self):
             if self.engine.load_models:

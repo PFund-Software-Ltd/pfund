@@ -44,6 +44,7 @@ class PandasDataTool(BaseDataTool):
 
     @backtest
     def prepare_df_before_event_driven_backtesting(self):
+        self.df.reset_index(inplace=True)
         # converts 'ts' from datetime to unix timestamp
         self.df['ts'] = self.df['ts'].astype(int) // 10**6  # in milliseconds
         self.df['ts'] = self.df['ts'] / 10**3  # in seconds with milliseconds precision

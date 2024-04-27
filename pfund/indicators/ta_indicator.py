@@ -4,11 +4,11 @@ import re
 import numpy as np
 import pandas as pd
 
-from pfund.indicators.indicator_base import TAFunction, BaseIndicator
+from pfund.indicators.indicator_base import TaFunction, BaseIndicator
 
 
 class TaIndicator(BaseIndicator):
-    def __init__(self, indicator: TAFunction, *args, funcs: list[str] | None=None, **kwargs):
+    def __init__(self, indicator: TaFunction, *args, funcs: list[str] | None=None, **kwargs):
         '''
         indicator: 
             import ta

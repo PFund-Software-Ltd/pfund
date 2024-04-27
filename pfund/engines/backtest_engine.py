@@ -251,12 +251,13 @@ class BacktestEngine(BaseEngine):
                     backtestee = strategy
                     backtestee_type = 'strategy'
                 df_iter = backtestee.get_df_iterable()
+                df_len = backtestee.df.shape[0]
+                
                 # NOTE: clear dfs so that strategies/models don't know anything about the incoming data
                 backtestee.clear_dfs()
-                # TODO: get df_iter length for tqdm, df_iter.shape is wrong
                 
                 # OPTIMIZE: critical loop
-                for row in tqdm(df_iter, total=df_iter.shape[0], desc=f'Backtesting {backtestee_type} {backtestee.name}', colour='yellow'):
+                for row in tqdm(df_iter, total=df_len, desc=f'Backtesting {backtestee_type} {backtestee.name}', colour='yellow'):
                     resolution: str = row.resolution
                     product: str = row.product
                     broker = self.brokers[row.broker]

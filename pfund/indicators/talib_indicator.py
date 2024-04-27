@@ -1,11 +1,11 @@
 import numpy as np
 import pandas as pd
 
-from pfund.indicators.indicator_base import TALibFunction, BaseIndicator
+from pfund.indicators.indicator_base import TalibFunction, BaseIndicator
 
 
 class TalibIndicator(BaseIndicator):
-    def __init__(self, indicator: TALibFunction, *args, **kwargs):
+    def __init__(self, indicator: TalibFunction, *args, **kwargs):
         '''
         indicator:
             from talib import abstract as talib

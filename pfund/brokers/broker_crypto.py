@@ -74,13 +74,14 @@ class CryptoBroker(LiveBroker):
     def get_account(self, exch: str, acc: str) -> CryptoAccount | None:
         return self.accounts[exch.upper()].get(acc.upper(), None)
     
-    def add_account(self, exch: str, key: str='', secret: str='', acc: str='', **kwargs) -> CryptoAccount:
+    def add_account(self, exch: str='', key: str='', secret: str='', acc: str='', **kwargs) -> CryptoAccount:
+        assert exch, 'kwarg "exch" must be provided'
         acc = acc.upper()
         if not (account := self.get_account(exch, acc)):
             account = CryptoAccount(self.env, exch, key=key, secret=secret, acc=acc, **kwargs)
             exchange = self.add_exchange(exch)
             exchange.add_account(account)
-            self.accounts[exch][acc] = account
+            self.accounts[exch][account.name] = account
             self.logger.debug(f'added {account=}')
         else:
             self.logger.warning(f'{account=} has already been added, please make sure the account names are not duplicated')
@@ -101,7 +102,7 @@ class CryptoBroker(LiveBroker):
             exchange = self.add_exchange(exch)
             product = exchange.create_product(bccy, qccy, ptype, *args, **kwargs)
             exchange.add_product(product, **kwargs)
-            self.products[exch][pdt] = product
+            self.products[exch][product.name] = product
             self.logger.debug(f'added {product=}')
         return product
     

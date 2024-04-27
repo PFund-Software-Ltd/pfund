@@ -291,9 +291,10 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         broker = self.add_broker(bkr) if bkr not in self.brokers else self.get_broker(bkr)
         if bkr == 'CRYPTO':
             exch = trading_venue
-            account =  broker.add_account(exch, acc=acc, strat=self.strat, **kwargs)
+            account =  broker.add_account(exch=exch, acc=acc, strat=self.strat, **kwargs)
         else:
             account = broker.add_account(acc=acc, strat=self.strat, **kwargs)
+
         if account.name not in self.accounts[trading_venue]:
             self.accounts[trading_venue][account.name] = account
             self.positions[account] = {}
@@ -535,16 +536,16 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         raise NotImplementedError(f"Please define your own on_bar(product, bar, ts, **kwargs) in your strategy '{self.name}'.")
 
     def on_position(self, account, position):
-        raise NotImplementedError(f"Please define your own on_position(account, position) in your strategy '{self.name}'.")
+        pass
 
     def on_balance(self, account, balance):
-        raise NotImplementedError(f"Please define your own on_balance(account, balance) in your strategy '{self.name}'.")
+        pass
 
     def on_order(self, account, order, type_: Literal['submitted', 'opened', 'closed', 'amended']):
-        raise NotImplementedError(f"Please define your own on_order(account, order, type_) in your strategy '{self.name}'.")
+        pass
 
     def on_trade(self, account, trade: dict, type_: Literal['partial', 'filled']):
-        raise NotImplementedError(f"Please define your own on_trade(account, trade, type_) in your strategy '{self.name}'.")
+        pass
 
 
     '''

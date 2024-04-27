@@ -5,21 +5,21 @@ import pandas as pd
 
 try:
     from talib import abstract as talib
-    TALibFunction = Type[talib.Function]  # If talib is available, use its Function type
+    TalibFunction = Type[talib.Function]  # If talib is available, use its Function type
 except ImportError:
-    TALibFunction = Any  # Fallback type if talib is not installed
-TAFunction = Callable[..., Any]  # Type for functions from the 'ta' library
+    TalibFunction = Any  # Fallback type if talib is not installed
+TaFunction = Callable[..., Any]  # Type for functions from the 'ta' library
 
 from pfund.models.model_base import BaseModel
 
 
 class BaseIndicator(BaseModel):
-    def __init__(self, indicator: TAFunction | TALibFunction, *args, **kwargs):
+    def __init__(self, indicator: TaFunction | TalibFunction, *args, **kwargs):
         '''
-        TALibFunction:
+        TalibFunction:
             from talib import abstract as talib
             e.g. indicator = talib.SMA
-        TAFunction:
+        TaFunction:
             import ta
             - type 1 (ta class):
                 e.g. indicator = lambda df: ta.volatility.BollingerBands(close=df['close'], ...)
