@@ -200,28 +200,26 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
     def get_model(self, name: str) -> BaseModel:
         return self.models[name]
     
-    def add_model(self, model: tModel, name: str='', model_path: str='', is_load: bool=True) -> tModel:
+    def add_model(self, model: tModel, name: str='') -> tModel:
         Model = model.get_model_type_of_ml_model()
         assert isinstance(model, Model), \
             f"model '{model.__class__.__name__}' is not an instance of {Model.__name__}. Please create your model using 'class {model.__class__.__name__}({Model.__name__})'"
         if name:
             model.set_name(name)
-        model.set_path(model_path)
         model.create_logger()
         mdl = model.mdl
         if mdl in self.models:
             raise Exception(f"model '{mdl}' already exists in strategy '{self.name}'")
         model.set_consumer(self)
-        model.set_is_load(is_load)
         self.models[mdl] = model
         self.logger.debug(f"added model '{mdl}'")
         return model
     
-    def add_feature(self, feature: tFeature, name: str='', feature_path: str='', is_load: bool=True) -> tFeature:
-        return self.add_model(feature, name=name, model_path=feature_path, is_load=is_load)
+    def add_feature(self, feature: tFeature, name: str='') -> tFeature:
+        return self.add_model(feature, name=name)
     
-    def add_indicator(self, indicator: tIndicator, name: str='', indicator_path: str='', is_load: bool=True) -> tIndicator:
-        return self.add_model(indicator, name=name, model_path=indicator_path, is_load=is_load)
+    def add_indicator(self, indicator: tIndicator, name: str='') -> tIndicator:
+        return self.add_model(indicator, name=name)
     
     # TODO
     def add_custom_data(self):

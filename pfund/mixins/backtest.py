@@ -60,17 +60,17 @@ class BacktestMixin:
                 self._add_raw_df(data, df)
         return datas
         
-    def add_model(self, model: tModel, name: str='', model_path: str='', is_load: bool=True) -> BacktestMixin | tModel:
+    def add_model(self, model: tModel, name: str='') -> BacktestMixin | tModel:
         from pfund.models.model_backtest import BacktestModel
         name = name or model.__class__.__name__
         model = BacktestModel(type(model), model.ml_model, *model._args, **model._kwargs)
-        return super().add_model(model, name=name, model_path=model_path, is_load=is_load)
+        return super().add_model(model, name=name)
     
-    def add_feature(self, feature: tFeature, name: str='', feature_path: str='', is_load: bool=True) -> BacktestMixin | tFeature:
-        return self.add_model(feature, name=name, model_path=feature_path, is_load=is_load)
+    def add_feature(self, feature: tFeature, name: str='') -> BacktestMixin | tFeature:
+        return self.add_model(feature, name=name)
         
-    def add_indicator(self, indicator: tIndicator, name: str='', indicator_path: str='', is_load: bool=True) -> BacktestMixin | tIndicator:
-        return self.add_model(indicator, name=name, model_path=indicator_path, is_load=is_load)
+    def add_indicator(self, indicator: tIndicator, name: str='') -> BacktestMixin | tIndicator:
+        return self.add_model(indicator, name=name)
         
     def _get_data_source(self, trading_venue: str, backtest_kwargs: dict):
         from pfeed.const.commons import SUPPORTED_DATA_FEEDS

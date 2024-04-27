@@ -36,24 +36,24 @@ class BaseIndicator(BaseModel):
     def set_signal_columns(self, columns: list[str]):
         self._signal_columns = columns
     
-    def load(self, path: str=''):
+    def load(self):
         # since ml_model is None when dumping, 
         # use the initialized ml_model to avoid ml_model=None after loading
         ml_model = self.ml_model
-        super().load(path=path)  # -> self.ml_model = None after loading
+        super().load()  # -> self.ml_model = None after loading
         self.ml_model = ml_model
     
-    def dump(self, signal: pd.DataFrame, path: str=''):
+    def dump(self, signal: pd.DataFrame):
         # NOTE: ml_model is indicator (function of talib.abstract, e.g. abstract.SMA), 
         # which is not serializable, so make it None before dumping
         self.ml_model = None
-        super().dump(signal, path=path)
+        super().dump(signal)
     
     def to_signal(self, X: pd.DataFrame, pred_y: np.ndarray) -> pd.DataFrame:
         return super().to_signal(X, pred_y, columns=self._signal_columns)
     
-    def flow(self, is_dump=False, path: str='') -> pd.DataFrame:
-        return super().flow(is_dump=is_dump, path=path)
+    def flow(self, is_dump=False) -> pd.DataFrame:
+        return super().flow(is_dump=is_dump)
 
     def _check_grouped_df_nlevels(self, grouped_df: pd.DataFrame) -> bool:
         # e.g. if self._GROUP is ['product', 'resolution'], after groupby() and applying indicate()

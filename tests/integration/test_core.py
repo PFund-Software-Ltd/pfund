@@ -57,22 +57,22 @@ class TestCore:
         )
         
         # add pytorch model:
-        strategy.add_model(DummyPytorch(ml_model=PytorchLinearRegression()), name='dummy_pytorch', model_path='')
+        strategy.add_model(DummyPytorch(ml_model=PytorchLinearRegression()), name='dummy_pytorch')
         
         # add sklearn model:
-        strategy.add_model(DummySklearn(ml_model=SklearnLinearRegression()), name='dummy_sklearn', model_path='')
+        strategy.add_model(DummySklearn(ml_model=SklearnLinearRegression()), name='dummy_sklearn')
 
         # add ta indicators
         ## type 1: ta class, e.g. ta.volatility.BollingerBands
         indicator = lambda df: ta.volatility.BollingerBands(close=df['close'], window=3, window_dev=2)
         funcs = ['bollinger_mavg', 'bollinger_hband', 'bollinger_lband']
-        strategy.add_indicator(pf.TaIndicator(indicator, funcs=funcs), name='BollingerBands', indicator_path='')
+        strategy.add_indicator(pf.TaIndicator(indicator, funcs=funcs), name='BollingerBands')
         ## type 2: ta function, e.g. ta.volatility.bollinger_mavg
         indicator2 = lambda df: ta.volatility.bollinger_mavg(close=df['close'], window=3)
-        strategy.add_indicator(pf.TaIndicator(indicator2), name='BollingerBands2', indicator_path='')
+        strategy.add_indicator(pf.TaIndicator(indicator2), name='BollingerBands2')
         
         # add talib indicator
-        strategy.add_indicator(pf.TalibIndicator(talib.SMA, timeperiod=3, price='close'), name='SMA', indicator_path='')
+        strategy.add_indicator(pf.TalibIndicator(talib.SMA, timeperiod=3, price='close'), name='SMA')
         
         engine.run()
         

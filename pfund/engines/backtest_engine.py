@@ -31,7 +31,7 @@ class BacktestEngine(BaseEngine):
         cls, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
         config: ConfigHandler | None=None, 
         append_signals=False, 
-        load_signals=True,
+        load_models=True,
         auto_git_commit=False, 
         save_backtests=False,
         **settings
@@ -42,10 +42,10 @@ class BacktestEngine(BaseEngine):
         # This will make event-driven backtesting faster but less consistent with live trading
         if not hasattr(cls, 'append_signals'):
             cls.append_signals = append_signals
-        # NOTE: load_signals=True means model's prepared signals will be reused in model.next()
+        # NOTE: load_models=True means model's prepared signals will be reused in model.next()
         # instead of recalculating the signals. This will make event-driven backtesting faster but less consistent with live trading
-        if not hasattr(cls, 'load_signals'):
-            cls.load_signals = load_signals
+        if not hasattr(cls, 'load_models'):
+            cls.load_models = load_models
         if not hasattr(cls, 'auto_git_commit'):
             cls.auto_git_commit = auto_git_commit
         if not hasattr(cls, 'save_backtests'):
@@ -56,7 +56,7 @@ class BacktestEngine(BaseEngine):
         self, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
         config: ConfigHandler | None=None,
         append_signals=False,
-        load_signals=True,
+        load_models=True,
         auto_git_commit=False,
         save_backtests=True,
         **settings
@@ -83,7 +83,7 @@ class BacktestEngine(BaseEngine):
         strategy = BacktestStrategy(type(strategy), *strategy._args, **strategy._kwargs)
         return super().add_strategy(strategy, name=name, is_parallel=is_parallel)
 
-    def add_model(self, model: tModel, name: str='', model_path: str='', is_load: bool=True) -> BacktestMixin | tModel:
+    def add_model(self, model: tModel, name: str='') -> BacktestMixin | tModel:
         '''Add model without creating a strategy (using dummy strategy)'''
         is_non_dummy_strategy_exist = bool([strat for strat in self.strategy_manager.strategies if strat != '_dummy'])
         assert not is_non_dummy_strategy_exist, 'Please use strategy.add_model(...) instead of engine.add_model(...) when a strategy is already created'
@@ -95,14 +95,14 @@ class BacktestEngine(BaseEngine):
             for func in event_driven_funcs:
                 setattr(strategy, func, empty_function)
         assert not strategy.models, 'Adding more than 1 model to dummy strategy in backtesting is not supported, you should train and dump your models one by one'
-        model = strategy.add_model(model, name=name, model_path=model_path, is_load=is_load)
+        model = strategy.add_model(model, name=name)
         return model
     
-    def add_feature(self, feature: tFeature, name: str='', feature_path: str='', is_load: bool=True) -> BacktestMixin | tFeature:
-        return self.add_model(feature, name=name, model_path=feature_path, is_load=is_load)
+    def add_feature(self, feature: tFeature, name: str='') -> BacktestMixin | tFeature:
+        return self.add_model(feature, name=name)
     
-    def add_indicator(self, indicator: tIndicator, name: str='', indicator_path: str='', is_load: bool=True) -> BacktestMixin | tIndicator:
-        return self.add_model(indicator, name=name, model_path=indicator_path, is_load=is_load)
+    def add_indicator(self, indicator: tIndicator, name: str='') -> BacktestMixin | tIndicator:
+        return self.add_model(indicator, name=name)
     
     def add_broker(self, bkr: str):
         bkr = bkr.upper()

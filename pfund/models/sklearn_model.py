@@ -18,7 +18,7 @@ class SklearnModel(BaseModel):
         pred_y = self.ml_model.predict(X)
         return pred_y
     
-    def flow(self, is_dump=True, path: str='') -> pd.DataFrame:
+    def flow(self, is_dump=True) -> pd.DataFrame:
         assert hasattr(self, 'prepare_target'), "prepare_target() must be defined before calling flow()"
         X: pd.DataFrame = self.prepare_features()
         y: pd.DataFrame = self.prepare_target()
@@ -28,5 +28,5 @@ class SklearnModel(BaseModel):
         pred_y: np.ndarray = self.predict(X)
         signal: pd.DataFrame = self.to_signal(X, pred_y)
         if is_dump:
-            self.dump(signal, path=path)
+            self.dump(signal)
         return signal

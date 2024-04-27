@@ -40,7 +40,6 @@ if TYPE_CHECKING:
         TALibFunction,
         Any,
     ]
-from pfund.const.paths import MODEL_PATH
 from pfund.models.model_meta import MetaModel
 from pfund.products.product_base import BaseProduct
 from pfund.utils.utils import short_path, get_engine_class, load_yaml_file, convert_ts_to_dt
@@ -89,8 +88,6 @@ class BaseModel(ABC, metaclass=MetaModel):
         DataTool = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool}'), f'{data_tool.capitalize()}DataTool')
         self._data_tool = DataTool()
         self.logger = None
-        self._path = ''
-        self._is_load = True  # if True, load trained model from file_path
         self._consumer = None  # strategy/model that consumes this model
         self._is_ready = False
         self._is_running = False
@@ -182,13 +179,13 @@ class BaseModel(ABC, metaclass=MetaModel):
         self.set_signal(signal)
         return signal
     
-    def flow(self, is_dump=True, path: str='') -> pd.DataFrame:
+    def flow(self, is_dump=True) -> pd.DataFrame:
         X: pd.DataFrame = self.prepare_features()
         pred_y: np.ndarray = self.predict(X)
         # No training
         signal: pd.DataFrame = self.to_signal(X, pred_y)
         if is_dump:
-            self.dump(signal, path=path)
+            self.dump(signal)
         return signal
     
     # FIXME: pandas specific
@@ -250,23 +247,12 @@ class BaseModel(ABC, metaclass=MetaModel):
     def set_name(self, name: str):
         self.name = self.mdl = name
         
-    def set_path(self, path: str):
-        self._path = path or str(MODEL_PATH)
-        
-    def set_is_load(self, is_load: bool):
-        self._is_load = is_load
-    
-    def _get_file_path(self, path: str='', extension='.joblib'):
-        path = path or self._path
-        if os.path.isdir(path):
-            path = path[:-1] if path.endswith('/') else path
-            file_path = path + f"/{self.name}{extension}"
-            self.logger.debug(f"'{short_path(path)}' is a folder, derive file_path={short_path(file_path)}")
-        elif os.path.isfile(path):
-            file_path = path
-        else:
-            file_path = f"{MODEL_PATH}/{self.name}{extension}"
-        return file_path
+    def _get_file_path(self, extension='.joblib'):
+        path = f'{self.engine.config.artifact_path}/{self.name}'
+        file_name = f'{self.name}{extension}'
+        if not os.path.exists(path):
+            os.makedirs(path)
+        return f"{path}/{file_name}"
     
     def _assert_no_missing_datas(self, obj):
         loaded_datas = {data for product in obj['datas'] for data in obj['datas'][product].values()}
@@ -275,29 +261,28 @@ class BaseModel(ABC, metaclass=MetaModel):
             missing_datas = loaded_datas - added_datas
             raise Exception(f"missing data {missing_datas} in model '{self.name}', please use add_data() to add them back")
     
-    def load(self, path: str=''):
-        file_path = self._get_file_path(path=path)
+    def load(self):
+        file_path = self._get_file_path()
         if os.path.exists(file_path):
             obj = joblib.load(file_path)
-            if self.engine.load_signals:
-                signal = obj['signal']
-                if not signal:
-                    self.logger.warning(f'failed to load signal, please make sure model {self.name} was dumped using "model.dump(signal)" correctly.')
-                self.set_signal(signal)
+            signal = obj['signal']
+            if not signal:
+                self.logger.warning(f'failed to load signal, please make sure model {self.name} was dumped using "model.dump(signal)" correctly.')
+            self.set_signal(signal)
             self.ml_model = obj['ml_model']
             self._assert_no_missing_datas(obj)
             self.logger.debug(f"loaded trained ml_model '{self.name}' and its signal from {short_path(file_path)}")
         else:
             self.logger.debug(f"no trained ml_model '{self.name}' found in {short_path(file_path)}")
     
-    def dump(self, signal: pd.DataFrame, path: str=''):
+    def dump(self, signal: pd.DataFrame):
         obj = {
             'signal': signal,
             'ml_model': self.ml_model,
             'datas': self.datas,
             # TODO: dump dates as well
         }
-        file_path = self._get_file_path(path=path)
+        file_path = self._get_file_path()
         joblib.dump(obj, file_path, compress=True)
         self.logger.debug(f"dumped trained ml_model '{self.name}' and its signal to {short_path(file_path)}")
     
@@ -342,7 +327,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         self.datas[data.product][repr(data.resolution)] = data
         self._consumer.add_listener(listener=self, listener_key=data)
     
-    def _add_consumer_datas_if_no_data(self) -> list[BaseData]:
+    def add_consumer_datas_if_no_data(self) -> list[BaseData]:
         '''if no data, add the consumer's datas'''
         if self.datas:
             return []
@@ -369,28 +354,26 @@ class BaseModel(ABC, metaclass=MetaModel):
     def get_model(self, name: str) -> BaseModel:
         return self.models[name]
     
-    def add_model(self, model: tModel, name: str='', model_path: str='', is_load=True) -> tModel:
+    def add_model(self, model: tModel, name: str='') -> tModel:
         Model = model.get_model_type_of_ml_model()
         assert isinstance(model, Model), \
             f"model '{model.__class__.__name__}' is not an instance of {Model.__name__}. Please create your model using 'class {model.__class__.__name__}({Model.__name__})'"
         if name:
             model.set_name(name)
-        model.set_path(model_path)
         model.create_logger()
         mdl = model.mdl
         if mdl in self.models:
             raise Exception(f"model '{mdl}' already exists in model '{self.name}'")
         model.set_consumer(self)
-        model.set_is_load(is_load)
         self.models[mdl] = model
         self.logger.debug(f"added model '{mdl}'")
         return model
     
-    def add_feature(self, feature: tFeature, name: str='', feature_path: str='', is_load: bool=True) -> tFeature:
-        return self.add_model(feature, name=name, model_path=feature_path, is_load=is_load)
+    def add_feature(self, feature: tFeature, name: str='') -> tFeature:
+        return self.add_model(feature, name=name)
     
-    def add_indicator(self, indicator: tIndicator, name: str='', indicator_path: str='', is_load: bool=True) -> tIndicator:
-        return self.add_model(indicator, name=name, model_path=indicator_path, is_load=is_load)
+    def add_indicator(self, indicator: tIndicator, name: str='') -> tIndicator:
+        return self.add_model(indicator, name=name)
     
     def update_quote(self, data: QuoteData, **kwargs):
         product, bids, asks, ts = data.product, data.bids, data.asks, data.ts
@@ -442,12 +425,11 @@ class BaseModel(ABC, metaclass=MetaModel):
     def start(self):
         if not self.is_running():
             self.add_datas()
-            self._add_consumer_datas_if_no_data()
+            self.add_consumer_datas_if_no_data()
             self.add_models()
             self._start_models()
             self._prepare_df()
-            if self._is_load:
-                self.load()  # load trained model, set signal
+            self.load()  # load trained model, set signal
             # prepare indicator's signal on the fly if required
             if self._is_signal_prepared() and self.signal is None:
                 if self.is_indicator():
