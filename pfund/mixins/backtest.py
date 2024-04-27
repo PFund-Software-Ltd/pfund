@@ -142,7 +142,7 @@ class BacktestMixin:
         return feed
 
     def get_historical_data(self, feed: BaseFeed, datas: list[BaseData], kwargs: dict, backtest_kwargs: dict):
-        rollback_period = backtest_kwargs.get('rollback_period', '1M')
+        rollback_period = backtest_kwargs.get('rollback_period', '1w')
         start_date = backtest_kwargs.get('start_date', '')
         end_date = backtest_kwargs.get('end_date', '')
         backtest_kwargs = self._remove_pfund_backtest_kwargs(kwargs, backtest_kwargs)
@@ -166,7 +166,7 @@ class BacktestMixin:
                 df = df[:-1]
             
             if 'symbol' in df.columns:
-                df = df.drop('symbol', axis=1) 
+                df = df.drop('symbol', axis=1)
             
             df['product'] = repr(product)
             df['resolution'] = repr(resolution)

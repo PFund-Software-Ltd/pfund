@@ -56,15 +56,15 @@ def test_import_feature():
 
 def test_import_ta_indicator():
     try:
-        from pfund import TAIndicator
+        from pfund import TaIndicator
     except ImportError:
-        pytest.fail("Failed to import 'TAIndicator' package")
+        pytest.fail("Failed to import 'TaIndicator' package")
 
 def test_import_talib_indicator():
     try:
-        from pfund import TALibIndicator
+        from pfund import TalibIndicator
     except ImportError:
-        pytest.fail("Failed to import 'TALibIndicator' package")
+        pytest.fail("Failed to import 'TalibIndicator' package")
 
 @pytest.mark.smoke
 def test_import_all():

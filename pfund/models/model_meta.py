@@ -46,7 +46,7 @@ class MetaModel(ABCMeta):
                 pass
             else:
                 required_arg = 'ml_model'
-        elif 'BaseIndicator' in base_names or 'TALibIndicator' in base_names or 'TAIndicator' in base_names:
+        elif 'BaseIndicator' in base_names or 'TalibIndicator' in base_names or 'TaIndicator' in base_names:
             required_arg = 'indicator'
         
         if required_arg:

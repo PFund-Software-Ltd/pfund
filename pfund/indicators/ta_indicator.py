@@ -7,7 +7,7 @@ import pandas as pd
 from pfund.indicators.indicator_base import TAFunction, BaseIndicator
 
 
-class TAIndicator(BaseIndicator):
+class TaIndicator(BaseIndicator):
     def __init__(self, indicator: TAFunction, *args, funcs: list[str] | None=None, **kwargs):
         '''
         indicator: 

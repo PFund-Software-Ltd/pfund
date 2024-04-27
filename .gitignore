@@ -181,3 +181,6 @@ cython_debug/
 docs/_build/*
 !docs/_build/html/_static/custom.css
 !docs/_build/html/_static/dark_theme.css
+
+# tests data
+tests/data/

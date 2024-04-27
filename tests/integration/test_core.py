@@ -66,13 +66,13 @@ class TestCore:
         ## type 1: ta class, e.g. ta.volatility.BollingerBands
         indicator = lambda df: ta.volatility.BollingerBands(close=df['close'], window=3, window_dev=2)
         funcs = ['bollinger_mavg', 'bollinger_hband', 'bollinger_lband']
-        strategy.add_indicator(pf.TAIndicator(indicator, funcs=funcs), name='BollingerBands', indicator_path='')
+        strategy.add_indicator(pf.TaIndicator(indicator, funcs=funcs), name='BollingerBands', indicator_path='')
         ## type 2: ta function, e.g. ta.volatility.bollinger_mavg
         indicator2 = lambda df: ta.volatility.bollinger_mavg(close=df['close'], window=3)
-        strategy.add_indicator(pf.TAIndicator(indicator2), name='BollingerBands2', indicator_path='')
+        strategy.add_indicator(pf.TaIndicator(indicator2), name='BollingerBands2', indicator_path='')
         
         # add talib indicator
-        strategy.add_indicator(pf.TALibIndicator(talib.SMA, timeperiod=3, price='close'), name='SMA', indicator_path='')
+        strategy.add_indicator(pf.TalibIndicator(talib.SMA, timeperiod=3, price='close'), name='SMA', indicator_path='')
         
         engine.run()
         

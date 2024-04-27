@@ -33,7 +33,7 @@ class BacktestEngine(BaseEngine):
         append_signals=False, 
         load_signals=True,
         auto_git_commit=False, 
-        save_backtests=True,
+        save_backtests=False,
         **settings
     ):
         if not hasattr(cls, 'mode'):
@@ -77,8 +77,9 @@ class BacktestEngine(BaseEngine):
         if is_parallel:
             is_parallel = False
             self.logger.warning(f'Parallel strategy is not supported in backtesting, {strategy.__class__.__name__} will be run in sequential mode')
+        if type(strategy) is not BaseStrategy:
+            assert name != '_dummy', 'dummy strategy is reserved for model backtesting, please use another name'
         name = name or strategy.__class__.__name__
-        assert name != '_dummy', 'dummy strategy is reserved for model backtesting, please use another name'
         strategy = BacktestStrategy(type(strategy), *strategy._args, **strategy._kwargs)
         return super().add_strategy(strategy, name=name, is_parallel=is_parallel)
 
