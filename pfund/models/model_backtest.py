@@ -33,7 +33,7 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
         def add_consumer_datas_if_no_data(self) -> list[BaseData]:
             consumer_datas = super().add_consumer_datas_if_no_data()
             for data in consumer_datas:
-                consumer_data_tool = self._consumer.data_tool
+                consumer_data_tool = self._consumer.get_data_tool()
                 df = consumer_data_tool.get_raw_df(data)
                 self._data_tool.add_raw_df(data, df)
             return consumer_datas
@@ -41,11 +41,6 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
         def _is_dummy_strategy(self):
             return isinstance(self._consumer, BaseStrategy) and self._consumer.name == '_dummy'
         
-        def start(self):
-            super().start()
-            if self.engine.mode == 'event_driven':
-                self._data_tool.prepare_df_before_event_driven_backtesting()
-                
         def stop(self):
             super().stop()
             if self.engine.mode == 'event_driven' and self._is_dummy_strategy():
@@ -54,9 +49,6 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
         def load(self):
             if self.engine.load_models:
                 super().load()
-        
-        def get_df_iterable(self):
-            return self._data_tool.get_df_iterable()
         
         def clear_dfs(self):
             assert self.engine.mode == 'event_driven'

@@ -105,10 +105,9 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
     
     @property
     def df(self):
-        return self._data_tool.get_df()
+        return self._data_tool.df
    
-    @property
-    def data_tool(self):
+    def get_data_tool(self):
         return self._data_tool
     
     @staticmethod

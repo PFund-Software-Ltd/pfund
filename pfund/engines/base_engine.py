@@ -15,7 +15,7 @@ from pfund.utils.utils import Singleton
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.brokers.broker_base import BaseBroker
 from pfund.managers.strategy_manager import StrategyManager
-from pfund.const.commons import SUPPORTED_ENVIRONMENTS, SUPPORTED_BROKERS
+from pfund.const.commons import SUPPORTED_ENVIRONMENTS, SUPPORTED_BROKERS, SUPPORTED_DATA_TOOLS
 from pfund.config_handler import ConfigHandler
 from pfund.plogging import set_up_loggers
 from pfund.plogging.config import LoggingDictConfigurator
@@ -35,7 +35,7 @@ ENV_COLORS = {
 class BaseEngine(Singleton):
     _PROCESS_NO_PONG_TOLERANCE_IN_SECONDS = 30
 
-    def __new__(cls, env, data_tool: tSUPPORTED_DATA_TOOLS='pandas', config: ConfigHandler | None=None, **settings):
+    def __new__(cls, env, data_tool: tSUPPORTED_DATA_TOOLS='polars', config: ConfigHandler | None=None, **settings):
         if not hasattr(cls, 'env'):
             cls.env = env.upper() if isinstance(env, str) else str(env).upper()
             assert cls.env in SUPPORTED_ENVIRONMENTS, f'env={cls.env} is not supported'
@@ -46,8 +46,7 @@ class BaseEngine(Singleton):
             os.environ['env'] = cls.env
             Console().print(f"{cls.env} Engine is running", style=ENV_COLORS[cls.env])
         if not hasattr(cls, 'data_tool'):
-            # TODO, now supports pandas only
-            assert data_tool == 'pandas', f'{data_tool=} is not supported'
+            assert data_tool in SUPPORTED_DATA_TOOLS, f'{data_tool=} is not supported, {SUPPORTED_DATA_TOOLS=}'
             cls.data_tool = data_tool
         if not hasattr(cls, 'settings'):
             cls.settings = settings
@@ -58,7 +57,7 @@ class BaseEngine(Singleton):
             cls.logging_configurator: LoggingDictConfigurator  = set_up_loggers(log_path, logging_config_file_path, user_logging_config=cls.config.logging_config)
         return super().__new__(cls)
     
-    def __init__(self, env, data_tool: tSUPPORTED_DATA_TOOLS='pandas', config: ConfigHandler | None=None, **settings):
+    def __init__(self, env, data_tool: tSUPPORTED_DATA_TOOLS='polars', config: ConfigHandler | None=None, **settings):
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):
             self.logger = logging.getLogger('pfund')

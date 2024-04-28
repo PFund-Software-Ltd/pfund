@@ -7,6 +7,7 @@ from pfund.models.model_base import BaseModel
 from pfund.utils.utils import short_path
 
 
+# FIXME: pandas specific
 class PytorchModel(BaseModel):
     def __call__(self, *args, **kwargs):
         return self.ml_model(*args, **kwargs)

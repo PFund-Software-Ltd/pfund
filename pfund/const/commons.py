@@ -20,6 +20,6 @@ SUPPORTED_TIMEFRAMES = [
 ]
 SUPPORTED_DATA_CHANNELS = ['orderbook', 'tradebook', 'kline']
 SUPPORTED_BACKTEST_MODES = ['vectorized', 'event_driven']
-SUPPORTED_DATA_TOOLS = ['pandas']
+SUPPORTED_DATA_TOOLS = ['pandas', 'polars']
 SUPPORTED_CODE_EDITORS = ['vscode', 'pycharm']
 SUPPORTED_TEMPLATE_TYPES = ['notebook', 'spreadsheet', 'dashboard']

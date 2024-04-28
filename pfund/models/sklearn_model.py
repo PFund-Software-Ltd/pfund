@@ -4,6 +4,7 @@ import pandas as pd
 from pfund.models.model_base import BaseModel
 
 
+# FIXME: pandas specific
 class SklearnModel(BaseModel):
     def fit(self, X: np.ndarray | pd.DataFrame, y: np.ndarray | pd.DataFrame):
         if type(X) is pd.DataFrame:

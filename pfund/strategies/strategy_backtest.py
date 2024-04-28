@@ -44,16 +44,6 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
                     account = self.add_account(trading_venue, **kwargs)
                     broker = self.get_broker(account.bkr)
                     broker.initialize_balances()
-            if self.engine.mode == 'event_driven' and not self._is_dummy_strategy():
-                self._data_tool.prepare_df_before_event_driven_backtesting()
-        
-        def stop(self):
-            super().stop()
-            if self.engine.mode == 'vectorized' and not self._is_dummy_strategy():
-                self._data_tool.prepare_df_after_vectorized_backtesting()
-        
-        def get_df_iterable(self):
-            return self._data_tool.get_df_iterable()
         
         def clear_dfs(self):
             assert self.engine.mode == 'event_driven'

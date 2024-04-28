@@ -13,6 +13,7 @@ TaFunction = Callable[..., Any]  # Type for functions from the 'ta' library
 from pfund.models.model_base import BaseModel
 
 
+# FIXME: pandas specific
 class BaseIndicator(BaseModel):
     def __init__(self, indicator: TaFunction | TalibFunction, *args, **kwargs):
         '''

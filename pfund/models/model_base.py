@@ -16,10 +16,11 @@ try:
     import torch.nn as nn
     from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
     from sklearn.pipeline import Pipeline
+    import numpy as np
+    import pandas as pd
+    import polars as pl
 except ImportError:
     pass
-import numpy as np
-import pandas as pd
 
 if TYPE_CHECKING:
     from pfund.strategies.strategy_base import BaseStrategy
@@ -108,7 +109,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         self.load_params()
 
     @abstractmethod
-    def predict(self, *args, **kwargs) -> pd.DataFrame | torch.Tensor | np.ndarray:
+    def predict(self, *args, **kwargs) -> pd.DataFrame | pl.DataFrame | pl.LazyFrame | torch.Tensor | np.ndarray:
         pass
     
     def __getattr__(self, attr):
@@ -121,10 +122,10 @@ class BaseModel(ABC, metaclass=MetaModel):
     
     @property
     def df(self):
-        return self._data_tool.get_df()
+        return self._data_tool.df
     
     @property
-    def data_tool(self):
+    def get_data_tool(self):
         return self._data_tool
     
     @staticmethod
@@ -146,14 +147,14 @@ class BaseModel(ABC, metaclass=MetaModel):
         self._data_tool.output_df_to_parquet(self.df, file_path)
     
     # if not specified, features are just the original df
-    def prepare_features(self) -> pd.DataFrame:
+    def prepare_features(self) -> pd.DataFrame | pl.DataFrame | pl.LazyFrame:
         return self.df
     
-    def set_signal(self, signal: pd.DataFrame | None):
+    def set_signal(self, signal: pd.DataFrame | pl.DataFrame | pl.LazyFrame | None):
         self.signal = signal
         
     # FIXME: pandas specific
-    def to_signal(self, X: pd.DataFrame, pred_y: torch.Tensor | np.ndarray, columns: list[str] | None=None) -> pd.DataFrame:
+    def to_signal(self, X: pd.DataFrame | pl.DataFrame | pl.LazyFrame, pred_y: torch.Tensor | np.ndarray, columns: list[str] | None=None) -> pd.DataFrame | pl.DataFrame | pl.LazyFrame:
         if type(pred_y) is torch.Tensor:
             pred_y = pred_y.detach().numpy() if pred_y.requires_grad else pred_y.numpy()
         if not columns:
@@ -167,7 +168,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         return signal
     
     # FIXME: pandas specific
-    def append_to_signal(self, X: pd.DataFrame, new_pred: torch.Tensor | np.ndarray) -> pd.DataFrame:
+    def append_to_signal(self, X: pd.DataFrame | pl.DataFrame | pl.LazyFrame, new_pred: torch.Tensor | np.ndarray) -> pd.DataFrame | pl.DataFrame | pl.LazyFrame:
         '''Appends new signal to self.signal'''
         assert self.signal is not None
         # self.data is the lastest data passed in
@@ -179,7 +180,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         self.set_signal(signal)
         return signal
     
-    def flow(self, is_dump=True) -> pd.DataFrame:
+    def flow(self, is_dump=True) -> pd.DataFrame | pl.DataFrame | pl.LazyFrame:
         X: pd.DataFrame = self.prepare_features()
         pred_y: np.ndarray = self.predict(X)
         # No training
@@ -275,7 +276,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         else:
             self.logger.debug(f"no trained ml_model '{self.name}' found in {short_path(file_path)}")
     
-    def dump(self, signal: pd.DataFrame):
+    def dump(self, signal: pd.DataFrame | pl.DataFrame | pl.LazyFrame):
         obj = {
             'signal': signal,
             'ml_model': self.ml_model,

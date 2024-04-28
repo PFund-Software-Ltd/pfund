@@ -9,10 +9,10 @@ from pfund.config_handler import ConfigHandler
 
 
 class TrainEngine(BacktestEngine):
-    def __new__(cls, *, data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', config: ConfigHandler | None=None, **settings):
+    def __new__(cls, *, data_tool: tSUPPORTED_DATA_TOOLS='polars', mode: tSUPPORTED_BACKTEST_MODES='vectorized', config: ConfigHandler | None=None, **settings):
         return super().__new__(cls, env='TRAIN', data_tool=data_tool, mode=mode, config=config, **settings)
     
-    def __init__(self, *, data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', config: ConfigHandler | None=None, **settings):
+    def __init__(self, *, data_tool: tSUPPORTED_DATA_TOOLS='polars', mode: tSUPPORTED_BACKTEST_MODES='vectorized', config: ConfigHandler | None=None, **settings):
         super().__init__(env='TRAIN', data_tool=data_tool)
         # avoid re-initialization to implement singleton class correctly
         # if not hasattr(self, '_initialized'):

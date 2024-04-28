@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import time
-import datetime
 import copy
 
 from typing import TYPE_CHECKING 
@@ -11,6 +10,14 @@ if TYPE_CHECKING:
     from pfund.types.backtest import BacktestKwargs
     from pfeed.feeds.base_feed import BaseFeed
     from pfund.datas.data_base import BaseData
+    from pfund.products.product_base import BaseProduct
+
+try:
+    import pandas as pd
+    import polars as pl
+except ImportError:
+    pass
+
 from pfund.managers.data_manager import get_resolutions_from_kwargs
 
 
@@ -141,7 +148,13 @@ class BacktestMixin:
             raise NotImplementedError
         return feed
 
-    def get_historical_data(self, feed: BaseFeed, datas: list[BaseData], kwargs: dict, backtest_kwargs: dict):
+    def get_historical_data(
+        self, 
+        feed: BaseFeed, 
+        datas: list[BaseData], 
+        kwargs: dict, 
+        backtest_kwargs: dict
+    ) -> list[pd.DataFrame | pl.DataFrame | pl.LazyFrame]:
         rollback_period = backtest_kwargs.get('rollback_period', '1w')
         start_date = backtest_kwargs.get('start_date', '')
         end_date = backtest_kwargs.get('end_date', '')
@@ -149,7 +162,6 @@ class BacktestMixin:
         
         dfs = []
         rate_limit = 3  # in seconds, 1 request every x seconds
-        utcnow_date = str(datetime.datetime.now(tz=datetime.timezone.utc).date())
         for n, data in enumerate(datas):
             if data.is_time_based():
                 if data.is_resamplee():
@@ -157,22 +169,42 @@ class BacktestMixin:
             product = data.product
             resolution = data.resolution
             pdt_or_symbol = product.symbol if feed.name == 'YAHOO_FINANCE' else product.pdt
-            df = feed.get_historical_data(pdt_or_symbol, rollback_period=rollback_period, start_date=start_date, end_date=end_date, resolution=repr(resolution), **backtest_kwargs)
-            assert not df.empty, f"dataframe is empty for {pdt_or_symbol=}"
-            df.reset_index(inplace=True)
-            latest_date = str(df['ts'][0])
-            if feed.name == 'YAHOO_FINANCE' and latest_date == utcnow_date:
-                print(f'To avoid non-deterministic metrics, Yahoo Finance data on {latest_date} is removed since it might be being updated in real-time')
-                df = df[:-1]
-            
-            if 'symbol' in df.columns:
-                df = df.drop('symbol', axis=1)
-            
-            df['product'] = repr(product)
-            df['resolution'] = repr(resolution)
+            pfeed_df = feed.get_historical_data(
+                pdt_or_symbol, 
+                rollback_period=rollback_period, 
+                start_date=start_date, 
+                end_date=end_date, 
+                resolution=repr(resolution), 
+                data_tool=self.engine.data_tool,
+                **backtest_kwargs
+            )
+            # NOTE: pfeed's df is a bit different: 
+            # e.g. it has 'symbol' instead of 'product' for YahooFinanceFeed
+            # and its 'product' doesn't have info for 'bkr' and 'exch' for BybitFeed
+            df = self._convert_pfeed_df_to_pfund_df(pfeed_df, product)
             dfs.append(df)
             
             # don't sleep on the last one loop, waste of time
             if feed.name == 'YAHOO_FINANCE' and n != len(datas) - 1:
                 time.sleep(rate_limit)
         return dfs
+    
+    def _convert_pfeed_df_to_pfund_df(self, df: pd.DataFrame | pl.DataFrame | pl.LazyFrame, product: BaseProduct) -> pd.DataFrame | pl.DataFrame | pl.LazyFrame:
+        if isinstance(df, pd.DataFrame):
+            is_empty = df.empty
+            if 'symbol' in df.columns:
+                df = df.drop(columns=['symbol'])
+            if 'product' in df.columns:
+                df = df.drop(columns=['product'])
+            df['product'] = repr(product)
+        elif isinstance(df, (pl.DataFrame, pl.LazyFrame)):
+            is_empty = df.is_empty()
+            df = df.drop(columns=['symbol', 'product'])
+            df = df.with_columns(
+                pl.lit(repr(product)).alias('product'),
+            )
+        # EXTEND
+        else:
+            raise NotImplementedError(f"{type(df)=} not supported")
+        assert not is_empty, f"dataframe is empty for {product!r}"
+        return df

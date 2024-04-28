@@ -22,6 +22,6 @@ tSUPPORTED_TIMEFRAMES = Literal[
 ]
 tSUPPORTED_DATA_CHANNELS = Literal['orderbook', 'tradebook', 'kline']
 tSUPPORTED_BACKTEST_MODES = Literal['vectorized', 'event_driven']
-tSUPPORTED_DATA_TOOLS = Literal['pandas']
+tSUPPORTED_DATA_TOOLS = Literal['pandas', 'polars']
 tSUPPORTED_CODE_EDITORS = Literal['vscode', 'pycharm']
 tSUPPORTED_TEMPLATE_TYPES = Literal['notebook', 'spreadsheet', 'dashboard']

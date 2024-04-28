@@ -28,7 +28,7 @@ from pfund.mixins.backtest import BacktestMixin
 
 class BacktestEngine(BaseEngine):
     def __new__(
-        cls, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
+        cls, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='polars', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
         config: ConfigHandler | None=None, 
         append_signals=False, 
         load_models=True,
@@ -53,7 +53,7 @@ class BacktestEngine(BaseEngine):
         return super().__new__(cls, env, data_tool=data_tool, config=config, **settings)
 
     def __init__(
-        self, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
+        self, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='polars', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
         config: ConfigHandler | None=None,
         append_signals=False,
         load_models=True,
@@ -185,16 +185,19 @@ class BacktestEngine(BaseEngine):
             self.logger.debug(f"Strategy {strat} has no changes to commit, return the last {commit_hash=}")
         return commit_hash
     
-    def _output_backtest_results(self, strat: str, start_time: float, end_time: float, commit_hash: str | None):
+    def _create_backtest_history(self, strat: str, start_time: float, end_time: float):
         strategy = self.get_strategy(strat)
         initial_balances = {bkr: broker.get_initial_balances() for bkr, broker in self.brokers.items()}
         backtest_id = self._generate_backtest_id()
         backtest_hash = self._generate_backtest_hash(strategy)
         backtest_name = self._create_backtest_name(strat, backtest_id)
         backtest_iter = self._generate_backtest_iteration(backtest_hash)
+        if self.auto_git_commit and self._git.is_git_repo():
+            commit_hash = self._commit_strategy(strategy)
+        else:
+            commit_hash = None
         local_tz = utils.get_local_timezone()
         duration = end_time - start_time
-        df_file_path = os.path.join(self.config.backtest_path, f'{backtest_name}.parquet')
         backtest_history = {
             'metadata': {
                 'pfund_version': pf.__version__,
@@ -202,19 +205,27 @@ class BacktestEngine(BaseEngine):
                 'backtest_hash': backtest_hash,
                 'backtest_name': backtest_name,
                 'backtest_iteration': backtest_iter,
-                'initial_balances': initial_balances,
                 'commit_hash': commit_hash,
                 'duration': f'{duration:.2f}s' if duration > 1 else f'{duration*1000:.2f}ms',
                 'start_time': datetime.datetime.fromtimestamp(start_time, tz=local_tz).strftime('%Y-%m-%dT%H:%M:%S%z'),
                 'end_time': datetime.datetime.fromtimestamp(end_time, tz=local_tz).strftime('%Y-%m-%dT%H:%M:%S%z'),
                 'settings': self.settings,
             },
+            'initial_balances': initial_balances,
             'strategy': strategy.to_dict(),
-            'result': df_file_path
         }
-        if self.save_backtests:
-            strategy.output_df_to_parquet(df_file_path)
-            self._write_json(f'{backtest_name}.json', backtest_history)
+        return backtest_history
+        
+    def _output_backtest_results(self, strategy: BaseStrategy, backtest_history: dict) -> dict:
+        backtest_name = backtest_history['metadata']['backtest_name']
+        df_file_path = os.path.join(self.config.backtest_path, f'{backtest_name}.parquet')
+        backtest_history['result'] = df_file_path
+        dtl = strategy.get_data_tool()
+        df = strategy.df
+        if self.mode == 'vectorized':
+            df = dtl.postprocess_vectorized_df(df)
+        dtl.output_df_to_parquet(df, df_file_path)
+        self._write_json(f'{backtest_name}.json', backtest_history)
         return backtest_history
         
     def run(self):
@@ -230,15 +241,13 @@ class BacktestEngine(BaseEngine):
                     continue
                 if not hasattr(strategy, 'backtest'):
                     raise Exception(f'Strategy {strat} does not have backtest() method, cannot run vectorized backtesting')
-                if self.auto_git_commit and self._git.is_git_repo():
-                    commit_hash = self._commit_strategy(strategy)
-                else:
-                    commit_hash = None
                 start_time = time.time()
                 strategy.backtest()
                 end_time = time.time()
                 self.strategy_manager.stop(strats=strat, reason='finished backtesting')
-                backtest_history: dict = self._output_backtest_results(strat, start_time, end_time, commit_hash)
+                backtest_history: dict = self._create_backtest_history(strat, start_time, end_time)
+                if self.save_backtests:
+                    backtest_history = self._output_backtest_results(strategy, backtest_history)
                 backtests[strat] = backtest_history
         elif self.mode == 'event_driven':
             for strat, strategy in self.strategy_manager.strategies.items():
@@ -246,16 +255,18 @@ class BacktestEngine(BaseEngine):
                     # dummy strategy has exactly one model
                     model = list(strategy.models.values())[0]
                     backtestee = model
-                    backtestee_type = 'model'
                 else:
                     backtestee = strategy
-                    backtestee_type = 'strategy'
-                df_iter = backtestee.get_df_iterable()
-                df_len = backtestee.df.shape[0]
+                backtestee_type = 'strategy' if isinstance(backtestee, BaseStrategy) else 'model'
+                dtl = backtestee.get_data_tool()
+                df = backtestee.df
+                df_len = df.shape[0]
+                df_iter = dtl.preprocess_event_driven_df(df)
                 
                 # NOTE: clear dfs so that strategies/models don't know anything about the incoming data
                 backtestee.clear_dfs()
                 
+                start_time = time.time()
                 # OPTIMIZE: critical loop
                 for row in tqdm(df_iter, total=df_len, desc=f'Backtesting {backtestee_type} {backtestee.name}', colour='yellow'):
                     resolution: str = row.resolution
@@ -287,8 +298,14 @@ class BacktestEngine(BaseEngine):
                             },
                         }
                         data_manager.update_bar(product, bar, now=row.ts)
-                        
+                end_time = time.time()
                 self.strategy_manager.stop(strats=strat, reason='finished backtesting')
+                
+                if backtestee_type == 'strategy':
+                    backtest_history: dict = self._create_backtest_history(strat, start_time, end_time)
+                    if self.save_backtests:
+                        backtest_history = self._output_backtest_results(strategy, backtest_history)
+                    backtests[strat] = backtest_history
         else:
             raise NotImplementedError(f'Backtesting mode {self.mode} is not supported')
         return backtests

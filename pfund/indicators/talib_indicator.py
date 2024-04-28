@@ -4,6 +4,7 @@ import pandas as pd
 from pfund.indicators.indicator_base import TalibFunction, BaseIndicator
 
 
+# FIXME: pandas specific
 class TalibIndicator(BaseIndicator):
     def __init__(self, indicator: TalibFunction, *args, **kwargs):
         '''
