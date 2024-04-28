@@ -41,6 +41,7 @@ if TYPE_CHECKING:
         TalibFunction,
         Any,
     ]
+
 from pfund.models.model_meta import MetaModel
 from pfund.products.product_base import BaseProduct
 from pfund.utils.utils import short_path, get_engine_class, load_yaml_file, convert_ts_to_dt
@@ -124,7 +125,6 @@ class BaseModel(ABC, metaclass=MetaModel):
     def df(self):
         return self._data_tool.df
     
-    @property
     def get_data_tool(self):
         return self._data_tool
     
@@ -342,8 +342,8 @@ class BaseModel(ABC, metaclass=MetaModel):
     # IMPROVE: current issue is in next(), when the df has multiple products and resolutions,
     # don't know how to determine the exact minimum amount of data points for predict()
     def _adjust_min_data_points(self):
-        num_products = len(self._data_tool.get_df_products())
-        num_resolutions = len(self._data_tool.get_df_resolutions())
+        num_products = len(self._data_tool.get_index_values(self.df, 'product'))
+        num_resolutions = len(self._data_tool.get_index_values(self.df, 'resolution'))
         assert num_products and num_resolutions, f"{num_products=} and/or {num_resolutions=} are invalid, please check your dataframe"
         adj_min_data_points = self.min_data_points * num_products * num_resolutions
         adj_max_data_points = self.max_data_points * num_products * num_resolutions
