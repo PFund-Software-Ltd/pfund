@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import os
 import hashlib
 import inspect
-import os
 import time
 import datetime
 import json
 import uuid
+import logging
+from logging.handlers import QueueHandler, QueueListener
 
 from tqdm import tqdm
 
@@ -42,6 +44,8 @@ class BacktestEngine(BaseEngine):
         auto_git_commit=False,
         save_backtests=False,
         num_chunks=1,
+        use_ray=False,
+        num_cpus=8,
         **settings
     ):
         if not hasattr(cls, 'mode'):
@@ -60,6 +64,14 @@ class BacktestEngine(BaseEngine):
             cls.save_backtests = save_backtests
         if not hasattr(cls, 'num_chunks'):
             cls.num_chunks = num_chunks
+        if not hasattr(cls, 'use_ray'):
+            cls.use_ray = use_ray
+            if use_ray:
+                logical_cpus = os.cpu_count()
+                cls.num_cpus = min(num_cpus, logical_cpus)
+                if cls.num_cpus > cls.num_chunks:
+                    cls.num_chunks = cls.num_cpus
+                    print(f'num_chunks is adjusted to {num_cpus} because {num_cpus=}')
         return super().__new__(cls, env, data_tool=data_tool, config=config, **settings)
 
     def __init__(
@@ -69,6 +81,9 @@ class BacktestEngine(BaseEngine):
         load_models=True,
         auto_git_commit=False,
         save_backtests=True,
+        num_chunks=1,
+        use_ray=False,
+        num_cpus=8,
         **settings
     ):
         # avoid re-initialization to implement singleton class correctly
@@ -251,11 +266,11 @@ class BacktestEngine(BaseEngine):
                     # dummy strategy has exactly one model
                     model = list(strategy.models.values())[0]
                     backtestee = model
-            backtests: dict = self.backtest(backtestee)
+            backtests: dict = self._backtest(backtestee)
         self.strategy_manager.stop(reason='finished backtesting')
         return backtests
 
-    def backtest(self, backtestee: BaseStrategy | BaseModel) -> dict:
+    def _backtest(self, backtestee: BaseStrategy | BaseModel) -> dict:
         backtests = {}
         backtestee_type = 'strategy' if isinstance(backtestee, BaseStrategy) else 'model'
         dtl = backtestee.get_data_tool()
@@ -272,54 +287,58 @@ class BacktestEngine(BaseEngine):
                 df_chunks.append(df_chunk)
             df = dtl.concat(df_chunks)
         elif self.mode == 'event_driven':
-            total_rows = dtl.get_total_rows(df)
             # NOTE: clear dfs so that strategies/models don't know anything about the incoming data
             backtestee.clear_dfs()
-            common_cols = ['ts', 'product', 'resolution', 
-                           'broker', 'is_quote', 'is_tick']
-            tqdm_iter = tqdm(total=total_rows, desc=f'Backtesting {backtestee_type} {backtestee.name}', colour='yellow')
-            # OPTIMIZE: critical loop
-            for df_chunk in dtl.iterate_df_by_chunks(df, num_chunks=self.num_chunks):
-                df_chunk = dtl.preprocess_event_driven_df(df_chunk)
-                if isinstance(df_chunk, pl.DataFrame):
-                    df_chunk = df_chunk.to_pandas()
-                for row in df_chunk.itertuples(index=False):
-                    tqdm_iter.update(1)
-                    ts, product, resolution = row.ts, row.product, row.resolution
-                    broker = self.brokers[row.broker]
-                    data_manager = broker.dm
-                    if row.is_quote:
-                        # TODO
-                        raise NotImplementedError('Quote data is not supported in event-driven backtesting yet')
-                        quote = {}
-                        data_manager.update_quote(product, quote)
-                    elif row.is_tick:
-                        # TODO
-                        raise NotImplementedError('Tick data is not supported in event-driven backtesting yet')
-                        tick = {}
-                        data_manager.update_tick(product, tick)
-                    else:
-                        bar_cols = ['open', 'high', 'low', 'close', 'volume']
-                        bar = {
-                            'resolution': resolution,
-                            'data': {
-                                'ts': ts,
-                                'open': row.open,
-                                'high': row.high,
-                                'low': row.low,
-                                'close': row.close,
-                                'volume': row.volume,
-                            },
-                            'other_info': {
-                                col: getattr(row, col) for col in row._fields
-                                if col not in common_cols + bar_cols
-                            },
-                        }
-                        data_manager.update_bar(product, bar, now=ts)
+            ray_tasks = []
+            
+            if not self.use_ray:
+                tqdm_bar = tqdm(
+                    total=self.num_chunks, 
+                    desc=f'Backtesting {backtestee_type} "{backtestee.name}" (per chunk)', 
+                    colour='green'
+                )
+                
+            for chunk_num, df_chunk in enumerate(dtl.iterate_df_by_chunks(df, num_chunks=self.num_chunks)):
+                if self.use_ray:
+                    ray_tasks.append((df_chunk, chunk_num))
+                else:
+                    df_chunk = dtl.preprocess_event_driven_df(df_chunk)
+                    self._event_driven_backtest(df_chunk, chunk_num=chunk_num)
+                    tqdm_bar.update(1)
+                    
+            if self.use_ray:
+                import ray
+                from ray.util.queue import Queue
+                
+                ray.init(num_cpus=self.num_cpus)
+                print(f"Ray's num_cpus is set to {self.num_cpus}")
+                
+                @ray.remote
+                def _run_task(log_queue: Queue,  _df_chunk: pd.DataFrame, _chunk_num: int, _batch_num: int):
+                    logger = backtestee.logger
+                    if not logger.handlers:
+                        logger.addHandler(QueueHandler(log_queue))
+                        logger.setLevel(logging.DEBUG)
+                    _df_chunk = dtl.preprocess_event_driven_df(_df_chunk)
+                    self._event_driven_backtest(_df_chunk, chunk_num=_chunk_num, batch_num=_batch_num)
+
+                batch_size = self.num_cpus
+                log_queue = Queue()
+                QueueListener(log_queue, *backtestee.logger.handlers, respect_handler_level=True).start()
+                batches = [ray_tasks[i: i + batch_size] for i in range(0, len(ray_tasks), batch_size)]
+                with tqdm(
+                    total=len(batches),
+                    desc=f'Backtesting {backtestee_type} "{backtestee.name}" ({batch_size} chunks per batch)', 
+                    colour='green'
+                ) as tqdm_bar:
+                    for batch_num, batch in enumerate(batches):
+                        futures = [_run_task.remote(log_queue, *task, batch_num) for task in batch]
+                        ray.get(futures)
+                        tqdm_bar.update(1)
         else:
             raise NotImplementedError(f'Backtesting mode {self.mode} is not supported')
         end_time = time.time()
-        print(f'Backtest elapsed time: {end_time - start_time:.3f}(s)')
+        print(f'Backtest elapsed time: {end_time - start_time:.2f}(s)')
         
         if backtestee_type == 'strategy':
             backtest_history: dict = self._create_backtest_history(backtestee, start_time, end_time)
@@ -330,6 +349,54 @@ class BacktestEngine(BaseEngine):
             self.assert_consistent_signals()
         return backtests
 
+    # TODO
+    def _vectorized_backtest(self, df_chunk, chunk_num=0, batch_num=0):
+        pass
+
+    def _event_driven_backtest(self, df_chunk, chunk_num=0, batch_num=0):
+        common_cols = ['ts', 'product', 'resolution', 'broker', 'is_quote', 'is_tick']
+        if isinstance(df_chunk, pl.DataFrame):
+            df_chunk = df_chunk.to_pandas()
+        
+        # OPTIMIZE: critical loop
+        for row in tqdm(
+            df_chunk.itertuples(index=False), 
+            total=df_chunk.shape[0], 
+            desc=f'Backtest-Chunk{chunk_num}-Batch{batch_num} (per row)', 
+            colour='yellow'
+        ):
+            ts, product, resolution = row.ts, row.product, row.resolution
+            broker = self.brokers[row.broker]
+            data_manager = broker.dm
+            if row.is_quote:
+                # TODO
+                raise NotImplementedError('Quote data is not supported in event-driven backtesting yet')
+                quote = {}
+                data_manager.update_quote(product, quote)
+            elif row.is_tick:
+                # TODO
+                raise NotImplementedError('Tick data is not supported in event-driven backtesting yet')
+                tick = {}
+                data_manager.update_tick(product, tick)
+            else:
+                bar_cols = ['open', 'high', 'low', 'close', 'volume']
+                bar = {
+                    'resolution': resolution,
+                    'data': {
+                        'ts': ts,
+                        'open': row.open,
+                        'high': row.high,
+                        'low': row.low,
+                        'close': row.close,
+                        'volume': row.volume,
+                    },
+                    'other_info': {
+                        col: getattr(row, col) for col in row._fields
+                        if col not in common_cols + bar_cols
+                    },
+                }
+                data_manager.update_bar(product, bar, now=ts)
+    
     def end(self):
         self.strategy_manager.stop(reason='finished backtesting')
         for broker in self.brokers.values():
