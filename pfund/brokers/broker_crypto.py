@@ -11,7 +11,7 @@ from pfund.accounts import CryptoAccount
 from pfund.utils.utils import convert_to_uppercases
 from pfund.brokers.broker_live import LiveBroker
 from pfund.exchanges.exchange_base import BaseExchange
-from pfund.const.commons import SUPPORTED_CRYPTO_EXCHANGES, SUPPORTED_CRYPTO_PRODUCT_TYPES
+from pfund.const.common import SUPPORTED_CRYPTO_EXCHANGES, SUPPORTED_CRYPTO_PRODUCT_TYPES
 
 
 class CryptoBroker(LiveBroker):

@@ -1,5 +1,5 @@
 from pfund.accounts.account_base import BaseAccount
-from pfund.const.commons import SUPPORTED_BYBIT_ACCOUNT_TYPES
+from pfund.const.common import SUPPORTED_BYBIT_ACCOUNT_TYPES
 
 
 class CryptoAccount(BaseAccount):

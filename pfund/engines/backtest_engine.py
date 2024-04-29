@@ -14,6 +14,13 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.types.common_literals import tSUPPORTED_BACKTEST_MODES, tSUPPORTED_DATA_TOOLS
     from pfund.types.core import tStrategy, tModel, tFeature, tIndicator
+    from pfund.models.model_base import BaseModel
+    
+try:
+    import pandas as pd
+    import polars as pl
+except ImportError:
+    pass
     
 import pfund as pf
 from pfund.git_controller import GitController
@@ -29,11 +36,12 @@ from pfund.mixins.backtest import BacktestMixin
 class BacktestEngine(BaseEngine):
     def __new__(
         cls, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='polars', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
-        config: ConfigHandler | None=None, 
-        append_signals=False, 
+        config: ConfigHandler | None=None,
+        append_signals=False,
         load_models=True,
-        auto_git_commit=False, 
+        auto_git_commit=False,
         save_backtests=False,
+        num_chunks=1,
         **settings
     ):
         if not hasattr(cls, 'mode'):
@@ -50,6 +58,8 @@ class BacktestEngine(BaseEngine):
             cls.auto_git_commit = auto_git_commit
         if not hasattr(cls, 'save_backtests'):
             cls.save_backtests = save_backtests
+        if not hasattr(cls, 'num_chunks'):
+            cls.num_chunks = num_chunks
         return super().__new__(cls, env, data_tool=data_tool, config=config, **settings)
 
     def __init__(
@@ -185,12 +195,11 @@ class BacktestEngine(BaseEngine):
             self.logger.debug(f"Strategy {strat} has no changes to commit, return the last {commit_hash=}")
         return commit_hash
     
-    def _create_backtest_history(self, strat: str, start_time: float, end_time: float):
-        strategy = self.get_strategy(strat)
+    def _create_backtest_history(self, strategy: BaseStrategy, start_time: float, end_time: float):
         initial_balances = {bkr: broker.get_initial_balances() for bkr, broker in self.brokers.items()}
         backtest_id = self._generate_backtest_id()
         backtest_hash = self._generate_backtest_hash(strategy)
-        backtest_name = self._create_backtest_name(strat, backtest_id)
+        backtest_name = self._create_backtest_name(strategy.name, backtest_id)
         backtest_iter = self._generate_backtest_iteration(backtest_hash)
         if self.auto_git_commit and self._git.is_git_repo():
             commit_hash = self._commit_strategy(strategy)
@@ -216,15 +225,16 @@ class BacktestEngine(BaseEngine):
         }
         return backtest_history
         
-    def _output_backtest_results(self, strategy: BaseStrategy, backtest_history: dict) -> dict:
+    def _output_backtest_results(self, strategy: BaseStrategy, df: pd.DataFrame | pl.LazyFrame, backtest_history: dict) -> dict:
         backtest_name = backtest_history['metadata']['backtest_name']
-        df_file_path = os.path.join(self.config.backtest_path, f'{backtest_name}.parquet')
-        backtest_history['result'] = df_file_path
-        dtl = strategy.get_data_tool()
-        df = strategy.df
         if self.mode == 'vectorized':
-            df = dtl.postprocess_vectorized_df(df)
-        dtl.output_df_to_parquet(df, df_file_path)
+            output_file_path = os.path.join(self.config.backtest_path, f'{backtest_name}.parquet')
+            dtl = strategy.get_data_tool()
+            dtl.output_df_to_parquet(df, output_file_path)
+        elif self.mode == 'event_driven':
+            # TODO: output trades? or orders? or df?
+            output_file_path = ...
+        backtest_history['result'] = output_file_path
         self._write_json(f'{backtest_name}.json', backtest_history)
         return backtest_history
         
@@ -232,82 +242,92 @@ class BacktestEngine(BaseEngine):
         for broker in self.brokers.values():
             broker.start()
         self.strategy_manager.start()
-
-        backtests = {}
-        if self.mode == 'vectorized':
-            for strat, strategy in self.strategy_manager.strategies.items():
-                # _dummy strategy is only created for model training, do nothing
-                if strat == '_dummy':
+        for strat, strategy in self.strategy_manager.strategies.items():
+            backtestee = strategy
+            if strat == '_dummy':
+                if self.mode == 'vectorized':
                     continue
-                if not hasattr(strategy, 'backtest'):
-                    raise Exception(f'Strategy {strat} does not have backtest() method, cannot run vectorized backtesting')
-                start_time = time.time()
-                strategy.backtest()
-                end_time = time.time()
-                self.strategy_manager.stop(strats=strat, reason='finished backtesting')
-                backtest_history: dict = self._create_backtest_history(strat, start_time, end_time)
-                if self.save_backtests:
-                    backtest_history = self._output_backtest_results(strategy, backtest_history)
-                backtests[strat] = backtest_history
-        elif self.mode == 'event_driven':
-            for strat, strategy in self.strategy_manager.strategies.items():
-                if strat == '_dummy':
+                elif self.mode == 'event_driven':
                     # dummy strategy has exactly one model
                     model = list(strategy.models.values())[0]
                     backtestee = model
-                else:
-                    backtestee = strategy
-                backtestee_type = 'strategy' if isinstance(backtestee, BaseStrategy) else 'model'
-                dtl = backtestee.get_data_tool()
-                df = backtestee.df
-                df_len = df.shape[0]
-                df_iter = dtl.preprocess_event_driven_df(df)
-                
-                # NOTE: clear dfs so that strategies/models don't know anything about the incoming data
-                backtestee.clear_dfs()
-                
-                start_time = time.time()
-                # OPTIMIZE: critical loop
-                for row in tqdm(df_iter, total=df_len, desc=f'Backtesting {backtestee_type} {backtestee.name}', colour='yellow'):
-                    resolution: str = row.resolution
-                    product: str = row.product
+            backtests: dict = self.backtest(backtestee)
+        self.strategy_manager.stop(reason='finished backtesting')
+        return backtests
+
+    def backtest(self, backtestee: BaseStrategy | BaseModel) -> dict:
+        backtests = {}
+        backtestee_type = 'strategy' if isinstance(backtestee, BaseStrategy) else 'model'
+        dtl = backtestee.get_data_tool()
+        df = backtestee.get_df(copy=True)
+        
+        start_time = time.time()
+        if self.mode == 'vectorized':
+            if not hasattr(backtestee, 'backtest'):
+                raise Exception(f'{backtestee_type} {backtestee.name} does not have backtest() method, cannot run vectorized backtesting')
+            df_chunks = []
+            for df_chunk in dtl.iterate_df_by_chunks(df, num_chunks=self.num_chunks):
+                backtestee.backtest(df_chunk)
+                df_chunk = dtl.postprocess_vectorized_df(df_chunk)
+                df_chunks.append(df_chunk)
+            df = dtl.concat(df_chunks)
+        elif self.mode == 'event_driven':
+            total_rows = dtl.get_total_rows(df)
+            # NOTE: clear dfs so that strategies/models don't know anything about the incoming data
+            backtestee.clear_dfs()
+            common_cols = ['ts', 'product', 'resolution', 
+                           'broker', 'is_quote', 'is_tick']
+            tqdm_iter = tqdm(total=total_rows, desc=f'Backtesting {backtestee_type} {backtestee.name}', colour='yellow')
+            # OPTIMIZE: critical loop
+            for df_chunk in dtl.iterate_df_by_chunks(df, num_chunks=self.num_chunks):
+                df_chunk = dtl.preprocess_event_driven_df(df_chunk)
+                if isinstance(df_chunk, pl.DataFrame):
+                    df_chunk = df_chunk.to_pandas()
+                for row in df_chunk.itertuples(index=False):
+                    tqdm_iter.update(1)
+                    ts, product, resolution = row.ts, row.product, row.resolution
                     broker = self.brokers[row.broker]
                     data_manager = broker.dm
-                    if resolution.is_quote():
+                    if row.is_quote:
                         # TODO
+                        raise NotImplementedError('Quote data is not supported in event-driven backtesting yet')
                         quote = {}
                         data_manager.update_quote(product, quote)
-                    elif resolution.is_tick():
+                    elif row.is_tick:
                         # TODO
+                        raise NotImplementedError('Tick data is not supported in event-driven backtesting yet')
                         tick = {}
                         data_manager.update_tick(product, tick)
                     else:
+                        bar_cols = ['open', 'high', 'low', 'close', 'volume']
                         bar = {
                             'resolution': resolution,
                             'data': {
-                                'ts': row.ts,
+                                'ts': ts,
                                 'open': row.open,
                                 'high': row.high,
                                 'low': row.low,
                                 'close': row.close,
-                                'volume': row.volume
+                                'volume': row.volume,
                             },
                             'other_info': {
                                 col: getattr(row, col) for col in row._fields
-                                if col not in ['product', 'resolution', 'ts', 'open', 'high', 'low', 'close', 'volume']
+                                if col not in common_cols + bar_cols
                             },
                         }
-                        data_manager.update_bar(product, bar, now=row.ts)
-                end_time = time.time()
-                self.strategy_manager.stop(strats=strat, reason='finished backtesting')
-                
-                if backtestee_type == 'strategy':
-                    backtest_history: dict = self._create_backtest_history(strat, start_time, end_time)
-                    if self.save_backtests:
-                        backtest_history = self._output_backtest_results(strategy, backtest_history)
-                    backtests[strat] = backtest_history
+                        data_manager.update_bar(product, bar, now=ts)
         else:
             raise NotImplementedError(f'Backtesting mode {self.mode} is not supported')
+        end_time = time.time()
+        print(f'Backtest elapsed time: {end_time - start_time:.3f}(s)')
+        
+        if backtestee_type == 'strategy':
+            backtest_history: dict = self._create_backtest_history(backtestee, start_time, end_time)
+            if self.save_backtests:
+                backtest_history = self._output_backtest_results(backtestee, df, backtest_history)
+            backtests[backtestee.name] = backtest_history
+        elif backtestee_type == 'model':
+            self.assert_consistent_signals()
         return backtests
 
     def end(self):

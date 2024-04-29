@@ -10,7 +10,7 @@ from typing import Callable
 
 from pfund.brokers.ib.ib_client import IBClient
 from pfund.brokers.ib.ib_wrapper import *
-from pfund.const.commons import SUPPORTED_DATA_CHANNELS
+from pfund.const.common import SUPPORTED_DATA_CHANNELS
 from pfund.zeromq import ZeroMQ
 
 

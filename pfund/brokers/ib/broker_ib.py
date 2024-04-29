@@ -6,7 +6,7 @@ from collections import defaultdict
 from pfund.adapter import Adapter
 from pfund.config.configuration import Configuration
 from pfund.const.paths import PROJ_CONFIG_PATH
-from pfund.const.commons import SUPPORTED_PRODUCT_TYPES
+from pfund.const.common import SUPPORTED_PRODUCT_TYPES
 from pfund.products import IBProduct
 from pfund.accounts import IBAccount
 from pfund.orders import IBOrder

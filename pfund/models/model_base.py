@@ -125,6 +125,9 @@ class BaseModel(ABC, metaclass=MetaModel):
     def df(self):
         return self._data_tool.df
     
+    def get_df(self, copy=True):
+        return self._data_tool.get_df(copy=copy)
+    
     def get_data_tool(self):
         return self._data_tool
     

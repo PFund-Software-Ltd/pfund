@@ -1,6 +1,5 @@
 import sys
 import logging
-from decimal import Decimal
 
 from pfund.datas.resolution import Resolution
 from pfund.datas.data_time_based import TimeBasedData
@@ -21,14 +20,16 @@ class Bar:
         self.timeframe = resolution.timeframe
         self.unit = self.get_unit()
         self.shift_unit = self.get_shift_unit(shift)
-        # variables that will be cleared using clear() for each new bar
-        self.o = self.open = Decimal(0.0)
-        self.h = self.high = Decimal(0.0)
-        self.l = self.low = Decimal(sys.float_info.max)
-        self.c = self.close = Decimal(0.0)
-        self.v = self.volume = Decimal(0.0)
-        self._start_ts = self._end_ts = self.ts = 0.0
+        self.clear()
 
+    def clear(self):
+        self.o = self.open = 0.0
+        self.h = self.high = 0.0
+        self.l = self.low = sys.float_info.max
+        self.c = self.close = 0.0
+        self.v = self.volume = 0.0
+        self._start_ts = self._end_ts = self.ts = 0.0
+        
     def __str__(self):
         bar_type = 'Bar'
         if not self._start_ts:
@@ -115,14 +116,6 @@ class Bar:
         elif self.timeframe.is_month():
             unit = 60 * 60 * 24 * 7 * 4 * self.period
         return unit
-
-    def clear(self):
-        self.o = self.open = Decimal(0.0)
-        self.h = self.high = Decimal(0.0)
-        self.l = self.low = Decimal(sys.float_info.max)
-        self.c = self.close = Decimal(0.0)
-        self.v = self.volume = Decimal(0.0)
-        self._start_ts = self._end_ts = self.ts = 0.0
 
     def update(self, o, h, l, c, v, ts, is_volume_aggregated):
         if not self.o:

@@ -24,7 +24,7 @@ from pfund.accounts.account_base import BaseAccount
 from pfund.orders.order_base import BaseOrder
 from pfund.zeromq import ZeroMQ
 from pfund.risk_monitor import RiskMonitor
-from pfund.const.commons import SUPPORTED_CRYPTO_EXCHANGES
+from pfund.const.common import SUPPORTED_CRYPTO_EXCHANGES
 from pfund.strategies.strategy_meta import MetaStrategy
 from pfund.utils.utils import convert_to_uppercases, get_engine_class, load_yaml_file, convert_ts_to_dt
 from pfund.plogging import create_dynamic_logger
@@ -106,6 +106,9 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
     @property
     def df(self):
         return self._data_tool.df
+    
+    def get_df(self, copy=True):
+        return self._data_tool.get_df(copy=copy)
    
     def get_data_tool(self):
         return self._data_tool

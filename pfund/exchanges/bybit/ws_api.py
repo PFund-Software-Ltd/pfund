@@ -7,7 +7,7 @@ except ImportError:
 import hmac
 from decimal import Decimal
 
-from pfund.const.commons import SUPPORTED_DATA_CHANNELS
+from pfund.const.common import SUPPORTED_DATA_CHANNELS
 from pfund.exchanges.ws_api_base import BaseWebsocketApi
 
 
@@ -278,8 +278,8 @@ class WebsocketApi(BaseWebsocketApi):
         asks_l2 = self._asks_l2[pdt]
         bid_pxs = sorted(bids_l2.keys(), key=lambda px: float(px), reverse=True)[:depth]
         ask_pxs = sorted(asks_l2.keys(), key=lambda px: float(px), reverse=False)[:depth]
-        quote['data']['bids'] = tuple((Decimal(px), Decimal(bids_l2[px])) for px in bid_pxs)
-        quote['data']['asks'] = tuple((Decimal(px), Decimal(asks_l2[px])) for px in ask_pxs)
+        quote['data']['bids'] = tuple((px, bids_l2[px]) for px in bid_pxs)
+        quote['data']['asks'] = tuple((px, asks_l2[px]) for px in ask_pxs)
         zmq = self._get_zmq(ws_name)
         if zmq:
             zmq_msg = (1, 1, (self.bkr, self.exch, pdt, quote))
@@ -294,8 +294,8 @@ class WebsocketApi(BaseWebsocketApi):
             'ts': 'ts',
             'ts_adj': 1/10**3,  # since timestamp in bybit is in mts
             'data': {
-                'px': ('p', Decimal,),
-                'qty': ('v', Decimal, abs),
+                'px': ('p', float,),
+                'qty': ('v', float, abs),
                 'ts': ('T', float),
             },
             # NOTE: other_info only exists in public data, e.g. orderbook, tradebook, kline etc.
@@ -315,21 +315,21 @@ class WebsocketApi(BaseWebsocketApi):
             'ts': 'ts',
             'ts_adj': 1/10**3,  # since timestamp in bybit is in mts
             'data': {
-                'open': ('open', Decimal),
-                'high': ('high', Decimal),
-                'low': ('low', Decimal),
-                'close': ('close', Decimal),
-                'volume': ('volume', Decimal),
+                'open': ('open', float),
+                'high': ('high', float),
+                'low': ('low', float),
+                'close': ('close', float),
+                'volume': ('volume', float),
                 'ts': ('timestamp', float),
             }
             # TODO: (move to OKX ws_api):
             # 'ts_adj': 1/10**3,
             # 'data': {
-            #     'open': (1, Decimal),
-            #     'high': (2, Decimal),
-            #     'low': (3, Decimal),
-            #     'close': (4, Decimal),
-            #     'volume': (5, Decimal),
+            #     'open': (1, float),
+            #     'high': (2, float),
+            #     'low': (3, float),
+            #     'close': (4, float),
+            #     'volume': (5, float),
             #     'ts': (0, float),
             # }
         }

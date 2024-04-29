@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 
 from numpy import sign
 
-from pfund.const.commons import PRODUCT_TYPES_AS_ASSETS
+from pfund.const.common import PRODUCT_TYPES_AS_ASSETS
 from pfund.positions.position_base import BasePosition
 
 

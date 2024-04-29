@@ -80,7 +80,7 @@ class BacktestMixin:
         return self.add_model(indicator, name=name)
         
     def _get_data_source(self, trading_venue: str, backtest_kwargs: dict):
-        from pfeed.const.commons import SUPPORTED_DATA_FEEDS
+        from pfeed.const.common import SUPPORTED_DATA_FEEDS
         trading_venue = trading_venue.upper()
         # if data_source is not defined, use trading_venue as data_source
         if trading_venue in SUPPORTED_DATA_FEEDS and 'data_source' not in backtest_kwargs:
@@ -154,7 +154,7 @@ class BacktestMixin:
         datas: list[BaseData], 
         kwargs: dict, 
         backtest_kwargs: dict
-    ) -> list[pd.DataFrame | pl.DataFrame | pl.LazyFrame]:
+    ) -> list[pd.DataFrame | pl.LazyFrame]:
         rollback_period = backtest_kwargs.get('rollback_period', '1w')
         start_date = backtest_kwargs.get('start_date', '')
         end_date = backtest_kwargs.get('end_date', '')
@@ -189,16 +189,16 @@ class BacktestMixin:
                 time.sleep(rate_limit)
         return dfs
     
-    def _convert_pfeed_df_to_pfund_df(self, df: pd.DataFrame | pl.DataFrame | pl.LazyFrame, product: BaseProduct) -> pd.DataFrame | pl.DataFrame | pl.LazyFrame:
+    def _convert_pfeed_df_to_pfund_df(self, df: pd.DataFrame | pl.DataFrame | pl.LazyFrame, product: BaseProduct) -> pd.DataFrame | pl.LazyFrame:
         if isinstance(df, pd.DataFrame):
-            is_empty = df.empty
             if 'symbol' in df.columns:
                 df = df.drop(columns=['symbol'])
             if 'product' in df.columns:
                 df = df.drop(columns=['product'])
             df['product'] = repr(product)
         elif isinstance(df, (pl.DataFrame, pl.LazyFrame)):
-            is_empty = df.is_empty()
+            if isinstance(df, pl.DataFrame):
+                df = df.lazy()
             df = df.drop(columns=['symbol', 'product'])
             df = df.with_columns(
                 pl.lit(repr(product)).alias('product'),
@@ -206,5 +206,4 @@ class BacktestMixin:
         # EXTEND
         else:
             raise NotImplementedError(f"{type(df)=} not supported")
-        assert not is_empty, f"dataframe is empty for {product!r}"
         return df

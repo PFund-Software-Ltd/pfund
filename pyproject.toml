@@ -47,7 +47,7 @@ pfund = "pfund.main:run_cli"
 optional = true
 
 [tool.poetry.group.dev.dependencies]
-# pfeed = { path = "../pfeed", develop = true, extras = ["df", "data", "boost"] }
+pfeed = { path = "../pfeed", develop = true, extras = ["df", "data", "boost"] }
 # pfolio = { path = "../pfolio", develop = true, extras = ["bayesian", "data", "portfolio", "temporary"] }
 pfolio = { path = "../pfolio", develop = true }
 pybit = "^5.6.2"

@@ -41,11 +41,6 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
         def _is_dummy_strategy(self):
             return isinstance(self._consumer, BaseStrategy) and self._consumer.name == '_dummy'
         
-        def stop(self):
-            super().stop()
-            if self.engine.mode == 'event_driven' and self._is_dummy_strategy():
-                self._assert_consistent_signals()
-       
         def load(self):
             if self.engine.load_models:
                 super().load()
@@ -89,7 +84,7 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
                 return new_pred.to_numpy()
         
         # FIXME: pandas specific
-        def _assert_consistent_signals(self):
+        def assert_consistent_signals(self):
             '''Asserts consistent model signals from vectorized and event-driven backtesting, triggered in event-driven backtesting'''
             import pandas.testing as pdt
             event_driven_signal = self.signal

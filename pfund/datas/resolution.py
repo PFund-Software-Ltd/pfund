@@ -1,7 +1,7 @@
 import re
 
 from pfund.datas.timeframe import Timeframe, TimeframeUnits
-from pfund.const.commons import SUPPORTED_TIMEFRAMES
+from pfund.const.common import SUPPORTED_TIMEFRAMES
 
 
 class Resolution:

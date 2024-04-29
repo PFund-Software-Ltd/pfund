@@ -1,8 +1,7 @@
 from __future__ import annotations
 from collections import defaultdict
-from decimal import Decimal
 
-from typing import TYPE_CHECKING, Iterator
+from typing import TYPE_CHECKING, Generator
 if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
 
@@ -15,7 +14,12 @@ from pfund.utils.envs import backtest
 class PandasDataTool(BaseDataTool):
     _INDEX = ['ts', 'product', 'resolution']
     _GROUP = ['product', 'resolution']
-    _DECIMAL_COLS = ['price', 'open', 'high', 'low', 'close', 'volume']
+    
+    def get_df(self, copy=True):
+        return self.df.copy(deep=True) if copy else self.df
+    
+    def concat(self, dfs: list[pd.DataFrame]) -> pd.DataFrame:
+        return pd.concat(dfs)
     
     def prepare_df(self):
         assert self._raw_dfs, "No data is found, make sure add_data(...) is called correctly"
@@ -24,19 +28,37 @@ class PandasDataTool(BaseDataTool):
         # arrange columns
         self.df = self.df[self._INDEX + [col for col in self.df.columns if col not in self._INDEX]]
         self._raw_dfs.clear()
-        
+    
+    def get_total_rows(self, df: pd.DataFrame):
+        return df.shape[0]
+    
     @backtest
-    def preprocess_event_driven_df(self, df: pd.DataFrame) -> Iterator:
+    def iterate_df_by_chunks(self, df: pd.DataFrame, num_chunks=1) -> Generator[pd.DataFrame, None, None]:
+        total_rows = self.get_total_rows(df)
+        chunk_size = total_rows // num_chunks
+        for i in range(0, total_rows, chunk_size):
+            df_chunk = df.iloc[i:i + chunk_size].copy(deep=True)
+            yield df_chunk
+    
+    @backtest
+    def preprocess_event_driven_df(self, df: pd.DataFrame) -> pd.DataFrame:
+        def _check_resolution(res):
+            from pfund.datas.resolution import Resolution
+            resolution = Resolution(res)
+            return resolution.is_quote(), resolution.is_tick()
+        
         # converts 'ts' from datetime to unix timestamp
-        df['ts'] = df['ts'].astype(int) // 10**6  # in milliseconds
-        df['ts'] = df['ts'] / 10**3  # in seconds with milliseconds precision
-        # convert float columns to decimal for consistency with live trading
-        for col in df.columns:
-            if col in self._DECIMAL_COLS:
-                df[col] = df[col].apply(lambda x: Decimal(str(x)))
-        # TODO: split 'broker' str column from 'product' str column
-        # df['broker'] = ...
-        return df.itertuples(index=False)
+        # in milliseconds int -> in seconds with milliseconds precision
+        df['ts'] = df['ts'].astype(int) // 10**6 / 10**3
+        
+        # add 'broker', 'is_quote', 'is_tick' columns
+        df['broker'] = df['product'].str.split('-').str[0]
+        df['is_quote'], df['is_tick'] = zip(*df['resolution'].apply(_check_resolution))
+        
+        # arrange columns
+        left_cols = self._INDEX + ['broker', 'is_quote', 'is_tick']
+        df = df[left_cols + [col for col in df.columns if col not in left_cols]]
+        return df
     
     @backtest
     def postprocess_vectorized_df(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -129,33 +151,32 @@ class PandasDataTool(BaseDataTool):
             index=self.create_multi_index(index_data, self.df.index.names)
         )
         self.df = pd.concat([self.df, new_row], ignore_index=False)
-            
-    def convert_ts_index_to_dt(self, df: pd.DataFrame) -> pd.DataFrame:
-        ts_index = df.index.get_level_values('ts')
-        dt_index = pd.to_datetime(ts_index, unit='s')
-        df.index = df.index.set_levels(dt_index, level='ts')
-        return df
     
     def create_multi_index(self, index_data: dict, index_names: list[str]) -> pd.MultiIndex:
         return pd.MultiIndex.from_tuples([tuple(index_data[name] for name in index_names)], names=index_names)
-    
-    def output_df_to_parquet(self, df: pd.DataFrame, file_path: str):
-        df.to_parquet(file_path, compression='zstd')
-     
+       
        
     '''
     ************************************************
     Helper Functions
     ************************************************
     '''
+    def get_index_values(self, df: pd.DataFrame, index: str) -> list:
+        assert index in df.index.names, f"index must be one of {df.index.names}"
+        return df.index.get_level_values(index).unique().to_list()
+    
+    def set_index_values(self, df: pd.DataFrame, index: str, values: list) -> pd.DataFrame:
+        assert index in df.index.names, f"index must be one of {df.index.names}"
+        df.index = df.index.set_levels(values, level=index)
+        return df
+    
+    def output_df_to_parquet(self, df: pd.DataFrame, file_path: str, compression: str='zstd'):
+        df.to_parquet(file_path, compression=compression)
+    
     def filter_df(self, df: pd.DataFrame, start_date: str | None=None, end_date: str | None=None, product: str='', resolution: str=''):
         product = product or slice(None)
         resolution = resolution or slice(None)
         return df.loc[(slice(start_date, end_date), product, resolution), :]
-    
-    def get_index_values(self, df: pd.DataFrame, index: str) -> list:
-        assert index in self._INDEX, f"index must be one of {self._INDEX}"
-        return df.index.get_level_values(index).unique().to_list()
     
     def unstack_df(self, df: pd.DataFrame):
         return df.unstack(level=self._GROUP)
