@@ -44,7 +44,7 @@ PFund (/piː fʌnd/), which stands for "**Personal Fund**", is an **algo-trading
 - [ ] Features a modern frontend using [Mantine UI] and TradingView's Charts library
 - [ ] Supports manual/semi-manual trading via a trading app
 
-> Since PFund's sole purpose is for trading only, for all the data workloads, there is a separate library to handle that: \
+> As PFund is for trading only, for all the data workloads, there is a separate library to handle that:\
 [PFeed] - Data pipeline for algo-trading, helping traders in getting real-time and historical data, and storing them in a local data lake for quantitative research.
 
 ---
