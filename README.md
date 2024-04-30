@@ -1,4 +1,4 @@
-# PFund: An Algo-Trading Framework powered by Machine Learning and Data Engineering, TradFi, CeFi and DeFi ready.
+# PFund: A Complete Algo-Trading Framework powered by Machine Learning and Data Engineering, TradFi, CeFi and DeFi ready.
 
 ![GitHub stars](https://img.shields.io/github/stars/PFund-Software-Ltd/pfund?style=social)
 ![PyPI downloads](https://img.shields.io/pypi/dm/pfund)
