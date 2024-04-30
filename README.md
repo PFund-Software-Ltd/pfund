@@ -27,32 +27,32 @@
 Machine learning (**AI**) and data engineering (**Big Data**) fields are advancing every year, but everyday traders are **not able to enjoy the benefits** of these improvements, leading to a **widening gap** between retail traders and professional traders.
 
 ## Solution
-A modern algo-trading framework is needed to **bridge the gap** between algo-trading, machine learning and data engineering, empowering retail traders with state-of-the-art machine learning models and data engineering tools.
+A modern algo-trading framework is needed to **bridge the gap** between algo-trading, machine learning and data engineering, empowering retail traders with state-of-the-art machine learning models and data engineering tools so that traders only need to focus on strategy research and the framework takes care of the rest.
 
 ---
 PFund (/piː fʌnd/), which stands for "**Personal Fund**", is an **algo-trading framework** designed for using **machine learning** models natively to trade across [TradFi] (Traditional Finance, e.g. **Interactive Brokers**), [CeFi] (Centralized Finance, e.g. Binance) and [DeFi] (Decentralized Finance, e.g. [dYdX]), or in simple terms, **Stocks** and **Cryptos**.
 
-PFund allows traders to:
-- perform vectorized or event-driven backtesting with
-  - different resolutions of data, e.g. orderbook data, tick data, bar data etc.
-  - different data tools, e.g. pandas, [polars] etc.
-- train machine learning models using their favorite frameworks, i.e. PFund is **ML-framework agnostic**
-- tune strategy (hyper)parameters by splitting data into training sets, development sets and test sets
-- go from backtesting to live trading by just changing **ONE line of code!!**
-- execute trades manually/semi-manually via a trading app (frontend+backend)
+## Core Features
+- [x] Supports vectorized and event-driven backtesting with different resolutions of data, e.g. tick data, second data and minute data etc.
+- [x] Allows choosing your preferred data tool, e.g. pandas, polars, pyspark etc.
+- [x] Supports machine learning models, features, technical analysis indicators
+- [x] Trains machine learning models using your favorite frameworks, i.e. PFund is **ML-framework agnostic**
+- [x] Offers **LEGO-style** strategy and model building, allowing strategies to add other strategies, models to add other models
+- [x] Streamlines the algo-trading flow, from vectorized backtesting for strategy prototyping and event-driven backtesting for strategy development, to live trading for strategy deployment
+- [x] Enables parallel data processing, e.g. Interactive Brokers and Binance each have their own process for receiving data feeds
+- [x] Switches from backtesting to live trading by just changing **ONE line of code!!**
+- [ ] Features a modern frontend using [Mantine UI] and TradingView's Charts library
+- [ ] Supports manual/semi-manual trading via a trading app
 
-It is created to enable trading for [PFund.ai] - a trading platform that bridges algo-trading and manual trading using AI (LLM).
-
-Since PFund's sole purpose is for trading only, for all the data work, there is a separate library to handle that: \
+> Since PFund's sole purpose is for trading only, for all the data workloads, there is a separate library to handle that: \
 [PFeed] - Data pipeline for algo-trading, helping traders in getting real-time and historical data, and storing them in a local data lake for quantitative research.
 
+---
 
 <details>
 <summary>Table of Contents</summary>
 
 - [Project Status](#project-status)
-- [Mission](#mission)
-- [Core Features](#core-features)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
   - [Backtesting](#backtesting)
@@ -73,40 +73,7 @@ Since PFund's sole purpose is for trading only, for all the data work, there is 
 PFund is currently under active development, the framework design will be prioritized first over
 stability and scalability.
 
-Please note that the available version is a *dev* version, not a *stable* one. \
-You are encouraged to play with the *dev* version, but only use it when a *stable* version is released.
-
-> PFund for the time being **_only supports vectorized backtesting_** using [Bybit] and Yahoo Finance data for testing purpose.
-
-
-## Mission
-As an algo-trader, if you aim to quickly try out some trading ideas to see if they work, and if they do, deploy them for live traidng, it is actually not a trivial task since it involves multiple stages:
-- Ideation
-- Strategy development
-- Backtesting
-- Model development (if use machine learning)
-- Model training (if use machine learning)
-- Parameter training / hyperparameter tuning
-- MLOps setup (if use machine learning)
-- Strategy & Model(s) deployment
-- Portfolio monitoring
-- Performance analysis
-
-This overview already omits some intricate steps, such as data handling and API integration.
-
-> PFund's mission is to **_enable traders to concentrate solely on strategy formulation_** while the framework manages the rest. With PFund serving as the core trade engine, it empowers retail traders to have a fund management experience on [PFund.ai] as if they are operating their personal hedge fund, hence the name *PFund*.
-
-
-## Core Features
-- [x] Easily switch environments with just one line of code, transitioning from backtesting to live trading
-- [x] Supports machine learning models, features, technical analysis indicators
-- [x] Both Strategy() and Model() are treated as first-class citizens
-- [x] Offers LEGO-style strategy and model building, allowing strategies to add other strategies, models to add other models
-- [x] Streamlines the algo-trading flow, from vectorized backtesting for strategy prototyping and event-driven backtesting for strategy development, to live trading for strategy deployment
-- [x] Enables parallel data processing, e.g. Interactive Brokers and Binance each have their own process for receiving data feeds
-- [ ] Allows choosing your preferred data tool, e.g. pandas, polars, pyspark etc.
-- [ ] Features a modern frontend using [Mantine UI] and TradingView's Charts library
-- [ ] Supports manual/semi-manual trading using the frontend
+> PFund for the time being **_only supports backtesting_** using [Bybit] and Yahoo Finance data for testing purpose.
 
 
 ## Installation
@@ -224,6 +191,7 @@ Imagine a space where algo-traders can share their machine learning models with 
 Strategy and model development could be so much faster since you can build on top of an existing working model.
 > Model Hub is coming soon on [PFund.ai], Stay Tuned!
 
+---
 
 ## Supported Trading Venues
 | Trading Venue             | Vectorized Backtesting | Event-Driven Backtesting | Paper Trading | Live Trading |
