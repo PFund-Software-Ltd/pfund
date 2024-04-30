@@ -29,12 +29,9 @@ class PandasDataTool(BaseDataTool):
         self.df = self.df[self._INDEX + [col for col in self.df.columns if col not in self._INDEX]]
         self._raw_dfs.clear()
     
-    def get_total_rows(self, df: pd.DataFrame):
-        return df.shape[0]
-    
     @backtest
     def iterate_df_by_chunks(self, df: pd.DataFrame, num_chunks=1) -> Generator[pd.DataFrame, None, None]:
-        total_rows = self.get_total_rows(df)
+        total_rows = df.shape[0]
         chunk_size = total_rows // num_chunks
         for i in range(0, total_rows, chunk_size):
             df_chunk = df.iloc[i:i + chunk_size].copy(deep=True)

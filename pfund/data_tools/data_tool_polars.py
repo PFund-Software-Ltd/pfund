@@ -29,17 +29,9 @@ class PolarsDataTool(BaseDataTool):
         self.df = self.df.select(self._INDEX + [col for col in self.df.columns if col not in self._INDEX])
         self._raw_dfs.clear()
     
-    def get_total_rows(self, df: pl.DataFrame | pl.LazyFrame):
-        if isinstance(df, pl.DataFrame):
-            return df.shape[0]
-        elif isinstance(df, pl.LazyFrame):
-            return df.count().collect()['ts'][0]
-        else:
-            raise ValueError("df should be either pl.DataFrame or pl.LazyFrame")
-        
     @backtest
     def iterate_df_by_chunks(self, lf: pl.LazyFrame, num_chunks=1) -> Generator[pd.DataFrame, None, None]:
-        total_rows = self.get_total_rows(lf)
+        total_rows = lf.count().collect()['ts'][0]
         chunk_size = total_rows // num_chunks
         for i in range(0, total_rows, chunk_size):
             df_chunk = lf.slice(i, chunk_size).collect()

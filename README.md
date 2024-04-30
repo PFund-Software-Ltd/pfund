@@ -1,4 +1,4 @@
-# PFund: Algo-Trading Framework for Machine Learning, TradFi, CeFi and DeFi ready.
+# PFund: Algo-Trading Framework powered Machine Learning and Data Engineering, TradFi, CeFi and DeFi ready.
 
 ![GitHub stars](https://img.shields.io/github/stars/PFund-Software-Ltd/pfund?style=social)
 ![PyPI downloads](https://img.shields.io/pypi/dm/pfund)
@@ -23,7 +23,14 @@
 [FirstRate Data]: https://firstratedata.com
 [Mantine UI]: https://ui.mantine.dev/
 
-PFund (/piː fʌnd/), which stands for "**Personal Fund**", is an **algo-trading framework** designed for using **machine learning** models to trade across [TradFi] (Traditional Finance, e.g. **Interactive Brokers**), [CeFi] (Centralized Finance, e.g. Binance) and [DeFi] (Decentralized Finance, e.g. [dYdX]), or in simple terms, **Stocks** and **Cryptos**.
+## Problem
+Machine learning (**AI**) and data engineering (**Big Data**) fields are advancing every year, but everyday traders are **not able to enjoy the benefits** of these improvements, leading to a **widening gap** between retail traders and professional traders.
+
+## Solution
+A modern algo-trading framework is needed to **bridge the gap** between algo-trading, machine learning and data engineering, empowering retail traders with state-of-the-art machine learning models and data engineering tools.
+
+---
+PFund (/piː fʌnd/), which stands for "**Personal Fund**", is an **algo-trading framework** designed for using **machine learning** models natively to trade across [TradFi] (Traditional Finance, e.g. **Interactive Brokers**), [CeFi] (Centralized Finance, e.g. Binance) and [DeFi] (Decentralized Finance, e.g. [dYdX]), or in simple terms, **Stocks** and **Cryptos**.
 
 PFund allows traders to:
 - perform vectorized or event-driven backtesting with
