@@ -20,23 +20,21 @@ LEVELS = {
 # override logging's DictConfigurator as it doesn't pass in logger names to file handlers to create filenames
 class LoggingDictConfigurator(DictConfigurator):
     _MANUALLY_CONFIGURED_HANDLERS = [
-        'file_handler', 
+        'file_handler',
         'compressed_timed_rotating_file_handler',
     ]
     
     def __init__(self, config):
-        if not hasattr(self, '_initialized'):
-            self.config_orig = copy.deepcopy(config)
-            # remove handlers that are manually configured
-            for h in list(config.get('handlers', {}).keys()):
-                if h in self._MANUALLY_CONFIGURED_HANDLERS:
-                    del config['handlers'][h]
-            # remove loggers that are manually configured, e.g. _strategy/_model/_manager
-            for l in list(config.get('loggers', {}).keys()):
-                if l.startswith('_'):
-                    del config['loggers'][l]
-            DictConfigurator.__init__(self, config)
-            self._initialized = True
+        self.config_orig = copy.deepcopy(config)
+        # remove handlers that are manually configured
+        for h in list(config.get('handlers', {}).keys()):
+            if h in self._MANUALLY_CONFIGURED_HANDLERS:
+                del config['handlers'][h]
+        # remove loggers that are manually configured, e.g. _strategy/_model/_manager
+        for l in list(config.get('loggers', {}).keys()):
+            if l.startswith('_'):
+                del config['loggers'][l]
+        DictConfigurator.__init__(self, config)
     
     def add_handlers(self, logger, handlers):
         """Add handlers to a logger from a list of names."""

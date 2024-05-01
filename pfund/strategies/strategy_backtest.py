@@ -66,10 +66,6 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
             if not self._is_dummy_strategy():
                 return self._data_tool.prepare_df()
             
-        def _prepare_df_with_signals(self):
-            if self.engine.mode == 'vectorized' and not self._is_dummy_strategy():
-                return self._data_tool.prepare_df_with_signals(self.models)
-        
         def _append_to_df(self, **kwargs):
             if self.engine.append_signals and not self._is_dummy_strategy():
                 return self._data_tool.append_to_df(self.data, self.predictions, **kwargs)

@@ -35,7 +35,7 @@ ENV_COLORS = {
 class BaseEngine(Singleton):
     _PROCESS_NO_PONG_TOLERANCE_IN_SECONDS = 30
 
-    def __new__(cls, env, data_tool: tSUPPORTED_DATA_TOOLS='polars', config: ConfigHandler | None=None, **settings):
+    def __new__(cls, env, data_tool: tSUPPORTED_DATA_TOOLS='pandas', config: ConfigHandler | None=None, **settings):
         if not hasattr(cls, 'env'):
             cls.env = env.upper() if isinstance(env, str) else str(env).upper()
             assert cls.env in SUPPORTED_ENVIRONMENTS, f'env={cls.env} is not supported'
@@ -57,7 +57,7 @@ class BaseEngine(Singleton):
             cls.logging_configurator: LoggingDictConfigurator  = set_up_loggers(log_path, logging_config_file_path, user_logging_config=cls.config.logging_config)
         return super().__new__(cls)
     
-    def __init__(self, env, data_tool: tSUPPORTED_DATA_TOOLS='polars', config: ConfigHandler | None=None, **settings):
+    def __init__(self, env, data_tool: tSUPPORTED_DATA_TOOLS='pandas', config: ConfigHandler | None=None, **settings):
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):
             self.logger = logging.getLogger('pfund')

@@ -1,10 +1,14 @@
 import numpy as np
-import pandas as pd
+
+try:
+    import pandas as pd
+    import polars as pl
+except ImportError:
+    pass
 
 from pfund.indicators.indicator_base import TalibFunction, BaseIndicator
 
 
-# FIXME: pandas specific
 class TalibIndicator(BaseIndicator):
     def __init__(self, indicator: TalibFunction, *args, **kwargs):
         '''
@@ -21,9 +25,9 @@ class TalibIndicator(BaseIndicator):
                     default_timeperiod = default_params['timeperiod']
                     kwargs['min_data_points'] = default_timeperiod
         super().__init__(indicator, *args, **kwargs)
-    
+            
     def get_indicator_info(self):
-        return self.ml_model.info
+        return self.indicator.info
     
     def get_indicator_name(self):
         return self.get_indicator_info()['name']
@@ -31,23 +35,28 @@ class TalibIndicator(BaseIndicator):
     def get_indicator_params(self):
         return self.get_indicator_info()['parameters']
     
-    def predict(self, X: pd.DataFrame) -> np.ndarray | None:
+    def _predict_pandas(self, X: pd.DataFrame) -> np.ndarray | None:
+        def _indicate(_X: pd.DataFrame) -> pd.DataFrame:
+            _df = self.indicator(_X, *self._args, **self._kwargs)
+            if type(_df) is pd.Series:
+                _df = _df.to_frame(name=self.get_indicator_name())
+            return _df
+        
         if len(self.datas) == 1:
-            df = self.ml_model(X, *self._args, **self._kwargs)
+            df = _indicate(X)
         else:
-            indicate = lambda df: self.ml_model(df, *self._args, **self._kwargs)
-            grouped_df = X.groupby(level=self._GROUP).apply(indicate)
-            if is_correct := self._check_grouped_df_nlevels(grouped_df):
-                df = grouped_df.droplevel([0, 1])
-                df.sort_index(level='ts', inplace=True)
-            else:
-                return
-        # convert series to dataframe
-        if type(df) is pd.Series:
-            df = df.to_frame(name=self.get_indicator_name())
-        self.set_signal_columns(df.columns.to_list())
+            grouped_df = X.groupby(self.group).apply(_indicate)
+            df = grouped_df.droplevel([0, 1])
+            df.sort_index(inplace=True)
+        if not self._signal_columns:
+            self.set_signal_columns(df.columns.to_list())
+        df = df[self.index + self._signal_columns]
         return df.to_numpy()
 
+    # TODO
+    def _predict_polars(self):
+        pass
+    
     def on_start(self):
         default_params = {k: v for k, v in self.get_indicator_params().items() if k not in self._kwargs}
         if default_params:

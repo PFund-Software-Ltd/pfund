@@ -4,33 +4,32 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, Generator
 if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
+    from pfund.models.model_base import BaseModel
 
+import numpy as np
 import pandas as pd
 
+from pfund.strategies.strategy_base import BaseStrategy
 from pfund.data_tools.data_tool_base import BaseDataTool
 from pfund.utils.envs import backtest
 
 
 class PandasDataTool(BaseDataTool):
-    _INDEX = ['ts', 'product', 'resolution']
-    _GROUP = ['product', 'resolution']
-    
     def get_df(self, copy=True):
         return self.df.copy(deep=True) if copy else self.df
-    
-    def concat(self, dfs: list[pd.DataFrame]) -> pd.DataFrame:
-        return pd.concat(dfs)
     
     def prepare_df(self):
         assert self._raw_dfs, "No data is found, make sure add_data(...) is called correctly"
         self.df = pd.concat(self._raw_dfs.values())
-        self.df = self.df.sort_values(by='ts', ascending=True)
+        self.df.sort_values(by=self.index, ascending=True, inplace=True)
+        self.df.reset_index(drop=True, inplace=True)
         # arrange columns
-        self.df = self.df[self._INDEX + [col for col in self.df.columns if col not in self._INDEX]]
+        self.df = self.df[self.index + [col for col in self.df.columns if col not in self.index]]
         self._raw_dfs.clear()
     
+    @staticmethod
     @backtest
-    def iterate_df_by_chunks(self, df: pd.DataFrame, num_chunks=1) -> Generator[pd.DataFrame, None, None]:
+    def iterate_df_by_chunks(df: pd.DataFrame, num_chunks=1) -> Generator[pd.DataFrame, None, None]:
         total_rows = df.shape[0]
         chunk_size = total_rows // num_chunks
         for i in range(0, total_rows, chunk_size):
@@ -53,18 +52,53 @@ class PandasDataTool(BaseDataTool):
         df['is_quote'], df['is_tick'] = zip(*df['resolution'].apply(_check_resolution))
         
         # arrange columns
-        left_cols = self._INDEX + ['broker', 'is_quote', 'is_tick']
+        left_cols = self.index + ['broker', 'is_quote', 'is_tick']
         df = df[left_cols + [col for col in df.columns if col not in left_cols]]
         return df
-    
+   
     @backtest
-    def postprocess_vectorized_df(self, df: pd.DataFrame) -> pd.DataFrame:
+    def preprocess_vectorized_df(self, df: pd.DataFrame, backtestee: BaseStrategy | BaseModel) -> pd.DataFrame:
+        if backtestee.type == 'strategy':
+            for strategy in backtestee.strategies.values():
+                # TODO:
+                # assert strategy.signal is not None
+                df = self.preprocess_vectorized_df(df, strategy)
+        
+        # NOTE: models can have different ts_ranges, need to store the original ts_range before concatenating
+        ts_range = df['ts']
+        for model in backtestee.models.values():
+            signal: pd.DataFrame = model.signal
+            assert signal is not None, \
+                f"signal is None, please make sure model '{model.name}' (for \
+                {backtestee.type} '{backtestee.name}') is loaded or was dumped using 'model.dump(signal)' correctly."
+            df = self.preprocess_vectorized_df(df, model)
+            
+            # rename model columns to avoid conflict
+            num_model_cols = len(signal.columns)
+            new_model_cols = {col: model.name if num_model_cols == 1 else model.name+'_'+col for col in signal.columns}
+            signal.rename(columns=new_model_cols, inplace=True)
+            
+            # filter to match the timestamp range
+            # TODO:
+            # model.signal = model.signal[ts_range.min():ts_range.max()]
+            df = pd.concat([df, signal], axis=1)
+        df.sort_values(by='ts', ascending=True, inplace=True)
+        return df
+     
+    @staticmethod
+    @backtest
+    def postprocess_vectorized_df(df_chunks: list[pd.DataFrame]) -> pd.DataFrame:
         '''Prepares the df after vectorized backtesting, including:
         if has 'orders' column:
         - converts orders to trades
         if no 'orders' column, then 'trade_size'/'position' must be in the df
         - derives 'trade_size'/'position' from 'position'/'trade_size'
         '''
+        # TEMP
+        print('postprocess_vectorized_df!!!')
+        return
+        # df = pd.concat(df_chunks)
+        # print(df)
         cols = df.columns
         if 'position' not in cols and 'trade_size' not in cols:
             raise Exception("either 'position' or 'trade_size' must be in the dataframe columns")
@@ -79,20 +113,6 @@ class PandasDataTool(BaseDataTool):
         if 'trade_price' not in cols:
             df.loc[df['trade_size'] != 0, 'trade_price'] = df['close']
         return df
-    
-    def prepare_df_with_signals(self, models):
-        # NOTE: models can have different ts_ranges, need to store the original ts_range before concatenating
-        ts_range = self.df.index.get_level_values('ts')
-        for mdl, model in models.items():
-            assert model.signal is not None, f"signal is None, please make sure model '{mdl}' is loaded or was dumped using 'model.dump(signal)' correctly."
-            # rename model columns to avoid conflict
-            num_model_cols = len(model.signal.columns)
-            new_model_cols = {col: model.name if num_model_cols == 1 else model.name+'_'+col for col in model.signal.columns}
-            model.signal = model.signal.rename(columns=new_model_cols)
-            # filter to match the timestamp range
-            model.signal = model.signal[ts_range.min():ts_range.max()]
-            self.df = pd.concat([self.df, model.signal], axis=1)
-        self.df.sort_index(level='ts', inplace=True)
     
     # TODO: for train engine
     def prepare_datasets(self, datas):
@@ -109,7 +129,7 @@ class PandasDataTool(BaseDataTool):
         # combine datasets from different products to create the final train/val/test set
         for type_ in ['train', 'val', 'test']:
             df = pd.concat(datasets[type_])
-            df.set_index(self._INDEX, inplace=True)
+            df.set_index(self.index, inplace=True)
             df.sort_index(level='ts', inplace=True)
             if type_ == 'train':
                 self.train_set = df
@@ -119,11 +139,7 @@ class PandasDataTool(BaseDataTool):
                 self.test_set = df
     
     def clear_df(self):
-        index_len = len(self._INDEX)
-        self.df = pd.DataFrame(
-            columns=self.df.columns,
-            index=pd.MultiIndex(levels=[[]]*index_len, codes=[[]]*index_len, names=self._INDEX)
-        )
+        self.df = pd.DataFrame(columns=self.df.columns)
     
     # OPTIMIZE
     def append_to_df(self, data: BaseData, predictions: dict, **kwargs):
@@ -151,42 +167,56 @@ class PandasDataTool(BaseDataTool):
     
     def create_multi_index(self, index_data: dict, index_names: list[str]) -> pd.MultiIndex:
         return pd.MultiIndex.from_tuples([tuple(index_data[name] for name in index_names)], names=index_names)
-       
+    
+    def to_signal(self, X: pd.DataFrame, pred_y: np.ndarray, columns: list[str]):
+        signal = pd.DataFrame(pred_y, columns=columns)
+        return signal
+
        
     '''
     ************************************************
     Helper Functions
     ************************************************
     '''
-    def get_index_values(self, df: pd.DataFrame, index: str) -> list:
+    @staticmethod
+    def get_index_values(df: pd.DataFrame, index: str) -> list:
         assert index in df.index.names, f"index must be one of {df.index.names}"
         return df.index.get_level_values(index).unique().to_list()
     
-    def set_index_values(self, df: pd.DataFrame, index: str, values: list) -> pd.DataFrame:
+    @staticmethod
+    def set_index_values(df: pd.DataFrame, index: str, values: list) -> pd.DataFrame:
         assert index in df.index.names, f"index must be one of {df.index.names}"
         df.index = df.index.set_levels(values, level=index)
         return df
     
-    def output_df_to_parquet(self, df: pd.DataFrame, file_path: str, compression: str='zstd'):
+    @staticmethod    
+    def output_df_to_parquet(df: pd.DataFrame, file_path: str, compression: str='zstd'):
         df.to_parquet(file_path, compression=compression)
     
-    def filter_df(self, df: pd.DataFrame, start_date: str | None=None, end_date: str | None=None, product: str='', resolution: str=''):
+    @staticmethod
+    def filter_df(df: pd.DataFrame, start_date: str | None=None, end_date: str | None=None, product: str='', resolution: str=''):
         product = product or slice(None)
         resolution = resolution or slice(None)
         return df.loc[(slice(start_date, end_date), product, resolution), :]
     
-    def unstack_df(self, df: pd.DataFrame):
-        return df.unstack(level=self._GROUP)
+    @staticmethod
+    def unstack_df(df: pd.DataFrame, columns: list[str]):
+        '''
+        Args:
+            columns: list of columns to unstack, e.g. ['product', 'resolution']
+        '''
+        return df.unstack(level=columns)
     
-    def ffill_df(self, df: pd.DataFrame):
+    @staticmethod
+    def ffill_df(df: pd.DataFrame, columns: list[str]):
         return (
-            self.unstack_df(df)
+            df.unstack_df(level=columns)
             .ffill()
-            .stack(level=self._GROUP)
+            .stack(level=columns)
         )
-        
+    
+    @staticmethod
     def rescale_df(
-        self, 
         df: pd.DataFrame,
         window_size: int | None=None,
         min_periods: int=20,

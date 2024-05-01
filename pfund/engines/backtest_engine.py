@@ -37,10 +37,10 @@ from pfund.mixins.backtest import BacktestMixin
 
 class BacktestEngine(BaseEngine):
     def __new__(
-        cls, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='polars', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
+        cls, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
         config: ConfigHandler | None=None,
         append_signals=False,
-        load_models=True,
+        use_trained_models=True,
         auto_git_commit=False,
         save_backtests=False,
         num_chunks=1,
@@ -54,10 +54,10 @@ class BacktestEngine(BaseEngine):
         # This will make event-driven backtesting faster but less consistent with live trading
         if not hasattr(cls, 'append_signals'):
             cls.append_signals = append_signals
-        # NOTE: load_models=True means model's prepared signals will be reused in model.next()
+        # NOTE: use_trained_models=True means model's prepared signals will be reused in model.next()
         # instead of recalculating the signals. This will make event-driven backtesting faster but less consistent with live trading
-        if not hasattr(cls, 'load_models'):
-            cls.load_models = load_models
+        if not hasattr(cls, 'use_trained_models'):
+            cls.use_trained_models = use_trained_models
         if not hasattr(cls, 'auto_git_commit'):
             cls.auto_git_commit = auto_git_commit
         if not hasattr(cls, 'save_backtests'):
@@ -75,10 +75,10 @@ class BacktestEngine(BaseEngine):
         return super().__new__(cls, env, data_tool=data_tool, config=config, **settings)
 
     def __init__(
-        self, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='polars', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
+        self, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
         config: ConfigHandler | None=None,
         append_signals=False,
-        load_models=True,
+        use_trained_models=True,
         auto_git_commit=False,
         save_backtests=True,
         num_chunks=1,
@@ -116,8 +116,7 @@ class BacktestEngine(BaseEngine):
             strategy = self.add_strategy(BaseStrategy(), name='_dummy')
             # add event driven functions to dummy strategy to avoid NotImplementedError in backtesting
             empty_function = lambda *args, **kwargs: None
-            event_driven_funcs = ['on_quote', 'on_tick', 'on_bar', 'on_position', 'on_balance', 'on_order', 'on_trade']
-            for func in event_driven_funcs:
+            for func in strategy.REQUIRED_FUNCTIONS:
                 setattr(strategy, func, empty_function)
         assert not strategy.models, 'Adding more than 1 model to dummy strategy in backtesting is not supported, you should train and dump your models one by one'
         model = strategy.add_model(model, name=name)
@@ -272,86 +271,101 @@ class BacktestEngine(BaseEngine):
 
     def _backtest(self, backtestee: BaseStrategy | BaseModel) -> dict:
         backtests = {}
-        backtestee_type = 'strategy' if isinstance(backtestee, BaseStrategy) else 'model'
         dtl = backtestee.get_data_tool()
         df = backtestee.get_df(copy=True)
         
-        start_time = time.time()
+        if not self.use_ray:
+            tqdm_bar = tqdm(
+                total=self.num_chunks, 
+                desc=f'Backtesting {backtestee.tname} (per chunk)', 
+                colour='green'
+            )
+        else:
+            ray_tasks = []
+        
+        # Pre-Backtesting
         if self.mode == 'vectorized':
             if not hasattr(backtestee, 'backtest'):
-                raise Exception(f'{backtestee_type} {backtestee.name} does not have backtest() method, cannot run vectorized backtesting')
+                raise Exception(f'{backtestee.tname} does not have backtest() method, cannot run vectorized backtesting')
+            sig = inspect.signature(backtestee.backtest)
+            params = list(sig.parameters.values())
+            if not params or params[0].name != 'df':
+                raise Exception(f'{backtestee.tname} backtest() must have "df" as its first arg, i.e. backtest(self, df)')
             df_chunks = []
-            for df_chunk in dtl.iterate_df_by_chunks(df, num_chunks=self.num_chunks):
-                backtestee.backtest(df_chunk)
-                df_chunk = dtl.postprocess_vectorized_df(df_chunk)
-                df_chunks.append(df_chunk)
-            df = dtl.concat(df_chunks)
         elif self.mode == 'event_driven':
             # NOTE: clear dfs so that strategies/models don't know anything about the incoming data
             backtestee.clear_dfs()
-            ray_tasks = []
-            
-            if not self.use_ray:
-                tqdm_bar = tqdm(
-                    total=self.num_chunks, 
-                    desc=f'Backtesting {backtestee_type} "{backtestee.name}" (per chunk)', 
-                    colour='green'
-                )
-                
-            for chunk_num, df_chunk in enumerate(dtl.iterate_df_by_chunks(df, num_chunks=self.num_chunks)):
-                if self.use_ray:
-                    ray_tasks.append((df_chunk, chunk_num))
-                else:
+        else:
+            raise NotImplementedError(f'Backtesting mode {self.mode} is not supported')
+        
+        
+        # Backtesting
+        start_time = time.time()
+        for chunk_num, df_chunk in enumerate(dtl.iterate_df_by_chunks(df, num_chunks=self.num_chunks)):
+            if self.use_ray:
+                ray_tasks.append((df_chunk, chunk_num))
+            else:
+                if self.mode == 'vectorized':
+                    df_chunk = dtl.preprocess_vectorized_df(df_chunk, backtestee)
+                    backtestee.backtest(df_chunk)
+                    df_chunks.append(df_chunk)
+                elif self.mode == 'event_driven':
                     df_chunk = dtl.preprocess_event_driven_df(df_chunk)
                     self._event_driven_backtest(df_chunk, chunk_num=chunk_num)
-                    tqdm_bar.update(1)
-                    
-            if self.use_ray:
-                import ray
-                from ray.util.queue import Queue
-                
-                ray.init(num_cpus=self.num_cpus)
-                print(f"Ray's num_cpus is set to {self.num_cpus}")
-                
-                @ray.remote
-                def _run_task(log_queue: Queue,  _df_chunk: pd.DataFrame, _chunk_num: int, _batch_num: int):
-                    logger = backtestee.logger
-                    if not logger.handlers:
-                        logger.addHandler(QueueHandler(log_queue))
-                        logger.setLevel(logging.DEBUG)
+                tqdm_bar.update(1)
+            
+        if self.use_ray:
+            import ray
+            from ray.util.queue import Queue
+            
+            ray.init(num_cpus=self.num_cpus)
+            print(f"Ray's num_cpus is set to {self.num_cpus}")
+            
+            @ray.remote
+            def _run_task(log_queue: Queue,  _df_chunk: pd.DataFrame, _chunk_num: int, _batch_num: int):
+                logger = backtestee.logger
+                if not logger.handlers:
+                    logger.addHandler(QueueHandler(log_queue))
+                    logger.setLevel(logging.DEBUG)
+                if self.mode == 'vectorized':
+                    _df_chunk = dtl.preprocess_vectorized_df(_df_chunk, backtestee)
+                    backtestee.backtest(_df_chunk)
+                elif self.mode == 'event_driven':
                     _df_chunk = dtl.preprocess_event_driven_df(_df_chunk)
                     self._event_driven_backtest(_df_chunk, chunk_num=_chunk_num, batch_num=_batch_num)
 
-                batch_size = self.num_cpus
-                log_queue = Queue()
-                QueueListener(log_queue, *backtestee.logger.handlers, respect_handler_level=True).start()
-                batches = [ray_tasks[i: i + batch_size] for i in range(0, len(ray_tasks), batch_size)]
-                with tqdm(
-                    total=len(batches),
-                    desc=f'Backtesting {backtestee_type} "{backtestee.name}" ({batch_size} chunks per batch)', 
-                    colour='green'
-                ) as tqdm_bar:
-                    for batch_num, batch in enumerate(batches):
-                        futures = [_run_task.remote(log_queue, *task, batch_num) for task in batch]
-                        ray.get(futures)
-                        tqdm_bar.update(1)
-        else:
-            raise NotImplementedError(f'Backtesting mode {self.mode} is not supported')
+            batch_size = self.num_cpus
+            log_queue = Queue()
+            QueueListener(log_queue, *backtestee.logger.handlers, respect_handler_level=True).start()
+            batches = [ray_tasks[i: i + batch_size] for i in range(0, len(ray_tasks), batch_size)]
+            with tqdm(
+                total=len(batches),
+                desc=f'Backtesting {backtestee.tname} ({batch_size} chunks per batch)', 
+                colour='green'
+            ) as tqdm_bar:
+                for batch_num, batch in enumerate(batches):
+                    futures = [_run_task.remote(log_queue, *task, batch_num) for task in batch]
+                    ray.get(futures)
+                    tqdm_bar.update(1)
         end_time = time.time()
         print(f'Backtest elapsed time: {end_time - start_time:.2f}(s)')
         
-        if backtestee_type == 'strategy':
+        
+        # Post-Backtesting
+        if backtestee.type == 'strategy':
+            if self.mode == 'vectorized':
+                df = dtl.postprocess_vectorized_df(df_chunks)
+            # TODO
+            elif self.mode == 'event_driven':
+                pass
             backtest_history: dict = self._create_backtest_history(backtestee, start_time, end_time)
             if self.save_backtests:
                 backtest_history = self._output_backtest_results(backtestee, df, backtest_history)
             backtests[backtestee.name] = backtest_history
-        elif backtestee_type == 'model':
+        else:
             self.assert_consistent_signals()
+            
         return backtests
-
-    # TODO
-    def _vectorized_backtest(self, df_chunk, chunk_num=0, batch_num=0):
-        pass
 
     def _event_driven_backtest(self, df_chunk, chunk_num=0, batch_num=0):
         common_cols = ['ts', 'product', 'resolution', 'broker', 'is_quote', 'is_tick']

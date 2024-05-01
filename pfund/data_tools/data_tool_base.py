@@ -2,6 +2,9 @@ from pfund.datas.data_base import BaseData
 
 
 class BaseDataTool:
+    index = ['ts', 'product', 'resolution']
+    group = ['product', 'resolution']
+
     def __init__(self):
         self.train_periods = {}  # {product: ('start_date', 'end_date')}
         self.val_periods = self.validation_periods = {}  # {product: ('start_date', 'end_date')}
@@ -14,6 +17,9 @@ class BaseDataTool:
     
     def get_raw_df(self, data: BaseData):
         return self._raw_dfs[data]
+    
+    def has_raw_df(self, data: BaseData):
+        return data in self._raw_dfs
     
     def add_raw_df(self, data: BaseData, df):
         self._raw_dfs[data] = df

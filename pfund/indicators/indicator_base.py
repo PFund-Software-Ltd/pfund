@@ -28,7 +28,18 @@ class BaseIndicator(BaseModel):
                 e.g. indicator = lambda df: ta.volatility.bollinger_mavg(close=df['close'], ...)
         '''
         super().__init__(indicator, *args, **kwargs)
+        self.type = 'indicator'
         self._signal_columns = []
+        
+        if self.engine.data_tool == 'pandas':
+            self.predict = self._predict_pandas
+        elif self.engine.data_tool == 'polars':
+            self.predict = self._predict_polars
+        else:
+            raise ValueError(f'Unsupported data tool: {self.engine.data_tool}')
+    
+    def predict(self, *args, **kwargs):
+        raise NotImplementedError
     
     @property
     def indicator(self):
@@ -40,9 +51,9 @@ class BaseIndicator(BaseModel):
     def load(self):
         # since ml_model is None when dumping, 
         # use the initialized ml_model to avoid ml_model=None after loading
-        ml_model = self.ml_model
+        indicator = self.ml_model
         super().load()  # -> self.ml_model = None after loading
-        self.ml_model = ml_model
+        self.ml_model = indicator
     
     def dump(self, signal: pd.DataFrame):
         # NOTE: ml_model is indicator (function of talib.abstract, e.g. abstract.SMA), 
@@ -55,16 +66,3 @@ class BaseIndicator(BaseModel):
     
     def flow(self, is_dump=False) -> pd.DataFrame:
         return super().flow(is_dump=is_dump)
-
-    def _check_grouped_df_nlevels(self, grouped_df: pd.DataFrame) -> bool:
-        # e.g. if self._GROUP is ['product', 'resolution'], after groupby() and applying indicate()
-        # the index.nlevels will be 5, and hence len(self._GROUP) * 2 + 1 where the 1 is 'ts'
-        expected_nlevels = len(self._GROUP) * 2 + 1
-        # NOTE: if not enough data, somehow grouped_df will have smaller .index.nlevels
-        if grouped_df.index.nlevels < expected_nlevels:
-            is_correct = False
-        elif grouped_df.index.nlevels > expected_nlevels:
-            raise Exception(f'Unexpected {grouped_df.index.nlevels=} > {expected_nlevels=}')
-        else:
-            is_correct = True
-        return is_correct

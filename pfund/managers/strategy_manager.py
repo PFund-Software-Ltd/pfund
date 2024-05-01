@@ -80,9 +80,9 @@ class StrategyManager:
             strategy.set_name(name)
         strategy.set_parallel(is_parallel)
         strategy.create_logger()
-        strat = strategy.strat
+        strat = strategy.name
         if strat in self.strategies:
-            raise Exception(f'strategy {strat} already exists')
+            raise Exception(f"strategy '{strat}' already exists")
         self.strategies[strat] = strategy
         self.logger.debug(f"added strategy '{strat}'")
         return strategy

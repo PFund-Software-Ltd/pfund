@@ -11,6 +11,8 @@ if TYPE_CHECKING:
     from pfeed.feeds.base_feed import BaseFeed
     from pfund.datas.data_base import BaseData
     from pfund.products.product_base import BaseProduct
+    from pfund.strategies.strategy_base import BaseStrategy
+    from pfund.models.model_base import BaseModel
 
 try:
     import pandas as pd
@@ -66,6 +68,15 @@ class BacktestMixin:
             for data, df in zip(datas, dfs):
                 self._add_raw_df(data, df)
         return datas
+    
+    def _add_consumer_datas(self, consumer: BaseStrategy | BaseModel, *args, use_consumer_data=False, **kwargs) -> list[BaseData]:
+        consumer_datas = super()._add_consumer_datas(consumer, *args, use_consumer_data=use_consumer_data, **kwargs)
+        dtl = consumer.get_data_tool()
+        for data in consumer_datas:
+            if dtl.has_raw_df(data):
+                df = dtl.get_raw_df(data)
+                self._add_raw_df(data, df)
+        return consumer_datas
         
     def add_model(self, model: tModel, name: str='') -> BacktestMixin | tModel:
         from pfund.models.model_backtest import BacktestModel

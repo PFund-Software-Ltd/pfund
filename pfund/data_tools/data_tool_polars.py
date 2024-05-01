@@ -4,33 +4,30 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, Generator
 if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
+    from pfund.models.model_base import BaseModel
     
-import pandas as pd
 import polars as pl
 
+from pfund.strategies.strategy_base import BaseStrategy
 from pfund.data_tools.data_tool_base import BaseDataTool
 from pfund.utils.envs import backtest
 
 
 class PolarsDataTool(BaseDataTool):
-    _INDEX = ['ts', 'product', 'resolution']
-    
     def get_df(self, copy=True):
         return self.df.clone() if copy else self.df
-    
-    def concat(self, dfs: list[pl.DataFrame | pl.LazyFrame]) -> pl.DataFrame | pl.LazyFrame:
-        return pl.concat(dfs)
     
     def prepare_df(self):
         assert self._raw_dfs, "No data is found, make sure add_data(...) is called correctly"
         self.df = pl.concat(self._raw_dfs.values())
-        self.df = self.df.sort(by='ts', descending=False)
+        self.df = self.df.sort(by=self.index, descending=False)
         # arrange columns
-        self.df = self.df.select(self._INDEX + [col for col in self.df.columns if col not in self._INDEX])
+        self.df = self.df.select(self.index + [col for col in self.df.columns if col not in self.index])
         self._raw_dfs.clear()
     
+    @staticmethod
     @backtest
-    def iterate_df_by_chunks(self, lf: pl.LazyFrame, num_chunks=1) -> Generator[pd.DataFrame, None, None]:
+    def iterate_df_by_chunks(lf: pl.LazyFrame, num_chunks=1) -> Generator[pl.DataFrame, None, None]:
         total_rows = lf.count().collect()['ts'][0]
         chunk_size = total_rows // num_chunks
         for i in range(0, total_rows, chunk_size):
@@ -63,17 +60,21 @@ class PolarsDataTool(BaseDataTool):
         ).unnest('Resolution')
         
         # arrange columns
-        left_cols = self._INDEX + ['broker', 'is_quote', 'is_tick']
+        left_cols = self.index + ['broker', 'is_quote', 'is_tick']
         df = df.select(left_cols + [col for col in df.columns if col not in left_cols])
         return df
     
+    # TODO
     @backtest
-    def postprocess_vectorized_df(self, df: pl.DataFrame) -> pl.LazyFrame:
-        return df.lazy()
-    
-    # TODO:
-    def prepare_df_with_signals(self, models):
+    def preprocess_vectorized_df(self, df: pl.DataFrame, strategy: BaseStrategy) -> pl.DataFrame:
         pass
+    
+    # TODO
+    @staticmethod
+    @backtest
+    def postprocess_vectorized_df(df_chunks: list[pl.DataFrame]) -> pl.LazyFrame:
+        df = pl.concat(df_chunks)
+        return df.lazy()
     
     # TODO: for train engine
     def prepare_datasets(self, datas):
@@ -92,13 +93,16 @@ class PolarsDataTool(BaseDataTool):
     Helper Functions
     ************************************************
     '''
-    def output_df_to_parquet(self, df: pl.DataFrame | pl.LazyFrame, file_path: str, compression: str='zstd'):
+    @staticmethod
+    def output_df_to_parquet(df: pl.DataFrame | pl.LazyFrame, file_path: str, compression: str='zstd'):
         df.write_parquet(file_path, compression=compression)
     
     # TODO
-    def filter_df(self, df: pl.DataFrame | pl.LazyFrame, **kwargs) -> pl.DataFrame | pl.LazyFrame:
+    @staticmethod
+    def filter_df(df: pl.DataFrame | pl.LazyFrame, **kwargs) -> pl.DataFrame | pl.LazyFrame:
         pass
     
     # TODO
-    def unstack_df(self, df: pl.DataFrame | pl.LazyFrame, **kwargs) -> pl.DataFrame | pl.LazyFrame:
+    @staticmethod
+    def unstack_df(df: pl.DataFrame | pl.LazyFrame, **kwargs) -> pl.DataFrame | pl.LazyFrame:
         pass

@@ -11,7 +11,7 @@ def print_all_loggers():
     for name, logger in logging.Logger.manager.loggerDict.items():
         if hasattr(logger, 'handlers'):
             print(name, logger, logger.handlers)
-
+            
 
 def set_up_loggers(log_path, logging_config_file_path, user_logging_config: dict | None=None) -> LoggingDictConfigurator:
     def deep_update(default_dict, override_dict, raise_if_key_not_exist=False):
@@ -46,13 +46,13 @@ def set_up_loggers(log_path, logging_config_file_path, user_logging_config: dict
         deep_update(logging_config, user_logging_config)
     logging_config['log_path'] = log_path
     # ≈ logging.config.dictConfig(logging_config) with a custom configurator
+    
     logging_configurator = LoggingDictConfigurator(logging_config)
     logging_configurator.configure()
     return logging_configurator
 
 
-# TODO: support 'feature', 'indicator'
-def create_dynamic_logger(name: str, type_: Literal['strategy', 'model', 'manager']):
+def create_dynamic_logger(name: str, type_: Literal['strategy', 'model', 'indicator', 'feature', 'manager']):
     """Set up logger for strategy/model/manager
     
     Since loggers for strategy/model/manager require dynamic names,
@@ -60,7 +60,7 @@ def create_dynamic_logger(name: str, type_: Literal['strategy', 'model', 'manage
     Instead, they will be created here and use the logger config of strategy/model/manager by default if not specified.
     """
     assert name, "logger name cannot be empty/None"
-    assert type_ in ['strategy', 'model', 'manager'], f"Unsupported {type_=}"
+    assert type_ in ['strategy', 'model', 'indicator', 'feature', 'manager'], f"Unsupported {type_=}"
     
     Engine = get_engine_class()
     config = Engine.logging_configurator

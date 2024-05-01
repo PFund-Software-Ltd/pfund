@@ -116,7 +116,7 @@ class ConfigHandler:
         if self.use_fork_process and sys.platform != 'win32':
             multiprocessing.set_start_method('fork', force=True)
         
-        if self.use_custom_excepthook:
+        if self.use_custom_excepthook and sys.excepthook is sys.__excepthook__:
             sys.excepthook = _custom_excepthook
     
 
@@ -126,7 +126,7 @@ def configure(
     logging_config_file_path: str = f'{PROJ_CONFIG_PATH}/logging.yml',
     logging_config: dict | None=None,
     use_fork_process: bool=True,
-    use_custom_excepthook: bool=True,
+    use_custom_excepthook: bool=False,
 ):
     return ConfigHandler(
         data_path=data_path,

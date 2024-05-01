@@ -31,7 +31,8 @@ from pfund.plogging import create_dynamic_logger
 
 
 class BaseStrategy(ABC, metaclass=MetaStrategy):
-
+    REQUIRED_FUNCTIONS = ['on_quote', 'on_tick', 'on_bar']
+    
     _file_path: Path | None = None  # Get the file path where the strategy was defined
     config = {}
 
@@ -81,6 +82,8 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         self.accounts = defaultdict(dict)  # {trading_venue: {acc1: account1, acc2: account2} }
         self.datas = defaultdict(dict)  # {product: {'1m': data}}
         self._listeners = defaultdict(list)  # {data: model}
+        self._consumers = []  # strategies that consume this strategy (sub-strategy)
+        self.type = 'strategy'
         self.orderbooks = {}  # {product: data}
         self.tradebooks = {}  # {product: data}
         self.positions = {}  # {account: {pdt: position} }
@@ -88,6 +91,11 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         # NOTE: includes submitted orders and opened orders
         self.orders = {}  # {account: [order, ...]}
         self.trades = {}  # {account: [trade, ...]}
+        self.models = {}
+        self.strategies = {}
+        self.predictions = {}
+        self.data = None  # last data
+        self.signal = None  # output signal df where a signal is buy/sell/null
         
         # TODO
         self.portfolio = None
@@ -95,13 +103,13 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         self.investment_profile = None
         self.risk_monitor = self.rm = RiskMonitor()
         
-        self.models = {}
-        self.strategies = {}
-        self.predictions = {}
-        self.data = None  # last data
-        
         self.params = {}
         self.load_params()
+    
+    @property
+    def tname(self):
+        '''type + name, e.g. strategy SMA'''
+        return f"{self.type} '{self.name}'"
     
     @property
     def df(self):
@@ -155,6 +163,10 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
     def set_parallel(self, is_parallel):
         self._is_parallel = is_parallel
     
+    def add_consumer(self, consumer: BaseStrategy):
+        if consumer not in self._consumers:
+            self._consumers.append(consumer)        
+    
     def add_listener(self, listener: BaseStrategy | BaseModel, listener_key: BaseData):
         if listener not in self._listeners[listener_key]:
             self._listeners[listener_key].append(listener)
@@ -193,11 +205,22 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
     def get_delay(self, ts):
         return time.time() - ts
     
-    # TODO
     def add_strategy(self, strategy: tStrategy, name: str='', is_parallel=False) -> tStrategy:
-        pass
-        # if name in self.strategies:
-        #     raise Exception(f"strategy '{name}' already exists in strategy '{self.name}'")
+        # TODO
+        assert not is_parallel, 'Running strategy in parallel is not supported yet'
+        assert isinstance(strategy, BaseStrategy), \
+            f"strategy '{strategy.__class__.__name__}' is not an instance of BaseStrategy. Please create your strategy using 'class {strategy.__class__.__name__}(pf.Strategy)'"
+        if name:
+            strategy.set_name(name)
+        strategy.set_parallel(is_parallel)
+        strategy.create_logger()
+        strat = strategy.name
+        if strat in self.strategies:
+            raise Exception(f"sub-strategy '{strat}' already exists in strategy '{self.name}'")
+        strategy.add_consumer(self)
+        self.strategies[strat] = strategy
+        self.logger.debug(f"added sub-strategy '{strat}'")
+        return strategy
     
     def get_model(self, name: str) -> BaseModel:
         return self.models[name]
@@ -205,16 +228,16 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
     def add_model(self, model: tModel, name: str='') -> tModel:
         Model = model.get_model_type_of_ml_model()
         assert isinstance(model, Model), \
-            f"model '{model.__class__.__name__}' is not an instance of {Model.__name__}. Please create your model using 'class {model.__class__.__name__}({Model.__name__})'"
+            f"{model.type} '{model.__class__.__name__}' is not an instance of {Model.__name__}. Please create your {model.type} using 'class {model.__class__.__name__}({Model.__name__})'"
         if name:
             model.set_name(name)
         model.create_logger()
-        mdl = model.mdl
+        mdl = model.name
         if mdl in self.models:
-            raise Exception(f"model '{mdl}' already exists in strategy '{self.name}'")
-        model.set_consumer(self)
+            raise Exception(f"{model.tname} already exists in {self.tname}")
+        model.add_consumer(self)
         self.models[mdl] = model
-        self.logger.debug(f"added model '{mdl}'")
+        self.logger.debug(f"added {model.tname}")
         return model
     
     def add_feature(self, feature: tFeature, name: str='') -> tFeature:
@@ -248,6 +271,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             datas = broker.add_data(exch, base_currency, quote_currency, ptype, *args, **kwargs)
         else:
             datas = broker.add_data(base_currency, quote_currency, ptype, *args, **kwargs)
+   
         for data in datas:
             if data.is_time_based():
                 # do not listen to data thats only used for resampling
@@ -259,10 +283,27 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
                 self.orderbooks[product] = data
             if resolution.is_tick():
                 self.tradebooks[product] = data
-            self.datas[product][repr(resolution)] = data
-            broker.add_listener(listener=self, listener_key=data, event_type='public')
+            
+            is_sub_strategy = bool(self._consumers)
+            if not is_sub_strategy:
+                self.datas[product][repr(resolution)] = data
+                broker.add_listener(listener=self, listener_key=data, event_type='public')
+
+        for consumer in self._consumers:
+            self._add_consumer_datas(consumer, trading_venue, base_currency, quote_currency, ptype, *args, **kwargs)
+
         return datas
     
+    def _add_consumer_datas(self, consumer: BaseStrategy | BaseModel, *args, use_consumer_data=False, **kwargs) -> list[BaseData]:
+        if not use_consumer_data:
+            consumer_datas = consumer.add_data(*args, **kwargs)
+        else:
+            consumer_datas = consumer.get_datas()
+        for data in consumer_datas:
+            self.datas[data.product][repr(data.resolution)] = data
+            consumer.add_listener(listener=self, listener_key=data)
+        return consumer_datas
+
     # TODO, for website to remove data from a strategy
     def remove_data(self, product: BaseProduct, resolution: str | None=None):
         if datas := self.get_data(product, resolution=resolution):
@@ -371,9 +412,8 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         product, bids, asks, ts = data.product, data.bids, data.asks, data.ts
         self.data = data
         for listener in self._listeners[data]:
-            model = listener
-            model.update_quote(data, **kwargs)
-            self.update_predictions(model)
+            listener.update_quote(data, **kwargs)
+            self.update_predictions(listener)
         self._append_to_df(**kwargs)
         self.on_quote(product, bids, asks, ts, **kwargs)
 
@@ -381,9 +421,8 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         product, px, qty, ts = data.product, data.px, data.qty, data.ts
         self.data = data
         for listener in self._listeners[data]:
-            model = listener
-            model.update_tick(data, **kwargs)
-            self.update_predictions(model)
+            listener.update_tick(data, **kwargs)
+            self.update_predictions(listener)
         self._append_to_df(**kwargs)
         self.on_tick(product, px, qty, ts, **kwargs)
     
@@ -391,15 +430,15 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         product, bar, ts = data.product, data.bar, data.bar.end_ts
         self.data = data
         for listener in self._listeners[data]:
-            model = listener
-            model.update_bar(data, **kwargs)
-            self.update_predictions(model)
+            # NOTE: listener could be a strategy or a model
+            listener.update_bar(data, **kwargs)
+            self.update_predictions(listener)
         self._append_to_df(**kwargs)
         self.on_bar(product, bar, ts, **kwargs)
 
-    def update_predictions(self, model: BaseModel):
-        pred_y = model.next()
-        self.predictions[model.name] = pred_y
+    def update_predictions(self, listener: BaseStrategy | BaseModel):
+        pred_y = listener.next()
+        self.predictions[listener.name] = pred_y
         
     def update_positions(self, position):
         self.positions[position.account][position.pdt] = position
@@ -438,21 +477,21 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
     def _prepare_df(self):
         return self._data_tool.prepare_df()
         
-    def _prepare_df_with_signals(self):
-        return self._data_tool.prepare_df_with_signals(self.models)
-    
     def _append_to_df(self, **kwargs):
         return self._data_tool.append_to_df(self.data, self.predictions, **kwargs)
     
     def start(self):
         if not self.is_running():
             self.add_datas()
+            if not self.datas:
+                self.logger.warning(f"No data for {self.tname}, adding datas from consumers {[consumer.tname for consumer in self._consumers]}")
+                for consumer in self._consumers:
+                    self._add_consumer_datas(consumer, use_consumer_data=True)
             self.add_strategies()
             self._start_strategies()
             self.add_models()
             self._start_models()
             self._prepare_df()
-            self._prepare_df_with_signals()
             self._subscribe_to_private_channels()
             self._set_aliases()
             if self.is_parallel():

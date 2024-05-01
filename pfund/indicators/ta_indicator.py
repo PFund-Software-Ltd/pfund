@@ -64,7 +64,7 @@ class TaIndicator(BaseIndicator):
             parameters = match.group(1)  # This is the string within the first parentheses
             return parameters
     
-    def predict(self, X: pd.DataFrame) -> np.ndarray:
+    def _predict_pandas(self, X: pd.DataFrame) -> np.ndarray:
         funcs = self._kwargs.get('funcs', [])
         ta_type = 'class' if funcs else 'function'
         dfs = []
@@ -100,3 +100,7 @@ class TaIndicator(BaseIndicator):
             df.sort_index(level='ts', inplace=True)
         self.set_signal_columns(df.columns.to_list())
         return df.to_numpy()
+
+    # TODO
+    def _predict_polars(self):
+        pass

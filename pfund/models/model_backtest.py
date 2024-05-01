@@ -4,8 +4,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.models.model_base import MachineLearningModel
-    from pfund.datas.data_base import BaseData
     from pfund.types.core import tModel
+    from pfund.models.model_base import BaseModel
 
 from pfund.models.model_base import BaseFeature
 from pfund.strategies.strategy_base import BaseStrategy
@@ -30,19 +30,22 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
             model_dict['data_signatures'] = self._data_signatures
             return model_dict
 
-        def add_consumer_datas_if_no_data(self) -> list[BaseData]:
-            consumer_datas = super().add_consumer_datas_if_no_data()
-            for data in consumer_datas:
-                consumer_data_tool = self._consumer.get_data_tool()
-                df = consumer_data_tool.get_raw_df(data)
-                self._data_tool.add_raw_df(data, df)
-            return consumer_datas
+        def add_consumer(self, consumer: BaseStrategy | BaseModel):
+            is_dummy_strategy = isinstance(consumer, BaseStrategy) and consumer.name == '_dummy'
+            if is_dummy_strategy:
+                assert not self._consumers, f"{self.tname} must have _dummy strategy as its only consumer"
+            return super().add_consumer(consumer)
         
         def _is_dummy_strategy(self):
-            return isinstance(self._consumer, BaseStrategy) and self._consumer.name == '_dummy'
+            if self._consumers:
+                # NOTE: dummy strategy will always be the only consumer
+                consumer = self._consumers[0]
+                return isinstance(consumer, BaseStrategy) and consumer.name == '_dummy'
+            else:
+                return False
         
         def load(self):
-            if self.engine.load_models:
+            if self._is_signal_prepared():
                 super().load()
         
         def clear_dfs(self):
@@ -58,10 +61,6 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
         def _set_data_periods(self, datas, **kwargs):
             return self._data_tool.set_data_periods(datas, **kwargs)
         
-        def _prepare_df_with_signals(self):
-            if self.engine.mode == 'vectorized':
-                self._data_tool.prepare_df_with_signals(self.models)
-        
         def _append_to_df(self, **kwargs):
             if not self._is_signal_prepared() and self.engine.append_signals:
                 return self._data_tool.append_to_df(self.data, self.predictions, **kwargs)
@@ -72,7 +71,7 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
             elif self.engine.mode == 'vectorized':
                 return True
             elif self.engine.mode == 'event_driven':
-                return self.engine.load_models
+                return self.engine.use_trained_models
                 
         def next(self):
             if not self._is_signal_prepared():

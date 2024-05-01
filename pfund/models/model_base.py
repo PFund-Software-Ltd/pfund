@@ -90,21 +90,21 @@ class BaseModel(ABC, metaclass=MetaModel):
         DataTool = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool}'), f'{data_tool.capitalize()}DataTool')
         self._data_tool = DataTool()
         self.logger = None
-        self._consumer = None  # strategy/model that consumes this model
-        self._is_ready = False
         self._is_running = False
         # minimum number of data required for the model to make a prediction
         self.min_data_points = kwargs.get('min_data_points', 1)
         self.max_data_points = kwargs.get('max_data_points', self.min_data_points)
         assert self.max_data_points >= self.min_data_points, f'max_data_points={self.max_data_points} must be greater than or equal to min_data_points={self.min_data_points}'
         self.ml_model = ml_model  # user-defined machine learning model
-        self.signal = None  # output signal df from trained ml_model
+        self.type = 'model'
         self.products = defaultdict(dict)  # {trading_venue: {pdt1: product1, pdt2: product2} }
         self.datas = defaultdict(dict)  # {product: {'1m': data}}
         self._listeners = defaultdict(list)  # {data: model}
+        self._consumers = []  # strategies/models that consume this model
         self.models = {}
         self.predictions = {}
         self.data = None  # last data
+        self.signal = None  # output signal df from trained ml_model
         
         self.params = {}
         self.load_params()
@@ -122,8 +122,21 @@ class BaseModel(ABC, metaclass=MetaModel):
             raise AttributeError(f"'{class_name}' object or '{class_name}.ml_model' or '{class_name}.data_tool' has no attribute '{attr}'")
     
     @property
+    def tname(self):
+        '''type + name, e.g. model XYZ'''
+        return f"{self.type} '{self.name}'"
+    
+    @property
     def df(self):
         return self._data_tool.df
+    
+    @property
+    def index(self):
+        return self._data_tool.index
+    
+    @property
+    def group(self):
+        return self._data_tool.group
     
     def get_df(self, copy=True):
         return self._data_tool.get_df(copy=copy)
@@ -156,7 +169,6 @@ class BaseModel(ABC, metaclass=MetaModel):
     def set_signal(self, signal: pd.DataFrame | pl.DataFrame | pl.LazyFrame | None):
         self.signal = signal
         
-    # FIXME: pandas specific
     def to_signal(self, X: pd.DataFrame | pl.DataFrame | pl.LazyFrame, pred_y: torch.Tensor | np.ndarray, columns: list[str] | None=None) -> pd.DataFrame | pl.DataFrame | pl.LazyFrame:
         if type(pred_y) is torch.Tensor:
             pred_y = pred_y.detach().numpy() if pred_y.requires_grad else pred_y.numpy()
@@ -166,14 +178,14 @@ class BaseModel(ABC, metaclass=MetaModel):
                 columns = [self.name]
             else:
                 columns = [f'{self.name}_{i}' for i in range(num_cols)]
-        signal = pd.DataFrame(pred_y, index=X.index, columns=columns)
+        dtl = self.get_data_tool()
+        signal = dtl.to_signal(X, pred_y, columns=columns)
         self.set_signal(signal)
         return signal
     
     # FIXME: pandas specific
-    def append_to_signal(self, X: pd.DataFrame | pl.DataFrame | pl.LazyFrame, new_pred: torch.Tensor | np.ndarray) -> pd.DataFrame | pl.DataFrame | pl.LazyFrame:
+    def append_signal(self, X: pd.DataFrame | pl.DataFrame | pl.LazyFrame, new_pred: torch.Tensor | np.ndarray) -> pd.DataFrame | pl.DataFrame | pl.LazyFrame:
         '''Appends new signal to self.signal'''
-        assert self.signal is not None
         # self.data is the lastest data passed in
         index_data = {'ts': self.data.dt, 'product': repr(self.data.product), 'resolution': repr(self.data.resolution)}
         index = self._data_tool.create_multi_index(index_data, X.index.names)
@@ -195,6 +207,10 @@ class BaseModel(ABC, metaclass=MetaModel):
     # FIXME: pandas specific
     def next(self) -> torch.Tensor | np.ndarray | None:
         '''Returns the next prediction in event-driven mode.'''
+        # TODO: check if the pred_y is already there first
+        # since the same data could be passed in multiple times 
+        # if the model is a listener to multiple consumers (e.g. strategy+model)
+        
         # get the lastest df (features) using self.min_data_points
         mask = self.df.index.get_level_values('ts') <= self.data.dt  # NOTE: self.data is the latest data
         positions = [i for i, m in enumerate(mask) if m]
@@ -225,7 +241,7 @@ class BaseModel(ABC, metaclass=MetaModel):
             self.to_signal(X, pred_y)
         # update signal
         else:
-            self.append_to_signal(X, new_pred)
+            self.append_signal(X, new_pred)
         return new_pred
             
     def get_model_type_of_ml_model(self) -> PytorchModel | SklearnModel | BaseModel:
@@ -238,15 +254,22 @@ class BaseModel(ABC, metaclass=MetaModel):
             Model = BaseModel
         return Model
     
-    def set_consumer(self, consumer: BaseStrategy | BaseModel):
+    def add_consumer(self, consumer: BaseStrategy | BaseModel):
         '''
         when a model is added to a strategy, consumer is a strategy
         when a model is added to a model, consumer is a model
         '''
-        self._consumer = consumer
+        if consumer not in self._consumers:
+            self._consumers.append(consumer)
 
     def create_logger(self):
-        self.logger = create_dynamic_logger(self.name, 'model')
+        if self.is_indicator():
+            type_ = 'indicator'
+        elif self.is_feature():
+            type_ = 'feature'
+        else:
+            type_ = 'model'
+        self.logger = create_dynamic_logger(self.name, type_)
         
     def set_name(self, name: str):
         self.name = self.mdl = name
@@ -300,7 +323,7 @@ class BaseModel(ABC, metaclass=MetaModel):
     
     # TODO
     def is_ready(self):
-        return self._is_ready
+        pass
     
     def is_running(self):
         return self._is_running
@@ -308,6 +331,9 @@ class BaseModel(ABC, metaclass=MetaModel):
     def is_indicator(self) -> bool:
         from pfund.indicators.indicator_base import BaseIndicator
         return isinstance(self, BaseIndicator)
+    
+    def is_feature(self) -> bool:
+        return isinstance(self, BaseFeature)
     
     def _is_signal_prepared(self):
         return True
@@ -322,31 +348,27 @@ class BaseModel(ABC, metaclass=MetaModel):
         return self.datas[product] if not resolution else self.datas[product][resolution]
     
     def add_data(self, trading_venue, base_currency, quote_currency, ptype, *args, **kwargs) -> list[BaseData]:
-        datas = self._consumer.add_data(trading_venue, base_currency, quote_currency, ptype, *args, **kwargs)
-        for data in datas:
-            self._add_data(data)
+        datas = []
+        for consumer in self._consumers:
+            consumer_datas = self._add_consumer_datas(consumer, trading_venue, base_currency, quote_currency, ptype, *args, **kwargs)
+            datas += consumer_datas
         return datas
     
-    def _add_data(self, data: BaseData):
-        self.datas[data.product][repr(data.resolution)] = data
-        self._consumer.add_listener(listener=self, listener_key=data)
-    
-    def add_consumer_datas_if_no_data(self) -> list[BaseData]:
-        '''if no data, add the consumer's datas'''
-        if self.datas:
-            return []
+    def _add_consumer_datas(self, consumer: BaseStrategy | BaseModel, *args, use_consumer_data=False, **kwargs) -> list[BaseData]:
+        if not use_consumer_data:
+            consumer_datas = consumer.add_data(*args, **kwargs)
         else:
-            self.logger.warning(f'No data for model {self.name}, adding {self._consumer.name}\'s datas')
-            consumer_datas = self._consumer.get_datas()
-            for data in consumer_datas:
-                self._add_data(data)
-            return consumer_datas
+            consumer_datas = consumer.get_datas()
+        for data in consumer_datas:
+            self.datas[data.product][repr(data.resolution)] = data
+            consumer.add_listener(listener=self, listener_key=data)
+        return consumer_datas
     
     # IMPROVE: current issue is in next(), when the df has multiple products and resolutions,
     # don't know how to determine the exact minimum amount of data points for predict()
     def _adjust_min_data_points(self):
-        num_products = len(self._data_tool.get_index_values(self.df, 'product'))
-        num_resolutions = len(self._data_tool.get_index_values(self.df, 'resolution'))
+        num_products = self.df['product'].nunique()
+        num_resolutions = self.df['resolution'].nunique()
         assert num_products and num_resolutions, f"{num_products=} and/or {num_resolutions=} are invalid, please check your dataframe"
         adj_min_data_points = self.min_data_points * num_products * num_resolutions
         adj_max_data_points = self.max_data_points * num_products * num_resolutions
@@ -361,16 +383,16 @@ class BaseModel(ABC, metaclass=MetaModel):
     def add_model(self, model: tModel, name: str='') -> tModel:
         Model = model.get_model_type_of_ml_model()
         assert isinstance(model, Model), \
-            f"model '{model.__class__.__name__}' is not an instance of {Model.__name__}. Please create your model using 'class {model.__class__.__name__}({Model.__name__})'"
+            f"{model.type} '{model.__class__.__name__}' is not an instance of {Model.__name__}. Please create your {model.type} using 'class {model.__class__.__name__}({Model.__name__})'"
         if name:
             model.set_name(name)
         model.create_logger()
-        mdl = model.mdl
+        mdl = model.name
         if mdl in self.models:
-            raise Exception(f"model '{mdl}' already exists in model '{self.name}'")
-        model.set_consumer(self)
+            raise Exception(f"{model.tname} already exists in {self.tname}")
+        model.add_consumer(self)
         self.models[mdl] = model
-        self.logger.debug(f"added model '{mdl}'")
+        self.logger.debug(f"added {model.tname}")
         return model
     
     def add_feature(self, feature: tFeature, name: str='') -> tFeature:
@@ -383,9 +405,8 @@ class BaseModel(ABC, metaclass=MetaModel):
         product, bids, asks, ts = data.product, data.bids, data.asks, data.ts
         self.data = data
         for listener in self._listeners[data]:
-            model = listener
-            model.update_quote(data, **kwargs)
-            self.update_predictions(model)
+            listener.update_quote(data, **kwargs)
+            self.update_predictions(listener)
         self._append_to_df(**kwargs)
         self.on_quote(product, bids, asks, ts, **kwargs)
         
@@ -393,9 +414,8 @@ class BaseModel(ABC, metaclass=MetaModel):
         product, px, qty, ts = data.product, data.px, data.qty, data.ts
         self.data = data
         for listener in self._listeners[data]:
-            model = listener
-            model.update_tick(data, **kwargs)
-            self.update_predictions(model)
+            listener.update_tick(data, **kwargs)
+            self.update_predictions(listener)
         self._append_to_df(**kwargs)
         self.on_tick(product, px, qty, ts, **kwargs)
     
@@ -403,15 +423,14 @@ class BaseModel(ABC, metaclass=MetaModel):
         product, bar, ts = data.product, data.bar, data.bar.end_ts
         self.data = data
         for listener in self._listeners[data]:
-            model = listener
-            model.update_bar(data, **kwargs)
-            self.update_predictions(model)
+            listener.update_bar(data, **kwargs)
+            self.update_predictions(listener)
         self._append_to_df(**kwargs)
         self.on_bar(product, bar, ts, **kwargs)
     
-    def update_predictions(self, model: BaseModel):
-        pred_y: torch.Tensor | np.ndarray | None = model.next()
-        self.predictions[model.name] = pred_y
+    def update_predictions(self, listener: BaseModel):
+        pred_y: torch.Tensor | np.ndarray | None = listener.next()
+        self.predictions[listener.name] = pred_y
     
     def _start_models(self):
         for model in self.models.values():
@@ -420,16 +439,16 @@ class BaseModel(ABC, metaclass=MetaModel):
     def _prepare_df(self):
         return self._data_tool.prepare_df()
         
-    def _prepare_df_with_signals(self):
-        return self._data_tool.prepare_df_with_signals(self.models)
-    
     def _append_to_df(self, **kwargs):
         return self._data_tool.append_to_df(self.data, self.predictions, **kwargs)
     
     def start(self):
         if not self.is_running():
             self.add_datas()
-            self.add_consumer_datas_if_no_data()
+            if not self.datas:
+                self.logger.warning(f"No data for {self.tname}, adding datas from consumers {[consumer.tname for consumer in self._consumers]}")
+                for consumer in self._consumers:
+                    self._add_consumer_datas(consumer, use_consumer_data=True)
             self.add_models()
             self._start_models()
             self._prepare_df()
@@ -441,7 +460,6 @@ class BaseModel(ABC, metaclass=MetaModel):
                     self.flow(is_dump=False)
                 else:
                     raise Exception(f"signal is None, please make sure model '{self.name}' is loaded or was dumped using 'model.dump(signal)' correctly.")
-            self._prepare_df_with_signals()
             self._adjust_min_data_points()
             self.on_start()
             self._is_running = True
@@ -490,4 +508,5 @@ class BaseFeature(BaseModel):
     def __init__(self, *args, **kwargs):
         ml_model = None
         super().__init__(ml_model, *args, **kwargs)
+        self.type = 'feature'
         
