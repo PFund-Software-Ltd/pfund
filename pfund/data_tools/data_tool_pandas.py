@@ -69,8 +69,8 @@ class PandasDataTool(BaseDataTool):
         for model in backtestee.models.values():
             signal: pd.DataFrame = model.signal
             assert signal is not None, \
-                f"signal is None, please make sure model '{model.name}' (for \
-                {backtestee.type} '{backtestee.name}') is loaded or was dumped using 'model.dump(signal)' correctly."
+                f"signal is None, please make sure {model.tname} (for {backtestee.tname}) \
+                is loaded or was dumped using '{model.type}.dump(signal)' correctly."
             df = self.preprocess_vectorized_df(df, model)
             
             # rename model columns to avoid conflict

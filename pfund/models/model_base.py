@@ -42,6 +42,7 @@ if TYPE_CHECKING:
         Any,
     ]
 
+from pfund.datas.resolution import Resolution
 from pfund.models.model_meta import MetaModel
 from pfund.products.product_base import BaseProduct
 from pfund.utils.utils import short_path, get_engine_class, load_yaml_file, convert_ts_to_dt
@@ -344,6 +345,11 @@ class BaseModel(ABC, metaclass=MetaModel):
             datas.extend(list(self.datas[product].values()))
         return datas
     
+    def set_data(self, product: BaseProduct, resolution: str | Resolution, data: BaseData):
+        if isinstance(resolution, Resolution):
+            resolution = repr(resolution)
+        self.datas[product][resolution] = data
+
     def get_data(self, product: BaseProduct, resolution: str | None=None):
         return self.datas[product] if not resolution else self.datas[product][resolution]
     
@@ -360,7 +366,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         else:
             consumer_datas = consumer.get_datas()
         for data in consumer_datas:
-            self.datas[data.product][repr(data.resolution)] = data
+            self.set_data(data.product, data.resolution, data)
             consumer.add_listener(listener=self, listener_key=data)
         return consumer_datas
     

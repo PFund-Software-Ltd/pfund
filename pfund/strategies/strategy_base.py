@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from pfund.datas.data_bar import Bar
     from pfund.types.core import tStrategy, tModel, tIndicator, tFeature, tProduct
 
+from pfund.datas.resolution import Resolution
 from pfund.models.model_base import BaseModel
 from pfund.datas import BaseData, BarData, TickData, QuoteData
 from pfund.products.product_base import BaseProduct
@@ -256,6 +257,11 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             datas.extend(list(self.datas[product].values()))
         return datas
     
+    def set_data(self, product: BaseProduct, resolution: str | Resolution, data: BaseData):
+        if isinstance(resolution, Resolution):
+            resolution = repr(resolution)
+        self.datas[product][resolution] = data
+
     def get_data(self, product: BaseProduct, resolution: str | None=None):
         return self.datas[product] if not resolution else self.datas[product][resolution]
 
@@ -286,7 +292,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             
             is_sub_strategy = bool(self._consumers)
             if not is_sub_strategy:
-                self.datas[product][repr(resolution)] = data
+                self.set_data(product, resolution, data)
                 broker.add_listener(listener=self, listener_key=data, event_type='public')
 
         for consumer in self._consumers:
@@ -300,7 +306,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         else:
             consumer_datas = consumer.get_datas()
         for data in consumer_datas:
-            self.datas[data.product][repr(data.resolution)] = data
+            self.set_data(data.product, data.resolution, data)
             consumer.add_listener(listener=self, listener_key=data)
         return consumer_datas
 
