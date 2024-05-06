@@ -45,12 +45,11 @@ class TalibIndicator(BaseIndicator):
         if len(self.datas) == 1:
             df = _indicate(X)
         else:
-            grouped_df = X.groupby(self.group).apply(_indicate)
+            grouped_df = X.groupby(self.GROUP).apply(_indicate)
             df = grouped_df.droplevel([0, 1])
             df.sort_index(inplace=True)
-        if not self._signal_columns:
+        if not self._signal_cols:
             self.set_signal_columns(df.columns.to_list())
-        df = df[self.index + self._signal_columns]
         return df.to_numpy()
 
     # TODO

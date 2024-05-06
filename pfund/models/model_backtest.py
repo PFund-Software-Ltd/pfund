@@ -6,6 +6,7 @@ if TYPE_CHECKING:
     from pfund.models.model_base import MachineLearningModel
     from pfund.types.core import tModel
     from pfund.models.model_base import BaseModel
+    from pfund.datas.data_base import BaseData
 
 from pfund.models.model_base import BaseFeature
 from pfund.strategies.strategy_base import BaseStrategy
@@ -61,6 +62,10 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
         def _set_data_periods(self, datas, **kwargs):
             return self._data_tool.set_data_periods(datas, **kwargs)
         
+        def _prepare_df(self):
+            ts_col_type = 'timestamp' if self.engine.mode == 'event_driven' else 'datetime'
+            return self._data_tool.prepare_df(ts_col_type=ts_col_type)
+    
         def _append_to_df(self, **kwargs):
             if not self._is_signal_prepared() and self.engine.append_signals:
                 return self._data_tool.append_to_df(self.data, self.predictions, **kwargs)
@@ -73,14 +78,17 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
             elif self.engine.mode == 'event_driven':
                 return self.engine.use_trained_models
                 
-        def next(self):
+        def next(self, data: BaseData):
             if not self._is_signal_prepared():
-                return super().next()
+                return super().next(data)
             else:
-                # FIXME: pandas specific
-                # retrieve prepared signal from self.signal
-                new_pred = self.signal.loc[(self.data.dt, repr(self.data.product), repr(self.data.resolution))]
-                return new_pred.to_numpy()
+                try:
+                    # FIXME: pandas specific
+                    # retrieve prepared signal from self.signal
+                    new_pred = self.signal.loc[(data.dt, repr(data.product), repr(data.resolution))]
+                    return new_pred.to_numpy()
+                except Exception as e:
+                    raise Exception(f"Please make sure {self.tname} has been prepared/dumped correctly") from e
         
         # FIXME: pandas specific
         def assert_consistent_signals(self):

@@ -18,6 +18,16 @@ class CryptoAccount(BaseAccount):
 
     def __repr__(self):
         return f'{self.bkr}-{self.exch}-{self.name}'
-    
+   
+    def __eq__(self, other):
+        if not isinstance(other, CryptoAccount):
+            return NotImplemented  # Allow other types to define equality with BaseProduct
+        return (
+            self.env == other.env
+            and self.bkr == other.bkr
+            and self.exch == other.exch
+            and self.name == other.name
+        )
+     
     def __hash__(self):
         return hash((self.env, self.bkr, self.exch, self.name))

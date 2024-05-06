@@ -78,17 +78,35 @@ class BacktestMixin:
                 self._add_raw_df(data, df)
         return consumer_datas
         
-    def add_model(self, model: tModel, name: str='') -> BacktestMixin | tModel:
+    def add_model(
+        self, 
+        model: tModel, 
+        name: str='',
+        min_data: int=1,
+        max_data: None | int=None
+    ) -> BacktestMixin | tModel:
         from pfund.models.model_backtest import BacktestModel
         name = name or model.__class__.__name__
         model = BacktestModel(type(model), model.ml_model, *model._args, **model._kwargs)
-        return super().add_model(model, name=name)
+        return super().add_model(model, name=name, min_data=min_data, max_data=max_data)
     
-    def add_feature(self, feature: tFeature, name: str='') -> BacktestMixin | tFeature:
-        return self.add_model(feature, name=name)
+    def add_feature(
+        self, 
+        feature: tFeature, 
+        name: str='',
+        min_data: int=1,
+        max_data: None | int=None
+    ) -> BacktestMixin | tFeature:
+        return self.add_model(feature, name=name, min_data=min_data, max_data=max_data)
         
-    def add_indicator(self, indicator: tIndicator, name: str='') -> BacktestMixin | tIndicator:
-        return self.add_model(indicator, name=name)
+    def add_indicator(
+        self, 
+        indicator: tIndicator, 
+        name: str='',
+        min_data: int=1,
+        max_data: None | int=None
+    ) -> BacktestMixin | tIndicator:
+        return self.add_model(indicator, name=name, min_data=min_data, max_data=max_data)
         
     def _get_data_source(self, trading_venue: str, backtest_kwargs: dict):
         from pfeed.const.common import SUPPORTED_DATA_FEEDS

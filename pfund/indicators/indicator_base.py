@@ -29,7 +29,7 @@ class BaseIndicator(BaseModel):
         '''
         super().__init__(indicator, *args, **kwargs)
         self.type = 'indicator'
-        self._signal_columns = []
+        self._signal_cols = []
         
         if self.engine.data_tool == 'pandas':
             self.predict = self._predict_pandas
@@ -46,7 +46,7 @@ class BaseIndicator(BaseModel):
         return self.ml_model
     
     def set_signal_columns(self, columns: list[str]):
-        self._signal_columns = columns
+        self._signal_cols = columns
     
     def load(self):
         # since ml_model is None when dumping, 
@@ -62,7 +62,7 @@ class BaseIndicator(BaseModel):
         super().dump(signal)
     
     def to_signal(self, X: pd.DataFrame, pred_y: np.ndarray) -> pd.DataFrame:
-        return super().to_signal(X, pred_y, columns=self._signal_columns)
+        return super().to_signal(X, pred_y, columns=self._signal_cols)
     
     def flow(self, is_dump=False) -> pd.DataFrame:
         return super().flow(is_dump=is_dump)

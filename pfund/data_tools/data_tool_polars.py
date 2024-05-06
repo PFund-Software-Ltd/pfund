@@ -1,7 +1,7 @@
 from __future__ import annotations
 from collections import defaultdict
 
-from typing import TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Generator, Literal
 if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
     from pfund.models.model_base import BaseModel
@@ -17,12 +17,20 @@ class PolarsDataTool(BaseDataTool):
     def get_df(self, copy=True):
         return self.df.clone() if copy else self.df
     
-    def prepare_df(self):
+    def prepare_df(self, ts_col_type: Literal['datetime', 'timestamp']='datetime'):
         assert self._raw_dfs, "No data is found, make sure add_data(...) is called correctly"
         self.df = pl.concat(self._raw_dfs.values())
-        self.df = self.df.sort(by=self.index, descending=False)
+        self.df = self.df.sort(by=self.INDEX, descending=False)
         # arrange columns
-        self.df = self.df.select(self.index + [col for col in self.df.columns if col not in self.index])
+        self.df = self.df.select(self.INDEX + [col for col in self.df.columns if col not in self.INDEX])
+        if ts_col_type == 'datetime':
+            # ts column already is datetime by default
+            pass
+        elif ts_col_type == 'timestamp':
+            # converts 'ts' from datetime to unix timestamp
+            self.df = self.df.with_columns(
+                pl.col("ts").cast(pl.Int64) // 10**6 / 10**3,
+            )
         self._raw_dfs.clear()
     
     @staticmethod
@@ -45,9 +53,6 @@ class PolarsDataTool(BaseDataTool):
             }
     
         df = df.with_columns(
-            # converts 'ts' from datetime to unix timestamp
-            pl.col("ts").cast(pl.Int64) // 10**6 / 10**3,
-            
             # add 'broker', 'is_quote', 'is_tick' columns
             pl.col('product').str.split("-").list.get(0).alias("broker"),
             pl.col('resolution').map_elements(
@@ -60,7 +65,7 @@ class PolarsDataTool(BaseDataTool):
         ).unnest('Resolution')
         
         # arrange columns
-        left_cols = self.index + ['broker', 'is_quote', 'is_tick']
+        left_cols = self.INDEX + ['broker', 'is_quote', 'is_tick']
         df = df.select(left_cols + [col for col in df.columns if col not in left_cols])
         return df
     

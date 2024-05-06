@@ -2,8 +2,8 @@ from pfund.datas.data_base import BaseData
 
 
 class BaseDataTool:
-    index = ['ts', 'product', 'resolution']
-    group = ['product', 'resolution']
+    INDEX = ['ts', 'product', 'resolution']
+    GROUP = ['product', 'resolution']
 
     def __init__(self):
         self.train_periods = {}  # {product: ('start_date', 'end_date')}

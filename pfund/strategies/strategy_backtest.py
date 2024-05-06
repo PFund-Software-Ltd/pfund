@@ -64,7 +64,8 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
         
         def _prepare_df(self):
             if not self._is_dummy_strategy():
-                return self._data_tool.prepare_df()
+                ts_col_type = 'timestamp' if self.engine.mode == 'event_driven' else 'datetime'
+                return self._data_tool.prepare_df(ts_col_type=ts_col_type)
             
         def _append_to_df(self, **kwargs):
             if self.engine.append_signals and not self._is_dummy_strategy():

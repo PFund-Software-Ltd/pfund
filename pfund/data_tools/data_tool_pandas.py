@@ -1,7 +1,7 @@
 from __future__ import annotations
 from collections import defaultdict
 
-from typing import TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Generator, Literal
 if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
     from pfund.models.model_base import BaseModel
@@ -18,15 +18,22 @@ class PandasDataTool(BaseDataTool):
     def get_df(self, copy=True):
         return self.df.copy(deep=True) if copy else self.df
     
-    def prepare_df(self):
+    def prepare_df(self, ts_col_type: Literal['datetime', 'timestamp']='datetime'):
         assert self._raw_dfs, "No data is found, make sure add_data(...) is called correctly"
         self.df = pd.concat(self._raw_dfs.values())
-        self.df.sort_values(by=self.index, ascending=True, inplace=True)
+        self.df.sort_values(by=self.INDEX, ascending=True, inplace=True)
         self.df.reset_index(drop=True, inplace=True)
         # arrange columns
-        self.df = self.df[self.index + [col for col in self.df.columns if col not in self.index]]
+        self.df = self.df[self.INDEX + [col for col in self.df.columns if col not in self.INDEX]]
+        if ts_col_type == 'datetime':
+            # ts column already is datetime by default
+            pass
+        elif ts_col_type == 'timestamp':
+            # converts 'ts' from datetime to unix timestamp
+            # in milliseconds int -> in seconds with milliseconds precision
+            self.df['ts'] = self.df['ts'].astype(int) // 10**6 / 10**3
         self._raw_dfs.clear()
-    
+
     @staticmethod
     @backtest
     def iterate_df_by_chunks(df: pd.DataFrame, num_chunks=1) -> Generator[pd.DataFrame, None, None]:
@@ -43,18 +50,20 @@ class PandasDataTool(BaseDataTool):
             resolution = Resolution(res)
             return resolution.is_quote(), resolution.is_tick()
         
-        # converts 'ts' from datetime to unix timestamp
-        # in milliseconds int -> in seconds with milliseconds precision
-        df['ts'] = df['ts'].astype(int) // 10**6 / 10**3
-        
         # add 'broker', 'is_quote', 'is_tick' columns
         df['broker'] = df['product'].str.split('-').str[0]
         df['is_quote'], df['is_tick'] = zip(*df['resolution'].apply(_check_resolution))
         
         # arrange columns
-        left_cols = self.index + ['broker', 'is_quote', 'is_tick']
+        left_cols = self.INDEX + ['broker', 'is_quote', 'is_tick']
         df = df[left_cols + [col for col in df.columns if col not in left_cols]]
         return df
+   
+    # TODO: 
+    @backtest
+    def postprocess_event_driven_df(self, df: pd.DataFrame) -> pd.DataFrame:
+        # convert ts column back to datetime type
+        pass
    
     @backtest
     def preprocess_vectorized_df(self, df: pd.DataFrame, backtestee: BaseStrategy | BaseModel) -> pd.DataFrame:
@@ -85,6 +94,7 @@ class PandasDataTool(BaseDataTool):
         df.sort_values(by='ts', ascending=True, inplace=True)
         return df
      
+    # TODO
     @staticmethod
     @backtest
     def postprocess_vectorized_df(df_chunks: list[pd.DataFrame]) -> pd.DataFrame:
@@ -129,7 +139,7 @@ class PandasDataTool(BaseDataTool):
         # combine datasets from different products to create the final train/val/test set
         for type_ in ['train', 'val', 'test']:
             df = pd.concat(datasets[type_])
-            df.set_index(self.index, inplace=True)
+            df.set_index(self.INDEX, inplace=True)
             df.sort_index(level='ts', inplace=True)
             if type_ == 'train':
                 self.train_set = df
@@ -148,6 +158,7 @@ class PandasDataTool(BaseDataTool):
         data & prediction (single signal) will be gradually appended back to the df for model.next() to use.
         '''
         row_data = {}
+        
         for col in self.df.columns:
             if hasattr(data, col):
                 row_data[col] = getattr(data, col)

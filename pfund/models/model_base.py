@@ -93,13 +93,13 @@ class BaseModel(ABC, metaclass=MetaModel):
         self.logger = None
         self._is_running = False
         # minimum number of data required for the model to make a prediction
-        self.min_data_points = kwargs.get('min_data_points', 1)
-        self.max_data_points = kwargs.get('max_data_points', self.min_data_points)
-        assert self.max_data_points >= self.min_data_points, f'max_data_points={self.max_data_points} must be greater than or equal to min_data_points={self.min_data_points}'
+        self._min_data = defaultdict(dict)  # {product: {resol: int}}
+        self._max_data = defaultdict(dict)  # {product: {resol: int}}
+        self._num_data = defaultdict(lambda: defaultdict(int))  # {product: {resol: int}}
         self.ml_model = ml_model  # user-defined machine learning model
         self.type = 'model'
         self.products = defaultdict(dict)  # {trading_venue: {pdt1: product1, pdt2: product2} }
-        self.datas = defaultdict(dict)  # {product: {'1m': data}}
+        self.datas = defaultdict(dict)  # {product: {resol: data}}, resol = repr(resolution)
         self._listeners = defaultdict(list)  # {data: model}
         self._consumers = []  # strategies/models that consume this model
         self.models = {}
@@ -132,12 +132,12 @@ class BaseModel(ABC, metaclass=MetaModel):
         return self._data_tool.df
     
     @property
-    def index(self):
-        return self._data_tool.index
+    def INDEX(self):
+        return self._data_tool.INDEX
     
     @property
-    def group(self):
-        return self._data_tool.group
+    def GROUP(self):
+        return self._data_tool.GROUP
     
     def get_df(self, copy=True):
         return self._data_tool.get_df(copy=copy)
@@ -206,18 +206,31 @@ class BaseModel(ABC, metaclass=MetaModel):
         return signal
     
     # FIXME: pandas specific
-    def next(self) -> torch.Tensor | np.ndarray | None:
+    def next(self, data: BaseData) -> torch.Tensor | np.ndarray | None:
         '''Returns the next prediction in event-driven mode.'''
         # TODO: check if the pred_y is already there first
         # since the same data could be passed in multiple times 
         # if the model is a listener to multiple consumers (e.g. strategy+model)
         
-        # get the lastest df (features) using self.min_data_points
-        mask = self.df.index.get_level_values('ts') <= self.data.dt  # NOTE: self.data is the latest data
+        product, resolution = data.product, data.resolution
+        
+        
+        # get the lastest df (features) using self._min_data
+        self._num_data_points[product][resolution] += 1
+        if self._num_data_points[product][resolution] < self._min_data:
+            return
+        
+        
+        mask = self.df['ts'] <= data.ts
         positions = [i for i, m in enumerate(mask) if m]
-        start_idx = positions[-max(self.min_data_points, self.max_data_points)] if len(positions) >= self.min_data_points else 0
+        start_idx = positions[-max(self._min_data, self._max_data)] if len(positions) >= self._min_data else 0
         end_idx = positions[-1] if positions else -1  # -1 if positions is empty
         X = self.df[ start_idx : end_idx+1 ]
+        
+        print('***next()***')
+        print('data.ts:', data.ts)
+        print(X)
+        exit()
         
         # predict
         pred_y = self.predict(X)
@@ -226,7 +239,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         
         # check if predictions are all nans
         num_rows = pred_y.shape[0]
-        is_enough_data = num_rows >= self.min_data_points
+        is_enough_data = num_rows >= self._min_data
         new_pred = pred_y[-1]
         if torch.is_tensor(new_pred):
             is_all_nan = torch.isnan(new_pred).all()
@@ -235,7 +248,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         else:
             raise Exception(f'Unexpected new_pred type {type(new_pred)}')
         if is_enough_data and is_all_nan:
-            raise Exception(f'wrong min_data_points={self.min_data_points} for model "{self.name}", got all nans predictions, try to increase your min_data_points')
+            raise Exception(f'wrong min_data={self._min_data} for model "{self.name}", got all nans predictions, try to increase your min_data')
         
         # initialize signal
         if self.signal is None:
@@ -245,6 +258,42 @@ class BaseModel(ABC, metaclass=MetaModel):
             self.append_signal(X, new_pred)
         return new_pred
             
+    def _convert_min_max_data_to_dict(self):
+        '''Converts min_data and max_data from int to dict[product, dict[resolution, int]]'''
+        is_min_data_int = is_max_data_int = False
+        if isinstance(self._min_data, int):
+            is_min_data_int = True
+            min_data = self._min_data
+            self._min_data = defaultdict(dict)
+        if isinstance(self._max_data, int):
+            is_max_data_int = True
+            max_data = self._max_data
+            self._max_data = defaultdict(dict)
+        
+        for product in self.datas:
+            for resol in self.datas[product]:
+                # if not int = min_data is already set up by user calling set_min_data() explicitly, i.e. check if set up correctly
+                if not is_min_data_int:
+                    assert product in self._min_data, f"{product} not found in {self._min_data=}, make sure set_min_data() is called correctly"
+                    assert resol in self._min_data[product], f"{resol} not found in {self._min_data[product]=}, make sure set_min_data() is called correctly"
+                else:
+                    self._min_data[product][resol] = min_data
+                    
+                # if not int = max_data is already set up by user calling set_max_data() explicitly, i.e. check if set up correctly
+                if not is_max_data_int:
+                    assert product in self._max_data, f"{product} not found in {self._max_data=}, make sure set_max_data() is called correctly"
+                    assert resol in self._max_data[product], f"{resol} not found in {self._max_data[product]=}, make sure set_max_data() is called correctly"
+                else:
+                    self._max_data[product][resol] = max_data
+        
+                max_data = self._max_data[product][resol]
+                min_data = self._min_data[product][resol]
+                assert max_data >= min_data, f'{max_data=} for {product} {resol} must be >= {min_data=}'
+        
+    # TODO
+    def is_ready(self):
+        pass
+    
     def get_model_type_of_ml_model(self) -> PytorchModel | SklearnModel | BaseModel:
         from pfund.models import PytorchModel, SklearnModel
         if isinstance(self.ml_model, nn.Module):
@@ -274,6 +323,12 @@ class BaseModel(ABC, metaclass=MetaModel):
         
     def set_name(self, name: str):
         self.name = self.mdl = name
+    
+    def set_min_data(self, min_data: int | dict[BaseProduct, dict[str, int]]):
+        self._min_data = min_data
+
+    def set_max_data(self, max_data: None | int | dict[BaseProduct, dict[str, int]]):
+        self._max_data = max_data if max_data else self._min_data
         
     def _get_file_path(self, extension='.joblib'):
         path = f'{self.engine.config.artifact_path}/{self.name}'
@@ -322,10 +377,6 @@ class BaseModel(ABC, metaclass=MetaModel):
         if listener in self._listeners[listener_key]:
             self._listeners[listener_key].remove(listener)
     
-    # TODO
-    def is_ready(self):
-        pass
-    
     def is_running(self):
         return self._is_running
     
@@ -370,28 +421,30 @@ class BaseModel(ABC, metaclass=MetaModel):
             consumer.add_listener(listener=self, listener_key=data)
         return consumer_datas
     
-    # IMPROVE: current issue is in next(), when the df has multiple products and resolutions,
-    # don't know how to determine the exact minimum amount of data points for predict()
-    def _adjust_min_data_points(self):
-        num_products = self.df['product'].nunique()
-        num_resolutions = self.df['resolution'].nunique()
-        assert num_products and num_resolutions, f"{num_products=} and/or {num_resolutions=} are invalid, please check your dataframe"
-        adj_min_data_points = self.min_data_points * num_products * num_resolutions
-        adj_max_data_points = self.max_data_points * num_products * num_resolutions
-        self.logger.warning(f'adjust min_data_points from {self.min_data_points} to {adj_min_data_points} with {num_products=} and {num_resolutions=}')
-        self.logger.warning(f'adjust max_data_points from {self.max_data_points} to {adj_max_data_points} with {num_products=} and {num_resolutions=}')
-        self.min_data_points = adj_min_data_points
-        self.max_data_points = adj_max_data_points
-        
+    def _add_datas_if_not_exist(self):
+        if self.datas:
+            return
+        self.logger.warning(f"No data for {self.tname}, adding datas from consumers {[consumer.tname for consumer in self._consumers]}")
+        for consumer in self._consumers:
+            self._add_consumer_datas(consumer, use_consumer_data=True)
+    
     def get_model(self, name: str) -> BaseModel:
         return self.models[name]
     
-    def add_model(self, model: tModel, name: str='') -> tModel:
+    def add_model(
+        self, 
+        model: tModel, 
+        name: str='', 
+        min_data: int=1,
+        max_data: None | int=None,  # NOTE: can set to -1 to include all data
+    ) -> tModel:
         Model = model.get_model_type_of_ml_model()
         assert isinstance(model, Model), \
             f"{model.type} '{model.__class__.__name__}' is not an instance of {Model.__name__}. Please create your {model.type} using 'class {model.__class__.__name__}({Model.__name__})'"
         if name:
             model.set_name(name)
+        model.set_min_data(min_data)
+        model.set_max_data(max_data)
         model.create_logger()
         mdl = model.name
         if mdl in self.models:
@@ -401,18 +454,30 @@ class BaseModel(ABC, metaclass=MetaModel):
         self.logger.debug(f"added {model.tname}")
         return model
     
-    def add_feature(self, feature: tFeature, name: str='') -> tFeature:
-        return self.add_model(feature, name=name)
+    def add_feature(
+        self, 
+        feature: tFeature, 
+        name: str='',
+        min_data: int=1,
+        max_data: None | int=None
+    ) -> tFeature:
+        return self.add_model(feature, name=name, min_data=min_data, max_data=max_data)
     
-    def add_indicator(self, indicator: tIndicator, name: str='') -> tIndicator:
-        return self.add_model(indicator, name=name)
+    def add_indicator(
+        self, 
+        indicator: tIndicator, 
+        name: str='',
+        min_data: int=1,
+        max_data: None | int=None
+    ) -> tIndicator:
+        return self.add_model(indicator, name=name, min_data=min_data, max_data=max_data)
     
     def update_quote(self, data: QuoteData, **kwargs):
         product, bids, asks, ts = data.product, data.bids, data.asks, data.ts
         self.data = data
         for listener in self._listeners[data]:
             listener.update_quote(data, **kwargs)
-            self.update_predictions(listener)
+            self.update_predictions(data, listener)
         self._append_to_df(**kwargs)
         self.on_quote(product, bids, asks, ts, **kwargs)
         
@@ -421,7 +486,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         self.data = data
         for listener in self._listeners[data]:
             listener.update_tick(data, **kwargs)
-            self.update_predictions(listener)
+            self.update_predictions(data, listener)
         self._append_to_df(**kwargs)
         self.on_tick(product, px, qty, ts, **kwargs)
     
@@ -430,12 +495,12 @@ class BaseModel(ABC, metaclass=MetaModel):
         self.data = data
         for listener in self._listeners[data]:
             listener.update_bar(data, **kwargs)
-            self.update_predictions(listener)
+            self.update_predictions(data, listener)
         self._append_to_df(**kwargs)
         self.on_bar(product, bar, ts, **kwargs)
     
-    def update_predictions(self, listener: BaseModel):
-        pred_y: torch.Tensor | np.ndarray | None = listener.next()
+    def update_predictions(self, data: BaseData, listener: BaseModel):
+        pred_y: torch.Tensor | np.ndarray | None = listener.next(data)
         self.predictions[listener.name] = pred_y
     
     def _start_models(self):
@@ -443,7 +508,7 @@ class BaseModel(ABC, metaclass=MetaModel):
             model.start()
 
     def _prepare_df(self):
-        return self._data_tool.prepare_df()
+        return self._data_tool.prepare_df(ts_col_type='timestamp')
         
     def _append_to_df(self, **kwargs):
         return self._data_tool.append_to_df(self.data, self.predictions, **kwargs)
@@ -451,10 +516,8 @@ class BaseModel(ABC, metaclass=MetaModel):
     def start(self):
         if not self.is_running():
             self.add_datas()
-            if not self.datas:
-                self.logger.warning(f"No data for {self.tname}, adding datas from consumers {[consumer.tname for consumer in self._consumers]}")
-                for consumer in self._consumers:
-                    self._add_consumer_datas(consumer, use_consumer_data=True)
+            self._add_datas_if_not_exist()
+            self._convert_min_max_data_to_dict()
             self.add_models()
             self._start_models()
             self._prepare_df()
@@ -466,7 +529,6 @@ class BaseModel(ABC, metaclass=MetaModel):
                     self.flow(is_dump=False)
                 else:
                     raise Exception(f"signal is None, please make sure model '{self.name}' is loaded or was dumped using 'model.dump(signal)' correctly.")
-            self._adjust_min_data_points()
             self.on_start()
             self._is_running = True
         else:

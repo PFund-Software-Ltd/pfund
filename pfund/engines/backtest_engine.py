@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from pfund.types.common_literals import tSUPPORTED_BACKTEST_MODES, tSUPPORTED_DATA_TOOLS
     from pfund.types.core import tStrategy, tModel, tFeature, tIndicator
     from pfund.models.model_base import BaseModel
+    from pfund.products.product_base import BaseProduct
     
 try:
     import pandas as pd
@@ -108,7 +109,13 @@ class BacktestEngine(BaseEngine):
         strategy = BacktestStrategy(type(strategy), *strategy._args, **strategy._kwargs)
         return super().add_strategy(strategy, name=name, is_parallel=is_parallel)
 
-    def add_model(self, model: tModel, name: str='') -> BacktestMixin | tModel:
+    def add_model(
+        self, 
+        model: tModel, 
+        name: str='',
+        min_data: int=1,
+        max_data: None | int=None
+    ) -> BacktestMixin | tModel:
         '''Add model without creating a strategy (using dummy strategy)'''
         is_non_dummy_strategy_exist = bool([strat for strat in self.strategy_manager.strategies if strat != '_dummy'])
         assert not is_non_dummy_strategy_exist, 'Please use strategy.add_model(...) instead of engine.add_model(...) when a strategy is already created'
@@ -119,14 +126,26 @@ class BacktestEngine(BaseEngine):
             for func in strategy.REQUIRED_FUNCTIONS:
                 setattr(strategy, func, empty_function)
         assert not strategy.models, 'Adding more than 1 model to dummy strategy in backtesting is not supported, you should train and dump your models one by one'
-        model = strategy.add_model(model, name=name)
+        model = strategy.add_model(model, name=name, min_data=min_data, max_data=max_data)
         return model
     
-    def add_feature(self, feature: tFeature, name: str='') -> BacktestMixin | tFeature:
-        return self.add_model(feature, name=name)
+    def add_feature(
+        self, 
+        feature: tFeature, 
+        name: str='',
+        min_data: int=1,
+        max_data: None | int=None
+    ) -> BacktestMixin | tFeature:
+        return self.add_model(feature, name=name, min_data=min_data, max_data=max_data)
     
-    def add_indicator(self, indicator: tIndicator, name: str='') -> BacktestMixin | tIndicator:
-        return self.add_model(indicator, name=name)
+    def add_indicator(
+        self, 
+        indicator: tIndicator, 
+        name: str='',
+        min_data: int=1,
+        max_data: None | int=None 
+    ) -> BacktestMixin | tIndicator:
+        return self.add_model(indicator, name=name, min_data=min_data, max_data=max_data)
     
     def add_broker(self, bkr: str):
         bkr = bkr.upper()

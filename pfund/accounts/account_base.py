@@ -22,5 +22,14 @@ class BaseAccount:
     def __repr__(self):
         return f'{self.bkr}-{self.name}'
 
+    def __eq__(self, other):
+        if not isinstance(other, BaseAccount):
+            return NotImplemented  # Allow other types to define equality with BaseProduct
+        return (
+            self.env == other.env
+            and self.bkr == other.bkr
+            and self.name == other.name
+        )
+        
     def __hash__(self):
         return hash((self.env, self.bkr, self.name))

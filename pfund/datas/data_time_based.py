@@ -9,6 +9,7 @@ class TimeBasedData(BaseData):
         self.base = 'time'
         self.latency = self.lat = None
         self.resolution = resolution
+        self.resol = repr(resolution)
         self.period = resolution.period
         self.timeframe = resolution.timeframe
         self._resamplers = []  # data used to be resampled into another data
