@@ -114,7 +114,8 @@ class BacktestEngine(BaseEngine):
         model: tModel, 
         name: str='',
         min_data: int=1,
-        max_data: None | int=None
+        max_data: None | int=None,
+        group_data: bool=True
     ) -> BacktestMixin | tModel:
         '''Add model without creating a strategy (using dummy strategy)'''
         is_non_dummy_strategy_exist = bool([strat for strat in self.strategy_manager.strategies if strat != '_dummy'])
@@ -126,7 +127,7 @@ class BacktestEngine(BaseEngine):
             for func in strategy.REQUIRED_FUNCTIONS:
                 setattr(strategy, func, empty_function)
         assert not strategy.models, 'Adding more than 1 model to dummy strategy in backtesting is not supported, you should train and dump your models one by one'
-        model = strategy.add_model(model, name=name, min_data=min_data, max_data=max_data)
+        model = strategy.add_model(model, name=name, min_data=min_data, max_data=max_data, group_data=group_data)
         return model
     
     def add_feature(
@@ -134,18 +135,20 @@ class BacktestEngine(BaseEngine):
         feature: tFeature, 
         name: str='',
         min_data: int=1,
-        max_data: None | int=None
+        max_data: None | int=None,
+        group_data: bool=True
     ) -> BacktestMixin | tFeature:
-        return self.add_model(feature, name=name, min_data=min_data, max_data=max_data)
+        return self.add_model(feature, name=name, min_data=min_data, max_data=max_data, group_data=group_data)
     
     def add_indicator(
         self, 
         indicator: tIndicator, 
         name: str='',
         min_data: int=1,
-        max_data: None | int=None 
+        max_data: None | int=None,
+        group_data: bool=True
     ) -> BacktestMixin | tIndicator:
-        return self.add_model(indicator, name=name, min_data=min_data, max_data=max_data)
+        return self.add_model(indicator, name=name, min_data=min_data, max_data=max_data, group_data=group_data)
     
     def add_broker(self, bkr: str):
         bkr = bkr.upper()

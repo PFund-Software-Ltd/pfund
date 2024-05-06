@@ -35,21 +35,24 @@ class TalibIndicator(BaseIndicator):
     def get_indicator_params(self):
         return self.get_indicator_info()['parameters']
     
-    def _predict_pandas(self, X: pd.DataFrame) -> np.ndarray | None:
+    def _predict_pandas(self, X: pd.DataFrame) -> np.ndarray:
         def _indicate(_X: pd.DataFrame) -> pd.DataFrame:
             _df = self.indicator(_X, *self._args, **self._kwargs)
             if type(_df) is pd.Series:
                 _df = _df.to_frame(name=self.get_indicator_name())
             return _df
         
-        if len(self.datas) == 1:
+        # if group_data is True, it means X will be passed in per group=(product, resolution)
+        if self._group_data:
             df = _indicate(X)
         else:
             grouped_df = X.groupby(self.GROUP).apply(_indicate)
             df = grouped_df.droplevel([0, 1])
             df.sort_index(inplace=True)
+
         if not self._signal_cols:
             self.set_signal_columns(df.columns.to_list())
+        
         return df.to_numpy()
 
     # TODO

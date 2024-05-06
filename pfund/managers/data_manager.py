@@ -24,7 +24,7 @@ def get_resolutions_from_kwargs(kwargs: dict) -> list[Resolution]:
 class DataManager(BaseManager):
     def __init__(self, broker):
         super().__init__('data_manager', broker)
-        # datas = {product: {resol: data}}, resol = repr(resolution)
+        # datas = {repr(product): {repr(resolution): data}}
         self._datas = defaultdict(dict)
 
     def _resample_to_official_resolution(self, product, resolution: Resolution, supported_timeframes_and_periods: dict | None=None) -> Resolution:
@@ -152,14 +152,18 @@ class DataManager(BaseManager):
         pass
     
     def set_data(self, product: BaseProduct, resolution: Resolution, data: BaseData):
-        self._datas[product][repr(resolution)] = data
+        self._datas[repr(product)][repr(resolution)] = data
 
-    def get_data(self, product: BaseProduct, resolution: str | Resolution | None=None) -> dict | BaseData | None:
+    def get_data(self, product: str | BaseProduct, resolution: str | Resolution | None=None) -> dict | BaseData | None:
+        if isinstance(product, BaseProduct):
+            product = repr(product)
         if isinstance(resolution, Resolution):
             resolution = repr(resolution)
         return self._datas[product] if not resolution else self._datas[product].get(resolution, None)
     
-    def remove_data(self, product: BaseProduct, resolution: str | Resolution | None=None):
+    def remove_data(self, product: str | BaseProduct, resolution: str | Resolution | None=None):
+        if isinstance(product, BaseProduct):
+            product = repr(product)
         if isinstance(resolution, Resolution):
             resolution = repr(resolution)
         if not resolution:

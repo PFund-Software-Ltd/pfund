@@ -21,6 +21,8 @@ if TYPE_CHECKING:
     from pfund.orders.order_base import BaseOrder
     from pfund.models.model_base import BaseModel
 
+import numpy as np
+
 from pfund.datas.resolution import Resolution
 from pfund.datas import BaseData, BarData, TickData, QuoteData
 from pfund.zeromq import ZeroMQ
@@ -114,11 +116,24 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
     
     @property
     def df(self):
-        return self._data_tool.df
+        return self.get_df(copy=False)
+
+    def get_df(
+        self, 
+        start_idx: int=0, 
+        end_idx: int | None=None, 
+        product: str | None=None, 
+        resolution: str | None=None, 
+        copy: bool=True
+    ):
+        return self._data_tool.get_df(
+            start_idx=start_idx, 
+            end_idx=end_idx, 
+            product=product,
+            resolution=resolution,
+            copy=copy
+        )
     
-    def get_df(self, copy=True):
-        return self._data_tool.get_df(copy=copy)
-   
     def get_data_tool(self):
         return self._data_tool
     
@@ -154,9 +169,6 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             'strategies': [strategy.to_dict() for strategy in self.strategies.values()],
             'models': [model.to_dict() for model in self.models.values()],
         }
-    
-    def output_df_to_parquet(self, file_path: str):
-        self._data_tool.output_df_to_parquet(self.df, file_path)
     
     def set_name(self, name: str):
         self.name = self.strat = name
@@ -231,7 +243,8 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         model: tModel, 
         name: str='',
         min_data: int=1,
-        max_data: None | int=None
+        max_data: None | int=None,
+        group_data: bool=True
     ) -> tModel:
         Model = model.get_model_type_of_ml_model()
         assert isinstance(model, Model), \
@@ -240,6 +253,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             model.set_name(name)
         model.set_min_data(min_data)
         model.set_max_data(max_data)
+        model.set_group_data(group_data)
         model.create_logger()
         mdl = model.name
         if mdl in self.models:
@@ -254,18 +268,20 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         feature: tFeature, 
         name: str='',
         min_data: int=1,
-        max_data: None | int=None
+        max_data: None | int=None,
+        group_data: bool=True
     ) -> tFeature:
-        return self.add_model(feature, name=name, min_data=min_data, max_data=max_data)
+        return self.add_model(feature, name=name, min_data=min_data, max_data=max_data, group_data=group_data)
     
     def add_indicator(
         self, 
         indicator: tIndicator, 
         name: str='',
         min_data: int=1,
-        max_data: None | int=None
+        max_data: None | int=None,
+        group_data: bool=True
     ) -> tIndicator:
-        return self.add_model(indicator, name=name, min_data=min_data, max_data=max_data)
+        return self.add_model(indicator, name=name, min_data=min_data, max_data=max_data, group_data=group_data)
     
     # TODO
     def add_custom_data(self):
@@ -330,7 +346,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             consumer.add_listener(listener=self, listener_key=data)
         return consumer_datas
     
-    def _add_datas_if_not_exist(self):
+    def _add_consumers_datas_if_no_data(self):
         if self.datas:
             return
         self.logger.warning(f"No data for {self.tname}, adding datas from consumers {[consumer.tname for consumer in self._consumers]}")
@@ -447,7 +463,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         for listener in self._listeners[data]:
             listener.update_quote(data, **kwargs)
             self.update_predictions(data, listener)
-        self._append_to_df(**kwargs)
+        self._append_to_df(data, **kwargs)
         self.on_quote(product, bids, asks, ts, **kwargs)
 
     def update_tick(self, data: TickData, **kwargs):
@@ -456,7 +472,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         for listener in self._listeners[data]:
             listener.update_tick(data, **kwargs)
             self.update_predictions(data, listener)
-        self._append_to_df(**kwargs)
+        self._append_to_df(data, **kwargs)
         self.on_tick(product, px, qty, ts, **kwargs)
     
     def update_bar(self, data: BarData, **kwargs):
@@ -466,11 +482,13 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             # NOTE: listener could be a strategy or a model
             listener.update_bar(data, **kwargs)
             self.update_predictions(data, listener)
-        self._append_to_df(**kwargs)
+        self._append_to_df(data, **kwargs)
         self.on_bar(product, bar, ts, **kwargs)
 
     def update_predictions(self, data: BaseData, listener: BaseStrategy | BaseModel):
         pred_y = listener.next(data)
+        if pred_y is None:
+            pred_y = [[np.nan]]
         self.predictions[listener.name] = pred_y
         
     def update_positions(self, position):
@@ -510,25 +528,25 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
     def _prepare_df(self):
         return self._data_tool.prepare_df(ts_col_type='timestamp')
         
-    def _append_to_df(self, **kwargs):
-        return self._data_tool.append_to_df(self.data, self.predictions, **kwargs)
+    def _append_to_df(self, data: BaseData, **kwargs):
+        return self._data_tool.append_to_df(data, self.predictions, **kwargs)
     
     def start(self):
         if not self.is_running():
             self.add_datas()
-            self._add_datas_if_not_exist()
+            self._add_consumers_datas_if_no_data()
             self.add_strategies()
             self._start_strategies()
             self.add_models()
             self._start_models()
             self._prepare_df()
             self._subscribe_to_private_channels()
-            self._set_aliases()
             if self.is_parallel():
                 # TODO: notice strategy manager it has started running
                 pass
                 # self._zmq ...
             self.on_start()
+            self._set_aliases()
             self._is_running = True
         else:
             self.logger.warning(f'strategy {self.name} has already started')

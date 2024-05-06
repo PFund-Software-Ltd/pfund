@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.types.core import tStrategy
+    from pfund.datas.data_base import BaseData
     
 from pfund.mixins.backtest import BacktestMixin
 
@@ -33,8 +34,7 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
         def _is_dummy_strategy(self):
             return self.name == '_dummy'
         
-        def start(self):
-            super().start()
+        def on_start(self):
             if not self.accounts:
                 for trading_venue in self.products:
                     if trading_venue == 'BYBIT':
@@ -44,6 +44,7 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
                     account = self.add_account(trading_venue, **kwargs)
                     broker = self.get_broker(account.bkr)
                     broker.initialize_balances()
+            super().on_start()
         
         def clear_dfs(self):
             assert self.engine.mode == 'event_driven'
@@ -67,9 +68,9 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
                 ts_col_type = 'timestamp' if self.engine.mode == 'event_driven' else 'datetime'
                 return self._data_tool.prepare_df(ts_col_type=ts_col_type)
             
-        def _append_to_df(self, **kwargs):
-            if self.engine.append_signals and not self._is_dummy_strategy():
-                return self._data_tool.append_to_df(self.data, self.predictions, **kwargs)
+        def _append_to_df(self, data: BaseData, **kwargs):
+            if not self._is_dummy_strategy() and self.engine.append_signals:
+                return self._data_tool.append_to_df(data, self.predictions, **kwargs)
     
     try: 
         return _BacktestStrategy(*args, **kwargs)

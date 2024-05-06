@@ -16,7 +16,6 @@ try:
     import torch.nn as nn
     from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
     from sklearn.pipeline import Pipeline
-    import numpy as np
     import pandas as pd
     import polars as pl
 except ImportError:
@@ -41,6 +40,8 @@ if TYPE_CHECKING:
         TalibFunction,
         Any,
     ]
+
+import numpy as np
 
 from pfund.datas.resolution import Resolution
 from pfund.models.model_meta import MetaModel
@@ -92,14 +93,15 @@ class BaseModel(ABC, metaclass=MetaModel):
         self._data_tool = DataTool()
         self.logger = None
         self._is_running = False
-        # minimum number of data required for the model to make a prediction
-        self._min_data = defaultdict(dict)  # {product: {resol: int}}
-        self._max_data = defaultdict(dict)  # {product: {resol: int}}
-        self._num_data = defaultdict(lambda: defaultdict(int))  # {product: {resol: int}}
+        self._min_data = defaultdict(dict)  # {product: {repr(resolution): int}}
+        self._max_data = defaultdict(dict)  # {product: {repr(resolution): int}}
+        self._num_data = defaultdict(lambda: defaultdict(int))  # {product: {repr(resolution): int}}
+        self._group_data = True
+        
         self.ml_model = ml_model  # user-defined machine learning model
         self.type = 'model'
         self.products = defaultdict(dict)  # {trading_venue: {pdt1: product1, pdt2: product2} }
-        self.datas = defaultdict(dict)  # {product: {resol: data}}, resol = repr(resolution)
+        self.datas = defaultdict(dict)  # {product: {repr(resolution): data}}
         self._listeners = defaultdict(list)  # {data: model}
         self._consumers = []  # strategies/models that consume this model
         self.models = {}
@@ -129,7 +131,7 @@ class BaseModel(ABC, metaclass=MetaModel):
     
     @property
     def df(self):
-        return self._data_tool.df
+        return self.get_df(copy=False)
     
     @property
     def INDEX(self):
@@ -139,8 +141,21 @@ class BaseModel(ABC, metaclass=MetaModel):
     def GROUP(self):
         return self._data_tool.GROUP
     
-    def get_df(self, copy=True):
-        return self._data_tool.get_df(copy=copy)
+    def get_df(
+        self, 
+        start_idx: int=0, 
+        end_idx: int | None=None, 
+        product: str | None=None, 
+        resolution: str | None=None, 
+        copy: bool=True
+    ):
+        return self._data_tool.get_df(
+            start_idx=start_idx, 
+            end_idx=end_idx, 
+            product=product,
+            resolution=resolution,
+            copy=copy
+        )
     
     def get_data_tool(self):
         return self._data_tool
@@ -159,9 +174,6 @@ class BaseModel(ABC, metaclass=MetaModel):
             'datas': [repr(data) for product in self.datas for data in self.datas[product].values()],
             'models': [model.to_dict() for model in self.models.values()],
         }
-    
-    def output_df_to_parquet(self, file_path: str):
-        self._data_tool.output_df_to_parquet(self.df, file_path)
     
     # if not specified, features are just the original df
     def prepare_features(self) -> pd.DataFrame | pl.DataFrame | pl.LazyFrame:
@@ -205,35 +217,50 @@ class BaseModel(ABC, metaclass=MetaModel):
             self.dump(signal)
         return signal
     
-    # FIXME: pandas specific
     def next(self, data: BaseData) -> torch.Tensor | np.ndarray | None:
-        '''Returns the next prediction in event-driven mode.'''
+        '''Returns the next prediction in event-driven manner.'''
         # TODO: check if the pred_y is already there first
         # since the same data could be passed in multiple times 
         # if the model is a listener to multiple consumers (e.g. strategy+model)
         
-        product, resolution = data.product, data.resolution
-        
-        
-        # get the lastest df (features) using self._min_data
-        self._num_data_points[product][resolution] += 1
-        if self._num_data_points[product][resolution] < self._min_data:
+        if not self.is_ready(data):
             return
         
+        product, resol = data.product, data.resol
         
-        mask = self.df['ts'] <= data.ts
-        positions = [i for i, m in enumerate(mask) if m]
-        start_idx = positions[-max(self._min_data, self._max_data)] if len(positions) >= self._min_data else 0
-        end_idx = positions[-1] if positions else -1  # -1 if positions is empty
-        X = self.df[ start_idx : end_idx+1 ]
-        
+        # if max_data = -1 (include all data), then start_idx = 0
+        # if max_data = +x, then start_idx = -x
+        start_idx = min(-self._max_data[product][resol], 0)
+
+        if self._group_data:
+            product_filter = repr(product)
+            resolution_filter = resol
+        else:
+            product_filter = resolution_filter = None
+
+        # if group_data, X is per product and resolution -> X[-start_idx:];
+        # if not, X is the whole data -> X[-start_idx:]
+        X = self.get_df(
+            start_idx=start_idx,
+            product=product_filter,
+            resolution=resolution_filter,
+            copy=False
+        )
+                    
+        # TEMP
         print('***next()***')
-        print('data.ts:', data.ts)
         print(X)
-        exit()
+        # mask = self.df['ts'] <= data.ts
+        # positions = [i for i, m in enumerate(mask) if m]
+        # start_idx = positions[-max(self._min_data, self._max_data)] if len(positions) >= self._min_data else 0
+        # end_idx = positions[-1] if positions else -1  # -1 if positions is empty
+        # X = self.df[ start_idx : end_idx+1 ]
         
         # predict
         pred_y = self.predict(X)
+
+        print('***pred_y:', pred_y)
+        
         if pred_y is None:
             return
         
@@ -288,11 +315,20 @@ class BaseModel(ABC, metaclass=MetaModel):
         
                 max_data = self._max_data[product][resol]
                 min_data = self._min_data[product][resol]
+                
+                # NOTE: -1 means include all data
+                if max_data == -1:
+                    max_data = sys.float_info.max
+                    
+                assert min_data >= 1, f'{min_data=} for {product} {resol} must be >= 1'
                 assert max_data >= min_data, f'{max_data=} for {product} {resol} must be >= {min_data=}'
         
-    # TODO
-    def is_ready(self):
-        pass
+    def is_ready(self, data: BaseData) -> bool:
+        product, resol = data.product, data.resol
+        self._num_data[product][resol] += 1
+        if self._num_data[product][resol] < self._min_data[product][resol]:
+            return False
+        return True
     
     def get_model_type_of_ml_model(self) -> PytorchModel | SklearnModel | BaseModel:
         from pfund.models import PytorchModel, SklearnModel
@@ -329,7 +365,10 @@ class BaseModel(ABC, metaclass=MetaModel):
 
     def set_max_data(self, max_data: None | int | dict[BaseProduct, dict[str, int]]):
         self._max_data = max_data if max_data else self._min_data
-        
+    
+    def set_group_data(self, group_data: bool):
+        self._group_data = group_data
+    
     def _get_file_path(self, extension='.joblib'):
         path = f'{self.engine.config.artifact_path}/{self.name}'
         file_name = f'{self.name}{extension}'
@@ -421,7 +460,7 @@ class BaseModel(ABC, metaclass=MetaModel):
             consumer.add_listener(listener=self, listener_key=data)
         return consumer_datas
     
-    def _add_datas_if_not_exist(self):
+    def _add_consumers_datas_if_no_data(self):
         if self.datas:
             return
         self.logger.warning(f"No data for {self.tname}, adding datas from consumers {[consumer.tname for consumer in self._consumers]}")
@@ -436,8 +475,22 @@ class BaseModel(ABC, metaclass=MetaModel):
         model: tModel, 
         name: str='', 
         min_data: int=1,
-        max_data: None | int=None,  # NOTE: can set to -1 to include all data
+        max_data: None | int=None,
+        group_data: bool=True
     ) -> tModel:
+        '''Adds a model to the current model.
+        Args:
+            min_data (int): Minimum number of data points required for the model to make a prediction.
+            max_data (int | None): Maximum number of data points required for the model to make a prediction.
+            - If None: max_data is set to min_data.
+            - If value=-1: include all data
+            
+            group_data (bool): Determines how `min_data` and `max_data` are applied to the whole df:
+            - If True: `min_data` and `max_data` apply to each group=(product, resolution).
+            e.g. if `min_data=2`, at least two data points are required for each group=(product, resolution).
+            - If False: `min_data` and `max_data` apply to the entire dataset, not segregated by product or resolution.
+            e.g. if `min_data=2`, at least two data points are required for the whole dataset.
+        '''
         Model = model.get_model_type_of_ml_model()
         assert isinstance(model, Model), \
             f"{model.type} '{model.__class__.__name__}' is not an instance of {Model.__name__}. Please create your {model.type} using 'class {model.__class__.__name__}({Model.__name__})'"
@@ -445,6 +498,7 @@ class BaseModel(ABC, metaclass=MetaModel):
             model.set_name(name)
         model.set_min_data(min_data)
         model.set_max_data(max_data)
+        model.set_group_data(group_data)
         model.create_logger()
         mdl = model.name
         if mdl in self.models:
@@ -459,18 +513,20 @@ class BaseModel(ABC, metaclass=MetaModel):
         feature: tFeature, 
         name: str='',
         min_data: int=1,
-        max_data: None | int=None
+        max_data: None | int=None,
+        group_data: bool=True
     ) -> tFeature:
-        return self.add_model(feature, name=name, min_data=min_data, max_data=max_data)
+        return self.add_model(feature, name=name, min_data=min_data, max_data=max_data, group_data=group_data)
     
     def add_indicator(
         self, 
         indicator: tIndicator, 
         name: str='',
         min_data: int=1,
-        max_data: None | int=None
+        max_data: None | int=None,
+        group_data: bool=True
     ) -> tIndicator:
-        return self.add_model(indicator, name=name, min_data=min_data, max_data=max_data)
+        return self.add_model(indicator, name=name, min_data=min_data, max_data=max_data, group_data=group_data)
     
     def update_quote(self, data: QuoteData, **kwargs):
         product, bids, asks, ts = data.product, data.bids, data.asks, data.ts
@@ -478,7 +534,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         for listener in self._listeners[data]:
             listener.update_quote(data, **kwargs)
             self.update_predictions(data, listener)
-        self._append_to_df(**kwargs)
+        self._append_to_df(data, **kwargs)
         self.on_quote(product, bids, asks, ts, **kwargs)
         
     def update_tick(self, data: TickData, **kwargs):
@@ -487,7 +543,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         for listener in self._listeners[data]:
             listener.update_tick(data, **kwargs)
             self.update_predictions(data, listener)
-        self._append_to_df(**kwargs)
+        self._append_to_df(data, **kwargs)
         self.on_tick(product, px, qty, ts, **kwargs)
     
     def update_bar(self, data: BarData, **kwargs):
@@ -496,11 +552,13 @@ class BaseModel(ABC, metaclass=MetaModel):
         for listener in self._listeners[data]:
             listener.update_bar(data, **kwargs)
             self.update_predictions(data, listener)
-        self._append_to_df(**kwargs)
+        self._append_to_df(data, **kwargs)
         self.on_bar(product, bar, ts, **kwargs)
     
     def update_predictions(self, data: BaseData, listener: BaseModel):
         pred_y: torch.Tensor | np.ndarray | None = listener.next(data)
+        if pred_y is None:
+            pred_y = [[np.nan]]
         self.predictions[listener.name] = pred_y
     
     def _start_models(self):
@@ -510,13 +568,13 @@ class BaseModel(ABC, metaclass=MetaModel):
     def _prepare_df(self):
         return self._data_tool.prepare_df(ts_col_type='timestamp')
         
-    def _append_to_df(self, **kwargs):
-        return self._data_tool.append_to_df(self.data, self.predictions, **kwargs)
-    
+    def _append_to_df(self, data: BaseData, **kwargs):
+        return self._data_tool.append_to_df(data, self.predictions, **kwargs)
+        
     def start(self):
         if not self.is_running():
             self.add_datas()
-            self._add_datas_if_not_exist()
+            self._add_consumers_datas_if_no_data()
             self._convert_min_max_data_to_dict()
             self.add_models()
             self._start_models()

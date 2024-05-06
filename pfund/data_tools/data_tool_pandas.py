@@ -15,8 +15,26 @@ from pfund.utils.envs import backtest
 
 
 class PandasDataTool(BaseDataTool):
-    def get_df(self, copy=True):
-        return self.df.copy(deep=True) if copy else self.df
+    def get_df(
+        self, 
+        start_idx: int=0, 
+        end_idx: int | None=None, 
+        product: str | None=None, 
+        resolution: str | None=None, 
+        copy: bool=True
+    ):
+        if self._new_rows:
+            self._push_new_rows_to_df()
+        df = self.df.copy(deep=True) if copy else self.df
+        if product is None and resolution is None:
+            return df.iloc[start_idx:end_idx]
+        elif product is not None and resolution is None:
+            df = df.loc[df['product'] == product]
+        elif product is None and resolution is not None:
+            df = df.loc[df['resolution'] == resolution]
+        else:
+            df = df.loc[(df['product'] == product) & (df['resolution'] == resolution)]
+        return df
     
     def prepare_df(self, ts_col_type: Literal['datetime', 'timestamp']='datetime'):
         assert self._raw_dfs, "No data is found, make sure add_data(...) is called correctly"
@@ -34,6 +52,41 @@ class PandasDataTool(BaseDataTool):
             self.df['ts'] = self.df['ts'].astype(int) // 10**6 / 10**3
         self._raw_dfs.clear()
 
+    def clear_df(self):
+        self.df = pd.DataFrame(columns=self.df.columns).astype(self.df.dtypes)
+        
+    def _push_new_rows_to_df(self):
+        new_rows_df = pd.DataFrame(self._new_rows)
+        self.df = pd.concat([self.df, new_rows_df], ignore_index=True)
+        self.df.sort_values(by=self.INDEX, ascending=True, inplace=True)
+        self.df.reset_index(drop=True, inplace=True)
+        self._new_rows.clear()
+        
+    def append_to_df(self, data: BaseData, predictions: dict, **kwargs):
+        '''Appends new data to the df
+        Args:
+            kwargs: other_info about the data
+        '''
+        row_data = {
+            'ts': data.ts, 
+            'product': repr(data.product), 
+            'resolution': data.resol
+        }
+        
+        for col in self.df.columns:
+            if col in self.INDEX:
+                continue
+            # e.g. open, high, low, close, volume
+            if hasattr(data, col):
+                row_data[col] = getattr(data, col)
+            elif col in kwargs:
+                row_data[col] = kwargs[col]
+                
+        for mdl, pred_y in predictions.items():
+            row_data[mdl] = pred_y[0]
+                
+        self._new_rows.append(row_data)
+        
     @staticmethod
     @backtest
     def iterate_df_by_chunks(df: pd.DataFrame, num_chunks=1) -> Generator[pd.DataFrame, None, None]:
@@ -148,37 +201,7 @@ class PandasDataTool(BaseDataTool):
             elif type_ == 'test':
                 self.test_set = df
     
-    def clear_df(self):
-        self.df = pd.DataFrame(columns=self.df.columns)
-    
-    # OPTIMIZE
-    def append_to_df(self, data: BaseData, predictions: dict, **kwargs):
-        '''Appends new data to the df
-        The flow is, the df is cleared in model's event-driven backtesting,
-        data & prediction (single signal) will be gradually appended back to the df for model.next() to use.
-        '''
-        row_data = {}
-        
-        for col in self.df.columns:
-            if hasattr(data, col):
-                row_data[col] = getattr(data, col)
-            elif col in kwargs:
-                row_data[col] = kwargs[col]
-        for mdl, pred_y in predictions.items():
-            if pred_y is not None and pred_y.shape[0] == 1:
-                row_data[mdl] = pred_y[0]
-            else:
-                row_data[mdl] = pred_y
-        index_data = {'ts': data.dt, 'product': repr(data.product), 'resolution': repr(data.resolution)}
-        new_row = pd.DataFrame(
-            [row_data], 
-            index=self.create_multi_index(index_data, self.df.index.names)
-        )
-        self.df = pd.concat([self.df, new_row], ignore_index=False)
-    
-    def create_multi_index(self, index_data: dict, index_names: list[str]) -> pd.MultiIndex:
-        return pd.MultiIndex.from_tuples([tuple(index_data[name] for name in index_names)], names=index_names)
-    
+    # TODO
     def to_signal(self, X: pd.DataFrame, pred_y: np.ndarray, columns: list[str]):
         signal = pd.DataFrame(pred_y, columns=columns)
         return signal
@@ -200,28 +223,20 @@ class PandasDataTool(BaseDataTool):
         df.index = df.index.set_levels(values, level=index)
         return df
     
-    @staticmethod    
+    @staticmethod
     def output_df_to_parquet(df: pd.DataFrame, file_path: str, compression: str='zstd'):
         df.to_parquet(file_path, compression=compression)
     
-    @staticmethod
-    def filter_df(df: pd.DataFrame, start_date: str | None=None, end_date: str | None=None, product: str='', resolution: str=''):
+    def filter_multi_index_df(self, df: pd.DataFrame, start_date: str | None=None, end_date: str | None=None, product: str='', resolution: str=''):
+        assert self.INDEX == df.index.names, f"index must be {self.INDEX}"
         product = product or slice(None)
         resolution = resolution or slice(None)
         return df.loc[(slice(start_date, end_date), product, resolution), :]
     
     @staticmethod
-    def unstack_df(df: pd.DataFrame, columns: list[str]):
-        '''
-        Args:
-            columns: list of columns to unstack, e.g. ['product', 'resolution']
-        '''
-        return df.unstack(level=columns)
-    
-    @staticmethod
     def ffill_df(df: pd.DataFrame, columns: list[str]):
         return (
-            df.unstack_df(level=columns)
+            df.unstack(level=columns)
             .ffill()
             .stack(level=columns)
         )

@@ -45,6 +45,11 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
             else:
                 return False
         
+        def on_start(self):
+            if self.engine.mode == 'vectorized':
+                self.set_group_data(False)
+            super().on_start()
+        
         def load(self):
             if self._is_signal_prepared():
                 super().load()
@@ -66,9 +71,9 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
             ts_col_type = 'timestamp' if self.engine.mode == 'event_driven' else 'datetime'
             return self._data_tool.prepare_df(ts_col_type=ts_col_type)
     
-        def _append_to_df(self, **kwargs):
+        def _append_to_df(self, data: BaseData, **kwargs):
             if not self._is_signal_prepared() and self.engine.append_signals:
-                return self._data_tool.append_to_df(self.data, self.predictions, **kwargs)
+                return self._data_tool.append_to_df(data, self.predictions, **kwargs)
         
         def _is_signal_prepared(self):
             if self._is_dummy_strategy():
