@@ -51,7 +51,7 @@ class TalibIndicator(BaseIndicator):
             df.sort_index(inplace=True)
 
         if not self._signal_cols:
-            self.set_signal_columns(df.columns.to_list())
+            self.set_signal_cols(df.columns.to_list())
         
         return df.to_numpy()
 

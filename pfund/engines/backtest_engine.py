@@ -17,14 +17,15 @@ if TYPE_CHECKING:
     from pfund.types.common_literals import tSUPPORTED_BACKTEST_MODES, tSUPPORTED_DATA_TOOLS
     from pfund.types.core import tStrategy, tModel, tFeature, tIndicator
     from pfund.models.model_base import BaseModel
-    from pfund.products.product_base import BaseProduct
     
+from rich.console import Console
+
 try:
     import pandas as pd
     import polars as pl
 except ImportError:
     pass
-    
+
 import pfund as pf
 from pfund.git_controller import GitController
 from pfund.engines.base_engine import BaseEngine
@@ -40,8 +41,8 @@ class BacktestEngine(BaseEngine):
     def __new__(
         cls, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
         config: ConfigHandler | None=None,
-        append_signals=False,
-        use_trained_models=True,
+        disable_df=True,  # normally no need to access df in event-driven backtesting
+        use_signal_df=True,
         auto_git_commit=False,
         save_backtests=False,
         num_chunks=1,
@@ -51,14 +52,16 @@ class BacktestEngine(BaseEngine):
     ):
         if not hasattr(cls, 'mode'):
             cls.mode = mode.lower()
-        # NOTE: append_signals=False means signals from models won't be added to dfs.
         # This will make event-driven backtesting faster but less consistent with live trading
-        if not hasattr(cls, 'append_signals'):
-            cls.append_signals = append_signals
-        # NOTE: use_trained_models=True means model's prepared signals will be reused in model.next()
+        if not hasattr(cls, 'disable_df'):
+            cls.disable_df = disable_df
+            if disable_df and cls.mode == 'event_driven':
+                Console().print(f'{disable_df=}, df will stay empty during {cls.mode} backtesting.', style='bold')
+
+        # NOTE: use_signal_df=True means model's prepared signals will be reused in model.next()
         # instead of recalculating the signals. This will make event-driven backtesting faster but less consistent with live trading
-        if not hasattr(cls, 'use_trained_models'):
-            cls.use_trained_models = use_trained_models
+        if not hasattr(cls, 'use_signal_df'):
+            cls.use_signal_df = use_signal_df
         if not hasattr(cls, 'auto_git_commit'):
             cls.auto_git_commit = auto_git_commit
         if not hasattr(cls, 'save_backtests'):
@@ -78,10 +81,10 @@ class BacktestEngine(BaseEngine):
     def __init__(
         self, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
         config: ConfigHandler | None=None,
-        append_signals=False,
-        use_trained_models=True,
+        disable_df=True,
+        use_signal_df=True,
         auto_git_commit=False,
-        save_backtests=True,
+        save_backtests=False,
         num_chunks=1,
         use_ray=False,
         num_cpus=8,
@@ -265,8 +268,7 @@ class BacktestEngine(BaseEngine):
         backtest_name = backtest_history['metadata']['backtest_name']
         if self.mode == 'vectorized':
             output_file_path = os.path.join(self.config.backtest_path, f'{backtest_name}.parquet')
-            dtl = strategy.get_data_tool()
-            dtl.output_df_to_parquet(df, output_file_path)
+            strategy.dtl.output_df_to_parquet(df, output_file_path)
         elif self.mode == 'event_driven':
             # TODO: output trades? or orders? or df?
             output_file_path = ...
@@ -293,13 +295,13 @@ class BacktestEngine(BaseEngine):
 
     def _backtest(self, backtestee: BaseStrategy | BaseModel) -> dict:
         backtests = {}
-        dtl = backtestee.get_data_tool()
+        dtl = backtestee.dtl
         df = backtestee.get_df(copy=True)
         
         if not self.use_ray:
             tqdm_bar = tqdm(
                 total=self.num_chunks, 
-                desc=f'Backtesting {backtestee.tname} (per chunk)', 
+                desc=f'Backtesting {backtestee.name} (per chunk)', 
                 colour='green'
             )
         else:
@@ -308,11 +310,11 @@ class BacktestEngine(BaseEngine):
         # Pre-Backtesting
         if self.mode == 'vectorized':
             if not hasattr(backtestee, 'backtest'):
-                raise Exception(f'{backtestee.tname} does not have backtest() method, cannot run vectorized backtesting')
+                raise Exception(f'{backtestee.name} does not have backtest() method, cannot run vectorized backtesting')
             sig = inspect.signature(backtestee.backtest)
             params = list(sig.parameters.values())
             if not params or params[0].name != 'df':
-                raise Exception(f'{backtestee.tname} backtest() must have "df" as its first arg, i.e. backtest(self, df)')
+                raise Exception(f'{backtestee.name} backtest() must have "df" as its first arg, i.e. backtest(self, df)')
             df_chunks = []
         elif self.mode == 'event_driven':
             # NOTE: clear dfs so that strategies/models don't know anything about the incoming data
@@ -344,7 +346,7 @@ class BacktestEngine(BaseEngine):
             print(f"Ray's num_cpus is set to {self.num_cpus}")
             
             @ray.remote
-            def _run_task(log_queue: Queue,  _df_chunk: pd.DataFrame, _chunk_num: int, _batch_num: int):
+            def _run_task(log_queue: Queue,  _df_chunk: pd.DataFrame | pl.LazyFrame, _chunk_num: int, _batch_num: int):
                 logger = backtestee.logger
                 if not logger.handlers:
                     logger.addHandler(QueueHandler(log_queue))
@@ -362,7 +364,7 @@ class BacktestEngine(BaseEngine):
             batches = [ray_tasks[i: i + batch_size] for i in range(0, len(ray_tasks), batch_size)]
             with tqdm(
                 total=len(batches),
-                desc=f'Backtesting {backtestee.tname} ({batch_size} chunks per batch)', 
+                desc=f'Backtesting {backtestee.name} ({batch_size} chunks per batch)', 
                 colour='green'
             ) as tqdm_bar:
                 for batch_num, batch in enumerate(batches):
@@ -391,8 +393,8 @@ class BacktestEngine(BaseEngine):
 
     def _event_driven_backtest(self, df_chunk, chunk_num=0, batch_num=0):
         common_cols = ['ts', 'product', 'resolution', 'broker', 'is_quote', 'is_tick']
-        if isinstance(df_chunk, pl.DataFrame):
-            df_chunk = df_chunk.to_pandas()
+        if isinstance(df_chunk, pl.LazyFrame):
+            df_chunk = df_chunk.collect().to_pandas()
         
         # OPTIMIZE: critical loop
         for row in tqdm(

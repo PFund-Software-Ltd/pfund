@@ -4,6 +4,7 @@ from pfund.datas.data_base import BaseData
 class BaseDataTool:
     INDEX = ['ts', 'product', 'resolution']
     GROUP = ['product', 'resolution']
+    _MAX_NEW_ROWS = 1000
 
     def __init__(self):
         self.train_periods = {}  # {product: ('start_date', 'end_date')}

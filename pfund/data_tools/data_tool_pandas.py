@@ -22,19 +22,17 @@ class PandasDataTool(BaseDataTool):
         product: str | None=None, 
         resolution: str | None=None, 
         copy: bool=True
-    ):
+    ) -> pd.DataFrame:
         if self._new_rows:
             self._push_new_rows_to_df()
         df = self.df.copy(deep=True) if copy else self.df
-        if product is None and resolution is None:
-            return df.iloc[start_idx:end_idx]
-        elif product is not None and resolution is None:
-            df = df.loc[df['product'] == product]
-        elif product is None and resolution is not None:
-            df = df.loc[df['resolution'] == resolution]
-        else:
+        if product and resolution:
             df = df.loc[(df['product'] == product) & (df['resolution'] == resolution)]
-        return df
+        elif product and not resolution:
+            df = df.loc[df['product'] == product]
+        elif not product and resolution:
+            df = df.loc[df['resolution'] == resolution]
+        return df.iloc[start_idx:end_idx]
     
     def prepare_df(self, ts_col_type: Literal['datetime', 'timestamp']='datetime'):
         assert self._raw_dfs, "No data is found, make sure add_data(...) is called correctly"
@@ -83,10 +81,21 @@ class PandasDataTool(BaseDataTool):
                 row_data[col] = kwargs[col]
                 
         for mdl, pred_y in predictions.items():
-            row_data[mdl] = pred_y[0]
-                
-        self._new_rows.append(row_data)
+            row_data[mdl] = pred_y
         
+        self._new_rows.append(row_data)
+        if len(self._new_rows) >= self._MAX_NEW_ROWS:
+            self._push_new_rows_to_df()
+        
+    def signalize(self, X: pd.DataFrame, pred_y: np.ndarray, columns: list[str]) -> pd.DataFrame:
+        pred_df = pd.DataFrame(pred_y, columns=columns)
+        assert self.INDEX in X.columns, f"{self.INDEX} must be in X's columns"
+        X = X[self.INDEX]  # only keep the index columns
+        signal_df = pd.concat([X, pred_df], axis=1)
+        # arrange columns
+        signal_df = signal_df[self.INDEX + [col for col in signal_df.columns if col not in self.INDEX]]
+        return signal_df
+
     @staticmethod
     @backtest
     def iterate_df_by_chunks(df: pd.DataFrame, num_chunks=1) -> Generator[pd.DataFrame, None, None]:
@@ -123,27 +132,27 @@ class PandasDataTool(BaseDataTool):
         if backtestee.type == 'strategy':
             for strategy in backtestee.strategies.values():
                 # TODO:
-                # assert strategy.signal is not None
+                # assert strategy.signal_df is not None
                 df = self.preprocess_vectorized_df(df, strategy)
         
         # NOTE: models can have different ts_ranges, need to store the original ts_range before concatenating
         ts_range = df['ts']
         for model in backtestee.models.values():
-            signal: pd.DataFrame = model.signal
-            assert signal is not None, \
-                f"signal is None, please make sure {model.tname} (for {backtestee.tname}) \
-                is loaded or was dumped using '{model.type}.dump(signal)' correctly."
+            signal_df: pd.DataFrame = model.signal_df
+            assert signal_df is not None, \
+                f"signal_df is None, please make sure {model.name} (for {backtestee.name}) \
+                is loaded or was dumped using '{model.type}.dump(signal_df)' correctly."
             df = self.preprocess_vectorized_df(df, model)
             
             # rename model columns to avoid conflict
-            num_model_cols = len(signal.columns)
+            num_model_cols = len(signal_df.columns)
             new_model_cols = {col: model.name if num_model_cols == 1 else model.name+'_'+col for col in signal.columns}
-            signal.rename(columns=new_model_cols, inplace=True)
+            signal_df.rename(columns=new_model_cols, inplace=True)
             
             # filter to match the timestamp range
             # TODO:
-            # model.signal = model.signal[ts_range.min():ts_range.max()]
-            df = pd.concat([df, signal], axis=1)
+            # model.signal_df = model.signal_df[ts_range.min():ts_range.max()]
+            df = pd.concat([df, signal_df], axis=1)
         df.sort_values(by='ts', ascending=True, inplace=True)
         return df
      
@@ -201,11 +210,6 @@ class PandasDataTool(BaseDataTool):
             elif type_ == 'test':
                 self.test_set = df
     
-    # TODO
-    def to_signal(self, X: pd.DataFrame, pred_y: np.ndarray, columns: list[str]):
-        signal = pd.DataFrame(pred_y, columns=columns)
-        return signal
-
        
     '''
     ************************************************

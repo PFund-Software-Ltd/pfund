@@ -2,12 +2,15 @@ import inspect
 import re
 
 import numpy as np
-import pandas as pd
+try:
+    import pandas as pd
+    import polars as pl
+except ImportError:
+    pass
 
 from pfund.indicators.indicator_base import TaFunction, BaseIndicator
 
 
-# FIXME: pandas specific
 class TaIndicator(BaseIndicator):
     def __init__(self, indicator: TaFunction, *args, funcs: list[str] | None=None, **kwargs):
         '''
@@ -98,7 +101,7 @@ class TaIndicator(BaseIndicator):
                     return
             df = pd.concat(dfs, axis=1)
             df.sort_index(level='ts', inplace=True)
-        self.set_signal_columns(df.columns.to_list())
+        self.set_signal_cols(df.columns.to_list())
         return df.to_numpy()
 
     # TODO

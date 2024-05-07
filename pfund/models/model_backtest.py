@@ -8,6 +8,13 @@ if TYPE_CHECKING:
     from pfund.models.model_base import BaseModel
     from pfund.datas.data_base import BaseData
 
+import numpy as np
+try:
+    import pandas as pd
+    import polars as pl
+except ImportError:
+    pass
+
 from pfund.models.model_base import BaseFeature
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.mixins.backtest import BacktestMixin
@@ -34,7 +41,7 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
         def add_consumer(self, consumer: BaseStrategy | BaseModel):
             is_dummy_strategy = isinstance(consumer, BaseStrategy) and consumer.name == '_dummy'
             if is_dummy_strategy:
-                assert not self._consumers, f"{self.tname} must have _dummy strategy as its only consumer"
+                assert not self._consumers, f"{self.name} must have _dummy strategy as its only consumer"
             return super().add_consumer(consumer)
         
         def _is_dummy_strategy(self):
@@ -48,15 +55,32 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
         def on_start(self):
             if self.engine.mode == 'vectorized':
                 self.set_group_data(False)
+            if self._is_signal_df_required():
+                if self._signal_df is None:
+                    raise ValueError(
+                        f"Please make sure '{self.name}' was dumped "
+                        f"using '{self.type}.dump(signal_df)' correctly."
+                        # FIXME: correct the link
+                        f"Please refer to the doc: https://pfund.ai"  
+                    )
+                # TODO: check if the signal_df is consistent with the current datas
+                else:
+                    pass
             super().on_start()
         
-        def load(self):
-            if self._is_signal_prepared():
-                super().load()
-        
+        def load(self) -> dict:
+            obj: dict = super().load()
+            signal_df = obj.get('signal_df', None)
+            self.set_signal_df(signal_df)
+            return obj
+
+        def dump(self, signal_df: pd.DataFrame | pl.LazyFrame):
+            obj = {'signal_df': signal_df}
+            super().dump(obj)
+            
         def clear_dfs(self):
             assert self.engine.mode == 'event_driven'
-            if not self._is_signal_prepared():
+            if not self._is_signal_df_required():
                 self._data_tool.clear_df()
             for model in self.models.values():
                 model.clear_dfs()
@@ -72,39 +96,32 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
             return self._data_tool.prepare_df(ts_col_type=ts_col_type)
     
         def _append_to_df(self, data: BaseData, **kwargs):
-            if not self._is_signal_prepared() and self.engine.append_signals:
+            if not (self._is_signal_df_required() or self.engine.disable_df):
                 return self._data_tool.append_to_df(data, self.predictions, **kwargs)
-        
-        def _is_signal_prepared(self):
-            if self._is_dummy_strategy():
-                return False
-            elif self.engine.mode == 'vectorized':
-                return True
-            elif self.engine.mode == 'event_driven':
-                return self.engine.use_trained_models
                 
         def next(self, data: BaseData):
-            if not self._is_signal_prepared():
+            if not self._is_signal_df_required():
                 return super().next(data)
             else:
                 try:
                     # FIXME: pandas specific
-                    # retrieve prepared signal from self.signal
-                    new_pred = self.signal.loc[(data.dt, repr(data.product), repr(data.resolution))]
+                    # retrieve prepared signal_df from self.signal_df
+                    # TODO: share to_numpy() first, no loc()
+                    new_pred = self.signal_df.loc[(data.dt, repr(data.product), repr(data.resolution))]
                     return new_pred.to_numpy()
                 except Exception as e:
-                    raise Exception(f"Please make sure {self.tname} has been prepared/dumped correctly") from e
+                    raise Exception(f"Please make sure {self.name} has been prepared/dumped correctly") from e
         
         # FIXME: pandas specific
         def assert_consistent_signals(self):
             '''Asserts consistent model signals from vectorized and event-driven backtesting, triggered in event-driven backtesting'''
             import pandas.testing as pdt
-            event_driven_signal = self.signal
-            # set signal to None and load the vectorized_signal
-            self.set_signal(None)
+            event_driven_signal = self.signal_df
+            # set signal_df to None and load the vectorized_signal
+            self.set_signal_df(None)
             self.load()
-            assert self.signal is not None, f"Please dump your model '{self.name}' by calling model.dump() before running event-driven backtesting"
-            vectorized_signal = self.signal
+            assert self.signal_df is not None, f"Please dump your model '{self.name}' by calling model.dump() before running event-driven backtesting"
+            vectorized_signal = self.signal_df
             # filter out the last date since event_driven_signal doesn't have it 
             vectorized_signal_ts_index = vectorized_signal.index.get_level_values('ts')
             last_date = vectorized_signal_ts_index.max()

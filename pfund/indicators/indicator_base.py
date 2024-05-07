@@ -1,7 +1,12 @@
 from typing import Type, Any, Callable
 
 import numpy as np
-import pandas as pd
+
+try:
+    import pandas as pd
+    import polars as pl
+except ImportError:
+    pass
 
 try:
     from talib import abstract as talib
@@ -13,7 +18,6 @@ TaFunction = Callable[..., Any]  # Type for functions from the 'ta' library
 from pfund.models.model_base import BaseModel
 
 
-# FIXME: pandas specific
 class BaseIndicator(BaseModel):
     def __init__(self, indicator: TaFunction | TalibFunction, *args, **kwargs):
         '''
@@ -29,7 +33,6 @@ class BaseIndicator(BaseModel):
         '''
         super().__init__(indicator, *args, **kwargs)
         self.type = 'indicator'
-        self._signal_cols = []
         
         if self.engine.data_tool == 'pandas':
             self.predict = self._predict_pandas
@@ -40,29 +43,23 @@ class BaseIndicator(BaseModel):
     
     def predict(self, *args, **kwargs):
         raise NotImplementedError
+    indicate = predict
     
     @property
     def indicator(self):
         return self.ml_model
-    
-    def set_signal_columns(self, columns: list[str]):
-        self._signal_cols = columns
-    
-    def load(self):
+
+    def load(self) -> dict:
         # since ml_model is None when dumping, 
         # use the initialized ml_model to avoid ml_model=None after loading
         indicator = self.ml_model
-        super().load()  # -> self.ml_model = None after loading
+        obj: dict = super().load()  # -> self.ml_model = None after loading
         self.ml_model = indicator
+        return obj
     
-    def dump(self, signal: pd.DataFrame):
+    def dump(self):
         # NOTE: ml_model is indicator (function of talib.abstract, e.g. abstract.SMA), 
         # which is not serializable, so make it None before dumping
         self.ml_model = None
-        super().dump(signal)
+        super().dump()
     
-    def to_signal(self, X: pd.DataFrame, pred_y: np.ndarray) -> pd.DataFrame:
-        return super().to_signal(X, pred_y, columns=self._signal_cols)
-    
-    def flow(self, is_dump=False) -> pd.DataFrame:
-        return super().flow(is_dump=is_dump)

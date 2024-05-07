@@ -69,7 +69,7 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
                 return self._data_tool.prepare_df(ts_col_type=ts_col_type)
             
         def _append_to_df(self, data: BaseData, **kwargs):
-            if not self._is_dummy_strategy() and self.engine.append_signals:
+            if not (self._is_dummy_strategy() or self.engine.disable_df):
                 return self._data_tool.append_to_df(data, self.predictions, **kwargs)
     
     try: 
