@@ -31,7 +31,7 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
         def add_account(self, trading_venue: str, acc: str='', initial_balances: dict[str, int|float]|None=None, **kwargs):
             return super().add_account(trading_venue, acc=acc, initial_balances=initial_balances, **kwargs)
             
-        def _is_dummy_strategy(self):
+        def _check_if_dummy_strategy(self):
             return self.name == '_dummy'
         
         def on_start(self):
@@ -48,30 +48,13 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
         
         def clear_dfs(self):
             assert self.engine.mode == 'event_driven'
-            if not self._is_dummy_strategy():
+            if not self._is_signal_df_required and not self._is_dummy_strategy:
                 self._data_tool.clear_df()
             for strategy in self.strategies.values():
                 strategy.clear_dfs()
             for model in self.models.values():
                 model.clear_dfs()
         
-        def _add_raw_df(self, data, df):
-            if not self._is_dummy_strategy():
-                return self._data_tool.add_raw_df(data, df)
-        
-        def _set_data_periods(self, datas, **kwargs):
-            if not self._is_dummy_strategy():
-                return self._data_tool.set_data_periods(datas, **kwargs)
-        
-        def _prepare_df(self):
-            if not self._is_dummy_strategy():
-                ts_col_type = 'timestamp' if self.engine.mode == 'event_driven' else 'datetime'
-                return self._data_tool.prepare_df(ts_col_type=ts_col_type)
-            
-        def _append_to_df(self, data: BaseData, **kwargs):
-            if not (self._is_dummy_strategy() or self.engine.disable_df):
-                return self._data_tool.append_to_df(data, self.predictions, **kwargs)
-    
     try: 
         return _BacktestStrategy(*args, **kwargs)
     except TypeError as e:

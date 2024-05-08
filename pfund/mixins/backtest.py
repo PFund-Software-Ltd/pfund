@@ -11,8 +11,6 @@ if TYPE_CHECKING:
     from pfeed.feeds.base_feed import BaseFeed
     from pfund.datas.data_base import BaseData
     from pfund.products.product_base import BaseProduct
-    from pfund.strategies.strategy_base import BaseStrategy
-    from pfund.models.model_base import BaseModel
 
 import numpy as np
 try:
@@ -22,6 +20,8 @@ try:
 except ImportError:
     pass
 
+from pfund.strategies.strategy_base import BaseStrategy
+from pfund.models.model_base import BaseModel
 from pfund.managers.data_manager import get_resolutions_from_kwargs
 
 
@@ -39,6 +39,14 @@ class BacktestMixin:
         from pfund.models.model_base import BaseModel
         
         self._signal_df = None
+        self._is_signal_df_required = self._check_if_signal_df_required()
+        # case1: strategy is a dummy strategy
+        # case2: model is using a dummy strategy as its only consumer
+        self._is_dummy_strategy = self._check_if_dummy_strategy()
+        self._is_append_to_df = not self._is_signal_df_required
+        if isinstance(self, BaseStrategy):
+            self._is_append_to_df = self._is_append_to_df and not self._is_dummy_strategy
+        
         # stores signatures for backtest history tracking
         self._data_signatures = []
         if isinstance(self, BaseStrategy):
@@ -53,14 +61,35 @@ class BacktestMixin:
     def signal_df(self):
         return self._signal_df
     
-    def _is_signal_df_required(self) -> bool:
-        if self._is_dummy_strategy():
+    # TODO
+    def next(self, data: BaseData):
+        if not self._is_signal_df_required:
+            return super().next(data)
+        else:
+            try:
+                # FIXME: pandas specific
+                # retrieve prepared signal_df from self.signal_df
+                # TODO: share to_numpy() first, no loc()
+                new_pred = self.signal_df.loc[(data.dt, repr(data.product), repr(data.resolution))]
+                return new_pred.to_numpy()
+            except Exception as e:
+                raise Exception(f"Please make sure {self.name} has been prepared/dumped correctly") from e
+    
+    def _append_to_df(self, data: BaseData, **kwargs):
+        if self._is_append_to_df:
+            return self.dtl.append_to_df(data, self.predictions, **kwargs)
+    
+    def _check_if_signal_df_required(self) -> bool:
+        if self._is_dummy_strategy:
             return False
         elif self.engine.mode == 'vectorized':
             return True
         elif self.engine.mode == 'event_driven':
-            return self.engine.use_signal_df
-        
+            if isinstance(self, BaseStrategy):
+                return self.engine.use_signal_df and self.is_sub_strategy()
+            elif isinstance(self, BaseModel):
+                return self.engine.use_signal_df
+    
     def signalize(
         self, 
         X: pd.DataFrame | pl.LazyFrame,
@@ -74,7 +103,24 @@ class BacktestMixin:
     
     def set_signal_df(self, signal_df: pd.DataFrame | pl.DataFrame | pl.LazyFrame | None):
         self._signal_df = signal_df
-        
+    
+    def _add_raw_df(self, data, df):
+        if self._is_dummy_strategy and isinstance(self, BaseStrategy):
+            return
+        return self.dtl.add_raw_df(data, df)
+    
+    # TODO
+    def _set_data_periods(self, datas, **kwargs):
+        if self._is_dummy_strategy and isinstance(self, BaseStrategy):
+            return
+        return self.dtl.set_data_periods(datas, **kwargs)
+    
+    def _prepare_df(self):
+        if self._is_dummy_strategy and isinstance(self, BaseStrategy):
+            return
+        ts_col_type = 'timestamp' if self.engine.mode == 'event_driven' else 'datetime'
+        return self.dtl.prepare_df(ts_col_type=ts_col_type)
+    
     def add_data_signature(self, *args, **kwargs):
         self._data_signatures.append((args, kwargs))
     
@@ -114,12 +160,20 @@ class BacktestMixin:
         name: str='',
         min_data: int=1,
         max_data: None | int=None,
-        group_data: bool=True
+        group_data: bool=True,
+        signal_cols: list[str] | None=None,
     ) -> BacktestMixin | tModel:
         from pfund.models.model_backtest import BacktestModel
         name = name or model.__class__.__name__
         model = BacktestModel(type(model), model.ml_model, *model._args, **model._kwargs)
-        return super().add_model(model, name=name, min_data=min_data, max_data=max_data, group_data=group_data)
+        return super().add_model(
+            model, 
+            name=name, 
+            min_data=min_data, 
+            max_data=max_data, 
+            group_data=group_data,
+            signal_cols=signal_cols,
+        )
     
     def add_feature(
         self, 
@@ -127,9 +181,17 @@ class BacktestMixin:
         name: str='',
         min_data: int=1,
         max_data: None | int=None,
-        group_data: bool=True
+        group_data: bool=True,
+        signal_cols: list[str] | None=None,
     ) -> BacktestMixin | tFeature:
-        return self.add_model(feature, name=name, min_data=min_data, max_data=max_data, group_data=group_data)
+        return self.add_model(
+            feature, 
+            name=name, 
+            min_data=min_data, 
+            max_data=max_data, 
+            group_data=group_data,
+            signal_cols=signal_cols,
+        )
         
     def add_indicator(
         self, 
@@ -137,9 +199,17 @@ class BacktestMixin:
         name: str='',
         min_data: int=1,
         max_data: None | int=None,
-        group_data: bool=True
+        group_data: bool=True,
+        signal_cols: list[str] | None=None,
     ) -> BacktestMixin | tIndicator:
-        return self.add_model(indicator, name=name, min_data=min_data, max_data=max_data, group_data=group_data)
+        return self.add_model(
+            indicator, 
+            name=name, 
+            min_data=min_data, 
+            max_data=max_data, 
+            group_data=group_data,
+            signal_cols=signal_cols,
+        )
         
     def _get_data_source(self, trading_venue: str, backtest_kwargs: dict):
         from pfeed.const.common import SUPPORTED_DATA_FEEDS

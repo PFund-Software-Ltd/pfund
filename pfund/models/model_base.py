@@ -424,7 +424,8 @@ class BaseModel(ABC, metaclass=MetaModel):
         name: str='', 
         min_data: int=1,
         max_data: None | int=None,
-        group_data: bool=True
+        group_data: bool=True,
+        signal_cols: list[str] | None=None,
     ) -> tModel:
         '''Adds a model to the current model.
         Args:
@@ -438,6 +439,8 @@ class BaseModel(ABC, metaclass=MetaModel):
             e.g. if `min_data=2`, at least two data points are required for each group=(product, resolution).
             - If False: `min_data` and `max_data` apply to the entire dataset, not segregated by product or resolution.
             e.g. if `min_data=2`, at least two data points are required for the whole dataset.
+            
+            signal_cols: signal columns, if not provided, it will be derived in predict()
         '''
         Model = model.get_model_type_of_ml_model()
         assert isinstance(model, Model), \
@@ -447,6 +450,8 @@ class BaseModel(ABC, metaclass=MetaModel):
         model.set_min_data(min_data)
         model.set_max_data(max_data)
         model.set_group_data(group_data)
+        if signal_cols:
+            model.set_signal_cols(signal_cols)
         model.create_logger()
         mdl = model.name
         if mdl in self.models:
@@ -462,9 +467,17 @@ class BaseModel(ABC, metaclass=MetaModel):
         name: str='',
         min_data: int=1,
         max_data: None | int=None,
-        group_data: bool=True
+        group_data: bool=True,
+        signal_cols: list[str] | None=None,
     ) -> tFeature:
-        return self.add_model(feature, name=name, min_data=min_data, max_data=max_data, group_data=group_data)
+        return self.add_model(
+            feature, 
+            name=name, 
+            min_data=min_data, 
+            max_data=max_data, 
+            group_data=group_data,
+            signal_cols=signal_cols,
+        )
     
     def add_indicator(
         self, 
@@ -472,9 +485,17 @@ class BaseModel(ABC, metaclass=MetaModel):
         name: str='',
         min_data: int=1,
         max_data: None | int=None,
-        group_data: bool=True
+        group_data: bool=True,
+        signal_cols: list[str] | None=None,
     ) -> tIndicator:
-        return self.add_model(indicator, name=name, min_data=min_data, max_data=max_data, group_data=group_data)
+        return self.add_model(
+            indicator, 
+            name=name, 
+            min_data=min_data, 
+            max_data=max_data, 
+            group_data=group_data,
+            signal_cols=signal_cols,
+        )
     
     def update_quote(self, data: QuoteData, **kwargs):
         product, bids, asks, ts = data.product, data.bids, data.asks, data.ts

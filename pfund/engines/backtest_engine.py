@@ -18,8 +18,6 @@ if TYPE_CHECKING:
     from pfund.types.core import tStrategy, tModel, tFeature, tIndicator
     from pfund.models.model_base import BaseModel
     
-from rich.console import Console
-
 try:
     import pandas as pd
     import polars as pl
@@ -41,7 +39,6 @@ class BacktestEngine(BaseEngine):
     def __new__(
         cls, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
         config: ConfigHandler | None=None,
-        disable_df=True,  # normally no need to access df in event-driven backtesting
         use_signal_df=True,
         auto_git_commit=False,
         save_backtests=False,
@@ -52,12 +49,6 @@ class BacktestEngine(BaseEngine):
     ):
         if not hasattr(cls, 'mode'):
             cls.mode = mode.lower()
-        # This will make event-driven backtesting faster but less consistent with live trading
-        if not hasattr(cls, 'disable_df'):
-            cls.disable_df = disable_df
-            if disable_df and cls.mode == 'event_driven':
-                Console().print(f'{disable_df=}, df will stay empty during {cls.mode} backtesting.', style='bold')
-
         # NOTE: use_signal_df=True means model's prepared signals will be reused in model.next()
         # instead of recalculating the signals. This will make event-driven backtesting faster but less consistent with live trading
         if not hasattr(cls, 'use_signal_df'):
@@ -81,7 +72,6 @@ class BacktestEngine(BaseEngine):
     def __init__(
         self, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
         config: ConfigHandler | None=None,
-        disable_df=True,
         use_signal_df=True,
         auto_git_commit=False,
         save_backtests=False,
@@ -118,7 +108,8 @@ class BacktestEngine(BaseEngine):
         name: str='',
         min_data: int=1,
         max_data: None | int=None,
-        group_data: bool=True
+        group_data: bool=True,
+        signal_cols: list[str] | None=None,
     ) -> BacktestMixin | tModel:
         '''Add model without creating a strategy (using dummy strategy)'''
         is_non_dummy_strategy_exist = bool([strat for strat in self.strategy_manager.strategies if strat != '_dummy'])
@@ -130,7 +121,14 @@ class BacktestEngine(BaseEngine):
             for func in strategy.REQUIRED_FUNCTIONS:
                 setattr(strategy, func, empty_function)
         assert not strategy.models, 'Adding more than 1 model to dummy strategy in backtesting is not supported, you should train and dump your models one by one'
-        model = strategy.add_model(model, name=name, min_data=min_data, max_data=max_data, group_data=group_data)
+        model = strategy.add_model(
+            model, 
+            name=name, 
+            min_data=min_data, 
+            max_data=max_data, 
+            group_data=group_data,
+            signal_cols=signal_cols,
+        )
         return model
     
     def add_feature(
@@ -139,9 +137,17 @@ class BacktestEngine(BaseEngine):
         name: str='',
         min_data: int=1,
         max_data: None | int=None,
-        group_data: bool=True
+        group_data: bool=True,
+        signal_cols: list[str] | None=None,
     ) -> BacktestMixin | tFeature:
-        return self.add_model(feature, name=name, min_data=min_data, max_data=max_data, group_data=group_data)
+        return self.add_model(
+            feature, 
+            name=name, 
+            min_data=min_data, 
+            max_data=max_data, 
+            group_data=group_data,
+            signal_cols=signal_cols,
+        )
     
     def add_indicator(
         self, 
@@ -149,9 +155,17 @@ class BacktestEngine(BaseEngine):
         name: str='',
         min_data: int=1,
         max_data: None | int=None,
-        group_data: bool=True
+        group_data: bool=True,
+        signal_cols: list[str] | None=None,
     ) -> BacktestMixin | tIndicator:
-        return self.add_model(indicator, name=name, min_data=min_data, max_data=max_data, group_data=group_data)
+        return self.add_model(
+            indicator, 
+            name=name, 
+            min_data=min_data, 
+            max_data=max_data, 
+            group_data=group_data,
+            signal_cols=signal_cols,
+        )
     
     def add_broker(self, bkr: str):
         bkr = bkr.upper()

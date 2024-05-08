@@ -182,6 +182,9 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         """
         pass
     
+    def is_sub_strategy(self):
+        return bool(self._consumers)
+    
     def to_dict(self):
         return {
             'class': self.__class__.__name__,
@@ -282,7 +285,8 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         name: str='',
         min_data: int=1,
         max_data: None | int=None,
-        group_data: bool=True
+        group_data: bool=True,
+        signal_cols: list[str] | None=None,
     ) -> tModel:
         Model = model.get_model_type_of_ml_model()
         assert isinstance(model, Model), \
@@ -292,6 +296,8 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         model.set_min_data(min_data)
         model.set_max_data(max_data)
         model.set_group_data(group_data)
+        if signal_cols:
+            model.set_signal_cols(signal_cols)
         model.create_logger()
         mdl = model.name
         if mdl in self.models:
@@ -307,9 +313,17 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         name: str='',
         min_data: int=1,
         max_data: None | int=None,
-        group_data: bool=True
+        group_data: bool=True,
+        signal_cols: list[str] | None=None,
     ) -> tFeature:
-        return self.add_model(feature, name=name, min_data=min_data, max_data=max_data, group_data=group_data)
+        return self.add_model(
+            feature, 
+            name=name, 
+            min_data=min_data, 
+            max_data=max_data, 
+            group_data=group_data,
+            signal_cols=signal_cols,
+        )
     
     def add_indicator(
         self, 
@@ -317,9 +331,17 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         name: str='',
         min_data: int=1,
         max_data: None | int=None,
-        group_data: bool=True
+        group_data: bool=True,
+        signal_cols: list[str] | None=None,
     ) -> tIndicator:
-        return self.add_model(indicator, name=name, min_data=min_data, max_data=max_data, group_data=group_data)
+        return self.add_model(
+            indicator, 
+            name=name, 
+            min_data=min_data, 
+            max_data=max_data, 
+            group_data=group_data,
+            signal_cols=signal_cols,
+        )
     
     # TODO
     def add_custom_data(self):
@@ -364,8 +386,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             if resolution.is_tick():
                 self.tradebooks[product] = data
             
-            is_sub_strategy = bool(self._consumers)
-            if not is_sub_strategy:
+            if not self.is_sub_strategy():
                 self.set_data(product, resolution, data)
                 broker.add_listener(listener=self, listener_key=data, event_type='public')
 

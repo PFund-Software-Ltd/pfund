@@ -44,9 +44,9 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
                 assert not self._consumers, f"{self.name} must have _dummy strategy as its only consumer"
             return super().add_consumer(consumer)
         
-        def _is_dummy_strategy(self):
+        def _check_if_dummy_strategy(self):
             if self._consumers:
-                # NOTE: dummy strategy will always be the only consumer
+                # NOTE: dummy strategy will always be the only consumer if it's added
                 consumer = self._consumers[0]
                 return isinstance(consumer, BaseStrategy) and consumer.name == '_dummy'
             else:
@@ -55,7 +55,7 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
         def on_start(self):
             if self.engine.mode == 'vectorized':
                 self.set_group_data(False)
-            if self._is_signal_df_required():
+            if self._is_signal_df_required:
                 if self._signal_df is None:
                     raise ValueError(
                         f"Please make sure '{self.name}' was dumped "
@@ -80,38 +80,11 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
             
         def clear_dfs(self):
             assert self.engine.mode == 'event_driven'
-            if not self._is_signal_df_required():
+            if not self._is_signal_df_required:
                 self._data_tool.clear_df()
             for model in self.models.values():
                 model.clear_dfs()
-        
-        def _add_raw_df(self, data, df):
-            return self._data_tool.add_raw_df(data, df)
-        
-        def _set_data_periods(self, datas, **kwargs):
-            return self._data_tool.set_data_periods(datas, **kwargs)
-        
-        def _prepare_df(self):
-            ts_col_type = 'timestamp' if self.engine.mode == 'event_driven' else 'datetime'
-            return self._data_tool.prepare_df(ts_col_type=ts_col_type)
-    
-        def _append_to_df(self, data: BaseData, **kwargs):
-            if not (self._is_signal_df_required() or self.engine.disable_df):
-                return self._data_tool.append_to_df(data, self.predictions, **kwargs)
-                
-        def next(self, data: BaseData):
-            if not self._is_signal_df_required():
-                return super().next(data)
-            else:
-                try:
-                    # FIXME: pandas specific
-                    # retrieve prepared signal_df from self.signal_df
-                    # TODO: share to_numpy() first, no loc()
-                    new_pred = self.signal_df.loc[(data.dt, repr(data.product), repr(data.resolution))]
-                    return new_pred.to_numpy()
-                except Exception as e:
-                    raise Exception(f"Please make sure {self.name} has been prepared/dumped correctly") from e
-        
+            
         # FIXME: pandas specific
         def assert_consistent_signals(self):
             '''Asserts consistent model signals from vectorized and event-driven backtesting, triggered in event-driven backtesting'''
