@@ -47,9 +47,9 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
                     broker.initialize_balances()
             # TODO
             if self._is_signal_df_required and self._signal_df is None:
-                print(f"creating signal_df for '{self.name}' on the fly")
+                self.logger.info(f"creating signal_df for '{self.name}' on the fly")
                 # signal_df: pd.DataFrame | pl.LazyFrame = self.flow()
-                # self.set_signal_df(signal_df)
+                # self._set_signal_df(signal_df)
             super().on_start()
         
         # TODO

@@ -53,12 +53,12 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
             if self.engine.mode == 'vectorized':
                 self.set_group_data(False)
             if self._is_signal_df_required and self._signal_df is None:
-                print(
-                    f"creating signal_df for '{self.name}' on the fly:\n"
+                self.logger.info(
+                    f"creating signal_df for '{self.name}' on the fly: "
                     "featurize() -> predict(X) -> signalize(X, pred_y)"
                 )
                 signal_df: pd.DataFrame | pl.LazyFrame = self.flow()
-                self.set_signal_df(signal_df)
+                self._set_signal_df(signal_df)
                 # TODO: check if the signal_df is consistent with the current datas
             super().on_start()
             
@@ -71,7 +71,7 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
         def load(self) -> dict:
             obj: dict = super().load()
             signal_df = obj.get('signal_df', None)
-            self.set_signal_df(signal_df)
+            self._set_signal_df(signal_df)
             if self.is_model():
                 assert self.ml_model, \
                 f"Please make sure '{self.name}' was dumped "
@@ -96,12 +96,12 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
         def assert_consistent_signals(self):
             '''Asserts consistent model signals from vectorized and event-driven backtesting, triggered in event-driven backtesting'''
             import pandas.testing as pdt
-            event_driven_signal = self.signal_df
+            event_driven_signal = self._signal_df
             # set signal_df to None and load the vectorized_signal
-            self.set_signal_df(None)
+            self._set_signal_df(None)
             self.load()
-            assert self.signal_df is not None, f"Please dump your model '{self.name}' by calling model.dump() before running event-driven backtesting"
-            vectorized_signal = self.signal_df
+            assert self._signal_df is not None, f"Please dump your model '{self.name}' by calling model.dump() before running event-driven backtesting"
+            vectorized_signal = self._signal_df
             # filter out the last date since event_driven_signal doesn't have it 
             vectorized_signal_ts_index = vectorized_signal.index.get_level_values('ts')
             last_date = vectorized_signal_ts_index.max()

@@ -221,7 +221,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         self._signal_cols = [f'{self.name}-{col}' if not col.startswith(self.name) else col for col in columns]
         self._num_signal_cols = len(columns)
     
-    def next(self, data: BaseData) -> torch.Tensor | np.ndarray:
+    def _next(self, data: BaseData) -> torch.Tensor | np.ndarray:
         '''Returns the next prediction in event-driven manner.'''
         if data in self.signals:
             return self.signals[data]
@@ -418,7 +418,7 @@ class BaseModel(ABC, metaclass=MetaModel):
     def _add_consumers_datas_if_no_data(self):
         if self.datas:
             return
-        self.logger.warning(f"No data for {self.name}, adding datas from consumers {[consumer.name for consumer in self._consumers]}")
+        self.logger.info(f"No data for {self.name}, adding datas from consumers {[consumer.name for consumer in self._consumers]}")
         for consumer in self._consumers:
             self._add_consumer_datas(consumer, use_consumer_data=True)
     
@@ -529,7 +529,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         self.on_bar(product, bar, ts, **kwargs)
     
     def update_predictions(self, data: BaseData, listener: BaseModel):
-        pred_y: torch.Tensor | np.ndarray = listener.next(data)
+        pred_y: torch.Tensor | np.ndarray = listener._next(data)
         signal_cols = listener.get_signal_cols()
         for i, col in enumerate(signal_cols):
             self.predictions[col] = pred_y[i]

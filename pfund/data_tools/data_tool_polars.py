@@ -14,6 +14,7 @@ from pfund.data_tools.data_tool_base import BaseDataTool
 from pfund.utils.envs import backtest
 
 
+# NOTE: convention: all function names that endswith "_df" will directly modify self.df, e.g. "xxx_df"
 class PolarsDataTool(BaseDataTool):
     # TODO:
     def get_df(self, copy=True) -> pl.LazyFrame:

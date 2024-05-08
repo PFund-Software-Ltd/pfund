@@ -14,6 +14,7 @@ from pfund.data_tools.data_tool_base import BaseDataTool
 from pfund.utils.envs import backtest
 
 
+# NOTE: convention: all function names that endswith "_df" will directly modify self.df, e.g. "xxx_df"
 class PandasDataTool(BaseDataTool):
     def get_df(
         self, 
@@ -95,6 +96,15 @@ class PandasDataTool(BaseDataTool):
         if len(self._new_rows) >= self._MAX_NEW_ROWS:
             self._push_new_rows_to_df()
         
+    # TODO: Trims the df once exceeding a number of rows?
+    def trim_df(self):
+        ''''''
+        pass
+    
+    # TODO: stores the df to a database?
+    def store_df(self):
+        pass
+
     def signalize(self, X: pd.DataFrame, pred_y: np.ndarray, columns: list[str]) -> pd.DataFrame:
         pred_df = pd.DataFrame(pred_y, columns=columns)
         assert set(self.INDEX) <= set(X.columns), f"{self.INDEX} must be in X's columns"
@@ -215,14 +225,14 @@ class PandasDataTool(BaseDataTool):
     def output_df_to_parquet(df: pd.DataFrame, file_path: str, compression: str='zstd'):
         df.to_parquet(file_path, compression=compression)
     
-    def filter_multi_index_df(self, df: pd.DataFrame, start_date: str | None=None, end_date: str | None=None, product: str='', resolution: str=''):
+    def filter_df_with_multi_index(self, df: pd.DataFrame, start_date: str | None=None, end_date: str | None=None, product: str='', resolution: str=''):
         assert self.INDEX == df.index.names, f"index must be {self.INDEX}"
         product = product or slice(None)
         resolution = resolution or slice(None)
         return df.loc[(slice(start_date, end_date), product, resolution), :]
     
     @staticmethod
-    def ffill_df(df: pd.DataFrame, columns: list[str]):
+    def ffill(df: pd.DataFrame, columns: list[str]):
         return (
             df.unstack(level=columns)
             .ffill()
@@ -230,7 +240,7 @@ class PandasDataTool(BaseDataTool):
         )
     
     @staticmethod
-    def rescale_df(
+    def rescale(
         df: pd.DataFrame,
         window_size: int | None=None,
         min_periods: int=20,

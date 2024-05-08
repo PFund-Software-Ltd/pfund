@@ -410,7 +410,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
     def _add_consumers_datas_if_no_data(self):
         if self.datas:
             return
-        self.logger.warning(f"No data for {self.name}, adding datas from consumers {[consumer.name for consumer in self._consumers]}")
+        self.logger.info(f"No data for {self.name}, adding datas from consumers {[consumer.name for consumer in self._consumers]}")
         for consumer in self._consumers:
             self._add_consumer_datas(consumer, use_consumer_data=True)
 
@@ -544,7 +544,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         self.on_bar(product, bar, ts, **kwargs)
 
     def update_predictions(self, data: BaseData, listener: BaseStrategy | BaseModel):
-        pred_y: torch.Tensor | np.ndarray = listener.next(data)
+        pred_y: torch.Tensor | np.ndarray = listener._next(data)
         signal_cols = listener.get_signal_cols()
         for i, col in enumerate(signal_cols):
             self.predictions[col] = pred_y[i]
@@ -572,7 +572,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         self.on_trade(order.account, trade, type_)
     
     # TODO
-    def next(self, data: BaseData):
+    def _next(self, data: BaseData):
         # NOTE: only sub-strategies have predict()
         # pred_y = self.predict(X)
         pass
