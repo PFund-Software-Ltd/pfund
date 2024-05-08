@@ -1,4 +1,3 @@
-# NOTE: need this to make TYPE_CHECKING work to avoid the circular import issue
 from __future__ import annotations
 
 import os
@@ -75,7 +74,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
     def __init__(self, *args, **kwargs):
         self._args = args
         self._kwargs = kwargs
-        self.name = self.strat = self.__class__.__name__
+        self.name = self.strat = self.get_default_name()
         self.Engine = get_engine_class()
         self.engine = self.Engine()
         data_tool: str = self.Engine.data_tool
@@ -196,6 +195,9 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             'strategies': [strategy.to_dict() for strategy in self.strategies.values()],
             'models': [model.to_dict() for model in self.models.values()],
         }
+    
+    def get_default_name(self):
+        return self.__class__.__name__
     
     def get_default_signal_cols(self, num_cols: int):
         if num_cols == 1:

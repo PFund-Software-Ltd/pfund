@@ -1,12 +1,11 @@
-# NOTE: need this to make TYPE_CHECKING work to avoid the circular import issue
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    import torch
     from pfund.models.model_base import MachineLearningModel
     from pfund.types.core import tModel
     from pfund.models.model_base import BaseModel
-    from pfund.datas.data_base import BaseData
 
 import numpy as np
 try:
@@ -22,15 +21,13 @@ from pfund.mixins.backtest import BacktestMixin
 
 def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **kwargs) -> BacktestMixin | tModel:
     class _BacktestModel(BacktestMixin, Model):
-        # __getattr__ at this level to get the correct model name
-        def __getattr__(self, attr):
-            '''gets triggered only when the attribute is not found'''
-            try:
-                return super().__getattr__(attr)
-            except AttributeError:
+        def __getattr__(self, name):
+            if hasattr(super(), name):
+                return getattr(super(), name)
+            else:
                 class_name = Model.__name__
-                raise AttributeError(f"'{class_name}' object or '{class_name}.ml_model' or '{class_name}.data_tool' has no attribute '{attr}'")
-        
+                raise AttributeError(f"'{class_name}' object has no attribute '{name}'")
+            
         def to_dict(self):
             model_dict = super().to_dict()
             model_dict['class'] = Model.__name__
@@ -55,29 +52,39 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
         def on_start(self):
             if self.engine.mode == 'vectorized':
                 self.set_group_data(False)
-            if self._is_signal_df_required:
-                if self._signal_df is None:
-                    raise ValueError(
-                        f"Please make sure '{self.name}' was dumped "
-                        f"using '{self.type}.dump(signal_df)' correctly."
-                        # FIXME: correct the link
-                        f"Please refer to the doc: https://pfund.ai"  
-                    )
+            if self._is_signal_df_required and self._signal_df is None:
+                print(
+                    f"creating signal_df for '{self.name}' on the fly:\n"
+                    "featurize() -> predict(X) -> signalize(X, pred_y)"
+                )
+                signal_df: pd.DataFrame | pl.LazyFrame = self.flow()
+                self.set_signal_df(signal_df)
                 # TODO: check if the signal_df is consistent with the current datas
-                else:
-                    pass
             super().on_start()
+            
+        def flow(self) -> pd.DataFrame | pl.LazyFrame:
+            X: pd.DataFrame | pl.LazyFrame = self.featurize()
+            pred_y: torch.Tensor | np.ndarray = self.predict(X)
+            signal_df: pd.DataFrame | pl.LazyFrame = self.signalize(X, pred_y)
+            return signal_df
         
         def load(self) -> dict:
             obj: dict = super().load()
             signal_df = obj.get('signal_df', None)
             self.set_signal_df(signal_df)
+            if self.is_model():
+                assert self.ml_model, \
+                f"Please make sure '{self.name}' was dumped "
+                f"using '{self.type}.dump(signal_df)' correctly.\n"
+                # FIXME: correct the link
+                "Please refer to the doc for more details: https://pfund.ai"  
             return obj
 
         def dump(self, signal_df: pd.DataFrame | pl.LazyFrame):
+            assert signal_df is not None, "signal_df cannot be None"
             obj = {'signal_df': signal_df}
             super().dump(obj)
-            
+        
         def clear_dfs(self):
             assert self.engine.mode == 'event_driven'
             if not self._is_signal_df_required:

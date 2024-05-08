@@ -13,17 +13,13 @@ class SklearnModel(BaseModel):
     def fit(
         self, 
         X: np.ndarray | pd.DataFrame | pl.LazyFrame, 
-        y: np.ndarray | pd.DataFrame | pl.LazyFrame
+        y: np.ndarray
     ):
         if type(X) is pd.DataFrame:
             X = X.to_numpy()
         elif type(X) is pl.LazyFrame:
             X = X.collect().to_numpy()
         
-        if type(y) is pd.DataFrame:
-            y = y.to_numpy()
-        elif type(y) is pl.LazyFrame:
-            y = y.collect().to_numpy()
         return self.ml_model.fit(X, y)
     
     def predict(

@@ -35,6 +35,10 @@ class PolarsDataTool(BaseDataTool):
             )
         self._raw_dfs.clear()
     
+    # TODO:
+    def merge_with_signal_dfs(self):
+        pass
+    
     def clear_df(self):
         self.df.clear()
     

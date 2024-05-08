@@ -22,7 +22,9 @@ class PandasDataTool(BaseDataTool):
         product: str | None=None, 
         resolution: str | None=None, 
         copy: bool=True
-    ) -> pd.DataFrame:
+    ) -> pd.DataFrame | None:
+        if self.df is None:
+            return
         if self._new_rows:
             self._push_new_rows_to_df()
         df = self.df.copy(deep=True) if copy else self.df
@@ -49,6 +51,12 @@ class PandasDataTool(BaseDataTool):
             # in milliseconds int -> in seconds with milliseconds precision
             self.df['ts'] = self.df['ts'].astype(int) // 10**6 / 10**3
         self._raw_dfs.clear()
+    
+    def merge_with_signal_dfs(self, signal_dfs: list[pd.DataFrame]):
+        for signal_df in signal_dfs:
+            self.df = pd.merge(self.df, signal_df, on=self.INDEX, how='left')
+        self.df.sort_values(by='ts', ascending=True, inplace=True)
+        self.df.reset_index(drop=True, inplace=True)
 
     def clear_df(self):
         self.df = pd.DataFrame(columns=self.df.columns).astype(self.df.dtypes)
@@ -89,7 +97,7 @@ class PandasDataTool(BaseDataTool):
         
     def signalize(self, X: pd.DataFrame, pred_y: np.ndarray, columns: list[str]) -> pd.DataFrame:
         pred_df = pd.DataFrame(pred_y, columns=columns)
-        assert self.INDEX in X.columns, f"{self.INDEX} must be in X's columns"
+        assert set(self.INDEX) <= set(X.columns), f"{self.INDEX} must be in X's columns"
         X = X[self.INDEX]  # only keep the index columns
         signal_df = pd.concat([X, pred_df], axis=1)
         # arrange columns
@@ -127,35 +135,11 @@ class PandasDataTool(BaseDataTool):
         # convert ts column back to datetime type
         pass
    
+    # TODO
     @backtest
     def preprocess_vectorized_df(self, df: pd.DataFrame, backtestee: BaseStrategy | BaseModel) -> pd.DataFrame:
-        if backtestee.type == 'strategy':
-            for strategy in backtestee.strategies.values():
-                # TODO:
-                # assert strategy.signal_df is not None
-                df = self.preprocess_vectorized_df(df, strategy)
-        
-        # NOTE: models can have different ts_ranges, need to store the original ts_range before concatenating
-        ts_range = df['ts']
-        for model in backtestee.models.values():
-            signal_df: pd.DataFrame = model.signal_df
-            assert signal_df is not None, \
-                f"signal_df is None, please make sure {model.name} (for {backtestee.name}) \
-                is loaded or was dumped using '{model.type}.dump(signal_df)' correctly."
-            df = self.preprocess_vectorized_df(df, model)
-            
-            # rename model columns to avoid conflict
-            num_model_cols = len(signal_df.columns)
-            new_model_cols = {col: model.name if num_model_cols == 1 else model.name+'_'+col for col in signal.columns}
-            signal_df.rename(columns=new_model_cols, inplace=True)
-            
-            # filter to match the timestamp range
-            # TODO:
-            # model.signal_df = model.signal_df[ts_range.min():ts_range.max()]
-            df = pd.concat([df, signal_df], axis=1)
-        df.sort_values(by='ts', ascending=True, inplace=True)
-        return df
-     
+        return
+    
     # TODO
     @staticmethod
     @backtest

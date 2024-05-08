@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.types.core import tStrategy
-    from pfund.datas.data_base import BaseData
     
 from pfund.mixins.backtest import BacktestMixin
 
@@ -12,15 +11,13 @@ from pfund.mixins.backtest import BacktestMixin
 # write -> BacktestMixin | tStrategy for better intellisense in IDEs 
 def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixin | tStrategy:
     class _BacktestStrategy(BacktestMixin, Strategy):
-        # __getattr__ at this level to get the correct strategy name
-        def __getattr__(self, attr):
-            '''gets triggered only when the attribute is not found'''
-            try:
-                return super().__getattr__(attr)
-            except AttributeError:
+        def __getattr__(self, name):
+            if hasattr(super(), name):
+                return getattr(super(), name)
+            else:
                 class_name = Strategy.__name__
-                raise AttributeError(f"'{class_name}' object or '{class_name}.data_tool' has no attribute '{attr}'")
-        
+                raise AttributeError(f"'{class_name}' object has no attribute '{name}'")
+            
         def to_dict(self):
             strategy_dict = super().to_dict()
             strategy_dict['class'] = Strategy.__name__
@@ -31,6 +28,10 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
         def add_account(self, trading_venue: str, acc: str='', initial_balances: dict[str, int|float]|None=None, **kwargs):
             return super().add_account(trading_venue, acc=acc, initial_balances=initial_balances, **kwargs)
             
+        def add_strategy(self, strategy: tStrategy, name: str='', is_parallel=False) -> BacktestMixin | tStrategy:
+            strategy = BacktestStrategy(type(strategy), *strategy._args, **strategy._kwargs)
+            return super().add_strategy(strategy, name=name, is_parallel=is_parallel)
+        
         def _check_if_dummy_strategy(self):
             return self.name == '_dummy'
         
@@ -44,7 +45,20 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
                     account = self.add_account(trading_venue, **kwargs)
                     broker = self.get_broker(account.bkr)
                     broker.initialize_balances()
+            # TODO
+            if self._is_signal_df_required and self._signal_df is None:
+                print(f"creating signal_df for '{self.name}' on the fly")
+                # signal_df: pd.DataFrame | pl.LazyFrame = self.flow()
+                # self.set_signal_df(signal_df)
             super().on_start()
+        
+        # TODO
+        def load(self):
+            pass
+        
+        # TODO
+        def dump(self):
+            pass
         
         def clear_dfs(self):
             assert self.engine.mode == 'event_driven'

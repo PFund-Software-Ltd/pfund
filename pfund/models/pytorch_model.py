@@ -19,14 +19,14 @@ class PytorchModel(BaseModel):
             obj = torch.load(file_path)
             self.ml_model.load_state_dict(obj['state_dict'])
             self._assert_no_missing_datas(obj)
-            self.logger.debug(f"loaded trained model '{self.name}' from {short_path(file_path)}")
+            self.logger.debug(f"loaded trained '{self.name}' from {short_path(file_path)}")
             return obj
-        else:
-            self.logger.debug(f"no trained model '{self.name}' found in {short_path(file_path)}")
-            return {}
+        return {}
     
-    def dump(self):
-        obj = {
+    def dump(self, obj: dict[str, any] | None=None):
+        if obj is None:
+            obj = {}
+        obj.update({
             "state_dict": self.ml_model.state_dict(),
             'datas': self.datas,
             # TODO, refer to model_base, e.g. dump self.datas
@@ -39,11 +39,11 @@ class PytorchModel(BaseModel):
             #     'data_source': ...,
             #     'resolution': ...,
             # }
-        }
+        })
         file_path = self._get_file_path(extension='.pt')
         # TODO: need to dump datasets (parquet.gz) as well?
         torch.save(obj, file_path)
-        self.logger.debug(f"dumped trained model '{self.name}' to {short_path(file_path)}")
+        self.logger.debug(f"dumped trained '{self.name}' to {short_path(file_path)}")
         
     def predict(
         self, 

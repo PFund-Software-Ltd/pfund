@@ -1,6 +1,12 @@
+from __future__ import annotations
+
 import time
 from collections import defaultdict
 from multiprocessing import Process, Value
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.types.core import tStrategy
 
 try:
     import psutil
@@ -71,7 +77,7 @@ class StrategyManager:
     def get_strategy(self, strat: str) -> BaseStrategy | None:
         return self.strategies.get(strat, None)
 
-    def add_strategy(self, strategy: BaseStrategy, name: str='', is_parallel=False):
+    def add_strategy(self, strategy: tStrategy, name: str='', is_parallel=False) -> tStrategy:
         # TODO
         assert not is_parallel, 'Running strategy in parallel is not supported yet'
         assert isinstance(strategy, BaseStrategy), \

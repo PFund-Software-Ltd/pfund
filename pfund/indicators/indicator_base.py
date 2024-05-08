@@ -1,7 +1,5 @@
 from typing import Type, Any, Callable
 
-import numpy as np
-
 try:
     import pandas as pd
     import polars as pl
@@ -41,9 +39,15 @@ class BaseIndicator(BaseModel):
         else:
             raise ValueError(f'Unsupported data tool: {self.engine.data_tool}')
     
+    def get_default_name(self):
+        return self.get_indicator_name()
+    
     def predict(self, *args, **kwargs):
         raise NotImplementedError
     indicate = predict
+
+    def featurize(self) -> pd.DataFrame | pl.LazyFrame:
+        return self.get_df()
     
     @property
     def indicator(self):
@@ -57,9 +61,9 @@ class BaseIndicator(BaseModel):
         self.ml_model = indicator
         return obj
     
-    def dump(self):
+    def dump(self, obj: dict[str, Any] | None=None):
         # NOTE: ml_model is indicator (function of talib.abstract, e.g. abstract.SMA), 
         # which is not serializable, so make it None before dumping
         self.ml_model = None
-        super().dump()
+        super().dump(obj)
     

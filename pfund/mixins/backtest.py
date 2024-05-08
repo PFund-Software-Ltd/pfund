@@ -1,4 +1,3 @@
-# NOTE: need this to make TYPE_CHECKING work to avoid the circular import issue
 from __future__ import annotations
 
 import time
@@ -6,7 +5,7 @@ import copy
 
 from typing import TYPE_CHECKING 
 if TYPE_CHECKING:
-    from pfund.types.core import tModel, tFeature, tIndicator
+    from pfund.types.core import tModel
     from pfund.types.backtest import BacktestKwargs
     from pfeed.feeds.base_feed import BaseFeed
     from pfund.datas.data_base import BaseData
@@ -39,10 +38,10 @@ class BacktestMixin:
         from pfund.models.model_base import BaseModel
         
         self._signal_df = None
-        self._is_signal_df_required = self._check_if_signal_df_required()
         # case1: strategy is a dummy strategy
         # case2: model is using a dummy strategy as its only consumer
         self._is_dummy_strategy = self._check_if_dummy_strategy()
+        self._is_signal_df_required = self._check_if_signal_df_required()
         self._is_append_to_df = not self._is_signal_df_required
         if isinstance(self, BaseStrategy):
             self._is_append_to_df = self._is_append_to_df and not self._is_dummy_strategy
@@ -109,17 +108,27 @@ class BacktestMixin:
             return
         return self.dtl.add_raw_df(data, df)
     
+    def _prepare_df(self):
+        if self._is_dummy_strategy and isinstance(self, BaseStrategy):
+            return
+        ts_col_type = 'timestamp' if self.engine.mode == 'event_driven' else 'datetime'
+        self.dtl.prepare_df(ts_col_type=ts_col_type)
+        if self._is_signal_df_required:
+            self._merge_with_signal_dfs()
+    
+    def _merge_with_signal_dfs(self):
+        '''Concatenate df with signal dfs from all listeners (strategies/models)'''
+        if isinstance(self, BaseStrategy):
+            if signal_dfs := [strategy.signal_df for strategy in self.strategies.values()]:
+                self.dtl.merge_with_signal_dfs(signal_dfs)
+        if signal_dfs := [model.signal_df for model in self.models.values()]:
+            self.dtl.merge_with_signal_dfs(signal_dfs)
+    
     # TODO
     def _set_data_periods(self, datas, **kwargs):
         if self._is_dummy_strategy and isinstance(self, BaseStrategy):
             return
         return self.dtl.set_data_periods(datas, **kwargs)
-    
-    def _prepare_df(self):
-        if self._is_dummy_strategy and isinstance(self, BaseStrategy):
-            return
-        ts_col_type = 'timestamp' if self.engine.mode == 'event_driven' else 'datetime'
-        return self.dtl.prepare_df(ts_col_type=ts_col_type)
     
     def add_data_signature(self, *args, **kwargs):
         self._data_signatures.append((args, kwargs))
@@ -153,7 +162,7 @@ class BacktestMixin:
                 df = dtl.get_raw_df(data)
                 self._add_raw_df(data, df)
         return consumer_datas
-        
+    
     def add_model(
         self, 
         model: tModel, 
@@ -164,7 +173,7 @@ class BacktestMixin:
         signal_cols: list[str] | None=None,
     ) -> BacktestMixin | tModel:
         from pfund.models.model_backtest import BacktestModel
-        name = name or model.__class__.__name__
+        name = name or model.get_default_name()
         model = BacktestModel(type(model), model.ml_model, *model._args, **model._kwargs)
         return super().add_model(
             model, 
@@ -175,42 +184,6 @@ class BacktestMixin:
             signal_cols=signal_cols,
         )
     
-    def add_feature(
-        self, 
-        feature: tFeature, 
-        name: str='',
-        min_data: int=1,
-        max_data: None | int=None,
-        group_data: bool=True,
-        signal_cols: list[str] | None=None,
-    ) -> BacktestMixin | tFeature:
-        return self.add_model(
-            feature, 
-            name=name, 
-            min_data=min_data, 
-            max_data=max_data, 
-            group_data=group_data,
-            signal_cols=signal_cols,
-        )
-        
-    def add_indicator(
-        self, 
-        indicator: tIndicator, 
-        name: str='',
-        min_data: int=1,
-        max_data: None | int=None,
-        group_data: bool=True,
-        signal_cols: list[str] | None=None,
-    ) -> BacktestMixin | tIndicator:
-        return self.add_model(
-            indicator, 
-            name=name, 
-            min_data=min_data, 
-            max_data=max_data, 
-            group_data=group_data,
-            signal_cols=signal_cols,
-        )
-        
     def _get_data_source(self, trading_venue: str, backtest_kwargs: dict):
         from pfeed.const.common import SUPPORTED_DATA_FEEDS
         trading_venue = trading_venue.upper()
