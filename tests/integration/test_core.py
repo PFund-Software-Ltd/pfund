@@ -1,10 +1,13 @@
 import pytest
 
-import pfund as pf
 import ta
 from talib import abstract as talib
 import torch.nn as nn
 from sklearn.linear_model import LinearRegression as SklearnLinearRegression
+
+import pfund as pf
+import pfund.models as ml
+import pfund.indicators as ind
 
 
 class PytorchLinearRegression(nn.Module):
@@ -17,12 +20,12 @@ class PytorchLinearRegression(nn.Module):
         return self.linear(x)
 
 
-class DummyPytorch(pf.PytorchModel):
+class DummyPytorch(ml.PytorchModel):
     def predict(self, *args, **kwargs):
         pass
     
 
-class DummySklearn(pf.SklearnModel):
+class DummySklearn(ml.SklearnModel):
     def predict(self, *args, **kwargs):
         pass
     
@@ -66,13 +69,13 @@ class TestCore:
         ## type 1: ta class, e.g. ta.volatility.BollingerBands
         indicator = lambda df: ta.volatility.BollingerBands(close=df['close'], window=3, window_dev=2)
         funcs = ['bollinger_mavg', 'bollinger_hband', 'bollinger_lband']
-        strategy.add_indicator(pf.TaIndicator(indicator, funcs=funcs), name='BollingerBands')
+        strategy.add_indicator(ind.TaIndicator(indicator, funcs=funcs), name='BollingerBands')
         ## type 2: ta function, e.g. ta.volatility.bollinger_mavg
         indicator2 = lambda df: ta.volatility.bollinger_mavg(close=df['close'], window=3)
-        strategy.add_indicator(pf.TaIndicator(indicator2), name='BollingerBands2')
+        strategy.add_indicator(ind.TaIndicator(indicator2), name='BollingerBands2')
         
         # add talib indicator
-        strategy.add_indicator(pf.TalibIndicator(talib.SMA, timeperiod=3, price='close'), name='SMA')
+        strategy.add_indicator(ind.TalibIndicator(talib.SMA, timeperiod=3, price='close'), name='SMA')
         
         engine.run()
         

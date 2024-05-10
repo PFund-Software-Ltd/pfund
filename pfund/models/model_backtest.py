@@ -55,7 +55,6 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
                 )
                 signal_df: pd.DataFrame | pl.LazyFrame = self.flow()
                 self._set_signal_df(signal_df)
-                # TODO: check if the signal_df is consistent with the current datas
             super().on_start()
             
         def flow(self) -> pd.DataFrame | pl.LazyFrame:

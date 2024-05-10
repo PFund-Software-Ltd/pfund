@@ -2,6 +2,7 @@ import pytest
 import ta
 
 import pfund as pf
+import pfund.indicators as ind
 
 
 yf_data_params = [
@@ -27,11 +28,11 @@ class TestTaIndicator:
             if type_ == 'type1':
                 ta_ind = lambda df: ta.volatility.BollingerBands(close=df['close'], window=3, window_dev=2)
                 funcs = ['bollinger_mavg', 'bollinger_hband', 'bollinger_lband']
-                indicator = engine.add_indicator(pf.TaIndicator(ta_ind, funcs=funcs), name='BollingerBands')
+                indicator = engine.add_indicator(ind.TaIndicator(ta_ind, funcs=funcs), name='BollingerBands')
             # type 2: ta function, e.g. ta.volatility.bollinger_mavg
             elif type_ == 'type2':
                 ta_ind = lambda df: ta.volatility.bollinger_mavg(close=df['close'], window=3)
-                indicator = engine.add_indicator(pf.TaIndicator(ta_ind), name='BollingerBands')
+                indicator = engine.add_indicator(ind.TaIndicator(ta_ind), name='BollingerBands')
             
             data = indicator.add_data(
                 *yf_data['product'].split('_'), resolutions=yf_data['resolutions'],

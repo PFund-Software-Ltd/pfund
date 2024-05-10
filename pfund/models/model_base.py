@@ -8,7 +8,6 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 
 from typing import TYPE_CHECKING, Any, Union
-
 if TYPE_CHECKING:
     import pandas as pd
     import polars as pl
@@ -19,6 +18,7 @@ if TYPE_CHECKING:
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.models import PytorchModel, SklearnModel
     from pfund.indicators.indicator_base import TaFunction, TalibFunction
+    from pfund.products.product_base import BaseProduct
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_quote import QuoteData
     from pfund.datas.data_tick import TickData
@@ -39,20 +39,8 @@ import joblib
 import numpy as np
 from rich.console import Console
 
-try:
-    import torch.nn as nn
-except ImportError:
-    nn = None
-
-try:
-    from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
-    from sklearn.pipeline import Pipeline
-except ImportError:
-    sklearn = None
-
 from pfund.datas.resolution import Resolution
 from pfund.models.model_meta import MetaModel
-from pfund.products.product_base import BaseProduct
 from pfund.utils.utils import short_path, get_engine_class, load_yaml_file, convert_ts_to_dt
 from pfund.plogging import create_dynamic_logger
 
@@ -296,6 +284,18 @@ class BaseModel(ABC, metaclass=MetaModel):
             assert max_data >= min_data, f'{max_data=} for {data} must be >= {min_data=}'
     
     def get_model_type_of_ml_model(self) -> PytorchModel | SklearnModel | BaseModel:
+        try:
+            import torch.nn as nn
+        except ImportError:
+            nn = None
+
+        try:
+            import sklearn
+            from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
+            from sklearn.pipeline import Pipeline
+        except ImportError:
+            sklearn = None
+
         if nn is not None and isinstance(self.ml_model, nn.Module):
             from pfund.models import PytorchModel
             Model = PytorchModel
@@ -342,7 +342,6 @@ class BaseModel(ABC, metaclass=MetaModel):
             os.makedirs(path)
         return f"{path}/{file_name}"
     
-    # REVIEW
     def _assert_no_missing_datas(self, obj):
         loaded_datas = {data for product in obj['datas'] for data in obj['datas'][product].values()}
         added_datas = {data for product in self.datas for data in self.datas[product].values()}

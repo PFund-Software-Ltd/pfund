@@ -5,31 +5,20 @@ import copy
 
 from typing import TYPE_CHECKING 
 if TYPE_CHECKING:
+    import torch
+    import pandas as pd
+    import polars as pl
     from pfund.types.core import tModel
     from pfund.types.backtest import BacktestKwargs
     from pfeed.feeds.base_feed import BaseFeed
     from pfund.datas.data_base import BaseData
     from pfund.products.product_base import BaseProduct
-
-try:
-    import pandas as pd
-except ImportError:
-    pd = None
-
-try:
-    import polars as pl
-except ImportError:
-    pl = None
-
-try:
-    import torch
-except ImportError:
-    torch = None
+    from pfund.strategies.strategy_base import BaseStrategy
+    from pfund.models.model_base import BaseModel
 
 import numpy as np
 
 from pfund.strategies.strategy_base import BaseStrategy
-from pfund.models.model_base import BaseModel
 from pfund.managers.data_manager import get_resolutions_from_kwargs
 
 
@@ -84,6 +73,7 @@ class BacktestMixin:
             return self.dtl.append_to_df(data, self.predictions, **kwargs)
     
     def _check_if_signal_df_required(self) -> bool:
+        from pfund.models.model_base import BaseModel
         if self._is_dummy_strategy:
             return False
         elif self.engine.mode == 'vectorized':
@@ -99,6 +89,10 @@ class BacktestMixin:
         X: pd.DataFrame | pl.LazyFrame,
         pred_y: torch.Tensor | np.ndarray,
     ) -> pd.DataFrame | pl.LazyFrame:
+        try:
+            import torch
+        except ImportError:
+            torch = None
         if torch is not None and isinstance(pred_y, torch.Tensor):
             pred_y = pred_y.detach().numpy() if pred_y.requires_grad else pred_y.numpy()
         signal_cols = self.get_signal_cols()
@@ -300,6 +294,15 @@ class BacktestMixin:
         return dfs
     
     def _convert_pfeed_df_to_pfund_df(self, df: pd.DataFrame | pl.DataFrame | pl.LazyFrame, product: BaseProduct) -> pd.DataFrame | pl.LazyFrame:
+        try:
+            import pandas as pd
+        except ImportError:
+            pd = None
+
+        try:
+            import polars as pl
+        except ImportError:
+            pl = None
         if isinstance(df, pd.DataFrame):
             if 'symbol' in df.columns:
                 df = df.drop(columns=['symbol'])
