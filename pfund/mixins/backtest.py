@@ -11,13 +11,22 @@ if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
     from pfund.products.product_base import BaseProduct
 
-import numpy as np
 try:
-    import torch
     import pandas as pd
+except ImportError:
+    pd = None
+
+try:
     import polars as pl
 except ImportError:
-    pass
+    pl = None
+
+try:
+    import torch
+except ImportError:
+    torch = None
+
+import numpy as np
 
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.models.model_base import BaseModel
@@ -90,7 +99,7 @@ class BacktestMixin:
         X: pd.DataFrame | pl.LazyFrame,
         pred_y: torch.Tensor | np.ndarray,
     ) -> pd.DataFrame | pl.LazyFrame:
-        if type(pred_y) is torch.Tensor:
+        if torch is not None and isinstance(pred_y, torch.Tensor):
             pred_y = pred_y.detach().numpy() if pred_y.requires_grad else pred_y.numpy()
         signal_cols = self.get_signal_cols()
         signal_df: pd.DataFrame | pl.LazyFrame = self.dtl.signalize(X, pred_y, columns=signal_cols)
@@ -297,7 +306,7 @@ class BacktestMixin:
             if 'product' in df.columns:
                 df = df.drop(columns=['product'])
             df['product'] = repr(product)
-        elif isinstance(df, (pl.DataFrame, pl.LazyFrame)):
+        elif pl is not None and isinstance(df, (pl.DataFrame, pl.LazyFrame)):
             if isinstance(df, pl.DataFrame):
                 df = df.lazy()
             df = df.drop(columns=['symbol', 'product'])

@@ -22,12 +22,6 @@ if TYPE_CHECKING:
     from pfund.orders.order_base import BaseOrder
     from pfund.models.model_base import BaseModel
 
-try:
-    import pandas as pd
-    import polars as pl
-except ImportError:
-    pass
-
 from pfund.datas.resolution import Resolution
 from pfund.datas import BaseData, BarData, TickData, QuoteData
 from pfund.zeromq import ZeroMQ
@@ -104,7 +98,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         self.strategies = {}
         self.models = {}
         # NOTE: current strategy's signal is consumer's prediction
-        self.predictions = {}  # {strat/mdl: pred_y} -> X (INDEX + predictions) -> pred_y
+        self.predictions = {}  # {strat/mdl: pred_y}
         self.signals = {}  # {data: signal}, for strategy, signal is buy/sell/null
         self._signal_cols = []
         self._num_signal_cols = 0

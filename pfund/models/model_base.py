@@ -1,4 +1,3 @@
-# NOTE: need this to make TYPE_CHECKING work to avoid the circular import issue
 from __future__ import annotations
 
 import os
@@ -10,18 +9,13 @@ from collections import defaultdict
 
 from typing import TYPE_CHECKING, Any, Union
 
-try:
-    import joblib
+if TYPE_CHECKING:
+    import pandas as pd
+    import polars as pl
     import torch
     import torch.nn as nn
     from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
     from sklearn.pipeline import Pipeline
-    import pandas as pd
-    import polars as pl
-except ImportError:
-    pass
-
-if TYPE_CHECKING:
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.models import PytorchModel, SklearnModel
     from pfund.indicators.indicator_base import TaFunction, TalibFunction
@@ -41,8 +35,20 @@ if TYPE_CHECKING:
         Any,
     ]
 
+import joblib
 import numpy as np
 from rich.console import Console
+
+try:
+    import torch.nn as nn
+except ImportError:
+    nn = None
+
+try:
+    from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
+    from sklearn.pipeline import Pipeline
+except ImportError:
+    sklearn = None
 
 from pfund.datas.resolution import Resolution
 from pfund.models.model_meta import MetaModel
@@ -108,7 +114,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         
         self.models = {}
         # NOTE: current model's signal is consumer's prediction
-        self.predictions = {}  # {model_name: pred_y} -> X (INDEX + predictions) -> pred_y
+        self.predictions = {}  # {model_name: pred_y}
         self.signals = {}  # {data: signal}, signal = output of predict()
         self._signal_cols = []
         self._num_signal_cols = 0
@@ -290,10 +296,11 @@ class BaseModel(ABC, metaclass=MetaModel):
             assert max_data >= min_data, f'{max_data=} for {data} must be >= {min_data=}'
     
     def get_model_type_of_ml_model(self) -> PytorchModel | SklearnModel | BaseModel:
-        from pfund.models import PytorchModel, SklearnModel
-        if isinstance(self.ml_model, nn.Module):
+        if nn is not None and isinstance(self.ml_model, nn.Module):
+            from pfund.models import PytorchModel
             Model = PytorchModel
-        elif isinstance(self.ml_model, (BaseEstimator, ClassifierMixin, RegressorMixin, Pipeline)):
+        elif sklearn is not None and isinstance(self.ml_model, (BaseEstimator, ClassifierMixin, RegressorMixin, Pipeline)):
+            from pfund.models import SklearnModel
             Model = SklearnModel
         else:
             Model = BaseModel

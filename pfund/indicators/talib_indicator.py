@@ -2,6 +2,10 @@ import numpy as np
 
 try:
     import pandas as pd
+except ImportError:
+    pass
+
+try:
     import polars as pl
 except ImportError:
     pass

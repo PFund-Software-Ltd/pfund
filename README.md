@@ -80,13 +80,19 @@ stability and scalability.
 
 ### Using [Poetry] (Recommended)
 ```bash
-# [RECOMMENDED]: trading + backtest
-poetry add "pfund[data]"
+# [RECOMMENDED]: Trading + Backtesting + Machine Learning + Feature Engineering (e.g. feast, tsfresh, ta) + Analytics
+poetry add "pfund[all]"
 
-# [Machine Learning]: trading + backtest + machine learning/technical analysis
+# [Trading + Backtesting + Machine Learning + Feature Engineering]:
+poetry add "pfund[data,ml,fe]"
+
+# [Trading + Backtesting + Machine Learning]:
 poetry add "pfund[data,ml]"
 
-# only trading
+# [Trading + Backtesting]:
+poetry add "pfund[data]"
+
+# [Trading only]:
 poetry add pfund
 
 # update to the latest version:

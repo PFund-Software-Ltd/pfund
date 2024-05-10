@@ -1,10 +1,10 @@
-from typing import Type, Any, Callable
+from typing import TYPE_CHECKING, Type, Any, Callable
 
-try:
+if TYPE_CHECKING:
     import pandas as pd
     import polars as pl
-except ImportError:
-    pass
+
+from pfund.models.model_base import BaseModel
 
 try:
     from talib import abstract as talib
@@ -12,8 +12,6 @@ try:
 except ImportError:
     TalibFunction = Any  # Fallback type if talib is not installed
 TaFunction = Callable[..., Any]  # Type for functions from the 'ta' library
-
-from pfund.models.model_base import BaseModel
 
 
 class BaseIndicator(BaseModel):

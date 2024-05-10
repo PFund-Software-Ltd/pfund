@@ -1,12 +1,16 @@
 import os
 
-import torch
-
 try:
     import pandas as pd
+except ImportError:
+    pd = None
+
+try:
     import polars as pl
 except ImportError:
-    pass
+    pl = None
+
+import torch
 
 from pfund.models.model_base import BaseModel
 from pfund.utils.utils import short_path
@@ -51,9 +55,9 @@ class PytorchModel(BaseModel):
         *args, 
         **kwargs
     ) -> torch.Tensor:
-        if type(X) is pd.DataFrame:
+        if pd is not None and isinstance(X, pd.DataFrame):
             X = torch.tensor( X.to_numpy(), dtype=torch.float32 )
-        elif type(X) is pl.LazyFrame:
+        elif pl is not None and isinstance(X, pl.LazyFrame):
             X = torch.tensor( X.collect().to_numpy(), dtype=torch.float32 )
         else:
             raise ValueError(f"Unsupported data type: {type(X)}")

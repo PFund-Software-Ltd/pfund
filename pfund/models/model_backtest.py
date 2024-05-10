@@ -2,17 +2,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    import numpy as np
+    import pandas as pd
+    import polars as pl
     import torch
     from pfund.models.model_base import MachineLearningModel
     from pfund.types.core import tModel
     from pfund.models.model_base import BaseModel
-
-import numpy as np
-try:
-    import pandas as pd
-    import polars as pl
-except ImportError:
-    pass
 
 from pfund.models.model_base import BaseFeature
 from pfund.strategies.strategy_base import BaseStrategy

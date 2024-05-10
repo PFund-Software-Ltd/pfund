@@ -2,9 +2,13 @@ import numpy as np
 
 try:
     import pandas as pd
+except ImportError:
+    pd = None
+
+try:
     import polars as pl
 except ImportError:
-    pass
+    pl = None
 
 from pfund.models.model_base import BaseModel
 
@@ -15,9 +19,9 @@ class SklearnModel(BaseModel):
         X: np.ndarray | pd.DataFrame | pl.LazyFrame, 
         y: np.ndarray
     ):
-        if type(X) is pd.DataFrame:
+        if pd is not None and isinstance(X, pd.DataFrame):
             X = X.to_numpy()
-        elif type(X) is pl.LazyFrame:
+        elif pl is not None and isinstance(X, pl.LazyFrame):
             X = X.collect().to_numpy()
         
         return self.ml_model.fit(X, y)
@@ -28,9 +32,9 @@ class SklearnModel(BaseModel):
         *args, 
         **kwargs
     ) -> np.ndarray:
-        if type(X) is pd.DataFrame:
+        if pd is not None and isinstance(X, pd.DataFrame):
             X = X.to_numpy()
-        elif type(X) is pl.LazyFrame:
+        elif pl is not None and isinstance(X, pl.LazyFrame):
             X = X.collect().to_numpy()
         else:
             raise ValueError(f"Unsupported data type: {type(X)}")

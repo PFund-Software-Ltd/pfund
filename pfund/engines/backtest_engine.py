@@ -14,15 +14,15 @@ from tqdm import tqdm
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    import pandas as pd
     from pfund.types.common_literals import tSUPPORTED_BACKTEST_MODES, tSUPPORTED_DATA_TOOLS
     from pfund.types.core import tStrategy, tModel, tFeature, tIndicator
     from pfund.models.model_base import BaseModel
     
 try:
-    import pandas as pd
     import polars as pl
 except ImportError:
-    pass
+    pl = None
 
 import pfund as pf
 from pfund.git_controller import GitController
@@ -407,7 +407,7 @@ class BacktestEngine(BaseEngine):
 
     def _event_driven_backtest(self, df_chunk, chunk_num=0, batch_num=0):
         common_cols = ['ts', 'product', 'resolution', 'broker', 'is_quote', 'is_tick']
-        if isinstance(df_chunk, pl.LazyFrame):
+        if pl is not None and isinstance(df_chunk, pl.LazyFrame):
             df_chunk = df_chunk.collect().to_pandas()
         
         # OPTIMIZE: critical loop
