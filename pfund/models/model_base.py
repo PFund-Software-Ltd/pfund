@@ -484,6 +484,13 @@ class BaseModel(ABC, metaclass=MetaModel):
         self.logger.debug(f"added {model.name}")
         return model
     
+    def remove_model(self, name: str):
+        if name in self.models:
+            del self.models[name]
+            self.logger.debug(f"removed '{name}'")
+        else:
+            self.logger.error(f"'{name}' cannot be found, failed to remove")
+    
     def add_feature(
         self, 
         feature: tFeature, 
@@ -501,6 +508,9 @@ class BaseModel(ABC, metaclass=MetaModel):
             group_data=group_data,
             signal_cols=signal_cols,
         )
+        
+    def remove_feature(self, name: str):
+        self.remove_model(name)
     
     def add_indicator(
         self, 
@@ -520,6 +530,9 @@ class BaseModel(ABC, metaclass=MetaModel):
             signal_cols=signal_cols,
         )
     
+    def remove_indicator(self, name: str):
+        self.remove_model(name)
+        
     def update_quote(self, data: QuoteData, **kwargs):
         product, bids, asks, ts = data.product, data.bids, data.asks, data.ts
         for listener in self._listeners[data]:
@@ -573,7 +586,7 @@ class BaseModel(ABC, metaclass=MetaModel):
             self.on_start()
             self._is_running = True
             self.logger.info(
-                f"model '{self.name}' is started.\n"
+                f"model '{self.name}' has started.\n"
                 f"min_data={self._min_data}\n"
                 f"max_data={self._max_data}\n"
                 f"group_data={self._group_data}"
@@ -588,7 +601,7 @@ class BaseModel(ABC, metaclass=MetaModel):
             for model in self.models.values():
                 model.stop()
         else:
-            self.logger.warning(f'strategy {self.name} has already stopped')
+            self.logger.warning(f'model {self.name} has already stopped')
         
     '''
     ************************************************

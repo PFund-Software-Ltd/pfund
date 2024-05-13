@@ -304,7 +304,7 @@ class BacktestEngine(BaseEngine):
                     model = list(strategy.models.values())[0]
                     backtestee = model
             backtests: dict = self._backtest(backtestee)
-        self.strategy_manager.stop(reason='finished backtesting')
+        self.end()
         return backtests
 
     def _backtest(self, backtestee: BaseStrategy | BaseModel) -> dict:

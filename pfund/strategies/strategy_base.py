@@ -277,6 +277,13 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         self.logger.debug(f"added sub-strategy '{strat}'")
         return strategy
     
+    def remove_strategy(self, name: str):
+        if name in self.strategies:
+            del self.strategies[name]
+            self.logger.debug(f'removed sub-strategy {name}')
+        else:
+            self.logger.error(f'sub-strategy {name} cannot be found, failed to remove')
+    
     def get_model(self, name: str) -> BaseModel:
         return self.models[name]
     
@@ -310,6 +317,13 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         self.logger.debug(f"added {model.name}")
         return model
     
+    def remove_model(self, name: str):
+        if name in self.models:
+            del self.models[name]
+            self.logger.debug(f"removed '{name}'")
+        else:
+            self.logger.error(f"'{name}' cannot be found, failed to remove")
+    
     def add_feature(
         self, 
         feature: tFeature, 
@@ -327,6 +341,9 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             group_data=group_data,
             signal_cols=signal_cols,
         )
+    
+    def remove_feature(self, name: str):
+        self.remove_model(name)
     
     def add_indicator(
         self, 
@@ -346,6 +363,9 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             signal_cols=signal_cols,
         )
     
+    def remove_indicator(self, name: str):
+        self.remove_model(name)
+        
     # TODO
     def add_custom_data(self):
         pass
@@ -614,6 +634,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             self.on_start()
             self._set_aliases()
             self._is_running = True
+            self.logger.info(f"strategy '{self.name}' has started")
         else:
             self.logger.warning(f'strategy {self.name} has already started')
         
@@ -628,9 +649,10 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             for broker in self.brokers.values():
                 broker.remove_listener(listener=self, listener_key=self.strat, event_type='private')
             for strategy in self.strategies.values():
-                strategy.stop()
+                strategy.stop(reason=reason)
             for model in self.models.values():
                 model.stop()
+            self.logger.info(f"strategy '{self.name}' has stopped, ({reason=})")
         else:
             self.logger.warning(f'strategy {self.name} has already stopped')
 
