@@ -66,8 +66,9 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
         
         def load(self) -> dict:
             obj: dict = super().load()
-            signal_df = obj.get('signal_df', None)
-            self._set_signal_df(signal_df)
+            if signal_df := obj.get('signal_df', None):
+                self.logger.info(f"{self.name}'s signal_df is loaded")
+                self._set_signal_df(signal_df)
             if self.is_model():
                 assert self.ml_model, \
                 f"Please make sure '{self.name}' was dumped "

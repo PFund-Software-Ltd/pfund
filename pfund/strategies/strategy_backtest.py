@@ -37,7 +37,7 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
         
         def on_start(self):
             if not self.accounts:
-                for trading_venue in self.products:
+                for trading_venue in self.get_trading_venues():
                     if trading_venue == 'BYBIT':
                         kwargs = {'account_type': 'UNIFIED'}
                     else:

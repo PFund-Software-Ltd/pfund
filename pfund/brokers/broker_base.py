@@ -13,5 +13,5 @@ class BaseBroker:
         Engine = get_engine_class()
         self._settings = Engine.settings
         self.name = self.bkr = name.upper()
-        self.products = defaultdict(dict)  # {trading_venue: {pdt1: product1, pdt2: product2, exch1_pdt3: product, exch2_pdt3: product} }
+        self.products = defaultdict(dict)  # {exch: {pdt1: product1, pdt2: product2, exch1_pdt3: product, exch2_pdt3: product} }
         self.accounts = defaultdict(dict)  # {trading_venue: {acc1: account1, acc2: account2} }

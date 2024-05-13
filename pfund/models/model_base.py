@@ -78,7 +78,7 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
     def featurize(self) -> pd.DataFrame | pl.LazyFrame:
         Console().print(
             f"WARNING: '{self.name}' is using the default featurize(), "
-            "which assumes X = df, it could be a wrong input for predict(X).\n"
+            "which assumes X = self.df, it could be a wrong input for predict(X).\n"
             f"It is highly recommended to override featurize() in your '{self.name}'.",
             style='bold magenta'
         )

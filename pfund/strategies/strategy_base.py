@@ -8,9 +8,8 @@ from abc import ABC
 from typing import Literal, TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.brokers.broker_base import BaseBroker
-    from pfund.exchanges.exchange_base import BaseExchange
     from pfund.datas.data_bar import Bar
-    from pfund.types.core import tStrategy, tProduct
+    from pfund.types.core import tStrategy
     from pfund.products.product_base import BaseProduct
     from pfund.accounts.account_base import BaseAccount
     from pfund.orders.order_base import BaseOrder
@@ -41,10 +40,6 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self._is_parallel = False
         self._is_running = False
         self.brokers = {}
-        
-        # TODO
-        self.exchanges = {}
-        self.products = defaultdict(dict)  # {trading_venue: {pdt1: product1, pdt2: product2, exch1_pdt3: product, exch2_pdt3: product} }
         self.accounts = defaultdict(dict)  # {trading_venue: {acc1: account1, acc2: account2} }
         
         self.datas = defaultdict(dict)  # {product: {'1m': data}}
@@ -103,6 +98,16 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             'strategies': [strategy.to_dict() for strategy in self.strategies.values()],
             'models': [model.to_dict() for model in self.models.values()],
         }
+    
+    def get_trading_venues(self) -> list[str]:
+        trading_venues = []
+        for bkr, broker in self.brokers.items():
+            if bkr == 'CRYPTO':
+                for exch in broker.exchanges:
+                    trading_venues.append(exch)
+            else:
+                trading_venues.append(bkr)
+        return trading_venues
     
     def set_name(self, name: str):
         self.name = self.strat = name
@@ -175,8 +180,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
                 # do not listen to data thats only used for resampling
                 if data.resolution not in get_resolutions_from_kwargs(kwargs):
                     continue
-            product = self.add_product(data.product)
-            resolution = data.resolution
+            resolution, product = data.resolution, data.product
             if resolution.is_quote():
                 self.orderbooks[product] = data
             if resolution.is_tick():
@@ -186,12 +190,15 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
                 self.set_data(product, resolution, data)
                 broker.add_listener(listener=self, listener_key=data, event_type='public')
 
-        for consumer in self._consumers:
-            self._add_consumer_datas(consumer, trading_venue, base_currency, quote_currency, ptype, *args, **kwargs)
+        if self.is_sub_strategy():
+            for consumer in self._consumers:
+                self._add_consumer_datas(consumer, trading_venue, base_currency, quote_currency, ptype, *args, **kwargs)
 
         return datas
     
     # TODO, for website to remove data from a strategy
+    # should check if broker still has listeners, if not, remove the data from broker
+    # also need to consider products, need to remove product if no data is left
     def remove_data(self, product: BaseProduct, resolution: str | None=None):
         if datas := self.get_data(product, resolution=resolution):
             datas = list(datas.values()) if not resolution else list(datas)
@@ -206,7 +213,6 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
                 broker.remove_listener(listener=self, listener_key=data, event_type='public')
             if not self.datas[product]:
                 del self.datas[product]
-                self.remove_product(product)
 
     def get_account(self, trading_venue: str, acc: str=''):
         if acc:
@@ -237,55 +243,14 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             raise Exception(f'Strategy {self.name} already has an account called {acc} set up for {trading_venue=}')
         return account
 
-    def get_product(self, trading_venue: str, pdt: str='', exch: str='') -> BaseProduct:
-        if pdt:
-            if not exch:
-                return self.products[trading_venue.upper()][pdt.upper()]
-            else:
-                # same product, different exchanges, needs a different key
-                return self.products[trading_venue.upper()][exch.upper()+'_'+pdt.upper()]
+    def get_product(self, trading_venue: str, pdt: str, exch: str='') -> BaseProduct:
+        bkr = 'CRYPTO' if trading_venue in SUPPORTED_CRYPTO_EXCHANGES else trading_venue
+        broker = self.get_broker(bkr)
+        if bkr == 'CRYPTO':
+            exch = trading_venue
+            return broker.get_product(exch, pdt)
         else:
-            assert len(self.products[trading_venue.upper()]) == 1, f'{trading_venue} has more than one product, please specify the product name'
-            return getattr(self, f'{trading_venue.lower()}_product')
-
-    def add_product(self, product: tProduct, pdt_key='') -> tProduct:
-        trading_venue = product.exch if product.bkr == 'CRYPTO' else product.bkr
-        pdt_key = pdt_key or product.pdt
-        if pdt_key not in self.products[trading_venue]:
-            self.products[trading_venue][pdt_key] = product
-            if product.is_crypto() and product.exch not in self.exchanges:
-                self.add_exchange(product.exch)
-            self.logger.debug(f'added product {product}')
-            return product
-        else:
-            exist_product = self.products[trading_venue][pdt_key]
-            # REVIEW: change the pdt_key if same product, different exchanges
-            if product.exch != exist_product.exch:
-                self.remove_product(exist_product)
-                self.add_product(exist_product, pdt_key=exist_product.exch+'_'+product.pdt)
-                return self.add_product(product, pdt_key=product.exch+'_'+product.pdt)
-            return exist_product
-    
-    def remove_product(self, product: BaseProduct):
-        trading_venue = product.exch if product.bkr == 'CRYPTO' else product.bkr
-        if product.pdt in self.products[trading_venue]:
-            del self.products[trading_venue][product.pdt]
-            if product.is_crypto() and not self.products[trading_venue]:
-                del self.products[trading_venue]
-                self.remove_exchange(product.exch)
-            self.logger.debug(f'removed product {product}')
-            
-    def get_exchange(self, exch) -> BaseExchange: 
-        return self.exchanges[exch.upper()]
-    
-    def add_exchange(self, exch: str):
-        broker = self.get_broker('CRYPTO')
-        self.exchanges[exch] = broker.get_exchange(exch)
-        self.logger.debug(f'added exchange {exch}')
-
-    def remove_exchange(self, exch: str):
-        del self.exchanges[exch.upper()]
-        self.logger.debug(f'removed exchange {exch}')
+            return broker.get_product(pdt, exch=exch)
 
     def get_broker(self, bkr: str) -> BaseBroker:
         return self.brokers[bkr.upper()]
@@ -346,7 +311,10 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
                 pass
                 # self._zmq ...
             self.on_start()
-            self._set_aliases()
+            
+            # TODO: uncomment this line
+            # self._set_aliases()
+            
             self._is_running = True
             self.logger.info(f"strategy '{self.name}' has started")
         else:
@@ -432,6 +400,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     Sugar Functions
     ************************************************
     '''
+    # FIXME: update this function, e.g. self.products is removed
     def _set_aliases(self):
         for name, products_or_accounts in [('product', self.products), ('account', self.accounts)]:
             for tv in products_or_accounts:

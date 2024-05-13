@@ -39,7 +39,7 @@ class BacktestEngine(BaseEngine):
     def __new__(
         cls, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
         config: ConfigHandler | None=None,
-        use_signal_df=False,
+        use_signal_df=True,
         auto_git_commit=False,
         save_backtests=False,
         num_chunks=1,
@@ -72,7 +72,7 @@ class BacktestEngine(BaseEngine):
     def __init__(
         self, *, env: str='BACKTEST', data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
         config: ConfigHandler | None=None,
-        use_signal_df=False,
+        use_signal_df=True,
         auto_git_commit=False,
         save_backtests=False,
         num_chunks=1,
