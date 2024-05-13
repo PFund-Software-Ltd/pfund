@@ -32,7 +32,7 @@ from pfund.strategies.strategy_base import BaseStrategy
 from pfund.strategies.strategy_backtest import BacktestStrategy
 from pfund.config_handler import ConfigHandler
 from pfund.utils import utils
-from pfund.mixins.backtest import BacktestMixin
+from pfund.mixins.backtest_mixin import BacktestMixin
 
 
 class BacktestEngine(BaseEngine):

@@ -120,7 +120,7 @@ class IBBroker(LiveBroker):
     def add_account(self, host: str='', port: int=None, client_id: int=None, acc: str='', **kwargs) -> IBAccount:
         if not (account := self.get_account()):
             account = IBAccount(self.env, host=host, port=port, client_id=client_id, acc=acc, **kwargs)
-            self.accounts['IB'] = account
+            self.accounts[self.bkr][account.name] = account
             self.account = account
             self._api.add_account(account)
             self.logger.debug(f'added {account=}')

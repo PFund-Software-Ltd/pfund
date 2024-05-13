@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.types.core import tStrategy
     
-from pfund.mixins.backtest import BacktestMixin
+from pfund.mixins.backtest_mixin import BacktestMixin
 
 
 # HACK: since python doesn't support dynamic typing, true return type should be subclass of BacktestMixin and tStrategy

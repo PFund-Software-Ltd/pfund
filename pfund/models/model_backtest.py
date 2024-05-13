@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 from pfund.models.model_base import BaseFeature
 from pfund.strategies.strategy_base import BaseStrategy
-from pfund.mixins.backtest import BacktestMixin
+from pfund.mixins.backtest_mixin import BacktestMixin
 
 
 def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **kwargs) -> BacktestMixin | tModel:
