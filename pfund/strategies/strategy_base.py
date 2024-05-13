@@ -99,7 +99,8 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         self.models = {}
         # NOTE: current strategy's signal is consumer's prediction
         self.predictions = {}  # {strat/mdl: pred_y}
-        self.signals = {}  # {data: signal}, for strategy, signal is buy/sell/null
+        self._signals = {}  # {data: signal}, for strategy, signal is buy/sell/null
+        self._last_signal_ts = {}  # {data: ts}
         self._signal_cols = []
         self._num_signal_cols = 0
         
@@ -122,6 +123,10 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         return self._data_tool
     data_tool = dtl
 
+    @property
+    def signals(self):
+        return self._signals
+    
     @property
     def features(self):
         return {mdl: model for mdl, model in self.models.items() if model.is_feature()}
@@ -279,7 +284,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         self, 
         model: tModel, 
         name: str='',
-        min_data: int=1,
+        min_data: None | int=None,
         max_data: None | int=None,
         group_data: bool=True,
         signal_cols: list[str] | None=None,
@@ -289,12 +294,14 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
             f"{model.type} '{model.__class__.__name__}' is not an instance of {Model.__name__}. Please create your {model.type} using 'class {model.__class__.__name__}({Model.__name__})'"
         if name:
             model.set_name(name)
-        model.set_min_data(min_data)
-        model.set_max_data(max_data)
+        model.create_logger()
+        if min_data:
+            model.set_min_data(min_data)
+        if max_data:
+            model.set_max_data(max_data)
         model.set_group_data(group_data)
         if signal_cols:
             model.set_signal_cols(signal_cols)
-        model.create_logger()
         mdl = model.name
         if mdl in self.models:
             raise Exception(f"{model.name} already exists in {self.name}")
@@ -307,7 +314,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         self, 
         feature: tFeature, 
         name: str='',
-        min_data: int=1,
+        min_data: None | int=None,
         max_data: None | int=None,
         group_data: bool=True,
         signal_cols: list[str] | None=None,
@@ -325,7 +332,7 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         self, 
         indicator: tIndicator, 
         name: str='',
-        min_data: int=1,
+        min_data: None | int=None,
         max_data: None | int=None,
         group_data: bool=True,
         signal_cols: list[str] | None=None,
@@ -538,10 +545,11 @@ class BaseStrategy(ABC, metaclass=MetaStrategy):
         self.on_bar(product, bar, ts, **kwargs)
 
     def update_predictions(self, data: BaseData, listener: BaseStrategy | BaseModel):
-        pred_y: torch.Tensor | np.ndarray = listener._next(data)
-        signal_cols = listener.get_signal_cols()
-        for i, col in enumerate(signal_cols):
-            self.predictions[col] = pred_y[i]
+        pred_y: torch.Tensor | np.ndarray | None = listener._next(data)
+        if pred_y is not None:
+            signal_cols = listener.get_signal_cols()
+            for i, col in enumerate(signal_cols):
+                self.predictions[col] = pred_y[i]
         
     def update_positions(self, position):
         self.positions[position.account][position.pdt] = position

@@ -37,7 +37,7 @@ class PolarsDataTool(BaseDataTool):
         self._raw_dfs.clear()
     
     # TODO:
-    def merge_with_signal_dfs(self):
+    def merge_signal_dfs_with_df(self):
         pass
     
     def clear_df(self):
@@ -51,7 +51,14 @@ class PolarsDataTool(BaseDataTool):
     def append_to_df(self, data: BaseData, predictions: dict, **kwargs):
         pass
 
+    # TODO:
+    @staticmethod
+    def get_nan_columns(df: pl.LazyFrame) -> list[str]:
+        nan_columns = [col.name for col in df if col.is_null().all()]
+        return nan_columns
+
     # TODO
+    @backtest
     def signalize(self, X: pl.LazyFrame, pred_y: np.ndarray, columns: list[str]) -> pl.LazyFrame:
         pass
 

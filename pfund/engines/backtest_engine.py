@@ -106,7 +106,7 @@ class BacktestEngine(BaseEngine):
         self, 
         model: tModel, 
         name: str='',
-        min_data: int=1,
+        min_data: None | int=None,
         max_data: None | int=None,
         group_data: bool=True,
         signal_cols: list[str] | None=None,
@@ -135,7 +135,7 @@ class BacktestEngine(BaseEngine):
         self, 
         feature: tFeature, 
         name: str='',
-        min_data: int=1,
+        min_data: None | int=None,
         max_data: None | int=None,
         group_data: bool=True,
         signal_cols: list[str] | None=None,
@@ -153,7 +153,7 @@ class BacktestEngine(BaseEngine):
         self, 
         indicator: tIndicator, 
         name: str='',
-        min_data: int=1,
+        min_data: None | int=None,
         max_data: None | int=None,
         group_data: bool=True,
         signal_cols: list[str] | None=None,
@@ -400,8 +400,6 @@ class BacktestEngine(BaseEngine):
             if self.save_backtests:
                 backtest_history = self._output_backtest_results(backtestee, df, backtest_history)
             backtests[backtestee.name] = backtest_history
-        else:
-            self.assert_consistent_signals()
             
         return backtests
 

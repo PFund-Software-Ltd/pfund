@@ -67,3 +67,7 @@ class BaseIndicator(BaseModel):
         self.ml_model = None
         super().dump(obj)
     
+    def to_dict(self):
+        indicator_dict = super().to_dict()
+        indicator_dict['ml_model'] = None
+        return indicator_dict

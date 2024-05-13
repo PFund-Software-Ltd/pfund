@@ -103,7 +103,8 @@ class BaseModel(ABC, metaclass=MetaModel):
         self.models = {}
         # NOTE: current model's signal is consumer's prediction
         self.predictions = {}  # {model_name: pred_y}
-        self.signals = {}  # {data: signal}, signal = output of predict()
+        self._signals = {}  # {data: signal}, signal = output of predict()
+        self._last_signal_ts = {}  # {data: ts}
         self._signal_cols = []
         self._num_signal_cols = 0
         
@@ -132,6 +133,10 @@ class BaseModel(ABC, metaclass=MetaModel):
     def dtl(self):
         return self._data_tool
     data_tool = dtl
+
+    @property
+    def signals(self):
+        return self._signals
     
     @property
     def features(self):
@@ -215,13 +220,13 @@ class BaseModel(ABC, metaclass=MetaModel):
         self._signal_cols = [f'{self.name}-{col}' if not col.startswith(self.name) else col for col in columns]
         self._num_signal_cols = len(columns)
     
-    def _next(self, data: BaseData) -> torch.Tensor | np.ndarray:
+    def _next(self, data: BaseData) -> torch.Tensor | np.ndarray | None:
         '''Returns the next prediction in event-driven manner.'''
-        if data in self.signals:
-            return self.signals[data]
+        if data in self._last_signal_ts and self._last_signal_ts[data] == data.ts:
+            return self._signals[data]
         
         if not self.is_ready(data):
-            return [np.nan] * self._num_signal_cols
+            return None
         
         # if max_data = -1 (include all data), then start_idx = 0
         # if max_data = +x, then start_idx = -x
@@ -243,39 +248,42 @@ class BaseModel(ABC, metaclass=MetaModel):
         )
         
         pred_y = self.predict(X)
+        
         new_pred = pred_y[-1]
-        self.signals[data] = new_pred
+        if np.isnan(new_pred):
+            raise Exception(
+                f"model '{self.name}' was ready but predicted NaN for {data}, \n"
+                f"Setting: min_data={self._min_data[data]} (≈ warmup period), max_data={self._max_data[data]}, group_data={self._group_data}, "
+                "please make sure it is set up correctly."
+            )
+        
+        self._signals[data] = new_pred
+        self._last_signal_ts[data] = data.ts
         
         return new_pred
             
     def _convert_min_max_data_to_dict(self):
         '''Converts min_data and max_data from int to dict[product, dict[resolution, int]]'''
-        is_min_data_int = is_max_data_int = False
-        if isinstance(self._min_data, int):
-            is_min_data_int = True
+        DEFAULT_MIN_DATA = 1
+        if not self._min_data:
+            self._min_data = {data: DEFAULT_MIN_DATA for data in self.get_datas()}
+        elif isinstance(self._min_data, int):
             min_data = self._min_data
-            self._min_data = {}
-        if isinstance(self._max_data, int):
-            is_max_data_int = True
-            max_data = self._max_data
-            self._max_data = {}
-        
-        for data in self.get_datas():
-            # if not int = min_data is already set up by user calling set_min_data() explicitly, i.e. check if set up correctly
-            if not is_min_data_int:
-                assert data in self._min_data, f"{data} not found in {self._min_data=}, make sure set_min_data() is called correctly"
-            else:
-                self._min_data[data] = min_data
-                
-            # if not int = max_data is already set up by user calling set_max_data() explicitly, i.e. check if set up correctly
-            if not is_max_data_int:
-                assert data in self._max_data, f"{data} not found in {self._max_data=}, make sure set_max_data() is called correctly"
-            else:
-                self._max_data[data] = max_data
-    
-            max_data = self._max_data[data]
-            min_data = self._min_data[data]
+            self._min_data = {data: min_data for data in self.get_datas()}
             
+        if not self._max_data:
+            self._max_data = {data: self._min_data[data] for data in self.get_datas()}
+        elif isinstance(self._max_data, int):
+            max_data = self._max_data
+            self._max_data = {data: max_data for data in self.get_datas()}
+        
+        # check if set up correctly
+        for data in self.get_datas():
+            assert data in self._min_data, f"{data} not found in {self._min_data=}, make sure set_min_data() is called correctly"
+            assert data in self._max_data, f"{data} not found in {self._max_data=}, make sure set_max_data() is called correctly"
+    
+            min_data = self._min_data[data]
+            max_data = self._max_data[data]
             # NOTE: -1 means include all data
             if max_data == -1:
                 max_data = sys.float_info.max
@@ -329,8 +337,8 @@ class BaseModel(ABC, metaclass=MetaModel):
     def set_min_data(self, min_data: int | dict[BaseData, int]):
         self._min_data = min_data
 
-    def set_max_data(self, max_data: None | int | dict[BaseData, int]):
-        self._max_data = max_data if max_data else self._min_data
+    def set_max_data(self, max_data: int | dict[BaseData, int]):
+        self._max_data = max_data
     
     def set_group_data(self, group_data: bool):
         self._group_data = group_data
@@ -435,7 +443,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         self, 
         model: tModel, 
         name: str='', 
-        min_data: int=1,
+        min_data: None | int=None,
         max_data: None | int=None,
         group_data: bool=True,
         signal_cols: list[str] | None=None,
@@ -460,12 +468,14 @@ class BaseModel(ABC, metaclass=MetaModel):
             f"{model.type} '{model.__class__.__name__}' is not an instance of {Model.__name__}. Please create your {model.type} using 'class {model.__class__.__name__}({Model.__name__})'"
         if name:
             model.set_name(name)
-        model.set_min_data(min_data)
-        model.set_max_data(max_data)
+        model.create_logger()
+        if min_data:
+            model.set_min_data(min_data)
+        if max_data:
+            model.set_max_data(max_data)
         model.set_group_data(group_data)
         if signal_cols:
             model.set_signal_cols(signal_cols)
-        model.create_logger()
         mdl = model.name
         if mdl in self.models:
             raise Exception(f"{model.name} already exists in {self.name}")
@@ -478,7 +488,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         self, 
         feature: tFeature, 
         name: str='',
-        min_data: int=1,
+        min_data: None | int=None,
         max_data: None | int=None,
         group_data: bool=True,
         signal_cols: list[str] | None=None,
@@ -496,7 +506,7 @@ class BaseModel(ABC, metaclass=MetaModel):
         self, 
         indicator: tIndicator, 
         name: str='',
-        min_data: int=1,
+        min_data: None | int=None,
         max_data: None | int=None,
         group_data: bool=True,
         signal_cols: list[str] | None=None,
@@ -535,10 +545,11 @@ class BaseModel(ABC, metaclass=MetaModel):
         self.on_bar(product, bar, ts, **kwargs)
     
     def update_predictions(self, data: BaseData, listener: BaseModel):
-        pred_y: torch.Tensor | np.ndarray = listener._next(data)
-        signal_cols = listener.get_signal_cols()
-        for i, col in enumerate(signal_cols):
-            self.predictions[col] = pred_y[i]
+        pred_y: torch.Tensor | np.ndarray | None = listener._next(data)
+        if pred_y is not None:
+            signal_cols = listener.get_signal_cols()
+            for i, col in enumerate(signal_cols):
+                self.predictions[col] = pred_y[i]
     
     def _start_models(self):
         for model in self.models.values():
@@ -561,6 +572,12 @@ class BaseModel(ABC, metaclass=MetaModel):
             self.load()
             self.on_start()
             self._is_running = True
+            self.logger.info(
+                f"model '{self.name}' is started.\n"
+                f"min_data={self._min_data}\n"
+                f"max_data={self._max_data}\n"
+                f"group_data={self._group_data}"
+            )
         else:
             self.logger.warning(f'model {self.name} has already started')
         

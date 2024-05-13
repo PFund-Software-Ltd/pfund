@@ -53,7 +53,7 @@ class PandasDataTool(BaseDataTool):
             self.df['ts'] = self.df['ts'].astype(int) // 10**6 / 10**3
         self._raw_dfs.clear()
     
-    def merge_with_signal_dfs(self, signal_dfs: list[pd.DataFrame]):
+    def merge_signal_dfs_with_df(self, signal_dfs: list[pd.DataFrame]):
         for signal_df in signal_dfs:
             self.df = pd.merge(self.df, signal_df, on=self.INDEX, how='left')
         self.df.sort_values(by='ts', ascending=True, inplace=True)
@@ -104,7 +104,14 @@ class PandasDataTool(BaseDataTool):
     # TODO: stores the df to a database?
     def store_df(self):
         pass
+    
+    @staticmethod
+    def get_nan_columns(df: pd.DataFrame) -> list[str]:
+        all_nan_columns: pd.Series = df.isna().all()
+        nan_columns = all_nan_columns[all_nan_columns].index.tolist()
+        return nan_columns
 
+    @backtest
     def signalize(self, X: pd.DataFrame, pred_y: np.ndarray, columns: list[str]) -> pd.DataFrame:
         pred_df = pd.DataFrame(pred_y, columns=columns)
         assert set(self.INDEX) <= set(X.columns), f"{self.INDEX} must be in X's columns"
@@ -203,13 +210,14 @@ class PandasDataTool(BaseDataTool):
                 self.val_set = self.validation_set = df
             elif type_ == 'test':
                 self.test_set = df
-    
+
        
     '''
     ************************************************
     Helper Functions
     ************************************************
     '''
+    
     @staticmethod
     def get_index_values(df: pd.DataFrame, index: str) -> list:
         assert index in df.index.names, f"index must be one of {df.index.names}"

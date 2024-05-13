@@ -46,10 +46,10 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
                 return False
         
         def on_start(self):
-            if self.engine.mode == 'vectorized':
+            if self.engine.mode == 'vectorized' or self._is_signal_df_required:
                 self.set_group_data(False)
             if self._is_signal_df_required and self._signal_df is None:
-                self.logger.info(
+                self.logger.warning(
                     f"creating signal_df for '{self.name}' on the fly: "
                     "featurize() -> predict(X) -> signalize(X, pred_y)"
                 )
@@ -61,6 +61,7 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
             X: pd.DataFrame | pl.LazyFrame = self.featurize()
             pred_y: torch.Tensor | np.ndarray = self.predict(X)
             signal_df: pd.DataFrame | pl.LazyFrame = self.signalize(X, pred_y)
+            self._assert_no_nan_columns(signal_df)
             return signal_df
         
         def load(self) -> dict:
@@ -77,6 +78,7 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
 
         def dump(self, signal_df: pd.DataFrame | pl.LazyFrame):
             assert signal_df is not None, "signal_df cannot be None"
+            self._assert_no_nan_columns(signal_df)
             obj = {'signal_df': signal_df}
             super().dump(obj)
         
@@ -86,8 +88,13 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
                 self._data_tool.clear_df()
             for model in self.models.values():
                 model.clear_dfs()
+                
+        def _assert_no_nan_columns(self, df: pd.DataFrame | pl.LazyFrame):
+            nan_columns = self._data_tool.get_nan_columns(df)
+            assert not nan_columns, f"df has NaN values in columns: {nan_columns}"
             
         # FIXME: pandas specific
+        # should be called in on_stop()?
         def assert_consistent_signals(self):
             '''Asserts consistent model signals from vectorized and event-driven backtesting, triggered in event-driven backtesting'''
             import pandas.testing as pdt

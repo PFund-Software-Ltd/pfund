@@ -20,15 +20,19 @@ class TalibIndicator(BaseIndicator):
             from talib import abstract as talib
             e.g. indicator = talib.SMA
         '''
-        if 'min_data_points' not in kwargs:
-            if 'timeperiod' in kwargs:
-                kwargs['min_data_points'] = kwargs['timeperiod']
-            else:
-                default_params = indicator.info['parameters']
-                if 'timeperiod' in default_params:
-                    default_timeperiod = default_params['timeperiod']
-                    kwargs['min_data_points'] = default_timeperiod
         super().__init__(indicator, *args, **kwargs)
+        if min_data := self._derive_min_data():
+            self.set_min_data(min_data)
+    
+    def _derive_min_data(self) -> int | None:
+        '''Derives min_data from indicator parameters. If no specified params, use the default ones'''
+        if 'timeperiod' in self._kwargs:
+            timeperiod = self._kwargs['timeperiod']
+        else:
+            default_params = self.get_indicator_params()
+            timeperiod = default_params.get('timeperiod', None)
+        if timeperiod:
+            return int(timeperiod)
             
     def get_indicator_info(self):
         return self.indicator.info
@@ -68,4 +72,4 @@ class TalibIndicator(BaseIndicator):
         if default_params:
             self.logger.warning(f'talib indicator {self.name} is using default parameters {default_params}')
         super().on_start()
-        
+    

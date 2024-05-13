@@ -29,15 +29,14 @@ class TaIndicator(BaseIndicator):
             functions supported by lib 'ta'
             e.g. funcs = ['bollinger_mavg', 'bollinger_hband', 'bollinger_lband']
         '''
-        if 'min_data_points' not in kwargs:
-            # need to set ml_model to make the functions below work before calling super().__init__()
-            self.ml_model = indicator  
-            window = self._extract_window_from_indicator_params()
-            if window:
-                kwargs['min_data_points'] = window
         super().__init__(indicator, *args, funcs=funcs, **kwargs)
+        if min_data := self._derive_min_data():
+            self.set_min_data(min_data)
     
-    def _extract_window_from_indicator_params(self) -> int | None:
+    def _derive_min_data(self) -> int | None:
+        '''Derives min_data from indicator parameters.
+        Since the params are raw strings, we need to extract the window value from them.
+        '''
         if params := self.get_indicator_params():
             match = re.search(r'window=(\d+)', params)
             if match:
