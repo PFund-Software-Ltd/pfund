@@ -5,6 +5,8 @@ class BaseDataTool:
     INDEX = ['ts', 'product', 'resolution']
     GROUP = ['product', 'resolution']
     _MAX_NEW_ROWS = 1000
+    _MIN_ROWS = 1_000
+    _MAX_ROWS = None
 
     def __init__(self):
         self.train_periods = {}  # {product: ('start_date', 'end_date')}
@@ -20,6 +22,14 @@ class BaseDataTool:
         self._new_rows = []  # [{col: value, ...}]
         self._raw_dfs = {}  # {data: df}
     
+    @classmethod
+    def set_min_rows(cls, min_rows: int):
+        cls._MIN_ROWS = min_rows
+    
+    @classmethod
+    def set_max_rows(cls, max_rows: int):
+        cls._MAX_ROWS = max_rows
+
     def get_raw_df(self, data: BaseData):
         return self._raw_dfs[data]
     

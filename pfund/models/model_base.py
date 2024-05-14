@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import sys
-import importlib
 from abc import ABC, abstractmethod
 from collections import defaultdict
 
@@ -43,11 +42,8 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         self._kwargs = kwargs
         self.ml_model = ml_model  # user-defined machine learning model
         self.name = self.mdl = self.get_default_name()
-        self.Engine = get_engine_class()
-        self.engine = self.Engine()
-        data_tool: str = self.Engine.data_tool
-        DataTool = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool}'), f'{data_tool.capitalize()}DataTool')
-        self._data_tool = DataTool()
+        self.engine = get_engine_class()()
+        self._data_tool = self.engine.DataTool()
         self.logger = None
         self._is_running = False
         self._is_ready = defaultdict(bool)  # {data: bool}
@@ -215,7 +211,7 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
             max_data = self._max_data[data]
             # NOTE: -1 means include all data
             if max_data == -1:
-                max_data = sys.float_info.max
+                max_data = sys.maxsize
                 
             assert min_data >= 1, f'{min_data=} for {data} must be >= 1'
             assert max_data >= min_data, f'{max_data=} for {data} must be >= {min_data=}'

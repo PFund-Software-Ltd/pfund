@@ -35,7 +35,8 @@ class TradeEngine(BaseEngine):
         *, 
         env: Literal['SANDBOX', 'PAPER', 'LIVE']='PAPER', 
         data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
-        df_max_rows: int=1000,
+        df_min_rows: int=1_000,
+        df_max_rows: int=3_000,
         zmq_port=5557, 
         config: ConfigHandler | None=None, 
         **settings
@@ -43,23 +44,28 @@ class TradeEngine(BaseEngine):
         if not hasattr(cls, 'zmq_port'):
             assert isinstance(zmq_port, int), f'{zmq_port=} must be an integer'
             cls._zmq_port = zmq_port
-        return super().__new__(
-            cls, 
-            env, 
-            data_tool=data_tool, 
-            df_max_rows=df_max_rows, 
-            config=config, 
+        instance = super().__new__(
+            cls,
+            env,
+            data_tool=data_tool,
+            config=config,
             **settings
         )
+        if not hasattr(cls, 'df_min_rows'):
+            cls.DataTool.set_min_rows(df_min_rows)
+        if not hasattr(cls, 'df_max_rows'):
+            cls.DataTool.set_max_rows(df_max_rows)
+        return instance
 
     def __init__(
-        self, 
-        *, 
-        env: Literal['SANDBOX', 'PAPER', 'LIVE']='PAPER', 
-        data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
-        df_max_rows: int=1000,
+        self,
+        *,
+        env: Literal['SANDBOX', 'PAPER', 'LIVE']='PAPER',
+        data_tool: tSUPPORTED_DATA_TOOLS='pandas',
+        df_min_rows: int=1_000,
+        df_max_rows: int=3_000,
         zmq_port=5557,
-        config: ConfigHandler | None=None, 
+        config: ConfigHandler | None=None,
         **settings
     ):
         # avoid re-initialization to implement singleton class correctly
@@ -68,9 +74,8 @@ class TradeEngine(BaseEngine):
             self._zmq = ZeroMQ('engine')
             self._background_thread = None
             super().__init__(
-                env, 
-                data_tool=data_tool, 
-                df_max_rows=df_max_rows, 
+                env,
+                data_tool=data_tool,
                 config=config, 
                 **settings
             )

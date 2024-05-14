@@ -13,18 +13,20 @@ class SandboxEngine(TradeEngine):
         cls, 
         *, 
         data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
-        df_max_rows: int=1000,
+        df_min_rows: int=1_000,
+        df_max_rows: int=3_000,
         zmq_port=5557,
         config: ConfigHandler | None=None, 
         **settings
     ):
         return super().__new__(
-            cls, 
-            env='SANDBOX', 
+            cls,
+            env='SANDBOX',
             data_tool=data_tool,
+            df_min_rows=df_min_rows,
             df_max_rows=df_max_rows,
-            zmq_port=zmq_port, 
-            config=config, 
+            zmq_port=zmq_port,
+            config=config,
             **settings
         )
     
@@ -32,7 +34,8 @@ class SandboxEngine(TradeEngine):
         self, 
         *, 
         data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
-        df_max_rows: int=1000,
+        df_min_rows: int=1_000,
+        df_max_rows: int=3_000,
         zmq_port=5557, 
         config: ConfigHandler | None=None,
         **settings
@@ -40,8 +43,9 @@ class SandboxEngine(TradeEngine):
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):
             super().__init__(
-                env='SANDBOX', 
+                env='SANDBOX',
                 data_tool=data_tool,
+                df_min_rows=df_min_rows,
                 df_max_rows=df_max_rows,
                 zmq_port=zmq_port,
                 config=config,

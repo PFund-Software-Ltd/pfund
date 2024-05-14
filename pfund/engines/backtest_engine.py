@@ -24,6 +24,8 @@ try:
 except ImportError:
     pl = None
 
+from rich.console import Console
+
 import pfund as pf
 from pfund.git_controller import GitController
 from pfund.engines.base_engine import BaseEngine
@@ -37,11 +39,10 @@ from pfund.mixins.backtest_mixin import BacktestMixin
 
 class BacktestEngine(BaseEngine):
     def __new__(
-        cls, 
-        *, 
-        env: Literal['BACKTEST', 'TRAIN']='BACKTEST', 
-        data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
-        df_max_rows: int=1000,
+        cls,
+        *,
+        env: Literal['BACKTEST', 'TRAIN']='BACKTEST',
+        data_tool: tSUPPORTED_DATA_TOOLS='pandas',
         mode: tSUPPORTED_BACKTEST_MODES='vectorized',
         use_signal_df: bool=False,
         assert_signals: bool=True,
@@ -66,6 +67,11 @@ class BacktestEngine(BaseEngine):
             cls.mode = mode.lower()
         if not hasattr(cls, 'use_signal_df'):
             cls.use_signal_df = use_signal_df
+            if use_signal_df:
+                Console().print(
+                    f'Warning: {use_signal_df=} makes event-driven backtesting inconsistent with live trading',
+                    style='bold'
+                )
         if not hasattr(cls, 'assert_signals'):
             cls.assert_signals = assert_signals
             if cls.mode == 'event_driven' and cls.use_signal_df and cls.assert_signals:
@@ -85,21 +91,18 @@ class BacktestEngine(BaseEngine):
                     cls.num_chunks = cls.num_cpus
                     print(f'num_chunks is adjusted to {num_cpus} because {num_cpus=}')
         return super().__new__(
-            cls, 
-            env, 
-            data_tool=data_tool, 
-            df_max_rows=df_max_rows, 
-            config=config, 
+            cls,
+            env,
+            data_tool=data_tool,
+            config=config,
             **settings
         )
 
     def __init__(
-        self, 
-        *, 
-        env: Literal['BACKTEST', 'TRAIN']='BACKTEST', 
-        data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
-        config: ConfigHandler | None=None,
-        df_max_rows: int=1000,
+        self,
+        *,
+        env: Literal['BACKTEST', 'TRAIN']='BACKTEST',
+        data_tool: tSUPPORTED_DATA_TOOLS='pandas',
         mode: tSUPPORTED_BACKTEST_MODES='vectorized',
         use_signal_df: bool=False,
         assert_signals: bool=True,
@@ -108,6 +111,7 @@ class BacktestEngine(BaseEngine):
         num_chunks: int=1,
         use_ray: bool=False,
         num_cpus: int=8,
+        config: ConfigHandler | None=None,
         **settings
     ):
         # avoid re-initialization to implement singleton class correctly
@@ -117,10 +121,9 @@ class BacktestEngine(BaseEngine):
             file_path = caller_frame.f_code.co_filename  # Extract the file path from the frame
             self._git = GitController(os.path.abspath(file_path))
             super().__init__(
-                env, 
-                data_tool=data_tool, 
-                df_max_rows=df_max_rows, 
-                config=config, 
+                env,
+                data_tool=data_tool,
+                config=config,
                 **settings
             )
     

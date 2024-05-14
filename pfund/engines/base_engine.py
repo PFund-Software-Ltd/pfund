@@ -39,7 +39,6 @@ class BaseEngine(Singleton):
         cls, 
         env: tSUPPORTED_ENVIRONMENTS,
         data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
-        df_max_rows: int=1000,
         config: ConfigHandler | None=None,
         **settings
     ):
@@ -55,8 +54,7 @@ class BaseEngine(Singleton):
         if not hasattr(cls, 'data_tool'):
             assert data_tool in SUPPORTED_DATA_TOOLS, f'{data_tool=} is not supported, {SUPPORTED_DATA_TOOLS=}'
             cls.data_tool = data_tool
-        if not hasattr(cls, 'df_max_rows'):
-            cls.df_max_rows = df_max_rows
+            cls.DataTool = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool.lower()}'), f'{data_tool.capitalize()}DataTool')
         if not hasattr(cls, 'config'):
             cls.config: ConfigHandler = config if config else ConfigHandler.load_config()
             log_path = f'{cls.config.log_path}/{cls.env}'
@@ -69,8 +67,7 @@ class BaseEngine(Singleton):
     def __init__(
         self,
         env: tSUPPORTED_ENVIRONMENTS,
-        data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
-        df_max_rows: int=1000,
+        data_tool: tSUPPORTED_DATA_TOOLS='pandas',
         config: ConfigHandler | None=None, 
         **settings
     ):

@@ -41,10 +41,11 @@ class BacktestMixin:
         # case2: model is using a dummy strategy as its only consumer
         self._is_dummy_strategy = self._check_if_dummy_strategy()
         self._is_signal_df_required = self._check_if_signal_df_required()
-        self._is_append_to_df = not self._is_signal_df_required
         if isinstance(self, BaseStrategy):
-            self._is_append_to_df = self._is_append_to_df and not self._is_dummy_strategy
-        
+            self._is_append_to_df = not self._is_signal_df_required and not self._is_dummy_strategy
+        else:
+            self._is_append_to_df = not self._is_signal_df_required
+            
         # stores signatures for backtest history tracking
         self._data_signatures = []
         if isinstance(self, BaseStrategy):

@@ -52,6 +52,14 @@ class PolarsDataTool(BaseDataTool):
         pass
 
     # TODO:
+    def _trim_df(self):
+        pass
+    
+    # TODO:
+    def _write_df_to_db(self, trimmed_df: pl.LazyFrame):
+        pass
+    
+    # TODO:
     @staticmethod
     def get_nan_columns(df: pl.LazyFrame) -> list[str]:
         nan_columns = [col.name for col in df if col.is_null().all()]

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import importlib
 from collections import defaultdict, deque
 from abc import ABC
 
@@ -30,11 +29,8 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self._args = args
         self._kwargs = kwargs
         self.name = self.strat = self.get_default_name()
-        self.Engine = get_engine_class()
-        self.engine = self.Engine()
-        data_tool: str = self.Engine.data_tool
-        DataTool = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool}'), f'{data_tool.capitalize()}DataTool')
-        self._data_tool = DataTool()
+        self.engine = get_engine_class()()
+        self._data_tool = self.engine.DataTool()
         self.logger = None
         self._zmq = None
         self._is_parallel = False

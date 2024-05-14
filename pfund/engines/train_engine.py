@@ -13,28 +13,25 @@ class TrainEngine(BacktestEngine):
         cls, 
         *, 
         data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
-        df_max_rows: int=1000,
         mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
         config: ConfigHandler | None=None, 
         **settings
     ):
         return super().__new__(
-            cls, 
-            env='TRAIN', 
-            data_tool=data_tool, 
-            df_max_rows=df_max_rows,
-            mode=mode, 
-            config=config, 
+            cls,
+            env='TRAIN',
+            data_tool=data_tool,
+            mode=mode,
+            config=config,
             **settings
         )
     
     def __init__(
-        self, 
-        *, 
-        data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
-        df_max_rows: int=1000,
-        mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
-        config: ConfigHandler | None=None, 
+        self,
+        *,
+        data_tool: tSUPPORTED_DATA_TOOLS='pandas',
+        mode: tSUPPORTED_BACKTEST_MODES='vectorized',
+        config: ConfigHandler | None=None,
         **settings
     ):
         # avoid re-initialization to implement singleton class correctly
@@ -42,7 +39,7 @@ class TrainEngine(BacktestEngine):
             super().__init__(
                 env='TRAIN', 
                 data_tool=data_tool,
-                df_max_rows=df_max_rows,
+                mode=mode,
                 config=config,
                 **settings
             )

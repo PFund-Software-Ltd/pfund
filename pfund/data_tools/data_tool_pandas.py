@@ -68,6 +68,8 @@ class PandasDataTool(BaseDataTool):
         self.df.sort_values(by=self.INDEX, ascending=True, inplace=True)
         self.df.reset_index(drop=True, inplace=True)
         self._new_rows.clear()
+        if self._MAX_ROWS and self.df.shape[0] >= self._MAX_ROWS:
+            self._trim_df()
         
     def append_to_df(self, data: BaseData, predictions: dict, **kwargs):
         '''Appends new data to the df
@@ -95,14 +97,16 @@ class PandasDataTool(BaseDataTool):
         self._new_rows.append(row_data)
         if len(self._new_rows) >= self._MAX_NEW_ROWS:
             self._push_new_rows_to_df()
-        
-    # TODO: Trims the df once exceeding a number of rows?
-    def trim_df(self):
-        ''''''
-        pass
     
-    # TODO: stores the df to a database?
-    def store_df(self):
+    def _trim_df(self):
+        num_rows_to_trim = self.df.shape[0] - self._MIN_ROWS
+        trimmed_df = self.df.iloc[:num_rows_to_trim]
+        # TODO:
+        self._write_df_to_db(trimmed_df)
+        self.df = self.df.iloc[-self._MIN_ROWS:]
+    
+    # TODO:
+    def _write_df_to_db(self, trimmed_df: pd.DataFrame):
         pass
     
     @staticmethod
