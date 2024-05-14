@@ -303,6 +303,8 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             self.add_strategies()
             self._start_strategies()
             self.add_models()
+            self.add_features()
+            self.add_indicators()
             self._start_models()
             self._prepare_df()
             self._subscribe_to_private_channels()

@@ -110,7 +110,15 @@ class PandasDataTool(BaseDataTool):
         all_nan_columns: pd.Series = df.isna().all()
         nan_columns = all_nan_columns[all_nan_columns].index.tolist()
         return nan_columns
-
+    
+    @staticmethod
+    def assert_frame_equal(df1: pd.DataFrame, df2: pd.DataFrame):
+        '''
+        Raise:
+            AssertionError: if df1 and df2 are not equal
+        '''
+        pd.testing.assert_frame_equal(df1, df2, check_exact=False, rtol=1e-5)
+    
     @backtest
     def signalize(self, X: pd.DataFrame, pred_y: np.ndarray, columns: list[str]) -> pd.DataFrame:
         pred_df = pd.DataFrame(pred_y, columns=columns)

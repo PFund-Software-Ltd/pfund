@@ -60,15 +60,6 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
         def dump(self):
             pass
         
-        def clear_dfs(self):
-            assert self.engine.mode == 'event_driven'
-            if not self._is_signal_df_required and not self._is_dummy_strategy:
-                self._data_tool.clear_df()
-            for strategy in self.strategies.values():
-                strategy.clear_dfs()
-            for model in self.models.values():
-                model.clear_dfs()
-        
     try: 
         return _BacktestStrategy(*args, **kwargs)
     except TypeError as e:

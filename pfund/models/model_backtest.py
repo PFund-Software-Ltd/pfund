@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
@@ -46,73 +47,42 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
                 return False
         
         def on_start(self):
-            if self.engine.mode == 'vectorized' or self._is_signal_df_required:
+            if self._is_signal_df_required:
                 self.set_group_data(False)
-            if self._is_signal_df_required and self._signal_df is None:
-                self.logger.warning(
-                    f"creating signal_df for '{self.name}' on the fly: "
-                    "featurize() -> predict(X) -> signalize(X, pred_y)"
-                )
-                signal_df: pd.DataFrame | pl.LazyFrame = self.flow()
-                self._set_signal_df(signal_df)
             super().on_start()
             
         def flow(self) -> pd.DataFrame | pl.LazyFrame:
+            self.logger.warning(
+                f"creating '{self.name}' signal_df on the fly: "
+                "featurize() -> predict(X) -> signalize(X, pred_y)"
+            )
+            self.set_group_data(False)
             X: pd.DataFrame | pl.LazyFrame = self.featurize()
             pred_y: torch.Tensor | np.ndarray = self.predict(X)
             signal_df: pd.DataFrame | pl.LazyFrame = self.signalize(X, pred_y)
-            self._assert_no_nan_columns(signal_df)
             return signal_df
         
         def load(self) -> dict:
             obj: dict = super().load()
-            if signal_df := obj.get('signal_df', None):
-                self.logger.info(f"{self.name}'s signal_df is loaded")
+            if self._is_signal_df_required:
+                if signal_df := obj.get('signal_df', None):
+                    self.logger.info(f"{self.name}'s signal_df is loaded")
+                else:
+                    signal_df = self.flow()
                 self._set_signal_df(signal_df)
             if self.is_model():
-                assert self.ml_model, \
-                f"Please make sure '{self.name}' was dumped "
-                f"using '{self.type}.dump(signal_df)' correctly.\n"
-                # FIXME: correct the link
-                "Please refer to the doc for more details: https://pfund.ai"  
+                error_msg = (
+                    f"please make sure '{self.name}' was dumped "
+                    f"using '{self.type}.dump()' correctly.\n"
+                    # FIXME: correct the link
+                    "Please refer to the doc for more details: https://pfund.ai"  
+                )
+                assert self.ml_model, f"{self.ml_model=}, {error_msg}"
             return obj
 
         def dump(self, signal_df: pd.DataFrame | pl.LazyFrame):
-            assert signal_df is not None, "signal_df cannot be None"
-            self._assert_no_nan_columns(signal_df)
-            obj = {'signal_df': signal_df}
-            super().dump(obj)
+            super().dump({'signal_df': signal_df})
         
-        def clear_dfs(self):
-            assert self.engine.mode == 'event_driven'
-            if not self._is_signal_df_required:
-                self._data_tool.clear_df()
-            for model in self.models.values():
-                model.clear_dfs()
-                
-        def _assert_no_nan_columns(self, df: pd.DataFrame | pl.LazyFrame):
-            nan_columns = self._data_tool.get_nan_columns(df)
-            assert not nan_columns, f"df has NaN values in columns: {nan_columns}"
-            
-        # FIXME: pandas specific
-        # should be called in on_stop()?
-        def assert_consistent_signals(self):
-            '''Asserts consistent model signals from vectorized and event-driven backtesting, triggered in event-driven backtesting'''
-            import pandas.testing as pdt
-            event_driven_signal = self._signal_df
-            # set signal_df to None and load the vectorized_signal
-            self._set_signal_df(None)
-            self.load()
-            assert self._signal_df is not None, f"Please dump your model '{self.name}' by calling model.dump() before running event-driven backtesting"
-            vectorized_signal = self._signal_df
-            # filter out the last date since event_driven_signal doesn't have it 
-            vectorized_signal_ts_index = vectorized_signal.index.get_level_values('ts')
-            last_date = vectorized_signal_ts_index.max()
-            vectorized_signal = vectorized_signal[vectorized_signal_ts_index != last_date]
-
-            for col in vectorized_signal.columns:
-                pdt.assert_series_equal(vectorized_signal[col], event_driven_signal[col], check_exact=False, rtol=1e-5)
-            
     try:       
         if not issubclass(Model, BaseFeature):
             return _BacktestModel(ml_model, *args, **kwargs)

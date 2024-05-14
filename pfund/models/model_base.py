@@ -247,12 +247,11 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
             copy=False
         )
         
-        pred_y = self.predict(X)
-        
-        new_pred = pred_y[-1]
-        if np.isnan(new_pred):
+        pred_y: torch.Tensor | np.ndarray = self.predict(X)
+        new_pred: torch.Tensor | np.ndarray = pred_y[-1]
+        if np.isnan(new_pred).all():
             raise Exception(
-                f"model '{self.name}' was ready but predicted NaN for {data}, \n"
+                f"model '{self.name}' was ready but predicted all NaNs for {data}, \n"
                 f"Setting: min_data={self._min_data[data]} (≈ warmup period), max_data={self._max_data[data]}, group_data={self._group_data}, "
                 "please make sure it is set up correctly."
             )
@@ -268,6 +267,8 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
             self._add_consumers_datas_if_no_data()
             self._convert_min_max_data_to_dict()
             self.add_models()
+            self.add_features()
+            self.add_indicators()
             self._start_models()
             self._prepare_df()
             self.load()
@@ -316,6 +317,6 @@ class BaseFeature(BaseModel):
         self.set_signal_cols([self.name])
     
     def predict(self, X: pd.DataFrame | pl.LazyFrame, *args, **kwargs) -> np.ndarray:
-        raise NotImplementedError        
+        raise NotImplementedError
     extract = predict
     

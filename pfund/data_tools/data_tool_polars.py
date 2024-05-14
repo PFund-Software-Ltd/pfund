@@ -57,6 +57,14 @@ class PolarsDataTool(BaseDataTool):
         nan_columns = [col.name for col in df if col.is_null().all()]
         return nan_columns
 
+    @staticmethod
+    def assert_frame_equal(df1: pl.DataFrame | pl.LazyFrame, df2: pl.DataFrame | pl.LazyFrame):
+        '''
+        Raise:
+            AssertionError: if df1 and df2 are not equal
+        '''
+        pl.testing.assert_frame_equal(df1, df2, check_exact=False, rtol=1e-5)
+        
     # TODO
     @backtest
     def signalize(self, X: pl.LazyFrame, pred_y: np.ndarray, columns: list[str]) -> pl.LazyFrame:

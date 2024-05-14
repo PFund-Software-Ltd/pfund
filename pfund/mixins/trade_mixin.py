@@ -341,6 +341,12 @@ class TradeMixin:
     
     def add_models(self):
         pass
+
+    def add_features(self):
+        pass
+    
+    def add_indicators(self):
+        pass
     
     def on_start(self):
         pass
