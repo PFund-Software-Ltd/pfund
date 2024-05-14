@@ -14,7 +14,7 @@ from __future__ import annotations
 import time
 from threading import Thread
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfund.types.common_literals import tSUPPORTED_DATA_TOOLS
 
@@ -30,19 +30,50 @@ from pfund.config_handler import ConfigHandler
 class TradeEngine(BaseEngine):
     zmq_ports = {}
 
-    def __new__(cls, *, env: str='PAPER', data_tool: tSUPPORTED_DATA_TOOLS='pandas', zmq_port=5557, config: ConfigHandler | None=None, **settings):
+    def __new__(
+        cls, 
+        *, 
+        env: Literal['SANDBOX', 'PAPER', 'LIVE']='PAPER', 
+        data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
+        df_max_rows: int=1000,
+        zmq_port=5557, 
+        config: ConfigHandler | None=None, 
+        **settings
+    ):
         if not hasattr(cls, 'zmq_port'):
             assert isinstance(zmq_port, int), f'{zmq_port=} must be an integer'
             cls._zmq_port = zmq_port
-        return super().__new__(cls, env, data_tool=data_tool, config=config, **settings)
+        return super().__new__(
+            cls, 
+            env, 
+            data_tool=data_tool, 
+            df_max_rows=df_max_rows, 
+            config=config, 
+            **settings
+        )
 
-    def __init__(self, *, env: str='PAPER', data_tool: tSUPPORTED_DATA_TOOLS='pandas', zmq_port=5557, config: ConfigHandler | None=None, **settings):
-        super().__init__(env, data_tool=data_tool)
+    def __init__(
+        self, 
+        *, 
+        env: Literal['SANDBOX', 'PAPER', 'LIVE']='PAPER', 
+        data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
+        df_max_rows: int=1000,
+        zmq_port=5557,
+        config: ConfigHandler | None=None, 
+        **settings
+    ):
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):
             self._is_running = True
             self._zmq = ZeroMQ('engine')
             self._background_thread = None
+            super().__init__(
+                env, 
+                data_tool=data_tool, 
+                df_max_rows=df_max_rows, 
+                config=config, 
+                **settings
+            )
 
     @classmethod
     def assign_cpus(cls, name) -> list:

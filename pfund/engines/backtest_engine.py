@@ -12,7 +12,7 @@ from logging.handlers import QueueHandler, QueueListener
 
 from tqdm import tqdm
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     import pandas as pd
     from pfund.types.common_literals import tSUPPORTED_BACKTEST_MODES, tSUPPORTED_DATA_TOOLS
@@ -39,10 +39,10 @@ class BacktestEngine(BaseEngine):
     def __new__(
         cls, 
         *, 
-        env: str='BACKTEST', 
+        env: Literal['BACKTEST', 'TRAIN']='BACKTEST', 
         data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
+        df_max_rows: int=1000,
         mode: tSUPPORTED_BACKTEST_MODES='vectorized',
-        config: ConfigHandler | None=None,
         use_signal_df: bool=False,
         assert_signals: bool=True,
         auto_git_commit: bool=False,
@@ -50,6 +50,7 @@ class BacktestEngine(BaseEngine):
         num_chunks: int=1,
         use_ray: bool=False,
         num_cpus: int=8,
+        config: ConfigHandler | None=None,
         **settings
     ):
         '''
@@ -83,15 +84,23 @@ class BacktestEngine(BaseEngine):
                 if cls.num_cpus > cls.num_chunks:
                     cls.num_chunks = cls.num_cpus
                     print(f'num_chunks is adjusted to {num_cpus} because {num_cpus=}')
-        return super().__new__(cls, env, data_tool=data_tool, config=config, **settings)
+        return super().__new__(
+            cls, 
+            env, 
+            data_tool=data_tool, 
+            df_max_rows=df_max_rows, 
+            config=config, 
+            **settings
+        )
 
     def __init__(
         self, 
         *, 
-        env: str='BACKTEST', 
+        env: Literal['BACKTEST', 'TRAIN']='BACKTEST', 
         data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
-        mode: tSUPPORTED_BACKTEST_MODES='vectorized',
         config: ConfigHandler | None=None,
+        df_max_rows: int=1000,
+        mode: tSUPPORTED_BACKTEST_MODES='vectorized',
         use_signal_df: bool=False,
         assert_signals: bool=True,
         auto_git_commit: bool=False,
@@ -107,7 +116,13 @@ class BacktestEngine(BaseEngine):
             caller_frame = inspect.currentframe().f_back
             file_path = caller_frame.f_code.co_filename  # Extract the file path from the frame
             self._git = GitController(os.path.abspath(file_path))
-            super().__init__(env, data_tool=data_tool)
+            super().__init__(
+                env, 
+                data_tool=data_tool, 
+                df_max_rows=df_max_rows, 
+                config=config, 
+                **settings
+            )
     
     # HACK: since python doesn't support dynamic typing, true return type should be subclass of BacktestMixin and tStrategy
     # write -> BacktestMixin | tStrategy for better intellisense in IDEs

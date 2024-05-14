@@ -7,7 +7,7 @@ import importlib
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.types.core import tStrategy
-    from pfund.types.common_literals import tSUPPORTED_DATA_TOOLS
+    from pfund.types.common_literals import tSUPPORTED_DATA_TOOLS, tSUPPORTED_ENVIRONMENTS
     
 from rich.console import Console
 
@@ -35,7 +35,14 @@ ENV_COLORS = {
 class BaseEngine(Singleton):
     _PROCESS_NO_PONG_TOLERANCE_IN_SECONDS = 30
 
-    def __new__(cls, env, data_tool: tSUPPORTED_DATA_TOOLS='pandas', config: ConfigHandler | None=None, **settings):
+    def __new__(
+        cls, 
+        env: tSUPPORTED_ENVIRONMENTS,
+        data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
+        df_max_rows: int=1000,
+        config: ConfigHandler | None=None,
+        **settings
+    ):
         if not hasattr(cls, 'env'):
             cls.env = env.upper() if isinstance(env, str) else str(env).upper()
             assert cls.env in SUPPORTED_ENVIRONMENTS, f'env={cls.env} is not supported'
@@ -48,22 +55,47 @@ class BaseEngine(Singleton):
         if not hasattr(cls, 'data_tool'):
             assert data_tool in SUPPORTED_DATA_TOOLS, f'{data_tool=} is not supported, {SUPPORTED_DATA_TOOLS=}'
             cls.data_tool = data_tool
-        if not hasattr(cls, 'settings'):
-            cls.settings = settings
+        if not hasattr(cls, 'df_max_rows'):
+            cls.df_max_rows = df_max_rows
         if not hasattr(cls, 'config'):
             cls.config: ConfigHandler = config if config else ConfigHandler.load_config()
             log_path = f'{cls.config.log_path}/{cls.env}'
             logging_config_file_path = cls.config.logging_config_file_path
             cls.logging_configurator: LoggingDictConfigurator  = set_up_loggers(log_path, logging_config_file_path, user_logging_config=cls.config.logging_config)
+        if not hasattr(cls, 'settings'):
+            cls.settings = settings
         return super().__new__(cls)
     
-    def __init__(self, env, data_tool: tSUPPORTED_DATA_TOOLS='pandas', config: ConfigHandler | None=None, **settings):
+    def __init__(
+        self,
+        env: tSUPPORTED_ENVIRONMENTS,
+        data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
+        df_max_rows: int=1000,
+        config: ConfigHandler | None=None, 
+        **settings
+    ):
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):
+            self._validate_env()
             self.logger = logging.getLogger('pfund')
             self.brokers = {}
             self.strategy_manager = self.sm = StrategyManager()
             self._initialized = True
+    
+    def _validate_env(self):
+        env_to_engine = {
+            'BACKTEST': 'BacktestEngine',
+            'SANDBOX': 'SandboxEngine',
+            'PAPER': 'TradeEngine',
+            'LIVE': 'TradeEngine',
+            'TRAIN': 'TrainEngine',
+        }
+        engine_name = env_to_engine[self.env]
+        if self.__class__.__name__ != engine_name:
+            raise ValueError(
+                f"Invalid environment '{self.env}' for {self.__class__.__name__}. "
+                f"Use the '{engine_name}' for the '{self.env}' environment."
+            )
 
     def get_strategy(self, strat: str) -> BaseStrategy | None:
         return self.strategy_manager.get_strategy(strat)

@@ -9,14 +9,43 @@ from pfund.config_handler import ConfigHandler
 
 
 class TrainEngine(BacktestEngine):
-    def __new__(cls, *, data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', config: ConfigHandler | None=None, **settings):
-        return super().__new__(cls, env='TRAIN', data_tool=data_tool, mode=mode, config=config, **settings)
+    def __new__(
+        cls, 
+        *, 
+        data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
+        df_max_rows: int=1000,
+        mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
+        config: ConfigHandler | None=None, 
+        **settings
+    ):
+        return super().__new__(
+            cls, 
+            env='TRAIN', 
+            data_tool=data_tool, 
+            df_max_rows=df_max_rows,
+            mode=mode, 
+            config=config, 
+            **settings
+        )
     
-    def __init__(self, *, data_tool: tSUPPORTED_DATA_TOOLS='pandas', mode: tSUPPORTED_BACKTEST_MODES='vectorized', config: ConfigHandler | None=None, **settings):
-        super().__init__(env='TRAIN', data_tool=data_tool)
+    def __init__(
+        self, 
+        *, 
+        data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
+        df_max_rows: int=1000,
+        mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
+        config: ConfigHandler | None=None, 
+        **settings
+    ):
         # avoid re-initialization to implement singleton class correctly
-        # if not hasattr(self, '_initialized'):
-        #     pass
+        if not hasattr(self, '_initialized'):
+            super().__init__(
+                env='TRAIN', 
+                data_tool=data_tool,
+                df_max_rows=df_max_rows,
+                config=config,
+                **settings
+            )
     
     def is_training(self):
         return True
