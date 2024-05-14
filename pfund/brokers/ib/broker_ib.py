@@ -114,11 +114,11 @@ class IBBroker(LiveBroker):
             self.logger.debug(f'added product {product.name}')
         return product
 
-    def get_account(self) -> IBAccount | None:
-        return self.account
+    def get_account(self, acc: str) -> IBAccount | None:
+        return self.accounts[self.bkr].get(acc.upper(), None)
 
     def add_account(self, host: str='', port: int=None, client_id: int=None, acc: str='', **kwargs) -> IBAccount:
-        if not (account := self.get_account()):
+        if not (account := self.get_account(acc)):
             account = IBAccount(self.env, host=host, port=port, client_id=client_id, acc=acc, **kwargs)
             self.accounts[self.bkr][account.name] = account
             self.account = account
@@ -133,7 +133,7 @@ class IBBroker(LiveBroker):
     def add_balance(self, acc: str, ccy: str) -> IBBalance | None:
         acc, ccy = convert_to_uppercases(acc, ccy)
         if not (balance := self.get_balances(acc=acc, ccy=ccy)):
-            account = self.get_account()
+            account = self.get_account(acc)
             balance = IBBalance(account, ccy)
             self.portfolio_manager.add_balance(balance)
             self.logger.debug(f'added {balance=}')
@@ -143,7 +143,7 @@ class IBBroker(LiveBroker):
         exch, acc, pdt = convert_to_uppercases(exch, acc, pdt)
         if not (position := self.get_positions(exch=exch, acc=acc, pdt=pdt)):
             bccy, qccy, ptype, *args = IBProduct.parse_product_name(pdt)
-            account = self.get_account()
+            account = self.get_account(acc)
             product = self.add_product(exch, bccy, qccy, ptype, *args)
             position = IBPosition(account, product)
             self.portfolio_manager.add_position(position)
@@ -234,7 +234,7 @@ class IBBroker(LiveBroker):
         return positions
     
     def create_order(self, exch, acc, pdt, *args, **kwargs):
-        account = self.get_account()
+        account = self.get_account(acc)
         bccy, qccy, ptype, *args = IBProduct.parse_product_name(pdt)
         product = self.add_product(exch, bccy, qccy, ptype, *args)    
         return IBOrder(account, product, *args, **kwargs)

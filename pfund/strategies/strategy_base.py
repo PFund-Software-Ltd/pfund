@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from collections import defaultdict, deque
+from collections import defaultdict, deque, OrderedDict
 from abc import ABC
 
 from typing import Literal, TYPE_CHECKING
@@ -35,9 +35,6 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self._zmq = None
         self._is_parallel = False
         self._is_running = False
-        self.brokers = {}
-        self.accounts = defaultdict(dict)  # {trading_venue: {acc1: account1, acc2: account2} }
-        
         self.datas = defaultdict(dict)  # {product: {'1m': data}}
         self._listeners = defaultdict(list)  # {data: model}
         self._consumers = []  # strategies that consume this strategy (sub-strategy)
@@ -45,6 +42,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
 
         self.orderbooks = {}  # {product: data}
         self.tradebooks = {}  # {product: data}
+        self.accounts = defaultdict(OrderedDict)  # {trading_venue: {acc1: account1, acc2: account2} }
         self.positions = {}  # {account: {pdt: position} }
         self.balances = {}  # {account: {ccy: balance}}
         # NOTE: includes submitted orders and opened orders
@@ -61,9 +59,10 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self._num_signal_cols = 0
         
         # TODO
+        self.universe = {}  # {trading_venue: universe_object}
         self.portfolio = None
-        self.universe = None
         self.investment_profile = None
+        # TODO: risk strategy instead?
         self.risk_monitor = self.rm = RiskMonitor()
         
         self.params = {}
@@ -96,14 +95,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         }
     
     def get_trading_venues(self) -> list[str]:
-        trading_venues = []
-        for bkr, broker in self.brokers.items():
-            if bkr == 'CRYPTO':
-                for exch in broker.exchanges:
-                    trading_venues.append(exch)
-            else:
-                trading_venues.append(bkr)
-        return trading_venues
+        return list(self.accounts.keys())
     
     def set_name(self, name: str):
         self.name = self.strat = name
@@ -134,36 +126,60 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self._zmq.stop()
         self._zmq = None
     
-    def add_strategy(self, strategy: tStrategy, name: str='', is_parallel=False) -> tStrategy:
-        # TODO
-        assert not is_parallel, 'Running strategy in parallel is not supported yet'
-        assert isinstance(strategy, BaseStrategy), \
-            f"strategy '{strategy.__class__.__name__}' is not an instance of BaseStrategy. Please create your strategy using 'class {strategy.__class__.__name__}(pf.Strategy)'"
-        if name:
-            strategy.set_name(name)
-        strategy.set_parallel(is_parallel)
-        strategy.create_logger()
-        strat = strategy.name
-        if strat in self.strategies:
-            raise Exception(f"sub-strategy '{strat}' already exists in strategy '{self.name}'")
-        strategy.add_consumer(self)
-        self.strategies[strat] = strategy
-        self.logger.debug(f"added sub-strategy '{strat}'")
-        return strategy
+    def _derive_bkr_from_trading_venue(self, trading_venue: str) -> str:
+        trading_venue = trading_venue.upper()
+        return 'CRYPTO' if trading_venue in SUPPORTED_CRYPTO_EXCHANGES else trading_venue
     
-    def remove_strategy(self, name: str):
-        if name in self.strategies:
-            del self.strategies[name]
-            self.logger.debug(f'removed sub-strategy {name}')
-        else:
-            self.logger.error(f'sub-strategy {name} cannot be found, failed to remove')
+    def get_brokers(self) -> list[BaseBroker]:
+        return list(self.engine.brokers.values())
+    
+    def get_broker(self, bkr: str) -> BaseBroker:
+        return self.engine.get_broker(bkr)
+    
+    def get_broker_from_trading_venue(self, trading_venue: str) -> BaseBroker:
+        bkr = self._derive_bkr_from_trading_venue(trading_venue)
+        return self.get_broker(bkr)
 
+    def get_product(self, trading_venue: str, pdt: str, exch: str='') -> BaseProduct:
+        broker = self.get_broker_from_trading_venue(trading_venue)
+        if broker.name == 'CRYPTO':
+            exch = trading_venue
+            return broker.get_product(exch, pdt)
+        else:
+            return broker.get_product(pdt, exch=exch)
+    
+    def get_account(self, trading_venue: str, acc: str='') -> BaseAccount:
+        trading_venue, acc = trading_venue.upper(), acc.upper()
+        if not acc:
+            acc = next(iter(self.accounts[trading_venue]))
+            self.logger.warning(f"{trading_venue} account not specified, using first account '{acc}'")
+        return self.accounts[trading_venue][acc]
+    
+    def add_account(self, trading_venue: str, acc: str='', **kwargs) -> BaseAccount:
+        trading_venue, acc = trading_venue.upper(), acc.upper()
+        bkr = self._derive_bkr_from_trading_venue(trading_venue)
+        broker = self.engine.add_broker(bkr)
+        if bkr == 'CRYPTO':
+            exch = trading_venue
+            account =  broker.add_account(exch=exch, acc=acc, strat=self.strat, **kwargs)
+        else:
+            account = broker.add_account(acc=acc, strat=self.strat, **kwargs)
+        if account.name not in self.accounts[trading_venue]:
+            self.accounts[trading_venue][account.name] = account
+            self.positions[account] = {}
+            self.balances[account] = {}
+            self.orders[account] = []
+            # TODO make maxlen a variable in config
+            self.trades[account] = deque(maxlen=10)
+            self.logger.debug(f'added account {trading_venue=} {account.name=}')
+        return account
+    
     def add_data(self, trading_venue, base_currency, quote_currency, ptype, *args, **kwargs) -> list[BaseData]:
         from pfund.managers.data_manager import get_resolutions_from_kwargs
         assert not ('resolution' in kwargs and 'resolutions' in kwargs), "Please use either 'resolution' or 'resolutions', not both"
         trading_venue, base_currency, quote_currency, ptype = convert_to_uppercases(trading_venue, base_currency, quote_currency, ptype)
-        bkr = 'CRYPTO' if trading_venue in SUPPORTED_CRYPTO_EXCHANGES else trading_venue
-        broker = self.add_broker(bkr) if bkr not in self.brokers else self.get_broker(bkr)
+        bkr = self._derive_bkr_from_trading_venue(trading_venue)
+        broker = self.engine.add_broker(bkr)
         
         if bkr == 'CRYPTO':
             exch = trading_venue
@@ -209,53 +225,31 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
                 broker.remove_listener(listener=self, listener_key=data, event_type='public')
             if not self.datas[product]:
                 del self.datas[product]
-
-    def get_account(self, trading_venue: str, acc: str=''):
-        if acc:
-            return self.accounts[trading_venue.upper()][acc.upper()]
-        else:
-            assert len(self.accounts[trading_venue.upper()]) == 1, f'{trading_venue} has more than one account, please specify the account name'
-            return getattr(self, f'{trading_venue.lower()}_account')
     
-    def add_account(self, trading_venue: str, acc: str='', **kwargs) -> BaseAccount:
-        trading_venue, acc = trading_venue.upper(), acc.upper()
-        bkr = 'CRYPTO' if trading_venue in SUPPORTED_CRYPTO_EXCHANGES else trading_venue
-        broker = self.add_broker(bkr) if bkr not in self.brokers else self.get_broker(bkr)
-        if bkr == 'CRYPTO':
-            exch = trading_venue
-            account =  broker.add_account(exch=exch, acc=acc, strat=self.strat, **kwargs)
+    def add_strategy(self, strategy: tStrategy, name: str='', is_parallel=False) -> tStrategy:
+        # TODO
+        assert not is_parallel, 'Running strategy in parallel is not supported yet'
+        assert isinstance(strategy, BaseStrategy), \
+            f"strategy '{strategy.__class__.__name__}' is not an instance of BaseStrategy. Please create your strategy using 'class {strategy.__class__.__name__}(pf.Strategy)'"
+        if name:
+            strategy.set_name(name)
+        strategy.set_parallel(is_parallel)
+        strategy.create_logger()
+        strat = strategy.name
+        if strat in self.strategies:
+            raise Exception(f"sub-strategy '{strat}' already exists in strategy '{self.name}'")
+        strategy.add_consumer(self)
+        self.strategies[strat] = strategy
+        self.logger.debug(f"added sub-strategy '{strat}'")
+        return strategy
+    
+    def remove_strategy(self, name: str):
+        if name in self.strategies:
+            del self.strategies[name]
+            self.logger.debug(f'removed sub-strategy {name}')
         else:
-            account = broker.add_account(acc=acc, strat=self.strat, **kwargs)
-
-        if account.name not in self.accounts[trading_venue]:
-            self.accounts[trading_venue][account.name] = account
-            self.positions[account] = {}
-            self.balances[account] = {}
-            self.orders[account] = []
-            # TODO make maxlen a variable in config
-            self.trades[account] = deque(maxlen=10)
-            self.logger.debug(f'added account {trading_venue=} {account.name=}')
-        else:
-            raise Exception(f'Strategy {self.name} already has an account called {acc} set up for {trading_venue=}')
-        return account
-
-    def get_product(self, trading_venue: str, pdt: str, exch: str='') -> BaseProduct:
-        bkr = 'CRYPTO' if trading_venue in SUPPORTED_CRYPTO_EXCHANGES else trading_venue
-        broker = self.get_broker(bkr)
-        if bkr == 'CRYPTO':
-            exch = trading_venue
-            return broker.get_product(exch, pdt)
-        else:
-            return broker.get_product(pdt, exch=exch)
-
-    def get_broker(self, bkr: str) -> BaseBroker:
-        return self.brokers[bkr.upper()]
-
-    def add_broker(self, bkr: str) -> BaseBroker:
-        broker = self.engine.add_broker(bkr)
-        self.brokers[bkr] = broker
-        return broker
-
+            self.logger.error(f'sub-strategy {name} cannot be found, failed to remove')
+            
     def update_positions(self, position):
         self.positions[position.account][position.pdt] = position
         self.on_position(position.account, position)
@@ -283,7 +277,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             strategy.start()
 
     def _subscribe_to_private_channels(self):
-        for broker in self.brokers.values():
+        for broker in self.get_brokers():
             broker.add_listener(listener=self, listener_key=self.strat, event_type='private')
             
     # TODO
@@ -310,9 +304,6 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
                 # self._zmq ...
             self.on_start()
             
-            # TODO: uncomment this line
-            # self._set_aliases()
-            
             self._is_running = True
             self.logger.info(f"strategy '{self.name}' has started")
         else:
@@ -326,7 +317,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
                 # TODO: notice strategy manager it has stopped running
                 pass
                 # self._zmq ...
-            for broker in self.brokers.values():
+            for broker in self.get_brokers():
                 broker.remove_listener(listener=self, listener_key=self.strat, event_type='private')
             for strategy in self.strategies.values():
                 strategy.stop(reason=reason)
@@ -398,28 +389,6 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     Sugar Functions
     ************************************************
     '''
-    # FIXME: update this function, e.g. self.products is removed
-    def _set_aliases(self):
-        for name, products_or_accounts in [('product', self.products), ('account', self.accounts)]:
-            for tv in products_or_accounts:
-                num_product_or_account = len(products_or_accounts[tv])
-                # e.g. if Interactive Brokers has only one account, 
-                # create attributes `self.ib_account` `self.ib_positions` for quicker access
-                if num_product_or_account == 1:
-                    product_or_account = list(products_or_accounts[tv].values())[0]
-                    tv = tv.lower()
-                    setattr(self, f'{tv}_{name}', product_or_account)
-                    if name == 'account':
-                        account = product_or_account
-                        setattr(self, f'{tv}_positions', self.positions[account])
-                        setattr(self, f'{tv}_balances', self.balances[account])
-                        setattr(self, f'{tv}_orders', self.orders[account])
-                        setattr(self, f'{tv}_trades', self.trades[account])
-                    # if also only has one trading_venue, set aliases self.account and self.product
-                    num_tvs = len(products_or_accounts)
-                    if num_tvs == 1:
-                        setattr(self, f'{name}', product_or_account)
-    
     def get_second_bar(self, product: BaseProduct, period: int):
         return self.get_data(product, resolution=f'{period}_SECOND')
     

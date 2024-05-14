@@ -161,10 +161,13 @@ class TradeMixin:
         if listener in self._listeners[listener_key]:
             self._listeners[listener_key].remove(listener)
     
+    def get_products(self) -> list[BaseProduct]:
+        return list(self.datas.keys())
+        
     # TODO
     def add_custom_data(self):
         pass
-    
+
     def get_datas(self) -> list[BaseData]:
         datas = []
         for product in self.datas:
