@@ -1,8 +1,6 @@
 """This is a broker class for Interactive Brokers.
 Conceptually, this is a combination of broker_crypto.py + exchange_base.py in crypto version
 """
-from collections import defaultdict
-
 from pfund.adapter import Adapter
 from pfund.config.configuration import Configuration
 from pfund.const.paths import PROJ_CONFIG_PATH
@@ -18,7 +16,7 @@ from pfund.brokers.ib.ib_api import IBApi
 
 
 class IBBroker(LiveBroker):
-    def __init__(self, env, **configs):
+    def __init__(self, env: str, **configs):
         super().__init__(env, 'IB', **configs)
         config_path = f'{PROJ_CONFIG_PATH}/{self.bkr.lower()}'
         self.configs = Configuration(config_path, 'config')
@@ -102,25 +100,25 @@ class IBBroker(LiveBroker):
         if not exch:
             bccy, qccy, ptype, *args = IBProduct.parse_product_name(pdt)
             exch = self.derive_exch(bccy, qccy, ptype)
-        return self.products[exch.upper()].get(pdt.upper(), None)
+        return self._products[exch.upper()].get(pdt.upper(), None)
 
     def add_product(self, exch, bccy, qccy, ptype, *args, **kwargs):
         assert ptype.upper() in SUPPORTED_PRODUCT_TYPES, f'{self.bkr} product type {ptype} is not supported, {SUPPORTED_PRODUCT_TYPES=}'
         pdt = IBProduct.create_product_name(bccy, qccy, ptype, *args, **kwargs)
         if not (product := self.get_product(exch=exch, pdt=pdt)):
             product = IBProduct(exch, bccy, qccy, ptype, *args, **kwargs)
-            self.products[exch][product.name] = product
+            self._products[exch][product.name] = product
             self._api.add_product(product, **kwargs)
             self.logger.debug(f'added product {product.name}')
         return product
 
     def get_account(self, acc: str) -> IBAccount | None:
-        return self.accounts[self.bkr].get(acc.upper(), None)
+        return self._accounts[self.bkr].get(acc.upper(), None)
 
     def add_account(self, host: str='', port: int=None, client_id: int=None, acc: str='', **kwargs) -> IBAccount:
         if not (account := self.get_account(acc)):
             account = IBAccount(self.env, host=host, port=port, client_id=client_id, acc=acc, **kwargs)
-            self.accounts[self.bkr][account.name] = account
+            self._accounts[self.bkr][account.name] = account
             self.account = account
             self._api.add_account(account)
             self.logger.debug(f'added {account=}')

@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from pfund.datas import BaseData
 
 from pfund.zeromq import ZeroMQ
-from pfund.risk_monitor import RiskMonitor
 from pfund.const.common import SUPPORTED_CRYPTO_EXCHANGES
 from pfund.strategies.strategy_meta import MetaStrategy
 from pfund.utils.utils import convert_to_uppercases, get_engine_class
@@ -57,13 +56,6 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self._last_signal_ts = {}  # {data: ts}
         self._signal_cols = []
         self._num_signal_cols = 0
-        
-        # TODO
-        self.universe = {}  # {trading_venue: universe_object}
-        self.portfolio = None
-        self.investment_profile = None
-        # TODO: risk strategy instead?
-        self.risk_monitor = self.rm = RiskMonitor()
         
         self.params = {}
         self.load_params()
@@ -136,6 +128,9 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     def get_broker(self, bkr: str) -> BaseBroker:
         return self.engine.get_broker(bkr)
     
+    def add_broker(self, bkr: str) -> BaseBroker:
+        return self.engine.add_broker(bkr)
+    
     def get_broker_from_trading_venue(self, trading_venue: str) -> BaseBroker:
         bkr = self._derive_bkr_from_trading_venue(trading_venue)
         return self.get_broker(bkr)
@@ -158,7 +153,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     def add_account(self, trading_venue: str, acc: str='', **kwargs) -> BaseAccount:
         trading_venue, acc = trading_venue.upper(), acc.upper()
         bkr = self._derive_bkr_from_trading_venue(trading_venue)
-        broker = self.engine.add_broker(bkr)
+        broker = self.add_broker(bkr)
         if bkr == 'CRYPTO':
             exch = trading_venue
             account =  broker.add_account(exch=exch, acc=acc, strat=self.strat, **kwargs)
@@ -179,14 +174,14 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         assert not ('resolution' in kwargs and 'resolutions' in kwargs), "Please use either 'resolution' or 'resolutions', not both"
         trading_venue, base_currency, quote_currency, ptype = convert_to_uppercases(trading_venue, base_currency, quote_currency, ptype)
         bkr = self._derive_bkr_from_trading_venue(trading_venue)
-        broker = self.engine.add_broker(bkr)
+        broker = self.add_broker(bkr)
         
         if bkr == 'CRYPTO':
             exch = trading_venue
             datas = broker.add_data(exch, base_currency, quote_currency, ptype, *args, **kwargs)
         else:
             datas = broker.add_data(base_currency, quote_currency, ptype, *args, **kwargs)
-   
+
         for data in datas:
             if data.is_time_based():
                 # do not listen to data thats only used for resampling
@@ -211,7 +206,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     # TODO, for website to remove data from a strategy
     # should check if broker still has listeners, if not, remove the data from broker
     # also need to consider products, need to remove product if no data is left
-    def remove_data(self, product: BaseProduct, resolution: str | None=None):
+    def remove_data(self, product: BaseProduct, resolution: str):
         if datas := self.get_data(product, resolution=resolution):
             datas = list(datas.values()) if not resolution else list(datas)
             broker = self.get_broker(product.bkr)
@@ -389,24 +384,6 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     Sugar Functions
     ************************************************
     '''
-    def get_second_bar(self, product: BaseProduct, period: int):
-        return self.get_data(product, resolution=f'{period}_SECOND')
-    
-    def get_minute_bar(self, product: BaseProduct, period: int):
-        return self.get_data(product, resolution=f'{period}_MINUTE')
-    
-    def get_hour_bar(self, product: BaseProduct, period: int):
-        return self.get_data(product, resolution=f'{period}_HOUR')
-    
-    def get_day_bar(self, product: BaseProduct, period: int):
-        return self.get_data(product, resolution=f'{period}_DAY')
-    
-    def get_week_bar(self, product: BaseProduct, period: int):
-        return self.get_data(product, resolution=f'{period}_WEEK')
-    
-    def get_month_bar(self, product: BaseProduct, period: int):
-        return self.get_data(product, resolution=f'{period}_MONTH')
-    
     def buy(self, account, product, price, quantity, **kwargs):
         order = self.create_order(account, product, 1, quantity, price=price, o_type='LIMIT', **kwargs)
         self.place_orders(account, product, [order])

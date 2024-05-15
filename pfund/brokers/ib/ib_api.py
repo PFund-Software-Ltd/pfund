@@ -36,7 +36,7 @@ class IBApi(IBClient, IBWrapper):
         self._adapter = adapter
         self._full_channels = {'public': [], 'private': []}
         self._ib_params_for_channels_subscription = {}
-        self.products = {}
+        self._products = {}  # {pdt1: product1, pdt2: product2}
         self.account = None
         self._bids = defaultdict(list)
         self._asks = defaultdict(list)
@@ -75,7 +75,7 @@ class IBApi(IBClient, IBWrapper):
         self.logger.debug(f'added account {account.name}')
             
     def add_product(self, product, **kwargs):
-        self.products[product.name] = product
+        self._products[product.name] = product
         self.logger.debug(f'added product {product.name}')
             
     def add_channel(self, channel, type_, product=None, account=None, **kwargs):
@@ -173,7 +173,7 @@ class IBApi(IBClient, IBWrapper):
                 ib_params = self._ib_params_for_channels_subscription[full_channel]
                 if type_ == 'public':
                     channel, pdt, *_ = full_channel.split('.')
-                    product = self.products[pdt]
+                    product = self._products[pdt]
                     if channel == 'orderbook':
                         if self._orderbook_level[pdt] == 1:
                             if product.ptype not in self.PTYPES_WITHOUT_TICK_BY_TICK_DATA:

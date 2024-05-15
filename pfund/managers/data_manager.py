@@ -1,9 +1,15 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.datas.data_base import BaseData
+
 import time
 from collections import defaultdict
 import importlib
 
 from pfund.datas.resolution import Resolution
-from pfund.datas import QuoteData, TickData, BarData, BaseData
+from pfund.datas import QuoteData, TickData, BarData
 from pfund.products.product_base import BaseProduct
 from pfund.managers.base_manager import BaseManager
         
@@ -154,31 +160,23 @@ class DataManager(BaseManager):
     def set_data(self, product: BaseProduct, resolution: Resolution, data: BaseData):
         self._datas[repr(product)][repr(resolution)] = data
 
-    def get_data(self, product: str | BaseProduct, resolution: str | Resolution | None=None) -> dict | BaseData | None:
+    def get_data(self, product: str | BaseProduct, resolution: str | Resolution) -> BaseData | None:
         if isinstance(product, BaseProduct):
             product = repr(product)
         if isinstance(resolution, Resolution):
             resolution = repr(resolution)
-        return self._datas[product] if not resolution else self._datas[product].get(resolution, None)
+        return self._datas[product].get(resolution, None)
     
-    def remove_data(self, product: str | BaseProduct, resolution: str | Resolution | None=None):
-        if isinstance(product, BaseProduct):
-            product = repr(product)
-        if isinstance(resolution, Resolution):
-            resolution = repr(resolution)
-        if not resolution:
-            if product in self._datas:
-                del self._datas[product]
-                self.logger.debug(f'removed {product} data')
-            return []
+    def remove_data(self, product: BaseProduct, resolution: str) -> BaseData:
+        if data := self.get_data(product, resolution):
+            del self._datas[repr(product)][resolution]
+            self.logger.debug(f'removed {product} {resolution} data')
+            return data
         else:
-            if product in self._datas and resolution in self._datas[product]:
-                del self._datas[product][resolution]
-                self.logger.debug(f'removed {product} {resolution=} data')
-            datas: list[BaseData] = list(self.get_data(product).values())
-            return datas
+            raise Exception(f'{product} {resolution} data not found')
 
-    def add_data(self, product: BaseProduct, **kwargs) -> list:        
+    def add_data(self, product: BaseProduct, **kwargs) -> list[BaseData]:
+        datas = []
         # time-based data
         if 'resolution' in kwargs or 'resolutions' in kwargs:
             resolutions: list[Resolution] = get_resolutions_from_kwargs(kwargs)
@@ -188,6 +186,7 @@ class DataManager(BaseManager):
                 if not (data := self.get_data(product, resolution=resolution)):
                     data = self._create_time_based_data(product, resolution, **kwargs)
                     self.set_data(product, resolution, data)
+                    datas.append(data)
             
             resamples = {Resolution(resamplee_resolution): Resolution(resampler_resolution) for resamplee_resolution, resampler_resolution in kwargs.get('resamples', {}).items()}
             default_auto_resample = {'by_official_resolution': True, 'by_highest_resolution': True}
@@ -203,6 +202,7 @@ class DataManager(BaseManager):
                 if not (data_resampler := self.get_data(product, resolution=resampler_resolution)):
                     data_resampler = self._create_time_based_data(product, resampler_resolution)
                 self.set_data(product, resampler_resolution, data_resampler)
+                datas.append(data_resampler)
                 self.logger.debug(f'added {product} data')
                 data_resamplee = self.get_data(product, resolution=resamplee_resolution)
                 data_resamplee.add_resampler(data_resampler)
@@ -213,7 +213,9 @@ class DataManager(BaseManager):
         #     pass
         else:
             raise Exception(f'{product} data resolution(s) must be defined')
-        datas: list[BaseData] = list(self.get_data(product).values())
+        
+        # FIXME: DEPRECATED, to be removed
+        # datas: list[BaseData] = list(self._datas[repr(product)].values())
         return datas
 
     def update_quote(self, product: BaseProduct | str, quote: dict):

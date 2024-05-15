@@ -179,8 +179,8 @@ class TradeMixin:
             resolution = repr(resolution)
         self.datas[product][resolution] = data
 
-    def get_data(self, product: BaseProduct, resolution: str | None=None):
-        return self.datas[product] if not resolution else self.datas[product][resolution]
+    def get_data(self, product: BaseProduct, *, resolution: str) -> BaseData | None:
+        return self.datas[product].get(resolution, None)
     
     def _add_consumer_datas(self, consumer: BaseStrategy | BaseModel, *args, use_consumer_data=False, **kwargs) -> list[BaseData]:
         if not use_consumer_data:
@@ -357,3 +357,26 @@ class TradeMixin:
     def on_stop(self):
         pass
     
+    
+    '''
+    ************************************************
+    Sugar Functions
+    ************************************************
+    '''
+    def get_second_bar(self, product: BaseProduct, period: int):
+        return self.get_data(product, resolution=f'{period}s')
+    
+    def get_minute_bar(self, product: BaseProduct, period: int):
+        return self.get_data(product, resolution=f'{period}m')
+    
+    def get_hour_bar(self, product: BaseProduct, period: int):
+        return self.get_data(product, resolution=f'{period}h')
+    
+    def get_day_bar(self, product: BaseProduct, period: int):
+        return self.get_data(product, resolution=f'{period}d')
+    
+    def get_week_bar(self, product: BaseProduct, period: int):
+        return self.get_data(product, resolution=f'{period}w')
+    
+    def get_month_bar(self, product: BaseProduct, period: int):
+        return self.get_data(product, resolution=f'{period}M')

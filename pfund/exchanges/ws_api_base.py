@@ -37,7 +37,7 @@ class BaseWebsocketApi(ABC):
         self._is_use_private_ws_server = self._check_if_use_private_ws_server()
         self._servers = [self.exch]
         self._full_channels = {'public': [], 'private': []}
-        self._products = {}
+        self._products = {}  # {pdt1: product1, pdt2: product2}
         self._accounts = {}
         self._zmqs = {}
         self._ws_threads = {}

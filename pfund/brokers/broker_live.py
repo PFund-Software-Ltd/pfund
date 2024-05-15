@@ -1,5 +1,11 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.datas.data_base import BaseData
+    from pfund.products.product_base import BaseProduct
+
 from pfund.brokers.broker_base import BaseBroker
-from pfund.products.product_base import BaseProduct
 from pfund.managers import ConnectionManager, DataManager, OrderManager, PortfolioManager, RiskManager
 
 
@@ -47,7 +53,7 @@ class LiveBroker(BaseBroker):
     def get_zmq(self):
         return self._zmq
 
-    def get_data(self, product: BaseProduct, resolution: str | None=None):
+    def get_data(self, product: BaseProduct, resolution: str) -> BaseData | None:
         return self.data_manager.get_data(product, resolution=resolution)
     
     def cancel_all_orders(self, reason=None):

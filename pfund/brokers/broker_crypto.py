@@ -1,29 +1,35 @@
+from __future__ import annotations
+
 import inspect
 import importlib
 from threading import Thread
 
-from pfund.products.product_base import BaseProduct
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.products.product_base import BaseProduct
+    from pfund.orders.order_base import BaseOrder
+    from pfund.exchanges.exchange_base import BaseExchange
+
 from pfund.products import CryptoProduct
-from pfund.orders import BaseOrder, CryptoOrder
+from pfund.orders import CryptoOrder
 from pfund.positions import CryptoPosition
 from pfund.balances import CryptoBalance
 from pfund.accounts import CryptoAccount
 from pfund.utils.utils import convert_to_uppercases
 from pfund.brokers.broker_live import LiveBroker
-from pfund.exchanges.exchange_base import BaseExchange
 from pfund.const.common import SUPPORTED_CRYPTO_EXCHANGES, SUPPORTED_CRYPTO_PRODUCT_TYPES
 
 
 class CryptoBroker(LiveBroker):
-    def __init__(self, env):
+    def __init__(self, env: str):
         super().__init__(env, 'CRYPTO')
         self.exchanges = {}
     
     def start(self, zmq=None):
-        for exch in self.accounts:
+        for exch in self._accounts:
             exchange = self.get_exchange(exch)
             exchange.start()
-            for acc in self.accounts[exch]:
+            for acc in self._accounts[exch]:
                 balances = self.get_balances(exch, acc=acc, is_api_call=True)
                 self.portfolio_manager.update_balances(exch, acc, balances)
                 
@@ -67,12 +73,12 @@ class CryptoBroker(LiveBroker):
         else:
             raise NotImplementedError
 
-    def remove_data(self, product: BaseProduct, resolution: str | None=None):
+    def remove_data(self, product: BaseProduct, resolution: str):
         if not (datas := self.data_manager.remove_data(product, resolution=resolution)):
             self.remove_product(product.exch, product.pdt)
             
     def get_account(self, exch: str, acc: str) -> CryptoAccount | None:
-        return self.accounts[exch.upper()].get(acc.upper(), None)
+        return self._accounts[exch.upper()].get(acc.upper(), None)
     
     def add_account(self, exch: str='', key: str='', secret: str='', acc: str='', **kwargs) -> CryptoAccount:
         assert exch, 'kwarg "exch" must be provided'
@@ -81,14 +87,14 @@ class CryptoBroker(LiveBroker):
             account = CryptoAccount(self.env, exch, key=key, secret=secret, acc=acc, **kwargs)
             exchange = self.add_exchange(exch)
             exchange.add_account(account)
-            self.accounts[exch][account.name] = account
+            self._accounts[exch][account.name] = account
             self.logger.debug(f'added {account=}')
         else:
             self.logger.warning(f'{account=} has already been added, please make sure the account names are not duplicated')
         return account
     
     def get_product(self, exch: str, pdt: str) -> CryptoProduct | None:
-        return self.products[exch.upper()].get(pdt.upper(), None)
+        return self._products[exch.upper()].get(pdt.upper(), None)
 
     def add_product(self, exch, bccy='', qccy='', ptype='', *args, pdt='', **kwargs) -> CryptoProduct:
         assert pdt or (bccy and qccy and ptype), f'Please provide `pdt` or (`bccy` and `qccy` and `ptype`)'
@@ -102,16 +108,16 @@ class CryptoBroker(LiveBroker):
             exchange = self.add_exchange(exch)
             product = exchange.create_product(bccy, qccy, ptype, *args, **kwargs)
             exchange.add_product(product, **kwargs)
-            self.products[exch][product.name] = product
+            self._products[exch][product.name] = product
             self.logger.debug(f'added {product=}')
         return product
     
     def remove_product(self, exch: str, pdt: str):
         exch, pdt = exch.upper(), pdt.upper()
-        if exch in self.products and pdt in self.products[exch]:
-            del self.products[exch][pdt]
-        if not self.products[exch]:
-            del self.products[exch]
+        if exch in self._products and pdt in self._products[exch]:
+            del self._products[exch][pdt]
+        if not self._products[exch]:
+            del self._products[exch]
             self.remove_exchange(exch)
 
     def get_exchange(self, exch: str) -> BaseExchange | None:
@@ -158,8 +164,8 @@ class CryptoBroker(LiveBroker):
 
     def reconcile_orders(self):
         def work():
-            for exch in self.accounts:
-                for acc in self.accounts[exch]:
+            for exch in self._accounts:
+                for acc in self._accounts[exch]:
                     self.get_orders(exch, acc, is_api_call=True)
         func = inspect.stack()[0][3]
         Thread(target=work, name=func+'_thread', daemon=True).start()
@@ -175,8 +181,8 @@ class CryptoBroker(LiveBroker):
 
     def reconcile_trades(self):
         def work():
-            for exch in self.accounts:
-                for acc in self.accounts[exch]:
+            for exch in self._accounts:
+                for acc in self._accounts[exch]:
                     self.get_trades(exch, acc, is_api_call=True)
         func = inspect.stack()[0][3]
         Thread(target=work, name=func+'_thread', daemon=True).start()
@@ -192,8 +198,8 @@ class CryptoBroker(LiveBroker):
 
     def reconcile_balances(self):
         def work():
-            for exch in self.accounts:
-                for acc in self.accounts[exch]:
+            for exch in self._accounts:
+                for acc in self._accounts[exch]:
                     self.get_balances(exch, acc, is_api_call=True)
         func = inspect.stack()[0][3]
         Thread(target=work, name=func+'_thread', daemon=True).start()
@@ -209,8 +215,8 @@ class CryptoBroker(LiveBroker):
 
     def reconcile_positions(self):
         def work():
-            for exch in self.accounts:
-                for acc in self.accounts[exch]:
+            for exch in self._accounts:
+                for acc in self._accounts[exch]:
                     self.get_positions(exch, acc, is_api_call=True)
         func = inspect.stack()[0][3]
         Thread(target=work, name=func+'_thread', daemon=True).start()

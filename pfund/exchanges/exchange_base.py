@@ -33,8 +33,8 @@ class BaseExchange:
             config_path += '/' + self.category
         self.configs = Configuration(config_path, 'config')
         self.adapter = Adapter(config_path, self.configs.load_config_section('adapter'))
-        self.products = {}
-        self.accounts = {}
+        self._products = {}
+        self._accounts = {}
         self.categories = []
         
         # APIs
@@ -49,6 +49,14 @@ class BaseExchange:
         if not self._is_all_configs_ready():
             self._setup_configs()
 
+    @property
+    def products(self):
+        return self._products
+    
+    @property
+    def accounts(self):
+        return self._accounts
+    
     def _load_settings(self):
         settings = self.configs.load_config_section('settings')
         private_channels = settings.get('private_channels', [])
@@ -67,17 +75,17 @@ class BaseExchange:
         return product
 
     def get_product(self, pdt: str) -> CryptoProduct | None:
-        return self.products.get(pdt.upper(), None)
+        return self._products.get(pdt.upper(), None)
 
     def add_product(self, product, **kwargs):
-        self.products[product.name] = product
+        self._products[product.name] = product
         self.logger.debug(f'added product {product.name}')
 
     def get_account(self, acc: str) -> CryptoAccount | None:
-        return self.accounts.get(acc.upper(), None)
+        return self._accounts.get(acc.upper(), None)
     
     def add_account(self, account):
-        self.accounts[account.name] = account
+        self._accounts[account.name] = account
         self._ws_api.add_account(account)
         self.logger.debug(f'added account {account.name}')
 
@@ -230,7 +238,7 @@ class BaseExchange:
         if type_.lower() == 'public':
             assert product
             # need to assert using the exchange.add_product() first so that the product is loaded correctly
-            assert product.pdt in self.products, f"{product.pdt} must be added in the exchange first using exchange.add_product(...)"
+            assert product.pdt in self._products, f"{product.pdt} must be added in the exchange first using exchange.add_product(...)"
             if channel == 'kline':
                 assert 'period' in kwargs and 'timeframe' in kwargs, 'Keyword arguments "period" or/and "timeframe" is missing'
             self._ws_api.add_product(product, **kwargs)
@@ -336,7 +344,7 @@ class BaseExchange:
                     category = params.get('category', '')
                     pdt = self.adapter(epdt, ref_key=category)
                     qty = float(step_into(position, schema['data']['qty'][0]))
-                    if qty == 0 and pdt not in self.products:
+                    if qty == 0 and pdt not in self._products:
                         continue
                     if 'side' in schema:
                         eside = step_into(position, schema['side'])
