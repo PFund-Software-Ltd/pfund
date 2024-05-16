@@ -8,52 +8,31 @@ from collections import defaultdict
 from rich.console import Console
 
 from pfund.universes import BaseUniverse, CryptoUniverse, TradfiUniverse, DefiUniverse
-from pfund.const.common import SUPPORTED_PRODUCT_TYPES, SUPPORTED_CRYPTO_PRODUCT_TYPES
+from pfund.const.common import SUPPORTED_TRADFI_PRODUCT_TYPES, SUPPORTED_CRYPTO_PRODUCT_TYPES
+from pfund.mixins.assets import TradfiAssetsMixin, CryptoAssetsMixin, DefiAssetsMixin
 
 
-class Universe(BaseUniverse):
+class Universe(TradfiAssetsMixin, CryptoAssetsMixin, DefiAssetsMixin, BaseUniverse):
     '''A (unified) universe that combines multiple sub-universes from different brokers.'''
     def __init__(self):
-        super().__init__()
+        BaseUniverse.__init__(self)
         self._sub_universes = {}  # {bkr: universe}
-
-        self.stocks = defaultdict(dict)  # {exch: {pdt: product}}
-        self.futures = defaultdict(dict)
-        self.options = defaultdict(dict)
-        self.cashes = defaultdict(dict)
-        self.spots = self.cryptos = defaultdict(dict)
-        self.bonds = defaultdict(dict)
-        self.funds = defaultdict(dict)
-        self.cmdties = defaultdict(dict)
-        self.perps = defaultdict(dict)
-        self.iperps = defaultdict(dict)
-        self.ifutures = defaultdict(dict)
+        all_assets = {}
+        TradfiAssetsMixin.setup_assets(self)
+        all_assets.update(self._all_assets)
+        CryptoAssetsMixin.setup_assets(self)
+        all_assets.update(self._all_assets)
+        DefiAssetsMixin.setup_assets(self)
+        all_assets.update(self._all_assets)
+        self._all_assets = all_assets
         
-        # TODO: DeFi
-        # self.liquidity_pools = ... (no need to combine dicts)
-        
-        self._all_assets = {
-            # ptype: assets
-            'STK': self.stocks,
-            'FUT': self.futures,
-            'OPT': self.options,
-            'CASH': self.cashes,
-            'CRYPTO': self.cryptos,
-            'BOND': self.bonds,
-            'FUND': self.funds,
-            'CMDTY': self.cmdties,
-            'SPOT': self.spots,
-            'PERP': self.perps,
-            'IPERP': self.iperps,
-            'IFUT': self.ifutures,
-        }
-            
     def initialize(self, products: list[BaseProduct]):
         for bkr in {product.bkr for product in products}:
             products_per_bkr = [product for product in products if product.bkr == bkr]
-            universe = self._add_sub_universe(bkr, products_per_bkr)
+            universe: BaseUniverse = self._add_sub_universe(bkr, products_per_bkr)
             setattr(self, bkr.lower(), universe)
 
+        # TODO: use global() to dynamically create attributes?
         for attr in (
             'stocks', 
             'futures', 
@@ -89,18 +68,21 @@ class Universe(BaseUniverse):
                     combined[key].update(sub_dict)
         return combined
     
-    def _get_assets(self, product_type: str):
-        try:
-            return super()._get_assets(product_type)
-        except KeyError:
-            raise KeyError(f'Invalid {product_type=}, supported asset classes: {SUPPORTED_PRODUCT_TYPES+SUPPORTED_CRYPTO_PRODUCT_TYPES}')
+    def _get_assets(self, ptype: str) -> defaultdict[str, dict[str, BaseProduct]]:
+        ptype = ptype.upper()
+        # TODO: add SUPPORTED_DEFI_PRODUCT_TYPES
+        if ptype not in SUPPORTED_TRADFI_PRODUCT_TYPES + SUPPORTED_CRYPTO_PRODUCT_TYPES:
+            raise KeyError(f'Invalid {ptype=}, supported choices: {SUPPORTED_TRADFI_PRODUCT_TYPES+SUPPORTED_CRYPTO_PRODUCT_TYPES}')
+        else:
+            return self._all_assets[ptype]
     
     def _add_sub_universe(self, bkr: str, products: list[BaseProduct]) -> BaseUniverse:
-        if bkr == 'CRYPTO':
-            universe = CryptoUniverse.from_products(products)
-        elif bkr == 'DEFI':
-            universe = DefiUniverse.from_products(products)
-        else:
-            universe = TradfiUniverse.from_products(products)
-        self._sub_universes[bkr] = universe
-        return universe
+        if bkr not in self._sub_universes:
+            if bkr == 'CRYPTO':
+                universe = CryptoUniverse.from_products(products)
+            elif bkr == 'DEFI':
+                universe = DefiUniverse.from_products(products)
+            else:
+                universe = TradfiUniverse.from_products(products)
+            self._sub_universes[bkr] = universe
+        return self._sub_universes[bkr]

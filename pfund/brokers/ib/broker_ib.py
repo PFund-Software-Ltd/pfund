@@ -4,7 +4,7 @@ Conceptually, this is a combination of broker_crypto.py + exchange_base.py in cr
 from pfund.adapter import Adapter
 from pfund.config.configuration import Configuration
 from pfund.const.paths import PROJ_CONFIG_PATH
-from pfund.const.common import SUPPORTED_PRODUCT_TYPES
+from pfund.const.common import SUPPORTED_TRADFI_PRODUCT_TYPES
 from pfund.products import IBProduct
 from pfund.accounts import IBAccount
 from pfund.orders import IBOrder
@@ -103,7 +103,7 @@ class IBBroker(LiveBroker):
         return self._products[exch.upper()].get(pdt.upper(), None)
 
     def add_product(self, exch, bccy, qccy, ptype, *args, **kwargs):
-        assert ptype.upper() in SUPPORTED_PRODUCT_TYPES, f'{self.bkr} product type {ptype} is not supported, {SUPPORTED_PRODUCT_TYPES=}'
+        assert ptype.upper() in SUPPORTED_TRADFI_PRODUCT_TYPES, f'{self.bkr} product type {ptype} is not supported, {SUPPORTED_TRADFI_PRODUCT_TYPES=}'
         pdt = IBProduct.create_product_name(bccy, qccy, ptype, *args, **kwargs)
         if not (product := self.get_product(exch=exch, pdt=pdt)):
             product = IBProduct(exch, bccy, qccy, ptype, *args, **kwargs)

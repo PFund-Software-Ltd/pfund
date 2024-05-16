@@ -14,9 +14,6 @@ class BaseUniverse:
             universe.add(product)
         return universe
     
-    def _get_assets(self, ptype: str):
-        return self._all_assets[ptype.upper()]
-    
     def get(
         self, 
         ptype: str, 

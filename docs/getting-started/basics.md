@@ -114,10 +114,10 @@ Financial products/instruments are in the format of `XXX_YYY_PTYPE` where
 ```{code-cell}
 :tags: [hide-output]
 
-from pfund.const.common import SUPPORTED_PRODUCT_TYPES
+from pfund.const.common import SUPPORTED_TRADFI_PRODUCT_TYPES
 from pprint import pprint
 
-pprint(SUPPORTED_PRODUCT_TYPES)
+pprint(SUPPORTED_TRADFI_PRODUCT_TYPES)
 ```
 
 #### Crypto
