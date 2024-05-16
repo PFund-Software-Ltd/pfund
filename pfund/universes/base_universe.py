@@ -4,10 +4,9 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
 
 from collections import defaultdict
-from abc import ABC
 
 
-class BaseUniverse(ABC):
+class BaseUniverse:
     @classmethod
     def from_products(cls, products: list[BaseProduct]) -> BaseUniverse:
         universe = cls()

@@ -18,7 +18,7 @@ class DefiUniverse(BaseUniverse):
         self.nfts = {}
         
         self._all_assets = {
-            # ptype: asset_class
+            # ptype: assets
             'LIQUIDITY_POOL': self.liquidity_pools,
             'LENDING_PLATFORM': self.lending_platforms,
             'YIELD_FARM': self.yield_farms,

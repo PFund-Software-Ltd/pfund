@@ -12,13 +12,14 @@ from pfund.strategies.allocation_strategy import AllocationStrategy
 from pfund.utils.envs import backtest
 from pfund.portfolios import Portfolio
 from pfund.universes import Universe
+from pfund.investment_profile import InvestmentProfile
 
 
 class PortfolioStrategy(BaseStrategy):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # TODO: set_investment_profile()?
-        self._profile = None
+        self._profile = InvestmentProfile()
         self._universe = Universe()
         self._portfolio = Portfolio()
         self.rebalancing_strategy: RebalancingStrategy | None = None

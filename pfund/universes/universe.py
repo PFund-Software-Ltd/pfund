@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
@@ -17,30 +16,24 @@ class Universe(BaseUniverse):
     def __init__(self):
         super().__init__()
         self._sub_universes = {}  # {bkr: universe}
-            
-    def initialize(self, products: list[BaseProduct]):
-        products_per_bkr = {bkr: [product for product in products if product.bkr == bkr] for bkr in {product.bkr for product in products}}
-        for bkr, products in products_per_bkr.items():
-            self._add_sub_universe(bkr, products)
-        
-        self.stocks = self.combine_dicts(*(u.stocks for u in self._sub_universes.values() if hasattr(u, 'stocks')))
-        self.futures = self.combine_dicts(*(u.futures for u in self._sub_universes.values() if hasattr(u, 'futures')))
-        self.options = self.combine_dicts(*(u.options for u in self._sub_universes.values() if hasattr(u, 'options')))
-        self.cashes = self.combine_dicts(*(u.cashes for u in self._sub_universes.values() if hasattr(u, 'cashes')))
-        self.spots = self.cryptos = self.combine_dicts(*(u.cryptos for u in self._sub_universes.values() if hasattr(u, 'cryptos')))
-        self.bonds = self.combine_dicts(*(u.bonds for u in self._sub_universes.values() if hasattr(u, 'bonds')))
-        self.funds = self.combine_dicts(*(u.funds for u in self._sub_universes.values() if hasattr(u, 'funds')))
-        self.cmdties = self.combine_dicts(*(u.cmdties for u in self._sub_universes.values() if hasattr(u, 'cmdties')))
-        
-        self.perps = self.combine_dicts(*(u.perps for u in self._sub_universes.values() if hasattr(u, 'perps')))
-        self.iperps = self.combine_dicts(*(u.iperps for u in self._sub_universes.values() if hasattr(u, 'iperps')))
-        self.ifutures = self.combine_dicts(*(u.ifutures for u in self._sub_universes.values() if hasattr(u, 'ifutures')))
+
+        self.stocks = defaultdict(dict)  # {exch: {pdt: product}}
+        self.futures = defaultdict(dict)
+        self.options = defaultdict(dict)
+        self.cashes = defaultdict(dict)
+        self.spots = self.cryptos = defaultdict(dict)
+        self.bonds = defaultdict(dict)
+        self.funds = defaultdict(dict)
+        self.cmdties = defaultdict(dict)
+        self.perps = defaultdict(dict)
+        self.iperps = defaultdict(dict)
+        self.ifutures = defaultdict(dict)
         
         # TODO: DeFi
         # self.liquidity_pools = ... (no need to combine dicts)
         
         self._all_assets = {
-            # ptype: asset_class
+            # ptype: assets
             'STK': self.stocks,
             'FUT': self.futures,
             'OPT': self.options,
@@ -54,6 +47,29 @@ class Universe(BaseUniverse):
             'IPERP': self.iperps,
             'IFUT': self.ifutures,
         }
+            
+    def initialize(self, products: list[BaseProduct]):
+        for bkr in {product.bkr for product in products}:
+            products_per_bkr = [product for product in products if product.bkr == bkr]
+            universe = self._add_sub_universe(bkr, products_per_bkr)
+            setattr(self, bkr.lower(), universe)
+
+        for attr in (
+            'stocks', 
+            'futures', 
+            'options', 
+            'cashes', 
+            'cryptos', 
+            'bonds', 
+            'funds', 
+            'cmdties', 
+            'perps', 
+            'iperps', 
+            'ifutures'
+        ):
+            setattr(self, attr, self.combine_dicts(*(getattr(uni, attr) for uni in self._sub_universes.values() if hasattr(uni, attr))))
+            if attr == 'cryptos':
+                self.spots = self.cryptos
     
     @staticmethod
     # Function to combine nested dictionaries without copying
@@ -79,7 +95,7 @@ class Universe(BaseUniverse):
         except KeyError:
             raise KeyError(f'Invalid {product_type=}, supported asset classes: {SUPPORTED_PRODUCT_TYPES+SUPPORTED_CRYPTO_PRODUCT_TYPES}')
     
-    def _add_sub_universe(self, bkr: str, products: list[BaseProduct]):
+    def _add_sub_universe(self, bkr: str, products: list[BaseProduct]) -> BaseUniverse:
         if bkr == 'CRYPTO':
             universe = CryptoUniverse.from_products(products)
         elif bkr == 'DEFI':
@@ -87,4 +103,4 @@ class Universe(BaseUniverse):
         else:
             universe = TradfiUniverse.from_products(products)
         self._sub_universes[bkr] = universe
-        setattr(self, bkr.lower(), universe)
+        return universe

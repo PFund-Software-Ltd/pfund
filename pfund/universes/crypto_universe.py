@@ -14,7 +14,7 @@ class CryptoUniverse(BaseUniverse):
         self.ifutures = defaultdict(dict)
         self.options = defaultdict(dict)
         self._all_assets = {
-            # ptype: asset_class
+            # ptype: assets
             'SPOT': self.spots,
             'PERP': self.perps,
             'IPERP': self.iperps,
@@ -23,9 +23,8 @@ class CryptoUniverse(BaseUniverse):
             'OPT': self.options,
         }
 
-    def _get_assets(self, product_type: str):
+    def _get_assets(self, ptype: str):
         try:
-            return super()._get_assets(product_type)
+            return super()._get_assets(ptype)
         except KeyError:
-            raise KeyError(f'Invalid {product_type=}, {SUPPORTED_CRYPTO_PRODUCT_TYPES=}')
-    
+            raise KeyError(f'Invalid {ptype=}, {SUPPORTED_CRYPTO_PRODUCT_TYPES=}')
