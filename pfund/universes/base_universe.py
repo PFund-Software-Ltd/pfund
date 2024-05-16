@@ -1,39 +1,63 @@
 from __future__ import annotations
-
-from abc import ABC
-
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
 
+from collections import defaultdict
+from abc import ABC
+
 
 class BaseUniverse(ABC):
-    def get_asset_class(self, product_type: str):
-        return self._assets[product_type]
+    @classmethod
+    def from_products(cls, products: list[BaseProduct]) -> BaseUniverse:
+        universe = cls()
+        for product in products:
+            universe.add(product)
+        return universe
     
+    def _get_assets(self, ptype: str):
+        return self._all_assets[ptype.upper()]
+    
+    def get(
+        self, 
+        ptype: str, 
+        exch: str='', 
+        pdt: str=''
+    ) -> defaultdict[str, dict[str, BaseProduct]] | dict[str, BaseProduct] | BaseProduct | None:
+        assets = self._get_assets(ptype)
+        exch, pdt = exch.upper(), pdt.upper()
+        if not exch and not pdt:
+            return assets
+        elif exch and not pdt:
+            return assets.get(exch, None)
+        elif exch and pdt:
+            return assets[exch].get(pdt, None)
+        else:  # not exch and pdt
+            return {exch: product for exch, pdt_to_product in assets.items() for product in pdt_to_product.values() if product.name == pdt}
+            
     def add(self, product: BaseProduct):
-        asset_class: dict = self.get_asset_class(product.ptype)
-        asset_class[product.exch][product.name] = product
+        assets: dict = self._get_assets(product.ptype)
+        assets[product.exch][product.name] = product
     
     def update(self, product: BaseProduct):
-        asset_class: dict = self.get_asset_class(product.ptype)
-        if repr(product) in asset_class:
-            asset_class[product.exch][product.name] = product
+        assets: dict = self._get_assets(product.ptype)
+        if self.has(product):
+            assets[product.exch][product.name] = product
         else:
-            raise ValueError(f'{product} not in {asset_class}')
-    
+            raise ValueError(f'{product} not in {assets}')
+     
     def has(self, product: BaseProduct) -> bool:
-        asset_class: dict = self.get_asset_class(product.ptype)
-        return product.exch in asset_class and product.name in asset_class[product.exch]
+        assets: dict = self._get_assets(product.ptype)
+        return product.exch in assets and product.name in assets[product.exch]
     
     def remove(self, product: BaseProduct):
-        asset_class: dict = self.get_asset_class(product.ptype)
+        assets: dict = self._get_assets(product.ptype)
         if self.has(product):
-            del asset_class[product.exch][product.name]
+            del assets[product.exch][product.name]
         else:
-            raise ValueError(f'{product} not in {asset_class}')
+            raise ValueError(f'{product} not in {assets}')
     
     # TODO: add more functionalities, e.g. 
-    # - get_products_by_risk_level(asset_class)
+    # - get_products_by_risk_level(assets)
     # - get_stocks_by_sector()
     # - ...

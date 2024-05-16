@@ -17,7 +17,7 @@ class DefiUniverse(BaseUniverse):
         self.indexes = {}
         self.nfts = {}
         
-        self._assets = {
+        self._all_assets = {
             # ptype: asset_class
             'LIQUIDITY_POOL': self.liquidity_pools,
             'LENDING_PLATFORM': self.lending_platforms,

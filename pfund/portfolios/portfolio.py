@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 class Portfolio:
     def __init__(self, positions, balances):
-        self.stocks = {}
+        self.stocks = {}  # {exch: {pdt: position}}
         self.futures = {}
         self.options = {}
     
@@ -22,6 +22,12 @@ class Portfolio:
     
     def add_balance(self, balance: BaseBalance):
         pass
+    
+    # TODO: add more functionalities, e.g.
+    # - get_total_exposure(unit='USD')
+    # - get_positions_by_exposure()
+    # - get_exposures_by_asset_class()
+    # - ...
     
     
     

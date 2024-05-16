@@ -1,0 +1,2 @@
+class BasePortfolio:
+    pass

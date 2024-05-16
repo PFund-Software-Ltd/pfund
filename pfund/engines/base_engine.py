@@ -105,13 +105,11 @@ class BaseEngine(Singleton):
 
     # conditional typing, returns the exact type of broker
     @overload
-    def get_broker(self, bkr: Literal['CRYPTO']) -> CryptoBroker:
-        ...
+    def get_broker(self, bkr: Literal['CRYPTO']) -> CryptoBroker: ...
         
     # conditional typing, returns the exact type of broker
     @overload
-    def get_broker(self, bkr: Literal['IB']) -> IBBroker:
-        ...
+    def get_broker(self, bkr: Literal['IB']) -> IBBroker: ...
 
     def get_broker(self, bkr: Literal[tSUPPORTED_BROKERS]) -> BaseBroker:
         return self.brokers[bkr.upper()]
