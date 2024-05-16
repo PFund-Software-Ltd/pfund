@@ -11,6 +11,11 @@ class Portfolio:
         self.stocks = {}
         self.futures = {}
         self.options = {}
+    
+    # TODO
+    @classmethod
+    def from_positions_and_balances(cls, positions, balances):
+        return cls(positions, balances)
 
     def add_position(self, position: BasePosition):
         pass

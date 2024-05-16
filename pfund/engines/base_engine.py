@@ -4,16 +4,16 @@ import os
 import logging
 import importlib
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, overload
 if TYPE_CHECKING:
     from pfund.types.core import tStrategy
-    from pfund.types.common_literals import tSUPPORTED_DATA_TOOLS, tSUPPORTED_ENVIRONMENTS
+    from pfund.types.common_literals import tSUPPORTED_DATA_TOOLS, tSUPPORTED_ENVIRONMENTS, tSUPPORTED_BROKERS
     
 from rich.console import Console
 
 from pfund.utils.utils import Singleton
 from pfund.strategies.strategy_base import BaseStrategy
-from pfund.brokers.broker_base import BaseBroker
+from pfund.brokers import BaseBroker, CryptoBroker, IBBroker
 from pfund.managers.strategy_manager import StrategyManager
 from pfund.const.common import SUPPORTED_ENVIRONMENTS, SUPPORTED_BROKERS, SUPPORTED_DATA_TOOLS
 from pfund.config_handler import ConfigHandler
@@ -103,10 +103,20 @@ class BaseEngine(Singleton):
     def remove_strategy(self, strat: str):
         return self.strategy_manager.remove_strategy(strat)
 
-    def get_broker(self, bkr: str) -> BaseBroker:
+    # conditional typing, returns the exact type of broker
+    @overload
+    def get_broker(self, bkr: Literal['CRYPTO']) -> CryptoBroker:
+        ...
+        
+    # conditional typing, returns the exact type of broker
+    @overload
+    def get_broker(self, bkr: Literal['IB']) -> IBBroker:
+        ...
+
+    def get_broker(self, bkr: Literal[tSUPPORTED_BROKERS]) -> BaseBroker:
         return self.brokers[bkr.upper()]
     
-    def get_Broker(self, bkr: str) -> type[BaseBroker]:
+    def get_Broker(self, bkr: Literal[tSUPPORTED_BROKERS]) -> type[BaseBroker]:
         bkr = bkr.upper()
         assert bkr in SUPPORTED_BROKERS, f'broker {bkr} is not supported'
         if bkr == 'CRYPTO':

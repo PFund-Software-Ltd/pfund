@@ -4,13 +4,14 @@ import os
 from collections import defaultdict, deque, OrderedDict
 from abc import ABC
 
-from typing import Literal, TYPE_CHECKING
+from typing import Literal, TYPE_CHECKING, overload
 if TYPE_CHECKING:
-    from pfund.brokers.broker_base import BaseBroker
+    from pfund.types.common_literals import tSUPPORTED_TRADING_VENUES, tSUPPORTED_BROKERS, tSUPPORTED_CRYPTO_EXCHANGES
+    from pfund.brokers import BaseBroker, CryptoBroker, IBBroker
     from pfund.datas.data_bar import Bar
     from pfund.types.core import tStrategy
-    from pfund.products.product_base import BaseProduct
-    from pfund.accounts.account_base import BaseAccount
+    from pfund.products import BaseProduct, CryptoProduct, IBProduct
+    from pfund.accounts import BaseAccount, CryptoAccount, IBAccount
     from pfund.orders.order_base import BaseOrder
     from pfund.datas import BaseData
 
@@ -86,7 +87,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             'models': [model.to_dict() for model in self.models.values()],
         }
     
-    def get_trading_venues(self) -> list[str]:
+    def get_trading_venues(self) -> list[Literal[tSUPPORTED_TRADING_VENUES]]:
         return list(self.accounts.keys())
     
     def set_name(self, name: str):
@@ -118,39 +119,68 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self._zmq.stop()
         self._zmq = None
     
-    def _derive_bkr_from_trading_venue(self, trading_venue: str) -> str:
+    def _derive_bkr_from_trading_venue(self, trading_venue: Literal[tSUPPORTED_TRADING_VENUES]) -> Literal[tSUPPORTED_BROKERS]:
         trading_venue = trading_venue.upper()
         return 'CRYPTO' if trading_venue in SUPPORTED_CRYPTO_EXCHANGES else trading_venue
     
     def get_brokers(self) -> list[BaseBroker]:
         return list(self.engine.brokers.values())
+
+    # conditional typing, returns the exact type of broker
+    @overload
+    def get_broker(self, bkr: Literal['CRYPTO']) -> CryptoBroker:
+        ...
+        
+    # conditional typing, returns the exact type of broker
+    @overload
+    def get_broker(self, bkr: Literal['IB']) -> IBBroker:
+        ...
     
-    def get_broker(self, bkr: str) -> BaseBroker:
+    def get_broker(self, bkr: Literal[tSUPPORTED_BROKERS]) -> BaseBroker:
         return self.engine.get_broker(bkr)
     
-    def add_broker(self, bkr: str) -> BaseBroker:
+    def add_broker(self, bkr: Literal[tSUPPORTED_BROKERS]) -> BaseBroker:
         return self.engine.add_broker(bkr)
     
-    def get_broker_from_trading_venue(self, trading_venue: str) -> BaseBroker:
+    def get_broker_from_trading_venue(self, trading_venue: Literal[tSUPPORTED_TRADING_VENUES]) -> BaseBroker:
         bkr = self._derive_bkr_from_trading_venue(trading_venue)
         return self.get_broker(bkr)
 
-    def get_product(self, trading_venue: str, pdt: str, exch: str='') -> BaseProduct:
+    @overload
+    def get_product(self, trading_venue: Literal[tSUPPORTED_CRYPTO_EXCHANGES], pdt: str, exch: str='') -> CryptoProduct | None:
+        ...
+        
+    @overload
+    def get_product(self, trading_venue: Literal['IB'], pdt: str, exch: str='') -> IBProduct | None:
+        ...
+    
+    def get_product(self, trading_venue: Literal[tSUPPORTED_TRADING_VENUES], pdt: str, exch: str='') -> BaseProduct | None:
         broker = self.get_broker_from_trading_venue(trading_venue)
         if broker.name == 'CRYPTO':
             exch = trading_venue
-            return broker.get_product(exch, pdt)
+            product: BaseProduct | None = broker.get_product(exch, pdt)
         else:
-            return broker.get_product(pdt, exch=exch)
+            product: BaseProduct | None = broker.get_product(pdt, exch=exch)
+        if product and product not in self.datas:
+            self.logger.warning(f"{self.name} is getting '{product}' that is not in its datas")
+        return product
     
-    def get_account(self, trading_venue: str, acc: str='') -> BaseAccount:
+    @overload
+    def get_account(self, trading_venue: Literal[tSUPPORTED_CRYPTO_EXCHANGES], acc: str='') -> CryptoAccount:
+        ...
+        
+    @overload
+    def get_account(self, trading_venue: Literal['IB'], acc: str='') -> IBAccount:
+        ...
+    
+    def get_account(self, trading_venue: Literal[tSUPPORTED_TRADING_VENUES], acc: str='') -> BaseAccount:
         trading_venue, acc = trading_venue.upper(), acc.upper()
         if not acc:
             acc = next(iter(self.accounts[trading_venue]))
             self.logger.warning(f"{trading_venue} account not specified, using first account '{acc}'")
         return self.accounts[trading_venue][acc]
     
-    def add_account(self, trading_venue: str, acc: str='', **kwargs) -> BaseAccount:
+    def add_account(self, trading_venue: Literal[tSUPPORTED_TRADING_VENUES], acc: str='', **kwargs) -> BaseAccount:
         trading_venue, acc = trading_venue.upper(), acc.upper()
         bkr = self._derive_bkr_from_trading_venue(trading_venue)
         broker = self.add_broker(bkr)
@@ -169,7 +199,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             self.logger.debug(f'added account {trading_venue=} {account.name=}')
         return account
     
-    def add_data(self, trading_venue, base_currency, quote_currency, ptype, *args, **kwargs) -> list[BaseData]:
+    def add_data(self, trading_venue: Literal[tSUPPORTED_TRADING_VENUES], base_currency, quote_currency, ptype, *args, **kwargs) -> list[BaseData]:
         from pfund.managers.data_manager import get_resolutions_from_kwargs
         assert not ('resolution' in kwargs and 'resolutions' in kwargs), "Please use either 'resolution' or 'resolutions', not both"
         trading_venue, base_currency, quote_currency, ptype = convert_to_uppercases(trading_venue, base_currency, quote_currency, ptype)
@@ -304,7 +334,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         else:
             self.logger.warning(f'strategy {self.name} has already started')
         
-    def stop(self, reason=''):
+    def stop(self, reason: str=''):
         if self.is_running():
             self._is_running = False
             self.on_stop()
@@ -322,7 +352,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         else:
             self.logger.warning(f'strategy {self.name} has already stopped')
 
-    def create_order(self, account: BaseAccount, product: BaseProduct, side: int, quantity: float, price=None, **kwargs):
+    def create_order(self, account: BaseAccount, product: BaseProduct, side: int, quantity: float, price: float | None=None, **kwargs):
         broker = self.get_broker(account.bkr)
         return broker.create_order(account, product, side, quantity, price=price, **kwargs)
     

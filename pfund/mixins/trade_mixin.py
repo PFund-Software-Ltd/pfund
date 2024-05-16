@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import torch
     import numpy as np
+    import pandas as pd
+    import polars as pl
     from pfund.types.core import tModel, tIndicator, tFeature
     from pfund.datas.data_base import BaseData
     from pfund.strategies.strategy_base import BaseStrategy
@@ -61,7 +63,7 @@ class TradeMixin:
         product: str | None=None, 
         resolution: str | None=None, 
         copy: bool=True
-    ):
+    ) -> pd.DataFrame | pl.LazyFrame | None:
         return self._data_tool.get_df(
             start_idx=start_idx, 
             end_idx=end_idx, 
@@ -117,7 +119,7 @@ class TradeMixin:
         return datetime.datetime.now(tz=datetime.timezone.utc)
     
     @staticmethod
-    def get_delay(ts):
+    def get_delay(ts: float) -> float:
         return time.time() - ts
     
     def is_running(self):
@@ -135,14 +137,14 @@ class TradeMixin:
     def get_default_name(self):
         return self.__class__.__name__
     
-    def get_default_signal_cols(self, num_cols: int):
+    def get_default_signal_cols(self, num_cols: int) -> list[str]:
         if num_cols == 1:
             columns = [self.name]
         else:
             columns = [f'{self.name}-{i}' for i in range(num_cols)]
         return columns
    
-    def get_signal_cols(self):
+    def get_signal_cols(self) -> list[str]:
         return self._signal_cols
     
     def set_signal_cols(self, columns: list[str]):
@@ -363,20 +365,20 @@ class TradeMixin:
     Sugar Functions
     ************************************************
     '''
-    def get_second_bar(self, product: BaseProduct, period: int):
+    def get_second_bar(self, product: BaseProduct, period: int) -> BarData | None:
         return self.get_data(product, resolution=f'{period}s')
     
-    def get_minute_bar(self, product: BaseProduct, period: int):
+    def get_minute_bar(self, product: BaseProduct, period: int) -> BarData | None:
         return self.get_data(product, resolution=f'{period}m')
     
-    def get_hour_bar(self, product: BaseProduct, period: int):
+    def get_hour_bar(self, product: BaseProduct, period: int) -> BarData | None:
         return self.get_data(product, resolution=f'{period}h')
     
-    def get_day_bar(self, product: BaseProduct, period: int):
+    def get_day_bar(self, product: BaseProduct, period: int) -> BarData | None:
         return self.get_data(product, resolution=f'{period}d')
     
-    def get_week_bar(self, product: BaseProduct, period: int):
+    def get_week_bar(self, product: BaseProduct, period: int) -> BarData | None:
         return self.get_data(product, resolution=f'{period}w')
     
-    def get_month_bar(self, product: BaseProduct, period: int):
+    def get_month_bar(self, product: BaseProduct, period: int) -> BarData | None:
         return self.get_data(product, resolution=f'{period}M')
