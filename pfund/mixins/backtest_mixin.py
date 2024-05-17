@@ -1,9 +1,5 @@
 from __future__ import annotations
-
-import time
-import copy
-
-from typing import TYPE_CHECKING 
+from typing import TYPE_CHECKING, overload
 if TYPE_CHECKING:
     import torch
     import pandas as pd
@@ -14,6 +10,9 @@ if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
     from pfund.products.product_base import BaseProduct
     from pfund.strategies.strategy_base import BaseStrategy
+
+import time
+import copy
 
 import numpy as np
 
@@ -212,6 +211,9 @@ class BacktestMixin:
                     self._add_raw_df(data, df)
                     break
         return datas
+    
+    @overload
+    def dump(self, signal_df: pd.DataFrame | pl.LazyFrame): ...
         
     def add_model(
         self, 
