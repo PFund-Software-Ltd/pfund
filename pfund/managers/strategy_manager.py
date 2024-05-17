@@ -53,7 +53,7 @@ def _start_process(strategy: BaseStrategy, stop_flag: Value):
             strategy.stop(reason='stop process')
             strategy.stop_zmq()
     except:
-        strategy.logger.exception(f'{strategy.name} _start_process exception:')
+        strategy.logger.exception(f'{strategy.tname} _start_process exception:')
 
 
 class StrategyManager:
@@ -88,9 +88,9 @@ class StrategyManager:
         strategy.create_logger()
         strat = strategy.name
         if strat in self.strategies:
-            raise Exception(f"strategy '{strat}' already exists")
+            raise Exception(f"'{strategy.tname}' already exists")
         self.strategies[strat] = strategy
-        self.logger.debug(f"added strategy '{strat}'")
+        self.logger.debug(f"added '{strategy.tname}'")
         return strategy
 
     def remove_strategy(self, strat: str):

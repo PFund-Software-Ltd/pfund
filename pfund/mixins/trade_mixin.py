@@ -113,6 +113,14 @@ class TradeMixin:
     def GROUP(self):
         return self.dtl.GROUP
     
+    @property
+    def tname(self):
+        '''Add type to the name if it is not already there.'''
+        if self.type not in self.name:
+            return f"{self.name}_{self.type}"
+        else:
+            return self.name
+    
     @staticmethod
     def dt(ts: float):
         return convert_ts_to_dt(ts)
@@ -279,10 +287,10 @@ class TradeMixin:
             model.set_signal_cols(signal_cols)
         mdl = model.name
         if mdl in self.models:
-            raise Exception(f"{model.name} already exists in {self.name}")
+            raise Exception(f"{model.tname} already exists in {self.tname}")
         model._add_consumer(self)
         self.models[mdl] = model
-        self.logger.debug(f"added {model.name}")
+        self.logger.debug(f"added {model.tname}")
         return model
     
     def remove_model(self, name: str):
