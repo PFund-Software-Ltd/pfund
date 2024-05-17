@@ -112,5 +112,5 @@ class TaIndicator(BaseIndicator):
         return df.to_numpy()
 
     # TODO
-    def _predict_polars(self):
+    def _predict_polars(self, X):
         pass

@@ -59,23 +59,23 @@ class LiveBroker(BaseBroker):
     def cancel_all_orders(self, reason=None):
         print(f'broker cancel_all_orders, reason={reason}')
 
-    def add_listener(self, listener, listener_key, event_type):
+    def _add_listener(self, listener, listener_key, event_type):
         if event_type == 'public':
             # add listener for public events, e.g. quote, tick etc.
-            self.data_manager.add_listener(listener, listener_key)
+            self.data_manager._add_listener(listener, listener_key)
         else:
             # add listener for private events, e.g. order, trade, balance, position
             for manager in [self.rm, self.cm, self.om, self.pm]:
-                manager.add_listener(listener, listener_key)
+                manager._add_listener(listener, listener_key)
     
-    def remove_listener(self, listener, listener_key, event_type):
+    def _remove_listener(self, listener, listener_key, event_type):
         if event_type == 'public':
             # remove listener for public events, e.g. quote, tick etc.
-            self.data_manager.remove_listener(listener, listener_key)
+            self.data_manager._remove_listener(listener, listener_key)
         else:
             # remove listener for private events, e.g. order, trade, balance, position
             for manager in [self.rm, self.cm, self.om, self.pm]:
-                manager.remove_listener(listener, listener_key)
+                manager._remove_listener(listener, listener_key)
 
     def distribute_msgs(self, channel, topic, info):
         if channel == 1:

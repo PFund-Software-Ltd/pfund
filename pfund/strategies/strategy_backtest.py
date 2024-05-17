@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.types.core import tStrategy
@@ -31,9 +30,6 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
         def add_strategy(self, strategy: tStrategy, name: str='', is_parallel=False) -> BacktestMixin | tStrategy:
             strategy = BacktestStrategy(type(strategy), *strategy._args, **strategy._kwargs)
             return super().add_strategy(strategy, name=name, is_parallel=is_parallel)
-        
-        def _check_if_dummy_strategy(self):
-            return self.name == '_dummy'
         
         def on_start(self):
             if not self.accounts:

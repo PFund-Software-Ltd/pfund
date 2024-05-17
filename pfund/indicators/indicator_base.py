@@ -42,7 +42,7 @@ class BaseIndicator(BaseModel):
     def get_default_name(self):
         return self.get_indicator_name()
     
-    def predict(self, *args, **kwargs):
+    def predict(self, X: pd.DataFrame | pl.LazyFrame, *args, **kwargs):
         raise NotImplementedError
     indicate = predict
 

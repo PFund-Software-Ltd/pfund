@@ -154,15 +154,15 @@ class TradeMixin:
         self._signal_cols = [f'{self.name}-{col}' if not col.startswith(self.name) else col for col in columns]
         self._num_signal_cols = len(columns)
         
-    def add_consumer(self, consumer: BaseStrategy | BaseModel):
+    def _add_consumer(self, consumer: BaseStrategy | BaseModel):
         if consumer not in self._consumers:
             self._consumers.append(consumer)
             
-    def add_listener(self, listener: BaseStrategy | BaseModel, listener_key: BaseData):
+    def _add_listener(self, listener: BaseStrategy | BaseModel, listener_key: BaseData):
         if listener not in self._listeners[listener_key]:
             self._listeners[listener_key].append(listener)
     
-    def remove_listener(self, listener: BaseStrategy | BaseModel, listener_key: BaseData):
+    def _remove_listener(self, listener: BaseStrategy | BaseModel, listener_key: BaseData):
         if listener in self._listeners[listener_key]:
             self._listeners[listener_key].remove(listener)
     
@@ -224,22 +224,18 @@ class TradeMixin:
     def get_data(self, product: BaseProduct, *, resolution: str) -> BaseData | None:
         return self.datas[product].get(resolution, None)
     
-    def _add_consumer_datas(self, consumer: BaseStrategy | BaseModel, *args, use_consumer_data=False, **kwargs) -> list[BaseData]:
-        if not use_consumer_data:
-            consumer_datas = consumer.add_data(*args, **kwargs)
-        else:
-            consumer_datas = consumer.get_datas()
-        for data in consumer_datas:
-            self.set_data(data.product, data.resolution, data)
-            consumer.add_listener(listener=self, listener_key=data)
-        return consumer_datas
-    
-    def _add_consumers_datas_if_no_data(self):
+    def _add_consumers_datas_if_no_data(self) -> list[BaseData]:
         if self.datas:
-            return
+            return []
         self.logger.info(f"No data for {self.name}, adding datas from consumers {[consumer.name for consumer in self._consumers]}")
+        datas = []
         for consumer in self._consumers:
-            self._add_consumer_datas(consumer, use_consumer_data=True)
+            for data in consumer.get_datas():
+                self.set_data(data.product, data.resolution, data)
+                consumer._add_listener(listener=self, listener_key=data)
+                if data not in datas:
+                    datas.append(data)
+        return datas
     
     def get_model(self, name: str) -> BaseModel:
         return self.models[name]
@@ -284,7 +280,7 @@ class TradeMixin:
         mdl = model.name
         if mdl in self.models:
             raise Exception(f"{model.name} already exists in {self.name}")
-        model.add_consumer(self)
+        model._add_consumer(self)
         self.models[mdl] = model
         self.logger.debug(f"added {model.name}")
         return model

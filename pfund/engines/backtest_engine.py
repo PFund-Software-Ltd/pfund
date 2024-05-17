@@ -155,19 +155,21 @@ class BacktestEngine(BaseEngine):
         assert not is_non_dummy_strategy_exist, 'Please use strategy.add_model(...) instead of engine.add_model(...) when a strategy is already created'
         if not (strategy := self.strategy_manager.get_strategy('_dummy')):
             strategy = self.add_strategy(BaseStrategy(), name='_dummy')
+            strategy.set_is_dummy_strategy(True)
             # add event driven functions to dummy strategy to avoid NotImplementedError in backtesting
             empty_function = lambda *args, **kwargs: None
             for func in strategy.REQUIRED_FUNCTIONS:
                 setattr(strategy, func, empty_function)
         assert not strategy.models, 'Adding more than 1 model to dummy strategy in backtesting is not supported, you should train and dump your models one by one'
         model = strategy.add_model(
-            model, 
-            name=name, 
-            min_data=min_data, 
-            max_data=max_data, 
+            model,
+            name=name,
+            min_data=min_data,
+            max_data=max_data,
             group_data=group_data,
             signal_cols=signal_cols,
         )
+        model.set_is_dummy_strategy(True)
         return model
     
     def add_feature(
@@ -328,11 +330,21 @@ class BacktestEngine(BaseEngine):
         backtest_history['result'] = output_file_path
         self._write_json(f'{backtest_name}.json', backtest_history)
         return backtest_history
+    
+    def _assert_backtest_function(self, backtestee: BaseStrategy | BaseModel):
+        assert self.mode == 'vectorized', 'assert_backtest_function() is only for vectorized backtesting'
+        if not hasattr(backtestee, 'backtest'):
+            raise Exception(f'{backtestee.name} does not have backtest() method, cannot run vectorized backtesting')
+        sig = inspect.signature(backtestee.backtest)
+        params = list(sig.parameters.values())
+        if not params or params[0].name != 'df':
+            raise Exception(f'{backtestee.name} backtest() must have "df" as its first arg, i.e. backtest(self, df)')
         
     def run(self):
         for broker in self.brokers.values():
             broker.start()
         self.strategy_manager.start()
+        backtest_results = {}
         for strat, strategy in self.strategy_manager.strategies.items():
             backtestee = strategy
             if strat == '_dummy':
@@ -342,12 +354,13 @@ class BacktestEngine(BaseEngine):
                     # dummy strategy has exactly one model
                     model = list(strategy.models.values())[0]
                     backtestee = model
-            backtests: dict = self._backtest(backtestee)
+            backtest_result: dict = self._backtest(backtestee)
+            backtest_results.update(backtest_result)
         self.end()
-        return backtests
+        return backtest_results
 
     def _backtest(self, backtestee: BaseStrategy | BaseModel) -> dict:
-        backtests = {}
+        backtest_result = {}
         dtl = backtestee.dtl
         df = backtestee.get_df(copy=True)
         
@@ -362,12 +375,7 @@ class BacktestEngine(BaseEngine):
         
         # Pre-Backtesting
         if self.mode == 'vectorized':
-            if not hasattr(backtestee, 'backtest'):
-                raise Exception(f'{backtestee.name} does not have backtest() method, cannot run vectorized backtesting')
-            sig = inspect.signature(backtestee.backtest)
-            params = list(sig.parameters.values())
-            if not params or params[0].name != 'df':
-                raise Exception(f'{backtestee.name} backtest() must have "df" as its first arg, i.e. backtest(self, df)')
+            self._assert_backtest_function(backtestee)
             df_chunks = []
         elif self.mode == 'event_driven':
             # NOTE: clear dfs so that strategies/models don't know anything about the incoming data
@@ -438,9 +446,9 @@ class BacktestEngine(BaseEngine):
             backtest_history: dict = self._create_backtest_history(backtestee, start_time, end_time)
             if self.save_backtests:
                 backtest_history = self._output_backtest_results(backtestee, df, backtest_history)
-            backtests[backtestee.name] = backtest_history
+            backtest_result[backtestee.name] = backtest_history
             
-        return backtests
+        return backtest_result
 
     def _event_driven_backtest(self, df_chunk, chunk_num=0, batch_num=0):
         COMMON_COLS = ['ts', 'product', 'resolution', 'broker', 'is_quote', 'is_tick']

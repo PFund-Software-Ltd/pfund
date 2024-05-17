@@ -37,9 +37,8 @@ class BacktestMixin:
         self._signal_df = None
         self._signal_list = []
         self._signal_list_num = 0
-        # case1: strategy is a dummy strategy
-        # case2: model is using a dummy strategy as its only consumer
-        self._is_dummy_strategy = self._check_if_dummy_strategy()
+            
+        self._is_dummy_strategy = False
         self._is_signal_df_required = self._check_if_signal_df_required()
         if isinstance(self, BaseStrategy):
             self._is_append_to_df = not self._is_signal_df_required and not self._is_dummy_strategy
@@ -72,6 +71,14 @@ class BacktestMixin:
             new_pred = self._signal_list[self._signal_list_num]
             self._signal_list_num += 1
         return new_pred
+    
+    def set_is_dummy_strategy(self, is_dummy_strategy: bool):
+        # case1: strategy is a dummy strategy
+        # case2: model is using a dummy strategy as its only consumer
+        self._is_dummy_strategy = is_dummy_strategy
+        self._is_signal_df_required = self._check_if_signal_df_required()
+        if isinstance(self, BaseStrategy):
+            self._is_append_to_df = not self._is_signal_df_required and not self._is_dummy_strategy
     
     def _append_to_df(self, data: BaseData, **kwargs):
         if self._is_append_to_df:
@@ -137,8 +144,6 @@ class BacktestMixin:
         self.dtl.assert_frame_equal(vectorized_signal_df, event_driven_signal_df)
 
     def _add_raw_df(self, data, df):
-        if self._is_dummy_strategy and isinstance(self, BaseStrategy):
-            return
         return self.dtl.add_raw_df(data, df)
     
     def _prepare_df(self):
@@ -169,8 +174,6 @@ class BacktestMixin:
     
     # TODO
     def _set_data_periods(self, datas, **kwargs):
-        if self._is_dummy_strategy and isinstance(self, BaseStrategy):
-            return
         return self.dtl.set_data_periods(datas, **kwargs)
     
     def _add_data_signature(self, *args, **kwargs):
@@ -185,9 +188,9 @@ class BacktestMixin:
             data_source = self._get_data_source(trading_venue, backtest_kwargs)
             feed = self.get_feed(data_source)
             kwargs = self._prepare_kwargs(feed, kwargs)
-            
-        datas = super().add_data(trading_venue, base_currency, quote_currency, ptype, *args, **kwargs)
         
+        datas = super().add_data(trading_venue, base_currency, quote_currency, ptype, *args, **kwargs)
+                
         if train_kwargs:
             self._set_data_periods(datas, **train_kwargs)
 
@@ -195,17 +198,21 @@ class BacktestMixin:
             dfs = self.get_historical_data(feed, datas, kwargs, copy.deepcopy(backtest_kwargs))
             for data, df in zip(datas, dfs):
                 self._add_raw_df(data, df)
+                    
         return datas
     
-    def _add_consumer_datas(self, consumer: BaseStrategy | BaseModel, *args, use_consumer_data=False, **kwargs) -> list[BaseData]:
-        consumer_datas = super()._add_consumer_datas(consumer, *args, use_consumer_data=use_consumer_data, **kwargs)
-        dtl = consumer.dtl
-        for data in consumer_datas:
-            if dtl.has_raw_df(data):
-                df = dtl.get_raw_df(data)
-                self._add_raw_df(data, df)
-        return consumer_datas
-    
+    def _add_consumers_datas_if_no_data(self) -> list[BaseData]:
+        '''Add consumers' raw dfs if no datas'''
+        datas = super()._add_consumers_datas_if_no_data()
+        for data in datas:
+            for consumer in self._consumers:
+                dtl = consumer.dtl
+                if dtl.has_raw_df(data):
+                    df = dtl.get_raw_df(data)
+                    self._add_raw_df(data, df)
+                    break
+        return datas
+        
     def add_model(
         self, 
         model: tModel, 

@@ -203,14 +203,14 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             if resolution.is_tick():
                 self.tradebooks[product] = data
             
+            self.set_data(product, resolution, data)
             if not self.is_sub_strategy():
-                self.set_data(product, resolution, data)
-                broker.add_listener(listener=self, listener_key=data, event_type='public')
-
-        if self.is_sub_strategy():
-            for consumer in self._consumers:
-                self._add_consumer_datas(consumer, trading_venue, base_currency, quote_currency, ptype, *args, **kwargs)
-
+                broker._add_listener(listener=self, listener_key=data, event_type='public')
+            else:
+                for consumer in self._consumers:
+                    consumer.add_data(trading_venue, base_currency, quote_currency, ptype, *args, **kwargs)
+                    consumer._add_listener(listener=self, listener_key=data)
+                
         return datas
     
     # TODO, for website to remove data from a strategy
@@ -227,7 +227,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
                     del self.orderbooks[data.product]
                 if timeframe.is_tick():
                     del self.tradebooks[data.product]
-                broker.remove_listener(listener=self, listener_key=data, event_type='public')
+                broker._remove_listener(listener=self, listener_key=data, event_type='public')
             if not self.datas[product]:
                 del self.datas[product]
     
@@ -243,7 +243,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         strat = strategy.name
         if strat in self.strategies:
             raise Exception(f"sub-strategy '{strat}' already exists in strategy '{self.name}'")
-        strategy.add_consumer(self)
+        strategy._add_consumer(self)
         self.strategies[strat] = strategy
         self.logger.debug(f"added sub-strategy '{strat}'")
         return strategy
@@ -283,7 +283,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
 
     def _subscribe_to_private_channels(self):
         for broker in self.get_brokers():
-            broker.add_listener(listener=self, listener_key=self.strat, event_type='private')
+            broker._add_listener(listener=self, listener_key=self.strat, event_type='private')
             
     # TODO
     def _next(self, data: BaseData):
@@ -323,7 +323,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
                 pass
                 # self._zmq ...
             for broker in self.get_brokers():
-                broker.remove_listener(listener=self, listener_key=self.strat, event_type='private')
+                broker._remove_listener(listener=self, listener_key=self.strat, event_type='private')
             for strategy in self.strategies.values():
                 strategy.stop(reason=reason)
             for model in self.models.values():

@@ -1,10 +1,4 @@
 from __future__ import annotations
-
-import os
-import sys
-from abc import ABC, abstractmethod
-from collections import defaultdict
-
 from typing import TYPE_CHECKING, Any, Union
 if TYPE_CHECKING:
     import pandas as pd
@@ -26,6 +20,12 @@ if TYPE_CHECKING:
         TalibFunction,
         Any,
     ]
+
+import os
+import sys
+import inspect
+from abc import ABC, abstractmethod
+from collections import defaultdict
 
 import joblib
 import numpy as np
@@ -66,11 +66,18 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         
         self.params = {}
         self.load_params()
-
+        self._assert_predict_function()
+    
     @abstractmethod
     def predict(self, X: pd.DataFrame | pl.LazyFrame, *args, **kwargs) -> torch.Tensor | np.ndarray:
         pass
-    
+
+    def _assert_predict_function(self):
+        sig = inspect.signature(self.predict)
+        params = list(sig.parameters.values())
+        if not params or params[0].name != 'X':
+            raise Exception(f'{self.name} predict() must have "X" as its first arg, i.e. predict(self, X, *args, **kwargs)')
+
     def featurize(self) -> pd.DataFrame | pl.LazyFrame:
         Console().print(
             f"WARNING: '{self.name}' is using the default featurize(), "
@@ -183,8 +190,11 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         datas = []
         # consumers must also have model's data
         for consumer in self._consumers:
-            consumer_datas = self._add_consumer_datas(consumer, trading_venue, base_currency, quote_currency, ptype, *args, **kwargs)
-            datas += consumer_datas
+            for data in consumer.add_data(trading_venue, base_currency, quote_currency, ptype, *args, **kwargs):
+                self.set_data(data.product, data.resolution, data)
+                consumer._add_listener(listener=self, listener_key=data)
+                if data not in datas:
+                    datas.append(data)
         return datas
     
     def _convert_min_max_data_to_dict(self):

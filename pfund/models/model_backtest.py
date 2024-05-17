@@ -1,7 +1,5 @@
 from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
+from typing import TYPE_CHECKING, TypeVar
 if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
@@ -32,20 +30,12 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
             model_dict['data_signatures'] = self._data_signatures
             return model_dict
 
-        def add_consumer(self, consumer: BaseStrategy | BaseModel):
+        def _add_consumer(self, consumer: BaseStrategy | BaseModel):
             is_dummy_strategy = isinstance(consumer, BaseStrategy) and consumer.name == '_dummy'
             if is_dummy_strategy:
                 assert not self._consumers, f"{self.name} must have _dummy strategy as its only consumer"
-            return super().add_consumer(consumer)
-        
-        def _check_if_dummy_strategy(self):
-            if self._consumers:
-                # NOTE: dummy strategy will always be the only consumer if it's added
-                consumer = self._consumers[0]
-                return isinstance(consumer, BaseStrategy) and consumer.name == '_dummy'
-            else:
-                return False
-        
+            return super()._add_consumer(consumer)
+
         def on_start(self):
             if self._is_signal_df_required:
                 self.set_group_data(False)
@@ -70,7 +60,7 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
                 else:
                     signal_df = self.flow()
                 self._set_signal_df(signal_df)
-            if self.is_model():
+            if self.is_model() and not self._is_dummy_strategy:
                 error_msg = (
                     f"please make sure '{self.name}' was dumped "
                     f"using '{self.type}.dump()' correctly.\n"

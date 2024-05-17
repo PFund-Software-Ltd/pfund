@@ -13,11 +13,11 @@ class BaseManager:
         self.logger = create_dynamic_logger(name, 'manager')
         self._listeners = defaultdict(list)
 
-    def add_listener(self, listener: BaseStrategy | BaseData, listener_key: BaseData | str):
+    def _add_listener(self, listener: BaseStrategy | BaseData, listener_key: BaseData | str):
         if listener not in self._listeners[listener_key]:
             self._listeners[listener_key].append(listener)
 
-    def remove_listener(self, listener: BaseStrategy | BaseData, listener_key: BaseData | str):
+    def _remove_listener(self, listener: BaseStrategy | BaseData, listener_key: BaseData | str):
         if listener in self._listeners[listener_key]:
             self._listeners[listener_key].remove(listener)
 
