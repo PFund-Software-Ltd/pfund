@@ -40,8 +40,11 @@ class PortfolioStrategy(BaseStrategy):
         return self._profile
     
     def on_start(self):
-        strategy_products = self.get_products()
-        self._universe.initialize(strategy_products)
+        products = self.get_products()
+        positions = self.get_positions()
+        balances = self.get_balances()
+        self._universe.initialize(products)
+        self._portfolio.initialize(positions, balances)
         return super().on_start()
     
     def add_strategy(self, strategy: tStrategy, name: str='', is_parallel=False) -> tStrategy:

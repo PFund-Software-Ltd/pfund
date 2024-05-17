@@ -6,57 +6,64 @@ if TYPE_CHECKING:
 
 from collections import defaultdict
 
-from rich.console import Console
-
 from pfund.portfolios import BasePortfolio, CryptoPortfolio, DefiPortfolio, TradfiPortfolio
-from pfund.const.common import SUPPORTED_TRADFI_PRODUCT_TYPES, SUPPORTED_CRYPTO_PRODUCT_TYPES
-from pfund.mixins.assets import TradfiAssetsMixin, CryptoAssetsMixin, DefiAssetsMixin
+from pfund.mixins.assets import AllAssetsMixin
 
 
-class Portfolio(TradfiAssetsMixin, CryptoAssetsMixin, DefiAssetsMixin, BasePortfolio):
+class Portfolio(AllAssetsMixin, BasePortfolio):
     '''A (unified) portfolio that combines multiple sub-portfolios from different brokers.'''
     def __init__(self):
         BasePortfolio.__init__(self)
         self._sub_portfolios = {}  # {bkr: portfolio}
-        all_assets = {}
-        TradfiAssetsMixin.setup_assets(self)
-        all_assets.update(self._all_assets)
-        CryptoAssetsMixin.setup_assets(self)
-        all_assets.update(self._all_assets)
-        DefiAssetsMixin.setup_assets(self)
-        all_assets.update(self._all_assets)
-        self._all_assets = all_assets
+        self.setup_assets()
         
     def initialize(self, positions: list[BasePosition], balances: list[BaseBalance]):
-        for bkr in {position.bkr for position in positions}:
+        for bkr in {pb.bkr for pb in positions + balances}:
             positions_per_bkr = [position for position in positions if position.bkr == bkr]
-            portfolio: BasePortfolio = self._add_sub_portfolio(bkr, positions_per_bkr)
+            balances_per_bkr = [balance for balance in balances if balance.bkr == bkr]
+            portfolio: BasePortfolio = self._add_sub_portfolio(bkr, positions_per_bkr, balances_per_bkr)
+            # e.g. allows using 'portfolio.crypto' to access CryptoPortfolio
             setattr(self, bkr.lower(), portfolio)
+        
+        # TODO: use global() to dynamically create attributes?
+        for attr in (
+            'stocks', 
+            'futures', 
+            'options', 
+            'cashes', 
+            'cryptos', 
+            'bonds', 
+            'funds', 
+            'cmdties', 
+            'perps', 
+            'iperps', 
+            'ifutures',
+            '_currencies',  # REVIEW
+        ):
+            # combine assets from sub-portfolios, e.g. self.futures = futures in crypto portfolio + futures in tradfi portfolio
+            setattr(self, attr, self.combine_dicts(*(getattr(pfo, attr) for pfo in self._sub_portfolios.values() if hasattr(pfo, attr))))
+            if attr == 'cryptos':
+                self.spots = self.cryptos
+        
+    @staticmethod
+    # Function to combine nested dictionaries without copying
+    def combine_dicts(*dicts: defaultdict[str, dict]) -> defaultdict[str, dict]:
+        combined = defaultdict(dict)
+        for d in dicts:
+            for key, sub_dict in d.items():
+                if key not in combined:
+                    combined[key] = sub_dict
+                else:
+                    combined[key].update(sub_dict)
+        return combined
 
-    def _get_assets(self, ptype: str) -> defaultdict[str, dict[str, BasePosition]]:
-        ptype = ptype.upper()
-        # TODO: add SUPPORTED_DEFI_PRODUCT_TYPES
-        if ptype not in SUPPORTED_TRADFI_PRODUCT_TYPES + SUPPORTED_CRYPTO_PRODUCT_TYPES:
-            raise KeyError(f'Invalid {ptype=}, supported choices: {SUPPORTED_TRADFI_PRODUCT_TYPES+SUPPORTED_CRYPTO_PRODUCT_TYPES}')
-        else:
-            return self._all_assets[ptype]
-    
-    def _add_sub_portfolio(self, bkr: str, positions: list[BasePosition]) -> BasePortfolio:
+    def _add_sub_portfolio(self, bkr: str, positions: list[BasePosition], balances: list[BaseBalance]) -> BasePortfolio:
         if bkr not in self._sub_portfolios:
             if bkr == 'CRYPTO':
-                portfolio = CryptoPortfolio.from_positions_and_balances(positions)
+                portfolio = CryptoPortfolio.from_positions_and_balances(positions=positions, balances=balances)
             elif bkr == 'DEFI':
-                portfolio = DefiPortfolio.from_positions_and_balances()
+                portfolio = DefiPortfolio.from_positions_and_balances(positions=positions, balances=balances)
             else:
-                portfolio = TradfiPortfolio.from_positions_and_balances()
+                portfolio = TradfiPortfolio.from_positions_and_balances(positions=positions, balances=balances)
             self._sub_portfolios[bkr] = portfolio
         return self._sub_portfolios[bkr]
-    
-    # TODO: add more functionalities, e.g.
-    # - get_total_exposure(unit='USD')
-    # - get_positions_by_exposure()
-    # - get_exposures_by_asset_class()
-    # - ...
-    
-    
-    

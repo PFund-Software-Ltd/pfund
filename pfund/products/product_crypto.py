@@ -24,6 +24,7 @@ class CryptoProduct(BaseProduct):
         self.category = ''  
         self.month_code = self._extract_month_code(args)
         
+        # EXTEND: thsese are data/info/specs about this product, maybe add more useful data to it for convenience?
         self.taker_fee = self.tfee = None
         self.maker_fee = self.mfee = None
         self.tick_size = self.tsize = None

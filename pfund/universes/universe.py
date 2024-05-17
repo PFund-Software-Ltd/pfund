@@ -8,28 +8,21 @@ from collections import defaultdict
 from rich.console import Console
 
 from pfund.universes import BaseUniverse, CryptoUniverse, TradfiUniverse, DefiUniverse
-from pfund.const.common import SUPPORTED_TRADFI_PRODUCT_TYPES, SUPPORTED_CRYPTO_PRODUCT_TYPES
-from pfund.mixins.assets import TradfiAssetsMixin, CryptoAssetsMixin, DefiAssetsMixin
+from pfund.mixins.assets import AllAssetsMixin
 
 
-class Universe(TradfiAssetsMixin, CryptoAssetsMixin, DefiAssetsMixin, BaseUniverse):
+class Universe(AllAssetsMixin, BaseUniverse):
     '''A (unified) universe that combines multiple sub-universes from different brokers.'''
     def __init__(self):
         BaseUniverse.__init__(self)
         self._sub_universes = {}  # {bkr: universe}
-        all_assets = {}
-        TradfiAssetsMixin.setup_assets(self)
-        all_assets.update(self._all_assets)
-        CryptoAssetsMixin.setup_assets(self)
-        all_assets.update(self._all_assets)
-        DefiAssetsMixin.setup_assets(self)
-        all_assets.update(self._all_assets)
-        self._all_assets = all_assets
+        self.setup_assets()
         
     def initialize(self, products: list[BaseProduct]):
         for bkr in {product.bkr for product in products}:
             products_per_bkr = [product for product in products if product.bkr == bkr]
             universe: BaseUniverse = self._add_sub_universe(bkr, products_per_bkr)
+            # e.g. allows using 'universe.crypto' to access CryptoUniverse
             setattr(self, bkr.lower(), universe)
 
         # TODO: use global() to dynamically create attributes?
@@ -46,6 +39,7 @@ class Universe(TradfiAssetsMixin, CryptoAssetsMixin, DefiAssetsMixin, BaseUniver
             'iperps', 
             'ifutures'
         ):
+            # combine assets from sub-universes, e.g. self.futures = futures in crypto universe + futures in tradfi universe
             setattr(self, attr, self.combine_dicts(*(getattr(uni, attr) for uni in self._sub_universes.values() if hasattr(uni, attr))))
             if attr == 'cryptos':
                 self.spots = self.cryptos
@@ -67,14 +61,6 @@ class Universe(TradfiAssetsMixin, CryptoAssetsMixin, DefiAssetsMixin, BaseUniver
                     )
                     combined[key].update(sub_dict)
         return combined
-    
-    def _get_assets(self, ptype: str) -> defaultdict[str, dict[str, BaseProduct]]:
-        ptype = ptype.upper()
-        # TODO: add SUPPORTED_DEFI_PRODUCT_TYPES
-        if ptype not in SUPPORTED_TRADFI_PRODUCT_TYPES + SUPPORTED_CRYPTO_PRODUCT_TYPES:
-            raise KeyError(f'Invalid {ptype=}, supported choices: {SUPPORTED_TRADFI_PRODUCT_TYPES+SUPPORTED_CRYPTO_PRODUCT_TYPES}')
-        else:
-            return self._all_assets[ptype]
     
     def _add_sub_universe(self, bkr: str, products: list[BaseProduct]) -> BaseUniverse:
         if bkr not in self._sub_universes:

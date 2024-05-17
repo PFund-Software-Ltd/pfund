@@ -1,10 +1,16 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.accounts.account_base import BaseAccount
+    from pfund.products.product_base import BaseProduct
+
 import logging
 
 from numpy import sign
 
 
 class BasePosition:
-    def __init__(self, account, product):
+    def __init__(self, account: BaseAccount, product: BaseProduct):
         self.logger = logging.getLogger('positions')
         self.account = account
         self.product = product

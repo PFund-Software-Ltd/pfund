@@ -9,6 +9,8 @@ if TYPE_CHECKING:
     from pfund.types.common_literals import tSUPPORTED_TRADING_VENUES, tSUPPORTED_BROKERS, tSUPPORTED_CRYPTO_EXCHANGES
     from pfund.brokers import BaseBroker
     from pfund.products import BaseProduct
+    from pfund.positions import BasePosition, CryptoPosition, IBPosition
+    from pfund.balances import BaseBalance, CryptoBalance, IBBalance
     from pfund.datas.data_bar import Bar
     from pfund.types.core import tStrategy
     from pfund.accounts import BaseAccount, CryptoAccount, IBAccount
@@ -120,6 +122,30 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     
     def add_broker(self, bkr: Literal[tSUPPORTED_BROKERS]) -> BaseBroker:
         return self.engine.add_broker(bkr)
+    
+    @overload
+    def get_position(self, account: CryptoAccount, pdt: str) -> CryptoPosition | None: ...
+    
+    @overload
+    def get_position(self, account: IBAccount, pdt: str) -> IBPosition | None: ...
+    
+    def get_position(self, account: BaseAccount, pdt: str) -> BasePosition | None:
+        return self.positions[account].get(pdt, None)
+    
+    def get_positions(self) -> list[BasePosition]:
+        return [position for pdt_to_positions in self.positions.values() for position in pdt_to_positions.values()]
+    
+    @overload
+    def get_balance(self, account: CryptoAccount, ccy: str) -> CryptoBalance | None: ...
+    
+    @overload
+    def get_balance(self, account: IBAccount, ccy: str) -> IBBalance | None: ...
+    
+    def get_balance(self, account: BaseAccount, ccy: str) -> BaseBalance | None:
+        return self.balances[account].get(ccy, None)
+    
+    def get_balances(self) -> list[BaseBalance]:
+        return [balance for ccy_to_balance in self.balances.values() for balance in ccy_to_balance.values()]
     
     @overload
     def get_account(self, trading_venue: Literal[tSUPPORTED_CRYPTO_EXCHANGES], acc: str='') -> CryptoAccount: ...
