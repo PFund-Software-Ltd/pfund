@@ -27,6 +27,24 @@ _PFUND_BACKTEST_KWARGS = ['data_source', 'rollback_period', 'start_date', 'end_d
 _EVENT_DRIVEN_BACKTEST_KWARGS = ['resamples', 'shifts', 'auto_resample']
 
 
+def vectorized(func):
+    def wrapper(*args, **kwargs):
+        if args[0].engine.mode == 'vectorized':
+            return func(*args, **kwargs)
+        else:
+            raise Exception(f"{func.__name__}() is only available in vectorized backtesting.")
+    return wrapper
+
+
+def event_driven(func):
+    def wrapper(*args, **kwargs):
+        if args[0].engine.mode == 'event_driven':
+            return func(*args, **kwargs)
+        else:
+            raise Exception(f"{func.__name__}() is only available in event driven backtesting.")
+    return wrapper
+
+
 class BacktestMixin:
     # NOTE: custom __post_init__ is called in MetaStrategy/MetaModel
     # used to avoid confusing __init__ pattern in MetaStrategy/MetaModel
@@ -39,10 +57,7 @@ class BacktestMixin:
             
         self._is_dummy_strategy = False
         self._is_signal_df_required = self._check_if_signal_df_required()
-        if isinstance(self, BaseStrategy):
-            self._is_append_to_df = not self._is_signal_df_required and not self._is_dummy_strategy
-        else:
-            self._is_append_to_df = not self._is_signal_df_required
+        self._is_append_to_df = self._check_if_append_to_df()
             
         # stores signatures for backtest history tracking
         self._data_signatures = []
@@ -71,13 +86,12 @@ class BacktestMixin:
             self._signal_list_num += 1
         return new_pred
     
-    def set_is_dummy_strategy(self, is_dummy_strategy: bool):
+    def set_flags(self, is_dummy_strategy: bool):
         # case1: strategy is a dummy strategy
         # case2: model is using a dummy strategy as its only consumer
         self._is_dummy_strategy = is_dummy_strategy
         self._is_signal_df_required = self._check_if_signal_df_required()
-        if isinstance(self, BaseStrategy):
-            self._is_append_to_df = not self._is_signal_df_required and not self._is_dummy_strategy
+        self._is_append_to_df = self._check_if_append_to_df()
     
     def _append_to_df(self, data: BaseData, **kwargs):
         if self._is_append_to_df:
@@ -90,6 +104,12 @@ class BacktestMixin:
             return True
         elif self.engine.mode == 'event_driven':
             return self.engine.use_signal_df
+    
+    def _check_if_append_to_df(self):
+        if isinstance(self, BaseStrategy):
+            return not self._is_signal_df_required and not self._is_dummy_strategy
+        else:
+            return not self._is_signal_df_required
     
     def _has_signal_df(self):
         return ( isinstance(self, BaseStrategy) and self.is_sub_strategy() ) or isinstance(self, BaseModel)
@@ -116,6 +136,7 @@ class BacktestMixin:
         self._signal_list = signal_df.drop(columns=self.INDEX).to_numpy().tolist()
         self._signal_df = signal_df
     
+    @event_driven
     def _assert_consistent_signals(self):
         '''Asserts consistent signals from vectorized and event-driven backtesting, triggered in event-driven backtesting'''
         self.logger.debug(f"asserting {self.name}'s signals...")

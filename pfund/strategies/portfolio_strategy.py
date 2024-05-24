@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.types.core import tStrategy
@@ -71,6 +70,7 @@ class PortfolioStrategy(BaseStrategy):
         if self.rebalancing_strategy:
             self.rebalancing_strategy.rebalance(self.universe, self.portfolio)
         else:
+            # TODO: add exeuction_strategy?
             if weights:
                 # TODO: rebalances current portfolio based on the weights provided
                 pass

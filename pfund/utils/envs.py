@@ -13,6 +13,10 @@ def env_wrapper(func, envs: list[str]):
     return wrapper
 
 
+def train(func):
+    return env_wrapper(func, envs=['TRAIN'])
+
+
 def backtest(func):
     return env_wrapper(func, envs=['BACKTEST'])
 

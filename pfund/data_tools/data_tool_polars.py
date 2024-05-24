@@ -4,14 +4,12 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, Generator, Literal
 if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
-    from pfund.models.model_base import BaseModel
 
 import numpy as np    
 import polars as pl
 
-from pfund.strategies.strategy_base import BaseStrategy
 from pfund.data_tools.data_tool_base import BaseDataTool
-from pfund.utils.envs import backtest
+from pfund.utils.envs import backtest, train
 
 
 # NOTE: convention: all function names that endswith "_df" will directly modify self.df, e.g. "xxx_df"
@@ -36,19 +34,15 @@ class PolarsDataTool(BaseDataTool):
             )
         self._raw_dfs.clear()
     
-    # TODO:
-    def merge_signal_dfs_with_df(self):
-        pass
-    
     def clear_df(self):
         self.df.clear()
     
     # TODO:
-    def _push_new_rows_to_df(self):
+    def append_to_df(self, data: BaseData, predictions: dict, **kwargs):
         pass
     
     # TODO:
-    def append_to_df(self, data: BaseData, predictions: dict, **kwargs):
+    def _push_new_rows_to_df(self):
         pass
 
     # TODO:
@@ -73,6 +67,11 @@ class PolarsDataTool(BaseDataTool):
         '''
         pl.testing.assert_frame_equal(df1, df2, check_exact=False, rtol=1e-5)
         
+    # TODO:
+    @backtest
+    def merge_signal_dfs_with_df(self):
+        pass
+
     # TODO
     @backtest
     def signalize(self, X: pl.LazyFrame, pred_y: np.ndarray, columns: list[str]) -> pl.LazyFrame:
@@ -86,6 +85,20 @@ class PolarsDataTool(BaseDataTool):
         for i in range(0, total_rows, chunk_size):
             df_chunk = lf.slice(i, chunk_size)
             yield df_chunk
+    
+    @staticmethod
+    @backtest
+    def preprocess_vectorized_df(df: pl.LazyFrame) -> pl.LazyFrame:
+        # TODO: maybe create sth like SafeFrame(pl.LazyFrame) to prevent users from peeking into the future?
+        '''Creates signals (1/-1/0) for vectorized backtesting'''
+        return df
+    
+    # TODO
+    @staticmethod
+    @backtest
+    def postprocess_vectorized_df(df_chunks: list[pl.LazyFrame]) -> pl.LazyFrame:
+        df = pl.concat(df_chunks)
+        return df
     
     @backtest
     def preprocess_event_driven_df(self, df: pl.LazyFrame) -> pl.LazyFrame:
@@ -114,19 +127,14 @@ class PolarsDataTool(BaseDataTool):
         df = df.select(left_cols + [col for col in df.columns if col not in left_cols])
         return df
     
-    # TODO
+    # TODO: 
     @backtest
-    def preprocess_vectorized_df(self, df: pl.LazyFrame, backtestee: BaseStrategy | BaseModel) -> pl.LazyFrame:
+    def postprocess_event_driven_df(self, df: pl.LazyFrame) -> pl.LazyFrame:
+        # convert ts column back to datetime type
         pass
     
-    # TODO
-    @staticmethod
-    @backtest
-    def postprocess_vectorized_df(df_chunks: list[pl.LazyFrame]) -> pl.LazyFrame:
-        df = pl.concat(df_chunks)
-        return df
-    
     # TODO: for train engine
+    @train
     def prepare_datasets(self, datas):
         pass
     

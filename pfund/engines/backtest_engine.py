@@ -1,4 +1,10 @@
 from __future__ import annotations
+from typing import TYPE_CHECKING, Literal
+if TYPE_CHECKING:
+    import pandas as pd
+    from pfund.types.common_literals import tSUPPORTED_BACKTEST_MODES, tSUPPORTED_DATA_TOOLS
+    from pfund.types.core import tStrategy, tModel, tFeature, tIndicator
+    from pfund.models.model_base import BaseModel
 
 import os
 import hashlib
@@ -11,20 +17,11 @@ import logging
 from logging.handlers import QueueHandler, QueueListener
 
 from tqdm import tqdm
-
-from typing import TYPE_CHECKING, Literal
-if TYPE_CHECKING:
-    import pandas as pd
-    from pfund.types.common_literals import tSUPPORTED_BACKTEST_MODES, tSUPPORTED_DATA_TOOLS
-    from pfund.types.core import tStrategy, tModel, tFeature, tIndicator
-    from pfund.models.model_base import BaseModel
-    
+from rich.console import Console
 try:
     import polars as pl
 except ImportError:
     pl = None
-
-from rich.console import Console
 
 import pfund as pf
 from pfund.git_controller import GitController
@@ -155,7 +152,7 @@ class BacktestEngine(BaseEngine):
         assert not is_non_dummy_strategy_exist, 'Please use strategy.add_model(...) instead of engine.add_model(...) when a strategy is already created'
         if not (strategy := self.strategy_manager.get_strategy('_dummy')):
             strategy = self.add_strategy(BaseStrategy(), name='_dummy')
-            strategy.set_is_dummy_strategy(True)
+            strategy.set_flags(True)
             # add event driven functions to dummy strategy to avoid NotImplementedError in backtesting
             empty_function = lambda *args, **kwargs: None
             for func in strategy.REQUIRED_FUNCTIONS:
@@ -169,7 +166,7 @@ class BacktestEngine(BaseEngine):
             group_data=group_data,
             signal_cols=signal_cols,
         )
-        model.set_is_dummy_strategy(True)
+        model.set_flags(True)
         return model
     
     def add_feature(
@@ -391,7 +388,7 @@ class BacktestEngine(BaseEngine):
                 ray_tasks.append((df_chunk, chunk_num))
             else:
                 if self.mode == 'vectorized':
-                    df_chunk = dtl.preprocess_vectorized_df(df_chunk, backtestee)
+                    df_chunk = dtl.preprocess_vectorized_df(df_chunk)
                     backtestee.backtest(df_chunk)
                     df_chunks.append(df_chunk)
                 elif self.mode == 'event_driven':
