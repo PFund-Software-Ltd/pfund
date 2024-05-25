@@ -40,11 +40,6 @@ class BaseDataTool:
     def add_raw_df(self, data: BaseData, df):
         self._raw_dfs[data] = df
         
-    def _assert_registered_callbacks(self):
-        assert 'create_signal' in self._registered_callbacks, "No 'create_signal' callback is registered"
-        if 'close_position' in self._registered_callbacks:
-            assert 'open_position' in self._registered_callbacks, "No 'open_position' callback is registered"
-    
     def set_data_periods(self, datas, **kwargs):
         train_period = kwargs.get('train_period', None)
         val_period = kwargs.get('validation_period', None) or kwargs.get('val_period', None)
