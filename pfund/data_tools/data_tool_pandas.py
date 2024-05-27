@@ -232,7 +232,18 @@ class PandasDataTool(BaseDataTool):
     
     @backtest
     def _done(self, df: pd.DataFrame, debug=False) -> pd.DataFrame:
-        def _place_orders_and_derive_trades():
+        '''Orchestrate the whole process of opening and closing positions after signals are created.
+        '''
+        def _set_first_value(col: str, value):
+            first_indices = grouped_df[col].apply(lambda group: group.idxmax())
+            for group in groups:
+                df.iloc[first_indices.loc[group], df.columns.get_loc(col)] = value
+                
+        def _open_position():
+            '''
+            Dependency columns: ['order_price', 'order_size', '_position_close']
+            Updated columns: ['position', 'trade_price', 'trade_size']
+            '''
             # shift 'order_price' and 'order_size' to the next bar and act as opened limit orders in the same row
             # NOTE: order placed at the end of the previous bar = opened order at the beginning of the next bar
             opened_order_price = grouped_df['order_price'].shift(1)
@@ -245,8 +256,9 @@ class PandasDataTool(BaseDataTool):
             df['trade_size'] = opened_order_size.where(trade_condition)
             if first_trade_only:
                 # NOTE: include '_position_close' in the grouping so that trade for closing position is not considered as the first trade
-                df['_trade_sizes'] = df.groupby(['_trade_streak', '_position_close'] + self.GROUP)['trade_size'].ffill()
-                df['trade_size'] = df['trade_size'].where(grouped_df['_trade_sizes'].diff().ne(0))
+                df['_agg_trade'] = df.groupby(['_trade_streak', '_position_close'] + self.GROUP)['trade_size'].ffill()
+                df['trade_size'] = df['trade_size'].where(grouped_df['_agg_trade'].diff().ne(0))
+                
                 # clean up orders (order_size) after the first trade
                 df['_after_trade'] = df.groupby(['_signal_streak', '_position_close'] + self.GROUP)['trade_size'].transform(
                     lambda x: x.fillna(0).cumsum().astype(bool)
@@ -254,20 +266,83 @@ class PandasDataTool(BaseDataTool):
                 # if the order is for closing position, then it is not considered as an after (first) trade order
                 df.loc[grouped_df['_position_close'].shift(-1) == True, '_after_trade'] = False
                 df.loc[df['_after_trade'], 'order_size'] = np.nan
-                
-        def _set_first_value(col: str, value):
-            first_indices = grouped_df[col].apply(lambda group: group.idxmax())
-            for group in groups:
-                df.iloc[first_indices.loc[group], df.columns.get_loc(col)] = value
+        
+        def _flip_position():
+            '''
+            Flip position by changing 'trade_size'
+            Dependency columns: ['_position_close', 'trade_size']
+            Updated columns: ['trade_size', 'order_size']
+            '''
+            df['_position_flip'] = grouped_df['trade_size'].transform(
+                lambda x: x.ffill().diff().fillna(False).ne(0)
+            )
+            df.loc[df['_position_close'], '_position_flip'] = False
+            df['_flip_streak'] = grouped_df['_position_flip'].cumsum()
+            df['_agg_trade'] = df.groupby(['_flip_streak'] + self.GROUP)['trade_size'].transform(
+                lambda x: x.cumsum().ffill().fillna(0)
+            )
+            # set '_position_flip'=False if no trade
+            df.loc[grouped_df['_agg_trade'].shift(1) == 0, '_position_flip'] = False
+
+            # update trade_size for position flip, not orders because unlike closing position, 
+            # we don't need to update the order_price as well, so we can just update trade_size -> order_size
+            df.loc[df['_position_flip'], 'trade_size'] += grouped_df['_agg_trade'].shift(1) * (-1)
             
+            # update back order_size for reference after changing trade_size
+            mask = df.groupby(['_signal_streak'] + self.GROUP)['trade_size'].transform(
+                lambda x: x.fillna(0).cumsum().astype(bool)
+            )
+            df.loc[~mask, 'order_size'] = grouped_df['trade_size'].bfill()
+        
+        # NOTE:
+        '''
+        Originally the approach was to create a loop like this:
+        for i in range(n):
+            _open_position()
+            if flip_position:
+                _flip_position()
+            if close_position:
+                _close_position()
+        But it has lots of issues:
+        - error-prone
+        - VERY hard to debug/maintain
+        - no guarantee for convergence, at least no mathematical proof
+        If stop_loss/take_profit is also included, it will be even more complicated and take longer to converge.
+        So the new approach is to use for loop directly for closing positions.
+        It might be faster/slower, not sure, but it's much easier to debug and maintain.
+        '''
+        def _DEPRECATED_close_position():
+            '''
+            Add back orders for closing position.
+            Dependency columns: ['position']
+            Updated columns: ['_position_close', 'order_price', 'order_size']
+            '''
+            # reset to False first
+            df['_position_close'] = False
+            mask = (
+                (grouped_df[f'_{close_when}'].shift(1) == True) & 
+                (grouped_df['position'].shift(1) != 0)
+            )
+            df.loc[mask, '_position_close'] = True
+
+            # reset order_price and order_size since the mask were wrong before convergence
+            df['order_price'] = np.abs(df['signal']) * order_price
+            df['order_size'] = df['signal'] * 1
+            # update the orders
+            mask = (grouped_df['_position_close'].shift(-1) == True) & (grouped_df['position'] != 0)            
+            # close position with close price (market order) when signal flips
+            df.loc[mask, 'order_price'] = df['close']
+            # set back the exact order sizes for closing positions
+            df.loc[mask, 'order_size'] = df['position'] * (-1)
+            
+        
         assert 'signal' in df.columns, "No 'signal' column is found, please use create_signal() first"
         if '_position_close' in self._registered_callbacks:
             assert 'open_position' in self._registered_callbacks, "No 'open_position' callback is registered"
         elif 'open_position' not in self._registered_callbacks:
             return df
 
-        # Step 1: basic setup
-        # parse 'open_position' and '_position_close'
+        # parse registered callbacks
         open_position = self._registered_callbacks['open_position']
         order_price = open_position['order_price']
         order_price = df['close'] if order_price is None else order_price
@@ -275,11 +350,15 @@ class PandasDataTool(BaseDataTool):
         is_nan_signal = open_position['is_nan_signal']
         first_trade_only = open_position['first_only']
         flip_position = open_position['flip_position']
+        close_position = self._registered_callbacks.get('close_position', None)
         
+        # set up orders
+        df['order_price'] = np.abs(df['signal']) * order_price
+        df['order_size'] = df['signal'] * 1
+        
+        # create common columns and variables
         grouped_df = df.groupby(self.GROUP)
         groups = list(df[self.GROUP].drop_duplicates().itertuples(index=False, name=None))
-        
-        # create common columns
         if not is_nan_signal:
             df['_signal_change'] = grouped_df['signal'].transform(lambda x: x.ffill().diff().ne(0))
             df.loc[df['signal'].isna(), '_signal_change'] = False
@@ -293,100 +372,28 @@ class PandasDataTool(BaseDataTool):
         df['_position_close'] = False
         df['_position_flip'] = False
         
-        # set up orders
-        df['order_price'] = np.abs(df['signal']) * order_price
-        df['order_size'] = df['signal'] * 1
         
-        # Step 2: mark booleans for closing positions (EVALUATION)
-        if close_position := self._registered_callbacks.get('close_position', None):
+        if not close_position:
+            _open_position()
+            if flip_position:
+                _flip_position()
+            df['position'] = grouped_df['trade_size'].transform(
+                lambda x: x.cumsum().ffill().fillna(0).astype(int)
+            )
+        else:
+            # TODO: for loop
             close_when: str = close_position['when']
-
-            # NOTE: only set this bool '_position_close' first (used when placing orders) without order_price/size 
-            # because the order_size for closing position is unknown until the first batch of trades are placed
-            if close_when == 'signal_change':
-                col = f'_{close_when}'
-                df.loc[grouped_df[col].shift(1) == True, '_position_close'] = True
-            else:
-                # TODO
-                raise NotImplementedError(f"when={close_when} is not supported yet")
-
-            # TODO
-            close_at_time_window = close_position['time_window']
-            # TODO
             allow_reopen = close_position['allow_reopen']
-            # df.loc[df['_position_close'], 'after_close'] = False
-            # df['after_close'] = grouped_df['after_close'].ffill()
-            # df['after_close'] = (df['after_close'] + ~df['_position_close']).fillna(False).astype(bool)
-        # place orders (without orders for closing position)
-        # to get the first batch of trades before close_position can determine the actual order_size
-        _place_orders_and_derive_trades()
-        
-        
-        # Step 3: add back orders for closing positions (EXECUTION)
-        # can only be done AFTER having 'trade_size'
-        if close_position:
-            df['agg_trade'] = df.groupby(['_trade_streak', '_position_close'] + self.GROUP)['trade_size'].transform(
-                lambda x: x.cumsum().ffill().fillna(0)
-            )
-            mask = (df['_signal_change'] == True) & (df['agg_trade'] != 0)
-            # close position with close price (market order) when signal flips
-            df.loc[mask, 'order_price'] = df['close']
-            # NOTE: trade sizes are now known after step 4, 
-            # set back the exact order sizes for closing positions
-            df.loc[mask, 'order_size'] = df['agg_trade'] * (-1)
-            
-            # no position to be closed if no trade
-            df.loc[grouped_df['agg_trade'].shift(1) == 0, '_position_close'] = False
-
-            # TODO
-            if close_at_time_window:
-                pass
-            
-            # since closing orders have been added, place orders again
-            _place_orders_and_derive_trades()
-        
-        
-        # Step 4: flip position -> change trade_size -> calculate position
-        if flip_position:
-            df['_position_flip'] = grouped_df['trade_size'].transform(lambda x: x.ffill().diff().fillna(False).ne(0))
-            df.loc[df['_position_close'], '_position_flip'] = False
-            df['_flip_streak'] = grouped_df['_position_flip'].cumsum()
-            df['agg_trade'] = df.groupby(['_flip_streak'] + self.GROUP)['trade_size'].transform(
-                lambda x: x.cumsum().ffill().fillna(0)
-            )
-            df.loc[df['_position_flip'], 'trade_size'] += grouped_df['agg_trade'].shift(1) * (-1)
-            
-            # no position to be flipped if no trade
-            df.loc[grouped_df['agg_trade'].shift(1) == 0, '_position_flip'] = False
-            
-            # update back order_size for reference after changing trade_size
-            mask = df.groupby(['_signal_streak'] + self.GROUP)['trade_size'].transform(
-                lambda x: x.fillna(0).cumsum().astype(bool)
-            )
-            df.loc[~mask, 'order_size'] = grouped_df['trade_size'].bfill()
-        df['position'] = grouped_df['trade_size'].cumsum()
-        
-        
-        # Step 5: add back tp/sl orders for closing position, can only be done AFTER having 'position'
-        if close_position:
-            # TODO: need to use pfolio to calculate pnls so that we can use take_profit/stop_loss
-            # then need to re-calculate position/re-run the whole flow above?
-            '''
-            current idea:
-            -> set close_pos and after_close etc.
-            -> go back to step 3 (add stop loss orders)
-            -> position + returns
-            -> back to step 3, since the returns have changed, may have another stop-loss
-            -> position + returns
-            ...
-            -> loop until it converges, i.e. assert_frame_equal() is True for the last 2 dfs
-            '''
             take_profit, stop_loss = close_position['take_profit'], close_position['stop_loss']
             trailing_stop = close_position['trailing_stop']
-
+            # TODO: can only be done after having take_profit/stop_loss/trailing_stop determined
+            close_at_time_window = close_position['time_window']
         
+        
+        # clean up 'order_price'/'trade_price' if the corresponding 'order_size'/trade_size' is removed
         df['order_price'] = df['order_price'].where(df['order_size'].notna())
         df['trade_price'] = df['trade_price'].where(df['trade_size'].notna())
+        
         
         # add remarks
         if debug:
@@ -398,7 +405,21 @@ class PandasDataTool(BaseDataTool):
             df.loc[df['_position_flip'], 'remark'] += ',position_flip'
             # remove leading comma
             df['remark'] = df['remark'].str.lstrip(',')
+            
+
+        # check if positions are closed and flipped correctly
+        if flip_position:
+            position_after_flipped = df.loc[df['_position_flip'], 'position'].unique()
+            # if only 1s and -1s in position_after_flipped, this will make only 1 left
+            position_after_flipped = np.unique(np.abs(position_after_flipped))
+            assert position_after_flipped.shape[0] == 1 and position_after_flipped[0] == 1, \
+                f"position_after_flipped={position_after_flipped}"
+        if close_position:
+            position_after_closed = df.loc[df['_position_close'], 'position'].unique()
+            assert position_after_closed.shape[0] == 1 and position_after_closed[0] == 0, \
+                f"position_after_closed={position_after_closed}"
         
+
         # remove temporary columns
         tmp_cols = [col for col in df.columns if col.startswith('_')]
         df.drop(columns=tmp_cols, inplace=True)

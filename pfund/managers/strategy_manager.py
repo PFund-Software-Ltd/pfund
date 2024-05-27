@@ -96,7 +96,6 @@ class StrategyManager:
     def remove_strategy(self, strat: str):
         if strat in self.strategies:
             del self.strategies[strat]
-            self.stop(strat)
             self.logger.debug(f'removed strategy {strat}')
         else:
             self.logger.error(f'strategy {strat} cannot be found, failed to remove api')
