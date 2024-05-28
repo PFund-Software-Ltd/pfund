@@ -114,6 +114,11 @@ class BaseEngine(Singleton):
     def get_broker(self, bkr: Literal[tSUPPORTED_BROKERS]) -> BaseBroker:
         return self.brokers[bkr.upper()]
     
+    def remove_broker(self, bkr: Literal[tSUPPORTED_BROKERS]) -> BaseBroker:
+        broker = self.brokers.pop(bkr.upper())
+        self.logger.debug(f'removed broker {bkr}')
+        return broker
+    
     def get_Broker(self, bkr: Literal[tSUPPORTED_BROKERS]) -> type[BaseBroker]:
         bkr = bkr.upper()
         assert bkr in SUPPORTED_BROKERS, f'broker {bkr} is not supported'

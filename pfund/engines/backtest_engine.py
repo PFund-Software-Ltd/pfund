@@ -342,18 +342,22 @@ class BacktestEngine(BaseEngine):
             broker.start()
         self.strategy_manager.start()
         backtest_results = {}
-        for strat, strategy in self.strategy_manager.strategies.items():
-            backtestee = strategy
-            if strat == '_dummy':
-                if self.mode == 'vectorized':
-                    continue
-                elif self.mode == 'event_driven':
-                    # dummy strategy has exactly one model
-                    model = list(strategy.models.values())[0]
-                    backtestee = model
-            backtest_result: dict = self._backtest(backtestee)
-            backtest_results.update(backtest_result)
-        self.end()
+        try:
+            for strat, strategy in self.strategy_manager.strategies.items():
+                backtestee = strategy
+                if strat == '_dummy':
+                    if self.mode == 'vectorized':
+                        continue
+                    elif self.mode == 'event_driven':
+                        # dummy strategy has exactly one model
+                        model = list(strategy.models.values())[0]
+                        backtestee = model
+                backtest_result: dict = self._backtest(backtestee)
+                backtest_results.update(backtest_result)
+        except:
+            self.logger.exception('Error in backtesting:')
+        finally:
+            self.end()
         return backtest_results
 
     def _backtest(self, backtestee: BaseStrategy | BaseModel) -> dict:
@@ -491,7 +495,14 @@ class BacktestEngine(BaseEngine):
                 }
                 data_manager.update_bar(product, bar, now=ts)
     
+    # NOTE: end() vs stop()
+    # end() means everything is done and NO state will be kept, can't be restarted
+    # stop() means the process is stopped but the state is still kept, can be restarted
     def end(self):
-        self.strategy_manager.stop(reason='finished backtesting')
-        for broker in self.brokers.values():
+        for strat in list(self.strategy_manager.strategies):
+            self.strategy_manager.stop(strat, reason='finished backtesting')
+            self.remove_strategy(strat)
+        for broker in list(self.brokers.values()):
             broker.stop()
+            self.remove_broker(broker.name)
+        self._remove_singleton()

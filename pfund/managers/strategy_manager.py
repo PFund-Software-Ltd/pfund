@@ -88,7 +88,7 @@ class StrategyManager:
         strategy.create_logger()
         strat = strategy.name
         if strat in self.strategies:
-            raise Exception(f"'{strategy.tname}' already exists")
+            return self.strategies[strat]
         self.strategies[strat] = strategy
         self.logger.debug(f"added '{strategy.tname}'")
         return strategy
@@ -98,7 +98,7 @@ class StrategyManager:
             del self.strategies[strat]
             self.logger.debug(f'removed strategy {strat}')
         else:
-            self.logger.error(f'strategy {strat} cannot be found, failed to remove api')
+            self.logger.error(f'strategy {strat} cannot be found, failed to remove')
 
     def _set_pid(self, strat: str, pid: int):
         prev_pid = self._pids[strat]
@@ -183,7 +183,7 @@ class StrategyManager:
                 self._is_restarting[strat] = False
             else:
                 self.logger.warning(f'{strat} is already restarting, do not restart again ({reason=})')
-
+    
     def handle_msgs(self, topic, info):
         strat = info[0]
         # NOTE: this strategy object is just a shell without any memory

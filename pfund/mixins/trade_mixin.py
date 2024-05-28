@@ -287,7 +287,7 @@ class TradeMixin:
             model.set_signal_cols(signal_cols)
         mdl = model.name
         if mdl in self.models:
-            raise Exception(f"{model.tname} already exists in {self.tname}")
+            return self.models[mdl]
         model._add_consumer(self)
         self.models[mdl] = model
         self.logger.debug(f"added {model.tname}")

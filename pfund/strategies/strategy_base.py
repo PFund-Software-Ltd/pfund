@@ -242,7 +242,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         strategy.create_logger()
         strat = strategy.name
         if strat in self.strategies:
-            raise Exception(f"sub-strategy '{strat}' already exists in '{self.tname}'")
+            return self.strategies[strat]
         strategy._add_consumer(self)
         self.strategies[strat] = strategy
         self.logger.debug(f"added sub-strategy '{strat}'")

@@ -17,6 +17,11 @@ class Singleton:
             cls._instance = super().__new__(cls)
             # print(f'Singleton class "{cls.__name__}" is created')
         return cls._instance
+    
+    @classmethod
+    def _remove_singleton(cls):
+        if hasattr(cls, '_instance'):
+            delattr(cls, '_instance')
 
 
 # used to explicitly mark a function that includes an api call

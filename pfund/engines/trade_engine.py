@@ -206,10 +206,16 @@ class TradeEngine(BaseEngine):
                     broker = self.brokers[bkr]
                     broker.distribute_msgs(channel, topic, info)
             
+    # NOTE: end() vs stop()
+    # end() means everything is done and NO state will be kept.
+    # stop() means the process is stopped but the state is still kept.
     def end(self):
-        self.strategy_manager.stop()
-        for broker in self.brokers.values():
+        for strat in list(self.strategy_manager.strategies):
+            self.strategy_manager.stop(strat, reason='end')
+            self.remove_strategy(strat)
+        for broker in list(self.brokers.values()):
             broker.stop()
+            self.remove_broker(broker.name)
         self._zmq.stop()
         schedule.clear()
         self._is_running = False
