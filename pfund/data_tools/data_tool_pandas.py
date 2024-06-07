@@ -208,25 +208,35 @@ class PandasDataTool(BaseDataTool):
     def _close_position(
         self, 
         df: pd.DataFrame,
-        # TODO: add more time-based options, e.g. 'EOD'?
-        when: tSUPPORTED_CLOSE_POSITION_WHEN='',
-        time_window: int | None=None,
+        when: tSUPPORTED_CLOSE_POSITION_WHEN | None='signal_change',
         take_profit: float | None=None,
         stop_loss: float | None=None,
-        # TODO
-        # trailing_stop: float | None=None,
+        time_window: int | None=None,
+        trailing_stop: float | None=None,
     ) -> pd.DataFrame:
-        assert any([when, time_window, take_profit, stop_loss]), \
-            "At least one of 'when', 'time_window', 'take_profit', 'stop_loss' must be provided"
+        assert any([when, take_profit, stop_loss, time_window, trailing_stop]), \
+            "At least one of 'when', 'take_profit', 'stop_loss', 'time_window', 'trailing_stop' must be provided"
         if when:
             assert when in SUPPORTED_CLOSE_POSITION_WHEN, \
                 f"Supported 'when' options are {SUPPORTED_CLOSE_POSITION_WHEN}"
+        if take_profit:
+            assert take_profit > 0, "'take_profit' must be positive"
+        if stop_loss:
+            stop_loss = abs(stop_loss)
+            assert 1 > stop_loss > 0, "'stop_loss' must be between 0 and 1"
+        # TODO:
+        if time_window:
+            assert time_window > 0 and isinstance(time_window, int), "'time_window' must be a positive integer"
+            raise NotImplementedError("time_window > 1 is not yet implemented")
+        # TODO:
+        if trailing_stop:
+            raise NotImplementedError("trailing_stop is not yet implemented")
         self._registered_callbacks['close_position'] = {
             'when': when,
-            'time_window': time_window,
             'take_profit': take_profit,
             'stop_loss': stop_loss,
-            # 'trailing_stop': trailing_stop,
+            'time_window': time_window,
+            'trailing_stop': trailing_stop,
         }
         return df
     
@@ -261,7 +271,6 @@ class PandasDataTool(BaseDataTool):
             df['trade_size'] = opened_order_size.where(trade_condition)
             
             if first_trade_only:
-                df['_trade_streak'] = df['_signal_streak'].shift(1).bfill().astype(int)
                 df['agg_trade'] = df.groupby(['_trade_streak'])['trade_size'].ffill()
                 df['trade_size'] = df['trade_size'].where(df['agg_trade'].diff().ne(0))
                 
@@ -296,8 +305,8 @@ class PandasDataTool(BaseDataTool):
             df.loc[df['position_close'], 'trade_size'] =  df['agg_trade'].shift(1) * (-1)
             
             # update the orders
-            df.loc[df['position_close'].shift(-1), 'order_price'] = df['trade_price'].shift(-1)
-            df.loc[df['position_close'].shift(-1), 'order_size'] = df['trade_size'].shift(-1)
+            df.loc[df['position_close'].shift(-1, fill_value=False), 'order_price'] = df['trade_price'].shift(-1)
+            df.loc[df['position_close'].shift(-1, fill_value=False), 'order_size'] = df['trade_size'].shift(-1)
             
         def _flip_position():
             '''
@@ -330,6 +339,16 @@ class PandasDataTool(BaseDataTool):
                 lambda x: x.cumsum().ffill().fillna(0).astype(int)
             )
         
+        def _calculate_avg_price():
+            df['_avg_streak'] = df['_trade_streak'].shift(1).bfill().astype(int)
+            df['_cost'] = (df['trade_price'] * df['trade_size']).fillna(0)
+            df['agg_costs'] = df.groupby(['_avg_streak'])['_cost'].cumsum()
+            df['agg_trade'] = df.groupby(['_avg_streak'])['trade_size'].transform(
+                lambda x: x.cumsum().ffill().fillna(0)
+            )
+            df['avg_price'] = np.where(df['agg_trade'] != 0, df['agg_costs'] / df['agg_trade'], np.nan)
+            df['avg_price'] = df.groupby('_avg_streak')['avg_price'].ffill()    
+        
         assert 'signal' in df.columns, "No 'signal' column is found, please use create_signal() first"
         if 'close_position' in self._registered_callbacks:
             assert 'open_position' in self._registered_callbacks, "No 'open_position' callback is registered"
@@ -348,14 +367,11 @@ class PandasDataTool(BaseDataTool):
         flip_position = open_position['flip_position']
         if close_position := self._registered_callbacks.get('close_position', None):
             close_when: str = close_position['when']
-            time_window = close_position['time_window']
             take_profit, stop_loss = close_position['take_profit'], close_position['stop_loss']
-            # TODO:
-            # trailing_stop = close_position['trailing_stop']
-            
-            # only one of 'when', 'time_window', 'take_profit', 'stop_loss' is specified, can be run independently
-            # if more than one is specified, use for loop
-            if sum(bool(cond) for cond in [close_when, time_window, take_profit, stop_loss]) > 1:
+            time_window = close_position['time_window']
+            trailing_stop = close_position['trailing_stop']
+            if not (close_when and (take_profit or stop_loss or time_window or trailing_stop)):
+                cprint("Position dependencies detected, using FOR LOOP in vectorized backtesting!")
                 use_for_loop = True
         
         # set up orders
@@ -372,26 +388,56 @@ class PandasDataTool(BaseDataTool):
         # set the first True value to False since theres no signal before it
         _set_first_value(col='_signal_change', value=False)
         df['_signal_streak'] = df['_signal_change'].cumsum()
+        df['_trade_streak'] = df['_signal_streak'].shift(1).bfill().astype(int)
         df['position_close'] = False
         df['position_flip'] = False
         
-            
+        
         if not use_for_loop:
             _open_position()
             if close_position:
                 if close_when:
                     _close_position()
-                # closing methods that require 'position' to be calculated first
-                else:
+                    _calculate_avg_price()
+                    if stop_loss:
+                        df['sl_price'] = np.where(
+                            ~df['position_close'],
+                            df['avg_price'] * (1 - np.sign(df['trade_size'].ffill()) * stop_loss),
+                            np.nan
+                        )
+                        df['sl_price'] = df['sl_price'].shift(1)
+                        trigger_condition = (df['high'] >= df['sl_price']) & (df['sl_price'] >= df['low'])
+                        df['sl_price'] = df['sl_price'].where(trigger_condition & ~df['position_close'])
+                        df['_sl_close'] = df.groupby('_avg_streak')['sl_price'].transform(
+                            lambda x: x.ffill().fillna(0).astype(bool).diff().fillna(0).ne(0)
+                        )
+                        df.loc[df['_sl_close'], 'trade_size'] = df['agg_trade'].shift(1) * (-1)
+                        # update back the trade_size and order_size after stop loss
+                        after_sl_mask = df.groupby(['_avg_streak'])['_sl_close'].transform(
+                            lambda x: x.fillna(0).cumsum().astype(bool)
+                        )
+                        df.loc[after_sl_mask & ~df['_sl_close'], 'trade_size'] = np.nan
+                        df.loc[after_sl_mask & ~df['position_close'], 'order_size'] = np.nan
+                        
+                    if take_profit:
+                        df['tp_price'] = np.where(
+                            ~df['position_close'],
+                            df['avg_price'] * (1 + np.sign(df['trade_size'].ffill()) * take_profit),
+                            np.nan
+                        )
+                        trigger_condition = (df['high'] >= df['tp_price']) & (df['tp_price'] >= df['low'])
+                        df['tp_price'] = df['tp_price'].where(trigger_condition)
+                        
                     # TODO
-                    _calculate_position()
-                    _close_position()
+                    import random
+                    random.seed(8)
+                    # df['first'] = random.choices(['H', 'L', 'N'], k=df.shape[0])
+                   
             if flip_position:
                 _flip_position()
             _calculate_position()
         else:
             # TODO: consider all: first_trade_only, flip_position, close_position ...
-            cprint("Position dependencies detected, using FOR LOOP in vectorized backtesting!")
             raise NotImplementedError("The for-loop approach is not yet implemented for vectorized backtesting")
         
         
@@ -407,6 +453,7 @@ class PandasDataTool(BaseDataTool):
             if first_trade_only:
                 df.loc[df['trade_size'].notna() & (~df['position_close']), 'remark'] += ',first_trade'
             df.loc[df['position_close'], 'remark'] += ',position_close'
+            df.loc[df['_sl_close'], 'remark'] += ',sl_close'
             df.loc[df['position_flip'], 'remark'] += ',position_flip'
             # remove leading comma
             df['remark'] = df['remark'].str.lstrip(',')
@@ -426,6 +473,7 @@ class PandasDataTool(BaseDataTool):
         
 
         # remove temporary columns
+        # TODO: when stable, remove 'order_price' and 'order_size' as well, i.e. rename to '_order_price' and '_order_size'
         tmp_cols = [col for col in df.columns if col.startswith('_')]
         df.drop(columns=tmp_cols, inplace=True)
         return df

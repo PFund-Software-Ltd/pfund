@@ -224,3 +224,4 @@ class TradeEngine(BaseEngine):
             time.sleep(1)
         else:
             self.logger.debug('background thread is finished')
+        self._remove_singleton()
