@@ -69,7 +69,7 @@ PFund (/piː fʌnd/), which stands for "**Personal Fund**", is an **algo-trading
 
 ## Project Status
 > [!CAUTION]
-> PFund is at a VERY EARLY stage, use it at your own risk._**
+> PFund is at a VERY EARLY stage, use it at your own risk.
 
 PFund is currently under active development, the framework design will be prioritized first over
 stability and scalability.
