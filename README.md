@@ -6,6 +6,7 @@
 ![PyPI - Support Python Versions](https://img.shields.io/pypi/pyversions/pfund)
 [![Jupyter Book Badge](https://raw.githubusercontent.com/PFund-Software-Ltd/pfund/main/docs/images/jupyterbook.svg
 )](https://jupyterbook.org)
+[![marimo](https://marimo.io/shield.svg)](https://marimo.io)
 [![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/)
 
 [TradFi]: https://www.techopedia.com/definition/traditional-finance-tradfi
@@ -52,29 +53,18 @@ PFund (/piː fʌnd/), which stands for "**Personal Fund**", is an **algo-trading
 <details>
 <summary>Table of Contents</summary>
 
-- [Project Status](#project-status)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
   - [Backtesting](#backtesting)
   - [Live Trading](#live-trading)
   - [Parameter Training / Hyperparameter Tuning](#parameter-training--hyperparameter-tuning)
   - [Building LEGO-Style Strategy and Model](#building-lego-style-strategy-and-model)
-- [Model Hub](#model-hub)
+- [PFund Hub](#pfund-hub)
 - [Supported Trading Venues](#supported-trading-venues)
 - [Related Projects](#related-projects)
 - [Disclaimer](#disclaimer)
 
 </details>
-
-
-## Project Status
-> [!CAUTION]
-> PFund is at a VERY EARLY stage, use it at your own risk.
-
-PFund is currently under active development, the framework design will be prioritized first over
-stability and scalability.
-
-> PFund for the time being **_only supports backtesting_** using [Bybit] and Yahoo Finance data for testing purpose.
 
 
 ## Installation
@@ -102,7 +92,8 @@ poetry update pfund
 
 ### Using Pip
 ```bash
-pip install pfund
+# same as above, you can choose to install "pfund[all]", "pfund[data,ml,fe]", "pfund[data,ml]", "pfund[data]" or "pfund"
+pip install "pfund[all]"
 
 # install the latest version:
 pip install -U pfund
@@ -193,10 +184,10 @@ engine.run()
 ```
 
 
-## Model Hub
-Imagine a space where algo-traders can share their machine learning models with one another.
+## PFund Hub
+Imagine a space where algo-traders can share their trading strategies and machine learning models with one another.
 Strategy and model development could be so much faster since you can build on top of an existing working model.
-> Model Hub is coming soon on [PFund.ai], Stay Tuned!
+
 
 ---
 

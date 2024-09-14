@@ -55,6 +55,9 @@ class Resolution:
     def is_month(self):
         return self.timeframe.is_month()
     
+    def is_year(self):
+        return self.timeframe.is_year()
+    
     def __str__(self):
         return str(self.period) + '_' + str(self.timeframe)
 

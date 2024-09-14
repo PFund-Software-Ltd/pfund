@@ -13,27 +13,28 @@ keywords = ["trading", "algo-trading", "stocks", "cryptos", "cryptocurrencies", 
 [tool.poetry.dependencies]
 python = ">=3.10 <3.13"
 python-dotenv = "^1.0.1"
-pyyaml = "^6.0.1"
-tqdm = "^4.66.2"
-rich = "^13.7.0"
 click = "^8.1.7"
-schedule = "^1.2.1"
-platformdirs = "^4.2.0"
-requests = "^2.31.0"
-websocket-client = "^1.7.0"
-python-telegram-bot = "^20.7"
+rich = "^13.8.1"
+tqdm = "^4.66.5"
+pyyaml = "^6.0.2"
+requests = "^2.32.3"
+schedule = "^1.2.2"
 gitpython = "^3.1.43"
+platformdirs = "^4.3.3"
+websocket-client = "^1.8.0"
+python-telegram-bot = "^21.5"
 pfeed = { version = "^0.0.1.dev12", optional = true, extras = ["all"] }
-orjson = { version = "^3.9.14", optional = true }
-pyzmq = { version = "^25.1.2", optional = true }
-ta = { version = "^0.11.0", optional = true }
-scikit-learn = { version = "^1.4.0", optional = true }
-torch = { version = "^2.1.2", optional = true }
-feast = { git = "https://github.com/feast-dev/feast.git", optional = true }
-mlflow = { version = "^2.11.3", optional = true }
 pfolio = { version = "^0.0.1.dev4", optional = true }
-papermill = { version = "^2.5.0", optional = true }
-voila = { version = "^0.5.6", optional = true }
+orjson = {version = "^3.10.7", optional = true}
+pyzmq = {version = "^26.2.0", optional = true}
+papermill = {version = "^2.6.0", optional = true}
+voila = {version = "^0.5.7", optional = true}
+scikit-learn = {version = "^1.5.2", optional = true}
+torch = {version = "^2.4.1", optional = true}
+mlflow = {version = "^2.16.1", optional = true}
+feast = {version = "^0.40.1", optional = true}
+ta = { version = "^0.11.0", optional = true }
+tsfresh = {version = "^0.20.3", optional = true}
 
 [tool.poetry.extras]
 data = ["pfeed", "orjson", "pyzmq"]
@@ -70,8 +71,8 @@ bandit = "^1.7.7"
 pre-commit = "^3.6.1"
 
 [tool.poetry.group.doc.dependencies]
-jupyter-book = "^1.0.0"
-notebook = "^7.1.2"
+jupyter-book = "^1.0.2"
+notebook = "^7.2.2"
 sphinxawesome-theme = "^5.2.0"
 
 [build-system]

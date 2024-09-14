@@ -45,9 +45,9 @@ Since PFund's sole purpose is for trading only, for all the data work, there is 
 ## Why use `pfund`
 You should use `pfund` if you want to:
 - Join [PFund.ai]'s ecosystem, which includes:
-    - **AI** (LLM) capable of analyzing your `pfund` strategies
-    - A **Model Hub** for plug-and-play machine learning models
-    - Strategy deployment
+    - **AI** (LLM) capable of analyzing your trading strategies
+    - **PFund Hub** for downloading trading strategies and machine learning models
+    - Cloud deployment
 - Use a **single framework** to trade across markets - stocks, futures and cryptos etc.
 - Apply machine learning in algo-trading
 - Focus primarily on strategy development and let the framework handle the rest

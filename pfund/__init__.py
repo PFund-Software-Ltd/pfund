@@ -1,8 +1,6 @@
 import sys
 from importlib.metadata import version
 
-from rich.console import Console
-
 from pfund.config_handler import configure
 from pfund.const.aliases import ALIASES
 from pfund.const.paths import PROJ_PATH
@@ -12,13 +10,9 @@ from pfund.engines import BacktestEngine, TradeEngine, TrainEngine, SandboxEngin
 from pfund.strategies import Strategy
 
 
-cprint = lambda msg: Console().print(msg, style='bold')
-
-
 __version__ = version('pfund')
 __all__ = (
     '__version__',
-    'cprint',
     'configure', 
     'ALIASES',
     'BacktestEngine', 

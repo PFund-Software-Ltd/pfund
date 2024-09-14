@@ -2,10 +2,7 @@ import time
 
 from typing import Any
 
-try:
-    import zmq
-except ImportError:
-    pass
+import zmq
 
 
 class ZeroMQ:

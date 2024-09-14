@@ -8,17 +8,14 @@ from typing import TYPE_CHECKING, Literal, overload
 if TYPE_CHECKING:
     from pfund.types.core import tStrategy
     from pfund.types.common_literals import tSUPPORTED_DATA_TOOLS, tSUPPORTED_ENVIRONMENTS, tSUPPORTED_BROKERS
-    
+    from pfund.brokers import BaseBroker, CryptoBroker, IBBroker
+    from pfund.strategies.strategy_base import BaseStrategy
+
 from rich.console import Console
 
 from pfund.utils.utils import Singleton
-from pfund.strategies.strategy_base import BaseStrategy
-from pfund.brokers import BaseBroker, CryptoBroker, IBBroker
-from pfund.managers.strategy_manager import StrategyManager
 from pfund.const.common import SUPPORTED_ENVIRONMENTS, SUPPORTED_BROKERS, SUPPORTED_DATA_TOOLS
 from pfund.config_handler import ConfigHandler
-from pfund.plogging import set_up_loggers
-from pfund.plogging.config import LoggingDictConfigurator
 
 
 ENV_COLORS = {
@@ -42,6 +39,9 @@ class BaseEngine(Singleton):
         config: ConfigHandler | None=None,
         **settings
     ):
+        from pfund.plogging.config import LoggingDictConfigurator
+        from pfund.plogging import set_up_loggers
+
         if not hasattr(cls, 'env'):
             cls.env = env.upper() if isinstance(env, str) else str(env).upper()
             assert cls.env in SUPPORTED_ENVIRONMENTS, f'env={cls.env} is not supported'
@@ -71,6 +71,7 @@ class BaseEngine(Singleton):
         config: ConfigHandler | None=None, 
         **settings
     ):
+        from pfund.managers.strategy_manager import StrategyManager
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):
             self._validate_env()

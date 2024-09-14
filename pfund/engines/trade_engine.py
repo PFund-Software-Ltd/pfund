@@ -23,7 +23,6 @@ import schedule
 from pfund.engines.base_engine import BaseEngine
 from pfund.brokers.broker_base import BaseBroker
 from pfund.utils.utils import flatten_dict, is_port_in_use
-from pfund.zeromq import ZeroMQ
 from pfund.config_handler import ConfigHandler
 
 
@@ -68,6 +67,8 @@ class TradeEngine(BaseEngine):
         config: ConfigHandler | None=None,
         **settings
     ):
+        from pfund.zeromq import ZeroMQ
+
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):
             self._is_running = True

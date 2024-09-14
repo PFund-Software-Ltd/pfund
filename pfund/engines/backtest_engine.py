@@ -1,10 +1,14 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    import pandas as pd
+    try:
+        import pandas as pd
+    except ImportError:
+        pd = None
     from pfund.types.common_literals import tSUPPORTED_BACKTEST_MODES, tSUPPORTED_DATA_TOOLS
     from pfund.types.core import tStrategy, tModel, tFeature, tIndicator
     from pfund.models.model_base import BaseModel
+    from pfund.mixins.backtest_mixin import BacktestMixin
 
 import os
 import hashlib
@@ -24,14 +28,11 @@ except ImportError:
     pl = None
 
 import pfund as pf
-from pfund.git_controller import GitController
 from pfund.engines.base_engine import BaseEngine
-from pfund.brokers.broker_backtest import BacktestBroker
 from pfund.strategies.strategy_base import BaseStrategy
-from pfund.strategies.strategy_backtest import BacktestStrategy
+from pfund.brokers.broker_backtest import BacktestBroker
 from pfund.config_handler import ConfigHandler
 from pfund.utils import utils
-from pfund.mixins.backtest_mixin import BacktestMixin
 
 
 class BacktestEngine(BaseEngine):
@@ -111,6 +112,8 @@ class BacktestEngine(BaseEngine):
         config: ConfigHandler | None=None,
         **settings
     ):
+        from pfund.git_controller import GitController
+
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):
             # Get the current frame and then the outer frame (where the engine instance is created)
@@ -127,6 +130,7 @@ class BacktestEngine(BaseEngine):
     # HACK: since python doesn't support dynamic typing, true return type should be subclass of BacktestMixin and tStrategy
     # write -> BacktestMixin | tStrategy for better intellisense in IDEs
     def add_strategy(self, strategy: tStrategy, name: str='', is_parallel=False) -> BacktestMixin | tStrategy:
+        from pfund.strategies.strategy_backtest import BacktestStrategy
         is_dummy_strategy_exist = '_dummy' in self.strategy_manager.strategies
         assert not is_dummy_strategy_exist, 'dummy strategy is being used for model backtesting, adding another strategy is not allowed'
         if is_parallel:
@@ -401,38 +405,57 @@ class BacktestEngine(BaseEngine):
                 tqdm_bar.update(1)
             
         if self.use_ray:
+            import atexit
             import ray
             from ray.util.queue import Queue
             
-            ray.init(num_cpus=self.num_cpus)
-            print(f"Ray's num_cpus is set to {self.num_cpus}")
+            atexit.register(lambda: ray.shutdown())
             
             @ray.remote
             def _run_task(log_queue: Queue,  _df_chunk: pd.DataFrame | pl.LazyFrame, _chunk_num: int, _batch_num: int):
-                logger = backtestee.logger
-                if not logger.handlers:
-                    logger.addHandler(QueueHandler(log_queue))
-                    logger.setLevel(logging.DEBUG)
-                if self.mode == 'vectorized':
-                    _df_chunk = dtl.preprocess_vectorized_df(_df_chunk, backtestee)
-                    backtestee.backtest(_df_chunk)
-                elif self.mode == 'event_driven':
-                    _df_chunk = dtl.preprocess_event_driven_df(_df_chunk)
-                    self._event_driven_backtest(_df_chunk, chunk_num=_chunk_num, batch_num=_batch_num)
+                try:
+                    logger = backtestee.logger
+                    if not logger.handlers:
+                        logger.addHandler(QueueHandler(log_queue))
+                        logger.setLevel(logging.DEBUG)
+                    if self.mode == 'vectorized':
+                        _df_chunk = dtl.preprocess_vectorized_df(_df_chunk, backtestee)
+                        backtestee.backtest(_df_chunk)
+                    elif self.mode == 'event_driven':
+                        _df_chunk = dtl.preprocess_event_driven_df(_df_chunk)
+                        self._event_driven_backtest(_df_chunk, chunk_num=_chunk_num, batch_num=_batch_num)
+                except Exception:
+                    logger.exception(f'Error in backtest-chunk{_chunk_num}-batch{_batch_num}:')
+                    return False
+                return True
 
-            batch_size = self.num_cpus
-            log_queue = Queue()
-            QueueListener(log_queue, *backtestee.logger.handlers, respect_handler_level=True).start()
-            batches = [ray_tasks[i: i + batch_size] for i in range(0, len(ray_tasks), batch_size)]
-            with tqdm(
-                total=len(batches),
-                desc=f'Backtesting {backtestee.name} ({batch_size} chunks per batch)', 
-                colour='green'
-            ) as tqdm_bar:
-                for batch_num, batch in enumerate(batches):
-                    futures = [_run_task.remote(log_queue, *task, batch_num) for task in batch]
-                    ray.get(futures)
-                    tqdm_bar.update(1)
+            try:
+                log_listener = None
+                logger = backtestee.logger
+                ray.init(num_cpus=self.num_cpus)
+                print(f"Ray's num_cpus is set to {self.num_cpus}")
+                batch_size = self.num_cpus
+                log_queue = Queue()
+                log_listener = QueueListener(log_queue, *logger.handlers, respect_handler_level=True)
+                log_listener.start()
+                batches = [ray_tasks[i: i + batch_size] for i in range(0, len(ray_tasks), batch_size)]
+                with tqdm(
+                    total=len(batches),
+                    desc=f'Backtesting {backtestee.name} ({batch_size} chunks per batch)', 
+                    colour='green'
+                ) as tqdm_bar:
+                    for batch_num, batch in enumerate(batches):
+                        futures = [_run_task.remote(log_queue, *task, batch_num) for task in batch]
+                        results = ray.get(futures)
+                        if not all(results):
+                            logger.warning(f'Some backtesting tasks in batch{batch_num} failed, check {logger.name}.log for details')
+                        tqdm_bar.update(1)
+            except Exception:
+                logger.exception('Error in backtesting:')
+            finally:
+                if log_listener:
+                    log_listener.stop()
+                ray.shutdown()
         end_time = time.time()
         print(f'Backtest elapsed time: {end_time - start_time:.2f}(s)')
         

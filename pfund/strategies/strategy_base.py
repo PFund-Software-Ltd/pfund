@@ -17,7 +17,6 @@ if TYPE_CHECKING:
     from pfund.orders.order_base import BaseOrder
     from pfund.datas import BaseData
 
-from pfund.zeromq import ZeroMQ
 from pfund.strategies.strategy_meta import MetaStrategy
 from pfund.utils.utils import convert_to_uppercases, get_engine_class
 from pfund.mixins.trade_mixin import TradeMixin
@@ -106,6 +105,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         return self._zmq
 
     def start_zmq(self):
+        from pfund.zeromq import ZeroMQ
         zmq_ports = self.engine.zmq_ports
         self._zmq = ZeroMQ(self.name)
         self._zmq.start(

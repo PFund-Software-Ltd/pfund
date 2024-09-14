@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import yaml
 # from rich.traceback import install
 
-from pfund.const.paths import PROJ_NAME, LOG_PATH, PROJ_CONFIG_PATH, DATA_PATH, USER_CONFIG_FILE_PATH
+from pfund.const.paths import PROJ_NAME, LOG_PATH, MAIN_PATH, DATA_PATH, USER_CONFIG_FILE_PATH
 
 # install(show_locals=False)  # rich will set its own sys.excepthook
 # rich_excepthook = sys.excepthook  # get rich's excepthook
@@ -51,10 +51,12 @@ def dynamic_import(path: str):
 class ConfigHandler:
     data_path: str = str(DATA_PATH)
     log_path: str = str(LOG_PATH)
-    logging_config_file_path: str = f'{PROJ_CONFIG_PATH}/logging.yml'
+    logging_config_file_path: str = f'{MAIN_PATH}/logging.yml'
     logging_config: dict | None = None
     use_fork_process: bool = True
     use_custom_excepthook: bool = True
+    env_file_path: str | None=None
+    debug: bool = False
     
     @classmethod
     def load_config(cls):
@@ -118,15 +120,38 @@ class ConfigHandler:
         
         if self.use_custom_excepthook and sys.excepthook is sys.__excepthook__:
             sys.excepthook = _custom_excepthook
+            
+    def load_env_file(self, env_file_path: str | None):
+        from dotenv import find_dotenv, load_dotenv
+        
+        if not env_file_path:
+            found_env_file_path = find_dotenv(usecwd=True, raise_error_if_not_found=False)
+            if found_env_file_path:
+                print(f'.env file path is not specified, using env file in "{found_env_file_path}"')
+            else:
+                # print('.env file is not found')
+                return
+        load_dotenv(env_file_path, override=True)
+    
+    def enable_debug_mode(self):
+        '''Enables debug mode by setting the log level to DEBUG for all stream handlers'''
+        if 'handlers' not in self.logging_config:
+            self.logging_config['handlers'] = {}
+        for handler in ['stream_handler', 'stream_path_handler']:
+            if handler not in self.logging_config['handlers']:
+                self.logging_config['handlers'][handler] = {}
+            self.logging_config['handlers'][handler]['level'] = 'DEBUG'
     
 
 def configure(
     data_path: str = str(DATA_PATH),
     log_path: str = str(LOG_PATH),
-    logging_config_file_path: str = f'{PROJ_CONFIG_PATH}/logging.yml',
+    logging_config_file_path: str = f'{MAIN_PATH}/logging.yml',
     logging_config: dict | None=None,
     use_fork_process: bool=True,
     use_custom_excepthook: bool=False,
+    env_file_path: str | None = None,
+    debug: bool | None = None,
 ):
     return ConfigHandler(
         data_path=data_path,
@@ -135,4 +160,6 @@ def configure(
         logging_config=logging_config,
         use_fork_process=use_fork_process,
         use_custom_excepthook=use_custom_excepthook,
+        env_file_path=env_file_path,
+        debug=debug,
     )

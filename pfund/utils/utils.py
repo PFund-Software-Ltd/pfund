@@ -1,3 +1,5 @@
+from typing import Any
+
 import os
 import importlib
 import inspect
@@ -5,9 +7,6 @@ import datetime
 from pathlib import Path
 
 import yaml
-
-from typing import Any
-
 import requests
 
 

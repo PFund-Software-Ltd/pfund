@@ -10,7 +10,7 @@ class TimeframeUnits(IntEnum):
     DAY = d = 60 * 60 * 24
     WEEK = w = 60 * 60 * 24 * 7  # REVIEW: 7 is not accurate
     MONTH = M = 60 * 60 * 24 * 30  # REVIEW: 30 is not accurate
-
+    YEAR = y = 60 * 60 * 24 * 365  # REVIEW: 365 is not accurate
 
 class Timeframe:
     def __init__(self, timeframe):
@@ -40,6 +40,9 @@ class Timeframe:
 
     def is_month(self):
         return self._timeframe == 'M'
+    
+    def is_year(self):
+        return self._timeframe == 'y'
 
     def __str__(self):
         return str(self.unit.name)

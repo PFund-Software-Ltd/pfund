@@ -7,14 +7,17 @@ from collections import defaultdict
 
 import numpy as np
 import pandas as pd
+from rich.console import Console
 
-from pfund import cprint
 from pfund.data_tools.data_tool_base import BaseDataTool
 from pfund.utils.envs import backtest, train
 
 
 SUPPORTED_CLOSE_POSITION_WHEN = ['signal_change']
 tSUPPORTED_CLOSE_POSITION_WHEN = Literal['signal_change']
+
+
+cprint = lambda msg: Console().print(msg, style='bold')
 
 
 # NOTE: convention: all function names that endswith "_df" will directly modify self.df, e.g. "xxx_df"
@@ -428,7 +431,7 @@ class PandasDataTool(BaseDataTool):
                         trigger_condition = (df['high'] >= df['tp_price']) & (df['tp_price'] >= df['low'])
                         df['tp_price'] = df['tp_price'].where(trigger_condition)
                         
-                    # TODO
+                    # TODO: 'first' will make the order of take_profit and  stop_loss different
                     import random
                     random.seed(8)
                     # df['first'] = random.choices(['H', 'L', 'N'], k=df.shape[0])

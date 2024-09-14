@@ -18,6 +18,7 @@ SUPPORTED_TIMEFRAMES = [
     'days', 'day', 'd',
     'weeks', 'week', 'w',
     'months', 'month', 'M',
+    'years', 'year', 'y',
 ]
 SUPPORTED_DATA_CHANNELS = ['orderbook', 'tradebook', 'kline']
 SUPPORTED_BACKTEST_MODES = ['vectorized', 'event_driven']
