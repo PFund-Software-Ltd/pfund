@@ -1,9 +1,9 @@
-import numpy as np
-
-try:
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
     import pandas as pd
-except ImportError:
-    pd = None
+    import numpy as np
+
 
 try:
     import polars as pl
@@ -19,6 +19,11 @@ class SklearnModel(BaseModel):
         X: np.ndarray | pd.DataFrame | pl.LazyFrame, 
         y: np.ndarray
     ):
+        try:
+            import pandas as pd
+        except ImportError:
+            pd = None
+            
         if pd is not None and isinstance(X, pd.DataFrame):
             X = X.to_numpy()
         elif pl is not None and isinstance(X, pl.LazyFrame):
@@ -32,6 +37,11 @@ class SklearnModel(BaseModel):
         *args, 
         **kwargs
     ) -> np.ndarray:
+        try:
+            import pandas as pd
+        except ImportError:
+            pd = None
+            
         if pd is not None and isinstance(X, pd.DataFrame):
             X = X.to_numpy()
         elif pl is not None and isinstance(X, pl.LazyFrame):

@@ -61,7 +61,10 @@ class BaseEngine(Singleton):
             logging_config_file_path = cls.config.logging_config_file_path
             cls.logging_configurator: LoggingDictConfigurator  = set_up_loggers(log_path, logging_config_file_path, user_logging_config=cls.config.logging_config)
         if not hasattr(cls, 'settings'):
+            from IPython import get_ipython
             cls.settings = settings
+            if 'ipython' not in settings:
+                settings['ipython'] = bool(get_ipython() is not None)
         return super().__new__(cls)
     
     def __init__(

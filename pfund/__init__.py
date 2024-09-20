@@ -8,6 +8,7 @@ from pfund.const.paths import PROJ_PATH
 sys.path.append(f'{PROJ_PATH}/externals')
 from pfund.engines import BacktestEngine, TradeEngine, TrainEngine, SandboxEngine
 from pfund.strategies import Strategy
+from pfund.models import Model, Feature, PytorchModel, SklearnModel
 
 
 __version__ = version('pfund')
@@ -20,4 +21,8 @@ __all__ = (
     'TrainEngine', 
     'SandboxEngine',
     'Strategy', 
+    'Model',
+    'Feature',
+    'PytorchModel',
+    'SklearnModel',
 )

@@ -120,7 +120,12 @@ class ConfigHandler:
         
         if self.use_custom_excepthook and sys.excepthook is sys.__excepthook__:
             sys.excepthook = _custom_excepthook
-            
+        
+        self.load_env_file(self.env_file_path)
+        
+        if self.debug:
+            self.enable_debug_mode()    
+        
     def load_env_file(self, env_file_path: str | None):
         from dotenv import find_dotenv, load_dotenv
         

@@ -112,20 +112,22 @@ class BacktestEngine(BaseEngine):
         config: ConfigHandler | None=None,
         **settings
     ):
-        from pfund.git_controller import GitController
-
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):
-            # Get the current frame and then the outer frame (where the engine instance is created)
-            caller_frame = inspect.currentframe().f_back
-            file_path = caller_frame.f_code.co_filename  # Extract the file path from the frame
-            self._git = GitController(os.path.abspath(file_path))
             super().__init__(
                 env,
                 data_tool=data_tool,
                 config=config,
                 **settings
             )
+            if not self.settings['ipython']:
+                from pfund.git_controller import GitController
+                # Get the current frame and then the outer frame (where the engine instance is created)
+                caller_frame = inspect.currentframe().f_back
+                file_path = caller_frame.f_code.co_filename  # Extract the file path from the frame
+                self._git = GitController(os.path.abspath(file_path))
+            else:
+                self._git = None
     
     # HACK: since python doesn't support dynamic typing, true return type should be subclass of BacktestMixin and tStrategy
     # write -> BacktestMixin | tStrategy for better intellisense in IDEs
