@@ -1,16 +1,15 @@
-import numpy as np
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    import numpy as np
+    try:
+        import pandas as pd
+        import polars as pl
+    except ImportError:
+        pass
+    from pfund.indicators.indicator_base import TalibFunction
 
-try:
-    import pandas as pd
-except ImportError:
-    pass
-
-try:
-    import polars as pl
-except ImportError:
-    pass
-
-from pfund.indicators.indicator_base import TalibFunction, BaseIndicator
+from pfund.indicators.indicator_base import BaseIndicator
 
 
 class TalibIndicator(BaseIndicator):
@@ -44,6 +43,8 @@ class TalibIndicator(BaseIndicator):
         return self.get_indicator_info()['parameters']
     
     def _predict_pandas(self, X: pd.DataFrame) -> np.ndarray:
+        import pandas as pd
+
         def _indicate(_X: pd.DataFrame) -> pd.DataFrame:
             _df = self.indicator(_X, *self._args, **self._kwargs)
             if type(_df) is pd.Series:
@@ -65,6 +66,7 @@ class TalibIndicator(BaseIndicator):
 
     # TODO
     def _predict_polars(self):
+        import polars as pl
         pass
     
     def on_start(self):

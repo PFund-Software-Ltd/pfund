@@ -4,7 +4,6 @@ Conceptually, this is a combination of broker_crypto.py + exchange_base.py in cr
 from pfund.adapter import Adapter
 from pfund.config.configuration import Configuration
 from pfund.const.paths import PROJ_CONFIG_PATH
-from pfund.const.common import SUPPORTED_TRADFI_PRODUCT_TYPES
 from pfund.products import IBProduct
 from pfund.accounts import IBAccount
 from pfund.orders import IBOrder
@@ -30,9 +29,10 @@ class IBBroker(LiveBroker):
     def start(self, zmq=None):
         super().start(zmq=zmq)
 
-    @staticmethod
     # EXTEND
-    def derive_exch(bccy: str, qccy: str, ptype: str):
+    @staticmethod
+    def derive_exch(pdt: str):
+        bccy, qccy, ptype, *args = IBProduct.parse_product_name(pdt)
         if ptype == 'CASH':
             exch = 'IDEALPRO'
         elif ptype == 'CRYPTO':
@@ -41,8 +41,8 @@ class IBBroker(LiveBroker):
             exch = 'SMART'
         return exch
 
-    @staticmethod
     # EXTEND
+    @staticmethod
     def _standardize_ptype(ptype: str):
         if ptype in ['CASH', 'CURRENCY', 'FX', 'FOREX', 'SPOT']:
             ptype = 'CASH'
@@ -67,16 +67,11 @@ class IBBroker(LiveBroker):
     def add_custom_data(self):
         pass
     
-    def add_data(self, base_currency, quote_currency, product_type, *args, **kwargs):
-        base_currency, quote_currency, product_type = convert_to_uppercases(base_currency, quote_currency, product_type)
-        product_type = self._standardize_ptype(product_type)
-        if 'exch' in kwargs:
-            exch = kwargs['exch'].upper()
-            del kwargs['exch']
-        else:
-            exch = self.derive_exch(base_currency, quote_currency, product_type)
-        product = self.add_product(exch, base_currency, quote_currency, product_type, *args, **kwargs)
-        datas = self.data_manager.add_data(product, **kwargs)
+    def add_data(self, pdt: str, resolutions: list[str] | str, exch: str='', **kwargs):
+        exch = exch or self.derive_exch(pdt)
+        exch, pdt = exch.upper(), pdt.upper()
+        product: IBProduct = self.add_product(exch, pdt, **kwargs)
+        datas = self.data_manager.add_data(product, resolutions, **kwargs)
         for data in datas:
             self.add_data_channel(data, **kwargs)
         return datas
@@ -95,18 +90,22 @@ class IBBroker(LiveBroker):
             self.add_channel(channel, 'public', product=data.product, period=data.period, timeframe=str(timeframe), **kwargs)
         else:
             raise NotImplementedError
+    
+    def create_product(self, exch: str, pdt: str, **kwargs) -> IBProduct:
+        bccy, qccy, ptype, *args = IBProduct.parse_product_name(pdt)
+        product = IBProduct(exch, bccy, qccy, ptype, *args, **kwargs)
+        return product
 
     def get_product(self, pdt: str, exch: str='') -> IBProduct | None:
-        if not exch:
-            bccy, qccy, ptype, *args = IBProduct.parse_product_name(pdt)
-            exch = self.derive_exch(bccy, qccy, ptype)
+        exch = exch or self.derive_exch(pdt)
         return self._products[exch.upper()].get(pdt.upper(), None)
 
-    def add_product(self, exch, bccy, qccy, ptype, *args, **kwargs):
-        assert ptype.upper() in SUPPORTED_TRADFI_PRODUCT_TYPES, f'{self.bkr} product type {ptype} is not supported, {SUPPORTED_TRADFI_PRODUCT_TYPES=}'
+    def add_product(self, exch: str, pdt: str, **kwargs) -> IBProduct:
+        exch, pdt = exch.upper(), pdt.upper()
+        bccy, qccy, ptype, *args = IBProduct.parse_product_name(pdt)
         pdt = IBProduct.create_product_name(bccy, qccy, ptype, *args, **kwargs)
         if not (product := self.get_product(exch=exch, pdt=pdt)):
-            product = IBProduct(exch, bccy, qccy, ptype, *args, **kwargs)
+            product = self.create_product(exch, pdt, **kwargs)
             self._products[exch][product.name] = product
             self._api.add_product(product, **kwargs)
             self.logger.debug(f'added product {product.name}')
@@ -140,9 +139,8 @@ class IBBroker(LiveBroker):
     def add_position(self, exch: str, acc: str, pdt: str) -> IBPosition | None:
         exch, acc, pdt = convert_to_uppercases(exch, acc, pdt)
         if not (position := self.get_positions(exch=exch, acc=acc, pdt=pdt)):
-            bccy, qccy, ptype, *args = IBProduct.parse_product_name(pdt)
             account = self.get_account(acc)
-            product = self.add_product(exch, bccy, qccy, ptype, *args)
+            product = self.add_product(exch, pdt)
             position = IBPosition(account, product)
             self.portfolio_manager.add_position(position)
             self.logger.debug(f'added {position=}')
@@ -151,8 +149,7 @@ class IBBroker(LiveBroker):
     def add_order(self, exch: str, acc: str, pdt: str) -> IBOrder | None:
         exch, acc, pdt = convert_to_uppercases(exch, acc, pdt)
         if not (order := self.get_orders(acc)):
-            bccy, qccy, ptype, *args = IBProduct.parse_product_name(pdt)
-            product = self.add_product(exch, bccy, qccy, ptype, *args)
+            product = self.add_product(exch, pdt)
             order = IBOrder(self.env, acc, product)
             self.orders[acc][order.oid] = order
         return order
@@ -233,8 +230,7 @@ class IBBroker(LiveBroker):
     
     def create_order(self, exch, acc, pdt, *args, **kwargs):
         account = self.get_account(acc)
-        bccy, qccy, ptype, *args = IBProduct.parse_product_name(pdt)
-        product = self.add_product(exch, bccy, qccy, ptype, *args)    
+        product = self.add_product(exch, pdt)    
         return IBOrder(account, product, *args, **kwargs)
     
     def place_order(self, o):

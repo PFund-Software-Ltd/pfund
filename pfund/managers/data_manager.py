@@ -12,19 +12,6 @@ from pfund.datas.resolution import Resolution
 from pfund.datas import QuoteData, TickData, BarData
 from pfund.products.product_base import BaseProduct
 from pfund.managers.base_manager import BaseManager
-        
-
-def get_resolutions_from_kwargs(kwargs: dict) -> list[Resolution]:
-    # create data based on resolution(s)
-    key = 'resolutions' if 'resolutions' in kwargs else 'resolution'
-    if type(kwargs[key]) is list:
-        resolutions = kwargs[key]
-    elif type(kwargs[key]) is str:
-        resolutions = [kwargs[key]]
-    else:
-        raise Exception(f'{key} must be a list or str')
-    resolutions = [Resolution(resolution) for resolution in set(resolutions)]  # use set() to remove duplicates
-    return resolutions
 
 
 class DataManager(BaseManager):
@@ -175,47 +162,35 @@ class DataManager(BaseManager):
         else:
             raise Exception(f'{product} {resolution} data not found')
 
-    def add_data(self, product: BaseProduct, **kwargs) -> list[BaseData]:
+    def add_data(self, product: BaseProduct, resolutions: list[str], **kwargs) -> list[BaseData]:
         datas = []
-        # time-based data
-        if 'resolution' in kwargs or 'resolutions' in kwargs:
-            resolutions: list[Resolution] = get_resolutions_from_kwargs(kwargs)
-            if 'resolution' in kwargs:
-                del kwargs['resolution']
-            for resolution in resolutions:
-                if not (data := self.get_data(product, resolution=resolution)):
-                    data = self._create_time_based_data(product, resolution, **kwargs)
-                    self.set_data(product, resolution, data)
-                    datas.append(data)
-            
-            resamples = {Resolution(resamplee_resolution): Resolution(resampler_resolution) for resamplee_resolution, resampler_resolution in kwargs.get('resamples', {}).items()}
-            default_auto_resample = {'by_official_resolution': True, 'by_highest_resolution': True}
-            auto_resample = kwargs.get('auto_resample', default_auto_resample)
-            supported_timeframes_and_periods = kwargs.get('supported_timeframes_and_periods', None)
-            resamples = self._auto_resample(product, resamples, resolutions, auto_resample, supported_timeframes_and_periods)
-                
-            # mutually bind data_resampler and data_resamplee
-            for resamplee_resolution, resampler_resolution in resamples.items():
-                assert resamplee_resolution in resolutions, f'Your target resolution {resamplee_resolution=} must be included in kwarg {resolutions=}'
-                if resampler_resolution <= resamplee_resolution:
-                    raise Exception(f'Cannot use lower/equal resolution "{resampler_resolution}" to resample "{resamplee_resolution}"')
-                if not (data_resampler := self.get_data(product, resolution=resampler_resolution)):
-                    data_resampler = self._create_time_based_data(product, resampler_resolution)
-                self.set_data(product, resampler_resolution, data_resampler)
-                datas.append(data_resampler)
-                self.logger.debug(f'added {product} data')
-                data_resamplee = self.get_data(product, resolution=resamplee_resolution)
-                data_resamplee.add_resampler(data_resampler)
-                data_resampler.add_resamplee(data_resamplee)
-                self.logger.debug(f'{product} {resampler_resolution} data added listener {resamplee_resolution} data')
-        # TODO support volume-based etc.
-        # elif True:
-        #     pass
-        else:
-            raise Exception(f'{product} data resolution(s) must be defined')
+        resolutions = [Resolution(resolution) for resolution in set(resolutions)]  # use set() to remove duplicates
+        for resolution in resolutions:
+            if not (data := self.get_data(product, resolution=resolution)):
+                data = self._create_time_based_data(product, resolution, **kwargs)
+            self.set_data(product, resolution, data)
+            datas.append(data)
         
-        # FIXME: DEPRECATED, to be removed
-        # datas: list[BaseData] = list(self._datas[repr(product)].values())
+        resamples = {Resolution(resamplee_resolution): Resolution(resampler_resolution) for resamplee_resolution, resampler_resolution in kwargs.get('resamples', {}).items()}
+        default_auto_resample = {'by_official_resolution': True, 'by_highest_resolution': True}
+        auto_resample = kwargs.get('auto_resample', default_auto_resample)
+        supported_timeframes_and_periods = kwargs.get('supported_timeframes_and_periods', None)
+        resamples = self._auto_resample(product, resamples, resolutions, auto_resample, supported_timeframes_and_periods)
+            
+        # mutually bind data_resampler and data_resamplee
+        for resamplee_resolution, resampler_resolution in resamples.items():
+            assert resamplee_resolution in resolutions, f'Your target resolution {resamplee_resolution=} must be included in kwarg {resolutions=}'
+            if resampler_resolution <= resamplee_resolution:
+                raise Exception(f'Cannot use lower/equal resolution "{resampler_resolution}" to resample "{resamplee_resolution}"')
+            if not (data_resampler := self.get_data(product, resolution=resampler_resolution)):
+                data_resampler = self._create_time_based_data(product, resampler_resolution)
+            self.set_data(product, resampler_resolution, data_resampler)
+            datas.append(data_resampler)
+            self.logger.debug(f'added {product} data')
+            data_resamplee = self.get_data(product, resolution=resamplee_resolution)
+            data_resamplee.add_resampler(data_resampler)
+            data_resampler.add_resamplee(data_resamplee)
+            self.logger.debug(f'{product} {resampler_resolution} data added listener {resamplee_resolution} data')
         return datas
 
     def update_quote(self, product: BaseProduct | str, quote: dict):

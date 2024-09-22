@@ -1,10 +1,4 @@
 from __future__ import annotations
-
-import sys
-import time
-import datetime
-from pathlib import Path
-
 from typing import TYPE_CHECKING, overload, Literal
 if TYPE_CHECKING:
     import torch
@@ -21,6 +15,11 @@ if TYPE_CHECKING:
     from pfund.datas.data_quote import QuoteData
     from pfund.datas.data_tick import TickData
     from pfund.datas.data_bar import BarData
+
+import sys
+import time
+import datetime
+from pathlib import Path
 
 from pfund.const.common import SUPPORTED_CRYPTO_EXCHANGES
 from pfund.datas.resolution import Resolution
@@ -174,7 +173,7 @@ class TradeMixin:
         if listener in self._listeners[listener_key]:
             self._listeners[listener_key].remove(listener)
     
-    def _derive_bkr_from_trading_venue(self, trading_venue: Literal[tSUPPORTED_TRADING_VENUES]) -> Literal[tSUPPORTED_BROKERS]:
+    def _derive_bkr_from_trading_venue(self, trading_venue: tSUPPORTED_TRADING_VENUES) -> tSUPPORTED_BROKERS:
         trading_venue = trading_venue.upper()
         return 'CRYPTO' if trading_venue in SUPPORTED_CRYPTO_EXCHANGES else trading_venue
     
@@ -184,10 +183,10 @@ class TradeMixin:
     @overload
     def get_broker(self, bkr: Literal['IB']) -> IBBroker: ...
     
-    def get_broker(self, bkr: Literal[tSUPPORTED_BROKERS]) -> BaseBroker:
+    def get_broker(self, bkr: tSUPPORTED_BROKERS) -> BaseBroker:
         return self.engine.get_broker(bkr)
     
-    def get_broker_from_trading_venue(self, trading_venue: Literal[tSUPPORTED_TRADING_VENUES]) -> BaseBroker:
+    def get_broker_from_trading_venue(self, trading_venue: tSUPPORTED_TRADING_VENUES) -> BaseBroker:
         bkr = self._derive_bkr_from_trading_venue(trading_venue)
         return self.get_broker(bkr)
     
@@ -195,12 +194,12 @@ class TradeMixin:
         return list(self.engine.brokers.values())
     
     @overload
-    def get_product(self, trading_venue: Literal[tSUPPORTED_CRYPTO_EXCHANGES], pdt: str, exch: str='') -> CryptoProduct | None: ...
+    def get_product(self, trading_venue: tSUPPORTED_CRYPTO_EXCHANGES, pdt: str, exch: str='') -> CryptoProduct | None: ...
         
     @overload
     def get_product(self, trading_venue: Literal['IB'], pdt: str, exch: str='') -> IBProduct | None: ...
     
-    def get_product(self, trading_venue: Literal[tSUPPORTED_TRADING_VENUES], pdt: str, exch: str='') -> BaseProduct | None:
+    def get_product(self, trading_venue: tSUPPORTED_TRADING_VENUES, pdt: str, exch: str='') -> BaseProduct | None:
         broker = self.get_broker_from_trading_venue(trading_venue)
         if broker.name == 'CRYPTO':
             exch = trading_venue
@@ -233,7 +232,7 @@ class TradeMixin:
         return self.datas[product].get(resolution, None)
     
     def _add_consumers_datas_if_no_data(self) -> list[BaseData]:
-        if self.datas:
+        if self.datas or not self._consumers:
             return []
         self.logger.info(f"No data for {self.name}, adding datas from consumers {[consumer.name for consumer in self._consumers]}")
         datas = []

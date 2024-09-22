@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from sklearn.pipeline import Pipeline
     from pfund.models import PytorchModel, SklearnModel
     from pfund.indicators.indicator_base import TaFunction, TalibFunction
+    from pfund.types.common_literals import tSUPPORTED_TRADING_VENUES
     from pfund.datas.data_base import BaseData
     MachineLearningModel = Union[
         nn.Module,
@@ -186,11 +187,17 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         joblib.dump(obj, file_path, compress=True)
         self.logger.debug(f"dumped '{self.name}' to {short_path(file_path)}")
     
-    def add_data(self, trading_venue, base_currency, quote_currency, ptype, *args, **kwargs) -> list[BaseData]:
+    def add_data(
+        self, 
+        trading_venue: tSUPPORTED_TRADING_VENUES, 
+        product: str, 
+        resolutions: list[str] | str, 
+        **kwargs
+    ) -> list[BaseData]:
         datas = []
         # consumers must also have model's data
         for consumer in self._consumers:
-            for data in consumer.add_data(trading_venue, base_currency, quote_currency, ptype, *args, **kwargs):
+            for data in consumer.add_data(trading_venue, product, resolutions, **kwargs):
                 self.set_data(data.product, data.resolution, data)
                 consumer._add_listener(listener=self, listener_key=data)
                 if data not in datas:

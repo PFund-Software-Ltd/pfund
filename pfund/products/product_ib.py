@@ -1,6 +1,7 @@
 from pfund.externals.ibapi.contract import Contract
 from pfund.products.product_base import BaseProduct
 from pfund.utils.utils import convert_to_uppercases
+from pfund.const.common import SUPPORTED_TRADFI_PRODUCT_TYPES
 
 
 class IBProduct(BaseProduct, Contract):
@@ -24,10 +25,10 @@ class IBProduct(BaseProduct, Contract):
                 name += '_'.join([kwargs['right'], kwargs['strike']])
         return name
 
-    @staticmethod
     # TODO
+    @staticmethod
     def parse_product_name(pdt):
-        return pdt.split('_')
+        return pdt.upper().split('_')
 
     def __init__(
         self, 
@@ -40,6 +41,7 @@ class IBProduct(BaseProduct, Contract):
     ):
         BaseProduct.__init__(self, 'IB', exch, base_currency, quote_currency, product_type, *args, **kwargs)
         Contract.__init__(self)  # inherits attributes from `Contract` (official class from IB)
+        assert self.product_type in SUPPORTED_TRADFI_PRODUCT_TYPES, f'{self.product_type} is not supported, {SUPPORTED_TRADFI_PRODUCT_TYPES=}'
 
         self.symbol = self.base_currency
         self.currency = self.quote_currency

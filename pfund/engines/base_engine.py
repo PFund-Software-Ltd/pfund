@@ -115,15 +115,15 @@ class BaseEngine(Singleton):
     @overload
     def get_broker(self, bkr: Literal['IB']) -> IBBroker: ...
 
-    def get_broker(self, bkr: Literal[tSUPPORTED_BROKERS]) -> BaseBroker:
+    def get_broker(self, bkr: tSUPPORTED_BROKERS) -> BaseBroker:
         return self.brokers[bkr.upper()]
     
-    def remove_broker(self, bkr: Literal[tSUPPORTED_BROKERS]) -> BaseBroker:
+    def remove_broker(self, bkr: tSUPPORTED_BROKERS) -> BaseBroker:
         broker = self.brokers.pop(bkr.upper())
         self.logger.debug(f'removed broker {bkr}')
         return broker
     
-    def get_Broker(self, bkr: Literal[tSUPPORTED_BROKERS]) -> type[BaseBroker]:
+    def get_Broker(self, bkr: tSUPPORTED_BROKERS) -> type[BaseBroker]:
         bkr = bkr.upper()
         assert bkr in SUPPORTED_BROKERS, f'broker {bkr} is not supported'
         if bkr == 'CRYPTO':

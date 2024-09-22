@@ -4,26 +4,26 @@ if TYPE_CHECKING:
     import torch
     import pandas as pd
     import polars as pl
-    from pfund.types.core import tModel
-    from pfund.types.backtest import BacktestKwargs
     from pfeed.feeds.base_feed import BaseFeed
+    from pfeed.types.common_literals import tSUPPORTED_DATA_FEEDS
+    from pfund.types.core import tModel
     from pfund.datas.data_base import BaseData
     from pfund.products.product_base import BaseProduct
     from pfund.strategies.strategy_base import BaseStrategy
+    from pfund.types.common_literals import tSUPPORTED_TRADING_VENUES
 
 import time
-import copy
 
 import numpy as np
 
+from pfund.types.backtest import BacktestKwargs
+from pfund.validations.backtest import validate_backtest_kwargs
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.models.model_base import BaseModel
 from pfund.indicators.talib_indicator import TalibIndicator
-from pfund.managers.data_manager import get_resolutions_from_kwargs
 
 
 # FIXME: clean up, should add to types?
-_PFUND_BACKTEST_KWARGS = ['data_source', 'rollback_period', 'start_date', 'end_date']
 _EVENT_DRIVEN_BACKTEST_KWARGS = ['resamples', 'shifts', 'auto_resample']
 
 
@@ -149,13 +149,13 @@ class BacktestMixin:
         self._is_signal_df_required = True
         self.load()
 
-        if self.engine.data_tool == 'pandas':
+        if self.data_tool.name == 'pandas':
             event_driven_signal_df = consumer_df[self.INDEX + self._signal_cols]
             # NOTE: since the loaded signal_df might have a few more rows than event_driven_signal_df
             # because the last bar is not pushed in event-driven backtesting.
             # truncate the signal_df to the same length as event_driven_signal_df
             vectorized_signal_df = self._signal_df.iloc[:len(event_driven_signal_df)]
-        elif self.engine.data_tool == 'polars':
+        elif self.data_tool.name == 'polars':
             event_driven_signal_df = consumer_df.select(self.INDEX + self._signal_cols)
             vectorized_signal_df = self._signal_df.slice(0, len(event_driven_signal_df))
         # TODO
@@ -199,26 +199,25 @@ class BacktestMixin:
     def _add_data_signature(self, *args, **kwargs):
         self._data_signatures.append((args, kwargs))
     
-    def add_data(self, trading_venue, base_currency, quote_currency, ptype, *args, backtest: BacktestKwargs | None=None, train: dict | None=None, **kwargs) -> list[BaseData]:
-        self._add_data_signature(trading_venue, base_currency, quote_currency, ptype, *args, backtest=backtest, train=train, **kwargs)
-        
-        backtest_kwargs, train_kwargs = backtest or {}, train or {}
-        
-        if backtest_kwargs:
-            data_source = self._get_data_source(trading_venue, backtest_kwargs)
-            feed = self.get_feed(data_source)
-            kwargs = self._prepare_kwargs(feed, kwargs)
-        
-        datas = super().add_data(trading_venue, base_currency, quote_currency, ptype, *args, **kwargs)
-                
-        if train_kwargs:
-            self._set_data_periods(datas, **train_kwargs)
-
-        if backtest_kwargs:
-            dfs = self.get_historical_data(feed, datas, kwargs, copy.deepcopy(backtest_kwargs))
-            for data, df in zip(datas, dfs):
-                self._add_raw_df(data, df)
-                    
+    @validate_backtest_kwargs
+    def add_data(
+        self, 
+        trading_venue: tSUPPORTED_TRADING_VENUES, 
+        product: str,
+        resolutions: list[str] | str,
+        backtest: BacktestKwargs | None=None,
+        train: dict | None=None,
+        **kwargs
+    ) -> list[BaseData]:
+        self._add_data_signature(trading_venue, product, resolutions, backtest=backtest, train=train, **kwargs)
+        feed: BaseFeed = self.get_feed(backtest['data_source'])
+        kwargs = self._prepare_kwargs(feed, resolutions, kwargs)
+        datas = super().add_data(trading_venue, product, resolutions, **kwargs)
+        dfs = self.get_historical_data(feed, datas, backtest)
+        for data, df in zip(datas, dfs):
+            self._add_raw_df(data, df)
+        if train:
+            self._set_data_periods(datas, **train)
         return datas
     
     def _add_consumers_datas_if_no_data(self) -> list[BaseData]:
@@ -257,20 +256,7 @@ class BacktestMixin:
             signal_cols=signal_cols,
         )
     
-    def _get_data_source(self, trading_venue: str, backtest_kwargs: dict):
-        from pfeed.const.common import SUPPORTED_DATA_FEEDS
-        trading_venue = trading_venue.upper()
-        # if data_source is not defined, use trading_venue as data_source
-        if trading_venue in SUPPORTED_DATA_FEEDS and 'data_source' not in backtest_kwargs:
-            backtest_kwargs['data_source'] = trading_venue
-        assert 'data_source' in backtest_kwargs, "data_source must be defined"
-        data_source = backtest_kwargs['data_source'].upper()
-        assert data_source in SUPPORTED_DATA_FEEDS, f"{data_source=} not in {SUPPORTED_DATA_FEEDS}"
-        return data_source
-    
-    def _prepare_kwargs(self, feed: BaseFeed, kwargs: dict):
-        assert 'resolution' in kwargs or 'resolutions' in kwargs, f"data resolution(s) must be defined for {feed.name}"
-        
+    def _prepare_kwargs(self, feed: BaseFeed, resolutions, kwargs: dict):
         if self.engine.mode == 'vectorized':
             # clear kwargs that are only for event driven backtesting
             for k in _EVENT_DRIVEN_BACKTEST_KWARGS:
@@ -278,6 +264,7 @@ class BacktestMixin:
                     kwargs[k] = {'by_official_resolution': False, 'by_highest_resolution': False}
                 else:
                     kwargs[k] = {}
+        # FIXME
         elif self.engine.mode == 'event_driven':
             if 'is_skip_first_bar' not in kwargs:
                 kwargs['is_skip_first_bar'] = False
@@ -288,7 +275,7 @@ class BacktestMixin:
             if feed.name == 'YAHOO_FINANCE':
                 if 'shifts' not in kwargs:
                     kwargs['shifts'] = {}  # e.g. kwargs['shifts'] = {'1h': 30}
-                for resolution in get_resolutions_from_kwargs(kwargs):
+                for resolution in resolutions:
                     if resolution.is_hour() and repr(resolution) not in kwargs['shifts']:
                         # REVIEW: is there a better way to automatically determine the shifts? instead of hard-coding it to be 30 for yfinance here
                         kwargs['shifts'][repr(resolution)] = 30
@@ -301,26 +288,13 @@ class BacktestMixin:
         
         return kwargs
     
-    @staticmethod
-    def _remove_pfund_backtest_kwargs(kwargs: dict, backtest_kwargs: dict):
-        '''backtest_kwargs include kwargs for both pfund backtesting and data feeds such as yfinance,
-        clear pfund's kwargs for backtesting, only kwargs for e.g. yfinance are left
-        '''
-        for k in _PFUND_BACKTEST_KWARGS:
-            assert k not in kwargs, f"kwarg '{k}' should be put inside 'backtest={{'{k}': '{kwargs[k]}'}}' "
-            # clear PFund's kwargs for backtesting, only kwargs for e.g. yfinance are left
-            if k in backtest_kwargs:
-                del backtest_kwargs[k]
-        return backtest_kwargs
-
-    @staticmethod
-    def get_feed(data_source: str) -> BaseFeed:
+    def get_feed(self, data_source: tSUPPORTED_DATA_FEEDS) -> BaseFeed:
         from pfeed.feeds import YahooFinanceFeed, BybitFeed
         data_source = data_source.upper()
         if data_source == 'YAHOO_FINANCE':
-            feed = YahooFinanceFeed()
+            feed = YahooFinanceFeed(data_tool=self.data_tool.name)
         elif data_source == 'BYBIT':
-            feed = BybitFeed()
+            feed = BybitFeed(data_tool=self.data_tool.name)
         # TODO: other feeds
         else:
             raise NotImplementedError
@@ -330,36 +304,28 @@ class BacktestMixin:
         self, 
         feed: BaseFeed, 
         datas: list[BaseData], 
-        kwargs: dict,
-        backtest_kwargs: dict
+        backtest: BacktestKwargs
     ) -> list[pd.DataFrame | pl.LazyFrame]:
-        rollback_period = backtest_kwargs.get('rollback_period', '1w')
-        start_date = backtest_kwargs.get('start_date', '')
-        end_date = backtest_kwargs.get('end_date', '')
-        backtest_kwargs = self._remove_pfund_backtest_kwargs(kwargs, backtest_kwargs)
-        
         dfs = []
         rate_limit = 3  # in seconds, 1 request every x seconds
+        # BacktestKwargs include kwargs for both pfund backtesting and data feeds such as yfinance,
+        # clear pfund's kwargs for backtesting, only kwargs for e.g. yfinance are left 
+        feed_kwargs = {k: backtest[k] for k in backtest if k not in BacktestKwargs.__annotations__}
         for n, data in enumerate(datas):
             if data.is_time_based():
                 if data.is_resamplee():
                     continue
             product = data.product
-            resolution = data.resolution
-            pdt_or_symbol = product.symbol if feed.name == 'YAHOO_FINANCE' else product.pdt
-            pfeed_df = feed.get_historical_data(
-                pdt_or_symbol, 
-                rollback_period=rollback_period, 
-                start_date=start_date, 
-                end_date=end_date, 
-                resolution=repr(resolution), 
-                data_tool=self.engine.data_tool,
-                **backtest_kwargs
+            if feed.name == 'YAHOO_FINANCE':
+                feed_kwargs['product'] = product.pdt
+            df = feed.get_historical_data(
+                product.symbol if feed.name == 'YAHOO_FINANCE' else product.pdt, 
+                resolution=data.resol,
+                rollback_period=backtest.get('rollback_period', ''), 
+                start_date=backtest.get('start_date', ''), 
+                end_date=backtest.get('end_date', ''), 
+                **feed_kwargs
             )
-            # NOTE: pfeed's df is a bit different: 
-            # e.g. it has 'symbol' instead of 'product' for YahooFinanceFeed
-            # and its 'product' doesn't have info for 'bkr' and 'exch' for BybitFeed
-            df = self._convert_pfeed_df_to_pfund_df(pfeed_df, product)
             dfs.append(df)
             
             # don't sleep on the last one loop, waste of time
@@ -367,30 +333,3 @@ class BacktestMixin:
                 time.sleep(rate_limit)
         return dfs
     
-    def _convert_pfeed_df_to_pfund_df(self, df: pd.DataFrame | pl.DataFrame | pl.LazyFrame, product: BaseProduct) -> pd.DataFrame | pl.LazyFrame:
-        try:
-            import pandas as pd
-        except ImportError:
-            pd = None
-
-        try:
-            import polars as pl
-        except ImportError:
-            pl = None
-        if isinstance(df, pd.DataFrame):
-            if 'symbol' in df.columns:
-                df = df.drop(columns=['symbol'])
-            if 'product' in df.columns:
-                df = df.drop(columns=['product'])
-            df['product'] = repr(product)
-        elif pl is not None and isinstance(df, (pl.DataFrame, pl.LazyFrame)):
-            if isinstance(df, pl.DataFrame):
-                df = df.lazy()
-            df = df.drop(columns=['symbol', 'product'])
-            df = df.with_columns(
-                pl.lit(repr(product)).alias('product'),
-            )
-        # EXTEND
-        else:
-            raise NotImplementedError(f"{type(df)=} not supported")
-        return df

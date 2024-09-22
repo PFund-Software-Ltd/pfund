@@ -398,7 +398,7 @@ class Exchange(BaseExchange):
             and it won't receive the operational part thats used to handle connection and subscriptions
         '''
         for pdt in pdts:
-            product = self.create_product(*pdt.split('_'))
+            product = self.create_product(pdt)
             self.add_product(product)
             self.add_channel(
                 'orderbook', 
@@ -411,7 +411,7 @@ class Exchange(BaseExchange):
         
     def tradebook_stream(self, pdts: list[str], callback: Callable[[WebSocket, str], Any]):
         for pdt in pdts:
-            product = self.create_product(*pdt.split('_'))
+            product = self.create_product(pdt)
             self.add_product(product)
             self.add_channel(
                 'tradebook', 

@@ -1,19 +1,18 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    import numpy as np
+    try:
+        import pandas as pd
+        import polars as pl
+    except ImportError:
+        pass
+    from pfund.indicators.indicator_base import TaFunction
+
 import inspect
 import re
 
-import numpy as np
-
-try:
-    import pandas as pd
-except ImportError:
-    pass
-
-try:
-    import polars as pl
-except ImportError:
-    pass
-
-from pfund.indicators.indicator_base import TaFunction, BaseIndicator
+from pfund.indicators.indicator_base import BaseIndicator
 
 
 class TaIndicator(BaseIndicator):
@@ -72,6 +71,8 @@ class TaIndicator(BaseIndicator):
             return parameters
     
     def _predict_pandas(self, X: pd.DataFrame) -> np.ndarray:
+        import pandas as pd
+
         funcs = self._kwargs.get('funcs', [])
         ta_type = 'class' if funcs else 'function'
         dfs = []
@@ -113,4 +114,5 @@ class TaIndicator(BaseIndicator):
 
     # TODO
     def _predict_polars(self, X):
+        import polars as pl
         pass

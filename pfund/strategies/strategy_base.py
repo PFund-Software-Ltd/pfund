@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from pfund.datas import BaseData
 
 from pfund.strategies.strategy_meta import MetaStrategy
-from pfund.utils.utils import convert_to_uppercases, get_engine_class
+from pfund.utils.utils import get_engine_class
 from pfund.mixins.trade_mixin import TradeMixin
 
 
@@ -87,7 +87,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             'models': [model.to_dict() for model in self.models.values()],
         }
     
-    def get_trading_venues(self) -> list[Literal[tSUPPORTED_TRADING_VENUES]]:
+    def get_trading_venues(self) -> list[tSUPPORTED_TRADING_VENUES]:
         return list(self.accounts.keys())
     
     def set_name(self, name: str):
@@ -120,7 +120,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self._zmq.stop()
         self._zmq = None
     
-    def add_broker(self, bkr: Literal[tSUPPORTED_BROKERS]) -> BaseBroker:
+    def add_broker(self, bkr: tSUPPORTED_BROKERS) -> BaseBroker:
         return self.engine.add_broker(bkr)
     
     @overload
@@ -148,19 +148,19 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         return [balance for ccy_to_balance in self.balances.values() for balance in ccy_to_balance.values()]
     
     @overload
-    def get_account(self, trading_venue: Literal[tSUPPORTED_CRYPTO_EXCHANGES], acc: str='') -> CryptoAccount: ...
+    def get_account(self, trading_venue: tSUPPORTED_CRYPTO_EXCHANGES, acc: str='') -> CryptoAccount: ...
         
     @overload
     def get_account(self, trading_venue: Literal['IB'], acc: str='') -> IBAccount: ...
     
-    def get_account(self, trading_venue: Literal[tSUPPORTED_TRADING_VENUES], acc: str='') -> BaseAccount:
+    def get_account(self, trading_venue: tSUPPORTED_TRADING_VENUES, acc: str='') -> BaseAccount:
         trading_venue, acc = trading_venue.upper(), acc.upper()
         if not acc:
             acc = next(iter(self.accounts[trading_venue]))
             self.logger.warning(f"{trading_venue} account not specified, using first account '{acc}'")
         return self.accounts[trading_venue][acc]
     
-    def add_account(self, trading_venue: Literal[tSUPPORTED_TRADING_VENUES], acc: str='', **kwargs) -> BaseAccount:
+    def add_account(self, trading_venue: tSUPPORTED_TRADING_VENUES, acc: str='', **kwargs) -> BaseAccount:
         trading_venue, acc = trading_venue.upper(), acc.upper()
         bkr = self._derive_bkr_from_trading_venue(trading_venue)
         broker = self.add_broker(bkr)
@@ -179,23 +179,28 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             self.logger.debug(f'added account {trading_venue=} {account.name=}')
         return account
     
-    def add_data(self, trading_venue: Literal[tSUPPORTED_TRADING_VENUES], base_currency, quote_currency, ptype, *args, **kwargs) -> list[BaseData]:
-        from pfund.managers.data_manager import get_resolutions_from_kwargs
-        assert not ('resolution' in kwargs and 'resolutions' in kwargs), "Please use either 'resolution' or 'resolutions', not both"
-        trading_venue, base_currency, quote_currency, ptype = convert_to_uppercases(trading_venue, base_currency, quote_currency, ptype)
-        bkr = self._derive_bkr_from_trading_venue(trading_venue)
+    def add_data(
+        self, 
+        trading_venue: tSUPPORTED_TRADING_VENUES,
+        product: str,
+        resolutions: list[str] | str,
+        **kwargs
+    ) -> list[BaseData]:
+        tv, pdt = trading_venue.upper(), product.upper()
+        if isinstance(resolutions, str):
+            resolutions = [resolutions]
+        bkr = self._derive_bkr_from_trading_venue(tv)
         broker = self.add_broker(bkr)
-        
         if bkr == 'CRYPTO':
-            exch = trading_venue
-            datas = broker.add_data(exch, base_currency, quote_currency, ptype, *args, **kwargs)
+            exch = tv
+            datas = broker.add_data(exch, pdt, resolutions, **kwargs)
         else:
-            datas = broker.add_data(base_currency, quote_currency, ptype, *args, **kwargs)
+            datas = broker.add_data(pdt, resolutions, **kwargs)
 
         for data in datas:
             if data.is_time_based():
                 # do not listen to data thats only used for resampling
-                if data.resolution not in get_resolutions_from_kwargs(kwargs):
+                if data.resol not in resolutions:
                     continue
             resolution, product = data.resolution, data.product
             if resolution.is_quote():
@@ -208,7 +213,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
                 broker._add_listener(listener=self, listener_key=data, event_type='public')
             else:
                 for consumer in self._consumers:
-                    consumer.add_data(trading_venue, base_currency, quote_currency, ptype, *args, **kwargs)
+                    consumer.add_data(tv, pdt, resolutions, **kwargs)
                     consumer._add_listener(listener=self, listener_key=data)
                 
         return datas

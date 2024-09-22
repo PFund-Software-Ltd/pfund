@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing_extensions import TypedDict
 
 from pfeed.types.common_literals import tSUPPORTED_DATA_FEEDS
 

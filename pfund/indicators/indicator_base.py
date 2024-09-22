@@ -1,19 +1,16 @@
 from __future__ import annotations
-
 from typing import TYPE_CHECKING, Type, Any, Callable
-
 if TYPE_CHECKING:
     import pandas as pd
     import polars as pl
+    try:
+        from talib import abstract as talib
+        TalibFunction = Type[talib.Function]  # If talib is available, use its Function type
+    except ImportError:
+        TalibFunction = Any  # Fallback type if talib is not installed
+    TaFunction = Callable[..., Any]  # Type for functions from the 'ta' library
 
 from pfund.models.model_base import BaseModel
-
-try:
-    from talib import abstract as talib
-    TalibFunction = Type[talib.Function]  # If talib is available, use its Function type
-except ImportError:
-    TalibFunction = Any  # Fallback type if talib is not installed
-TaFunction = Callable[..., Any]  # Type for functions from the 'ta' library
 
 
 class BaseIndicator(BaseModel):
@@ -32,12 +29,12 @@ class BaseIndicator(BaseModel):
         super().__init__(indicator, *args, **kwargs)
         self.type = 'indicator'
         
-        if self.engine.data_tool == 'pandas':
+        if self.data_tool.name == 'pandas':
             self.predict = self._predict_pandas
-        elif self.engine.data_tool == 'polars':
+        elif self.data_tool.name == 'polars':
             self.predict = self._predict_polars
         else:
-            raise ValueError(f'Unsupported data tool: {self.engine.data_tool}')
+            raise ValueError(f'Unsupported data tool: {self.data_tool.name}')
     
     def get_default_name(self):
         return self.get_indicator_name()

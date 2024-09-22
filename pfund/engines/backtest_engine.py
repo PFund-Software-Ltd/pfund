@@ -131,7 +131,11 @@ class BacktestEngine(BaseEngine):
     
     # HACK: since python doesn't support dynamic typing, true return type should be subclass of BacktestMixin and tStrategy
     # write -> BacktestMixin | tStrategy for better intellisense in IDEs
-    def add_strategy(self, strategy: tStrategy, name: str='', is_parallel=False) -> BacktestMixin | tStrategy:
+    def add_strategy(
+        self, 
+        strategy: tStrategy, name: str='', 
+        is_parallel=False
+    ) -> BacktestMixin | tStrategy:
         from pfund.strategies.strategy_backtest import BacktestStrategy
         is_dummy_strategy_exist = '_dummy' in self.strategy_manager.strategies
         assert not is_dummy_strategy_exist, 'dummy strategy is being used for model backtesting, adding another strategy is not allowed'
@@ -337,7 +341,7 @@ class BacktestEngine(BaseEngine):
     def _assert_backtest_function(self, backtestee: BaseStrategy | BaseModel):
         assert self.mode == 'vectorized', 'assert_backtest_function() is only for vectorized backtesting'
         if not hasattr(backtestee, 'backtest'):
-            raise Exception(f'{backtestee.name} does not have backtest() method, cannot run vectorized backtesting')
+            raise Exception(f'class "{backtestee.name}" does not have backtest() method, cannot run vectorized backtesting')
         sig = inspect.signature(backtestee.backtest)
         params = list(sig.parameters.values())
         if not params or params[0].name != 'df':
@@ -348,6 +352,7 @@ class BacktestEngine(BaseEngine):
             broker.start()
         self.strategy_manager.start()
         backtest_results = {}
+        error = ''
         try:
             for strat, strategy in self.strategy_manager.strategies.items():
                 backtestee = strategy
@@ -360,25 +365,17 @@ class BacktestEngine(BaseEngine):
                         backtestee = model
                 backtest_result: dict = self._backtest(backtestee)
                 backtest_results.update(backtest_result)
-        except:
+        except Exception as err:
+            error = str(err)
             self.logger.exception('Error in backtesting:')
         finally:
-            self.end()
+            self.end(reason=error)
         return backtest_results
 
     def _backtest(self, backtestee: BaseStrategy | BaseModel) -> dict:
         backtest_result = {}
         dtl = backtestee.dtl
         df = backtestee.get_df(copy=True)
-        
-        if not self.use_ray:
-            tqdm_bar = tqdm(
-                total=self.num_chunks, 
-                desc=f'Backtesting {backtestee.name} (per chunk)', 
-                colour='green'
-            )
-        else:
-            ray_tasks = []
         
         # Pre-Backtesting
         if self.mode == 'vectorized':
@@ -392,6 +389,11 @@ class BacktestEngine(BaseEngine):
         
         
         # Backtesting
+        if not self.use_ray:
+            tqdm_desc = f'Backtesting {backtestee.name} (per chunk)'
+            tqdm_bar = tqdm(total=self.num_chunks, desc=tqdm_desc, colour='green')
+        else:
+            ray_tasks = []
         start_time = time.time()
         for chunk_num, df_chunk in enumerate(dtl.iterate_df_by_chunks(df, num_chunks=self.num_chunks)):
             if self.use_ray:
@@ -523,9 +525,9 @@ class BacktestEngine(BaseEngine):
     # NOTE: end() vs stop()
     # end() means everything is done and NO state will be kept, can't be restarted
     # stop() means the process is stopped but the state is still kept, can be restarted
-    def end(self):
+    def end(self, reason: str=''):
         for strat in list(self.strategy_manager.strategies):
-            self.strategy_manager.stop(strat, reason='finished backtesting')
+            self.strategy_manager.stop(strat, reason=reason or 'finished backtesting')
             self.remove_strategy(strat)
         for broker in list(self.brokers.values()):
             broker.stop()

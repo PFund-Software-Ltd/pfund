@@ -9,6 +9,7 @@ sys.path.append(f'{PROJ_PATH}/externals')
 from pfund.engines import BacktestEngine, TradeEngine, TrainEngine, SandboxEngine
 from pfund.strategies import Strategy
 from pfund.models import Model, Feature, PytorchModel, SklearnModel
+from pfund.indicators import Indicator, TalibIndicator, TaIndicator
 
 
 __version__ = version('pfund')
@@ -25,4 +26,7 @@ __all__ = (
     'Feature',
     'PytorchModel',
     'SklearnModel',
+    'Indicator',
+    'TalibIndicator',
+    'TaIndicator',
 )

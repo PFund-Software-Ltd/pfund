@@ -8,7 +8,8 @@ class BaseDataTool:
     _MIN_ROWS = 1_000
     _MAX_ROWS = None
 
-    def __init__(self):
+    def __init__(self, name: str):
+        self.name = name.lower()
         self.train_periods = {}  # {product: ('start_date', 'end_date')}
         self.val_periods = self.validation_periods = {}  # {product: ('start_date', 'end_date')}
         self.test_periods = {}  # {product: ('start_date', 'end_date')}

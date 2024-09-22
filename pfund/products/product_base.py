@@ -9,7 +9,7 @@ class BaseProduct(ABC):
     # TODO
     @staticmethod
     def parse_product_name(pdt):
-        return pdt.split('_')
+        return pdt.upper().split('_')
     
     def __init__(
         self, 

@@ -22,6 +22,9 @@ cprint = lambda msg: Console().print(msg, style='bold')
 
 # NOTE: convention: all function names that endswith "_df" will directly modify self.df, e.g. "xxx_df"
 class PandasDataTool(BaseDataTool):
+    def __init__(self):
+        super().__init__('pandas')
+    
     def get_df(
         self, 
         start_idx: int=0, 
@@ -499,6 +502,14 @@ class PandasDataTool(BaseDataTool):
         df.open_position = lambda *args, **kwargs: self._open_position(df, *args, **kwargs)
         df.close_position = lambda *args, **kwargs: self._close_position(df, *args, **kwargs)
         df.done = lambda *args, **kwargs: self._done(df, *args, **kwargs)
+
+        # set alias
+        if not hasattr(df, 'create'):
+            df.create = df.create_signal
+        if not hasattr(df, 'open'):
+            df.open = df.open_position
+        if not hasattr(df, 'close'):
+            df.close = df.close_position
         # TODO: maybe create a subclass like SafeFrame(pd.DataFrame) to prevent users from peeking into the future?
         # e.g. df['close'] = df['close'].shift(-1) should not be allowed
         return df

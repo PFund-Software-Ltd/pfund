@@ -1,6 +1,4 @@
 from __future__ import annotations
-from collections import defaultdict
-
 from typing import TYPE_CHECKING, Generator, Literal
 if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
@@ -14,6 +12,9 @@ from pfund.utils.envs import backtest, train
 
 # NOTE: convention: all function names that endswith "_df" will directly modify self.df, e.g. "xxx_df"
 class PolarsDataTool(BaseDataTool):
+    def __init__(self):
+        super().__init__('polars')
+    
     # TODO:
     def get_df(self, copy=True) -> pl.LazyFrame:
         return self.df.clone() if copy else self.df

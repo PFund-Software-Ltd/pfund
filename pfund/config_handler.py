@@ -55,7 +55,7 @@ class ConfigHandler:
     logging_config: dict | None = None
     use_fork_process: bool = True
     use_custom_excepthook: bool = True
-    env_file_path: str | None=None
+    env_file_path: str=''
     debug: bool = False
     
     @classmethod
@@ -105,6 +105,9 @@ class ConfigHandler:
         return f'{self.data_path}/artifacts'
     
     def __post_init__(self):
+        self._initialize()
+        
+    def _initialize(self):
         self.logging_config = self.logging_config or {}
         
         for path in [self.strategy_path, self.model_path, self.feature_path, self.indicator_path,
@@ -124,15 +127,15 @@ class ConfigHandler:
         self.load_env_file(self.env_file_path)
         
         if self.debug:
-            self.enable_debug_mode()    
+            self.enable_debug_mode()
         
-    def load_env_file(self, env_file_path: str | None):
+    def load_env_file(self, env_file_path: str = ''):
         from dotenv import find_dotenv, load_dotenv
         
         if not env_file_path:
-            found_env_file_path = find_dotenv(usecwd=True, raise_error_if_not_found=False)
-            if found_env_file_path:
-                print(f'.env file path is not specified, using env file in "{found_env_file_path}"')
+            env_file_path = find_dotenv(usecwd=True, raise_error_if_not_found=False)
+            if env_file_path:
+                print(f'.env file path is not specified, using env file in "{env_file_path}"')
             else:
                 # print('.env file is not found')
                 return
@@ -149,22 +152,32 @@ class ConfigHandler:
     
 
 def configure(
-    data_path: str = str(DATA_PATH),
-    log_path: str = str(LOG_PATH),
-    logging_config_file_path: str = f'{MAIN_PATH}/logging.yml',
-    logging_config: dict | None=None,
-    use_fork_process: bool=True,
-    use_custom_excepthook: bool=False,
+    data_path: str | None = None,
+    log_path: str | None = None,
+    logging_config_file_path: str | None = None,
+    logging_config: dict | None = None,
+    use_fork_process: bool | None = None,
+    use_custom_excepthook: bool | None = None,
     env_file_path: str | None = None,
     debug: bool | None = None,
 ):
-    return ConfigHandler(
-        data_path=data_path,
-        log_path=log_path,
-        logging_config_file_path=logging_config_file_path,
-        logging_config=logging_config,
-        use_fork_process=use_fork_process,
-        use_custom_excepthook=use_custom_excepthook,
-        env_file_path=env_file_path,
-        debug=debug,
-    )
+    config = ConfigHandler.load_config()
+    if data_path is not None:
+        config.data_path = data_path
+    if log_path is not None:
+        config.log_path = log_path
+    if logging_config_file_path is not None:
+        config.logging_config_file_path = logging_config_file_path
+    if logging_config is not None:
+        config.logging_config = logging_config
+    if use_fork_process is not None:
+        config.use_fork_process = use_fork_process
+    if use_custom_excepthook is not None:
+        config.use_custom_excepthook = use_custom_excepthook
+    if env_file_path is not None:
+        config.env_file_path = env_file_path
+    if debug is not None:
+        config.debug = debug
+        
+    config._initialize()
+    return config
