@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.types.common_literals import tSUPPORTED_BACKTEST_MODES, tSUPPORTED_DATA_TOOLS
+    from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
+    from pfund.types.common_literals import tSUPPORTED_BACKTEST_MODES
 
 from pfund.engines.backtest_engine import BacktestEngine
 from pfund.config_handler import ConfigHandler

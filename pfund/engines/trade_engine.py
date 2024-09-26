@@ -16,7 +16,7 @@ from threading import Thread
 
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfund.types.common_literals import tSUPPORTED_DATA_TOOLS
+    from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
 
 import schedule
 

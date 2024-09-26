@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.types.common_literals import tSUPPORTED_DATA_TOOLS
+    from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
     from pfund.config_handler import ConfigHandler
 
 from pfund.engines.trade_engine import TradeEngine

@@ -8236,8 +8236,9 @@ test = ["big-O", "importlib-resources", "jaraco.functools", "jaraco.itertools", 
 type = ["pytest-mypy"]
 
 [extras]
-all = ["feast", "mlflow", "orjson", "papermill", "pfeed", "pfolio", "pyzmq", "scikit-learn", "ta", "torch", "tsfresh", "voila"]
+all = ["feast", "mlflow", "numba", "orjson", "papermill", "pfeed", "pfolio", "pyzmq", "scikit-learn", "ta", "torch", "tsfresh", "voila"]
 analytics = ["papermill", "pfolio", "voila"]
+boost = ["numba"]
 data = ["orjson", "pfeed", "pyzmq"]
 fe = ["feast", "ta", "tsfresh"]
 ml = ["mlflow", "scikit-learn", "torch"]
@@ -8245,4 +8246,4 @@ ml = ["mlflow", "scikit-learn", "torch"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10 <3.13"
-content-hash = "ec38aec1e2a8ada6701496fb5a33f30314539121fd2c81ef53f6b27873ebcb84"
+content-hash = "7d6059fdda33e330c40aae2e5b458ecd1a959840f8198b5ead8e9a213fd8daed"

@@ -16,9 +16,11 @@ if TYPE_CHECKING:
     from pfund.accounts import BaseAccount, CryptoAccount, IBAccount
     from pfund.orders.order_base import BaseOrder
     from pfund.datas import BaseData
+    from pfund.types import dataframes
 
 from pfund.strategies.strategy_meta import MetaStrategy
 from pfund.utils.utils import get_engine_class
+from pfund.utils.envs import backtest
 from pfund.mixins.trade_mixin import TradeMixin
 
 
@@ -60,7 +62,12 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         
         self.params = {}
         self.load_params()
-
+    
+    # HACK: ideally no backtesting methods should be here, but it is required to improve IDE Intellisense
+    @backtest
+    def backtest(self, df: dataframes.BacktestDataFrame):
+        raise Exception(f'Strategy "{self.name}" does not have a backtest() method, cannot run vectorized backtesting')
+    
     def is_parallel(self):
         return self._is_parallel
     

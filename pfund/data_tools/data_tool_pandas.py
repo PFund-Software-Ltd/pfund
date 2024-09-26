@@ -156,64 +156,171 @@ class PandasDataTool(BaseDataTool):
     def _create_signal(
         self,
         df: pd.DataFrame,
+        product: str | None=None,  # TODO
         buy_condition: pd.Series | None=None,
         sell_condition: pd.Series | None=None,
+        signal: pd.Series | None=None,
+        is_nan_signal: bool=False,
         first_only: bool=False,
     ) -> pd.DataFrame:
-        if buy_condition is None and sell_condition is None:
-            raise ValueError("Either buy or sell must be provided")
-        elif buy_condition is not None and sell_condition is not None:
-            # assert non-overlapping signals
-            overlaps = buy_condition & sell_condition
-            if overlaps.any():
-                raise ValueError(
-                    "Overlapping buy and sell condition detected.\n"
-                    "Please make sure that buy and sell conditions are mutually exclusive."
-                )
-        if buy_condition is not None and sell_condition is not None:
-            conditions = [buy_condition, sell_condition]
-            choices = [1, -1]
+        '''
+        A signal is defined as a sequence of 1s and -1s, where 1 means a buy signal and -1 means a sell signal.
+        Args:
+            is_nan_signal: 
+                if True, nans are also considered as signals
+                if False, nans are ignored when constructing signal sequences, e.g. 1,1,1,nan,nan,1,1,1 is grouped as one signal sequence
+            first_only: only the first signal is remained in each signal sequence
+                useful when only the first signal is treated as a true signal
+        '''
+        if signal is None:
+            if buy_condition is None and sell_condition is None:
+                raise ValueError("Either buy or sell must be provided")
+            elif buy_condition is not None and sell_condition is not None:
+                # assert non-overlapping signals
+                overlaps = buy_condition & sell_condition
+                if overlaps.any():
+                    raise ValueError(
+                        "Overlapping buy and sell condition detected.\n"
+                        "Please make sure that buy and sell conditions are mutually exclusive."
+                    )
+            if buy_condition is not None and sell_condition is not None:
+                conditions = [buy_condition, sell_condition]
+                choices = [1, -1]
+            else:
+                conditions = [buy_condition if buy_condition is not None else sell_condition]
+                choices = [1 if buy_condition is not None else -1]
+            df['signal'] = np.select(
+                conditions,
+                choices,
+                default=np.nan
+            )
         else:
-            conditions = [buy_condition if buy_condition is not None else sell_condition]
-            choices = [1 if buy_condition is not None else -1]
-        df['signal'] = np.select(
-            conditions,
-            choices,
-            default=np.nan
-        )
+            assert np.isin(signal.unique(), [1, -1, np.nan]).all(), "'signal' must only contain 1, -1, nan"
+            df['signal'] = signal
+            
+        if is_nan_signal:
+            df['_signal_change'] = df['signal'].fillna(0).diff().ne(0)
+        else:
+            df['_signal_change'] = df['signal'].ffill().diff().ne(0)
+        
+        first_non_nan_idx = df['signal'].first_valid_index()
+        
+        # set the first nan sequence to False
+        df.loc[:first_non_nan_idx-1, '_signal_change'] = False
+        
+        df['_signal_streak'] = df['_signal_change'].cumsum()
+        # signal streak is nan before the first signal occurs
+        df.loc[:first_non_nan_idx-1, '_signal_streak'] = np.nan
+        
         if first_only:
-            df['signal'] = df['signal'].where(df['signal'].diff().ne(0))
+            df['signal'] = np.where(df['_signal_change'], df['signal'], np.nan)
+        
         return df
     
     @backtest
     def _open_position(
         self, 
         df: pd.DataFrame,
+        product: str | None=None,  # TODO
         order_price: pd.Series | None=None,
-        flip_position: bool=True,        
+        order_quantity: pd.Series | None=None,
+        fill_ratio: float=0.1,
         first_only: bool=True,
-        is_nan_signal: bool=False,
+        flip_position: bool=True,
+        ignore_sizing: bool=False,
+        slippage: float=0.0005,  # 5bps
     ) -> pd.DataFrame:
         '''
+        Opens positions in a vectorized manner.
+        This function places orders at the end of bar/candlestick N.
+        For example, for a buy order:
+        - If the order price >= close price of bar N, it is a market order,
+            by assuming that the close price is the current best price; otherwise it is a limit order.
+        Then the orders are opened at the beginning of bar N+1,
+        and filled in the duration of bar N+1, if high >= order price >= low.
         Args:
-            is_nan_signal: Only matters when first_only is True,
-            - if True, nans are also considered as signals, e.g. 1(trade),1,1,nan,nan,1 (trade),1,1
-                The 2nd 1s sequence can trade again when first_only=True 
-                because the nans between are considered as a new signal trend
-            - if False, nans are ignored when considering first only trade, e.g. 1(trade),1,1,nan,nan,1,1,1
+            first_only: first trade only, do not trade after the first trade until signal changes
+            fill_ratio: fill ratio for the order, e.g. 0.1 means 10% of the order is filled
+            ignore_sizing: ignore the 'order_quantity' and 'fill_ratio' and just use order quantity=1
         '''
-        self._registered_callbacks['open_position'] = {
-            'order_price': order_price,
-            'flip_position': flip_position,
-            'first_only': first_only,
-            'is_nan_signal': is_nan_signal,
-        }
+        assert 'signal' in df.columns, "No 'signal' column is found, please use create_signal() first"
+        assert '_signal_streak' in df.columns, "No '_signal_streak' column is found, please use create_signal() first"
+        assert 1 >= fill_ratio > 0, "'fill_ratio' must be between 0 and 1"
+        
+        # since 'flip_position' depends on the results from close_position(), register it as a callback
+        self._registered_callbacks['open_position'] = { 'flip_position': flip_position }
+        
+        # 1. create orders
+        if order_price is None:
+            cprint("No 'order_price' is provided, using 'close' as the order price, meaning market orders are placed and slippage is applied")
+            order_price = df['close']
+        else:
+            assert ( (order_price > 0) | order_price.isna() ).all(), "'order_price' must be positive or nan"
+        if order_quantity is None or ignore_sizing:
+            order_quantity = 1
+        else:
+            assert ( (order_quantity > 0) | order_quantity.isna() ).all(), "'order_quantity' must be positive or nan"
+        df['order_price'] = np.abs(df['signal']) * order_price
+        df['order_size'] = df['signal'] * order_quantity
+        
+        # 2. place orders
+        # shift 'order_price' and 'order_size' to the next bar and act as opened limit orders in the same row
+        # NOTE: order placed at the end of the previous bar = opened order at the beginning of the next bar
+        opened_order_price = df['order_price'].shift(1)
+        opened_order_size = df['order_size'].shift(1)
+        opened_order_side = df['signal'].shift(1)
+
+        # 3. fill orders
+        # trade_price = min(trade_price, prev_close) if buy, max(trade_price, prev_close) if sell
+        prev_close = df['close'].shift(1)
+        market_order_trade_condition = (
+            ((opened_order_side == 1) & (prev_close <= opened_order_price)) |
+            ((opened_order_side == -1) & (prev_close >= opened_order_price))
+        )
+        limit_order_trade_condition = (
+            ((opened_order_side == 1) & (opened_order_price >= df['low'])) |
+            ((opened_order_side == -1) & (opened_order_price <= df['high']))
+        )
+        df['trade_price'] = np.where(
+            market_order_trade_condition, prev_close * (1 + slippage * opened_order_side),
+            np.where(limit_order_trade_condition, opened_order_price, np.nan)
+        )
+        
+        trade_condition = market_order_trade_condition | limit_order_trade_condition
+        if ignore_sizing:
+            df['trade_size'] = np.where(trade_condition, opened_order_size, np.nan)
+        else:
+            # make sure the trade quantity does not exceed 'volume' * fill_ratio
+            max_liquidity = df['volume'] * fill_ratio
+            use_capped_liquidity = trade_condition & (opened_order_size.abs() > max_liquidity)
+            df['trade_size'] = np.where(
+                use_capped_liquidity, max_liquidity * opened_order_side, 
+                np.where(trade_condition, opened_order_size, np.nan)
+            )
+        
+        if first_only:
+            first_trade_mask = (
+                df
+                .assign(
+                    _trade_streak=lambda x: x['_signal_streak'].shift(1),
+                    trade_sign=lambda x: np.sign(x['trade_size'])
+                )
+                .groupby(['_trade_streak'])['trade_sign'].ffill().diff().ne(0)
+            )
+            df['trade_size'] = np.where(first_trade_mask, df['trade_size'], np.nan)
+            df['trade_price'] = np.where(first_trade_mask, df['trade_price'], np.nan)
+
+            # clean up orders (order_size) after the first trade
+            after_trade_mask = df.groupby(['_signal_streak'])['trade_size'].ffill().fillna(False).astype(bool)
+            df['order_size'] = np.where(after_trade_mask, np.nan, df['order_size'])
+            df['order_price'] = np.where(after_trade_mask, np.nan, df['order_price'])
         return df
     
     @backtest
     def _close_position(
         self, 
         df: pd.DataFrame,
+        product: str | None=None,  # TODO
         when: tSUPPORTED_CLOSE_POSITION_WHEN | None='signal_change',
         take_profit: float | None=None,
         stop_loss: float | None=None,
@@ -250,42 +357,6 @@ class PandasDataTool(BaseDataTool):
     def _done(self, df: pd.DataFrame, debug=False) -> pd.DataFrame:
         '''Orchestrate the whole process of opening and closing positions after signals are created.
         '''
-        def _set_first_value(col: str, value):
-            first_index = df[col].idxmax()
-            df.iloc[first_index, df.columns.get_loc(col)] = value
-            # GROUPING version:
-            # grouped_df = df.groupby(self.GROUP)
-            # groups = list(df[self.GROUP].drop_duplicates().itertuples(index=False, name=None))
-            # first_indices = grouped_df[col].apply(lambda group: group.idxmax())
-            # for group in groups:
-            #     df.iloc[first_indices.loc[group], df.columns.get_loc(col)] = value
-
-        def _open_position():
-            '''
-            Dependency columns: ['order_price', 'order_size']
-            Updated columns: ['trade_price', 'trade_size']
-            '''
-            # shift 'order_price' and 'order_size' to the next bar and act as opened limit orders in the same row
-            # NOTE: order placed at the end of the previous bar = opened order at the beginning of the next bar
-            opened_order_price = df['order_price'].shift(1)
-            opened_order_size = df['order_size'].shift(1)
-            trade_condition = (
-                (opened_order_price >= df[['low', 'prev_close', 'next_open']].min(axis=1)) & \
-                (opened_order_price <= df[['high', 'prev_close', 'next_open']].max(axis=1)) 
-            )
-            df['trade_price'] = opened_order_price.where(trade_condition)
-            df['trade_size'] = opened_order_size.where(trade_condition)
-            
-            if first_trade_only:
-                df['agg_trade'] = df.groupby(['_trade_streak'])['trade_size'].ffill()
-                df['trade_size'] = df['trade_size'].where(df['agg_trade'].diff().ne(0))
-                
-                # clean up orders (order_size) after the first trade
-                after_trade_mask = df.groupby(['_signal_streak'])['trade_size'].transform(
-                    lambda x: x.fillna(0).cumsum().astype(bool)
-                )
-                df.loc[after_trade_mask, 'order_size'] = np.nan
-        
         def _close_position():
             '''
             Add back orders for closing position.
@@ -355,7 +426,6 @@ class PandasDataTool(BaseDataTool):
             df['avg_price'] = np.where(df['agg_trade'] != 0, df['agg_costs'] / df['agg_trade'], np.nan)
             df['avg_price'] = df.groupby('_avg_streak')['avg_price'].ffill()    
         
-        assert 'signal' in df.columns, "No 'signal' column is found, please use create_signal() first"
         if 'close_position' in self._registered_callbacks:
             assert 'open_position' in self._registered_callbacks, "No 'open_position' callback is registered"
         elif 'open_position' not in self._registered_callbacks:
@@ -365,10 +435,6 @@ class PandasDataTool(BaseDataTool):
         
         # parse registered callbacks
         open_position = self._registered_callbacks['open_position']
-        order_price = open_position['order_price']
-        order_price = df['close'] if order_price is None else order_price
-        assert ( (order_price > 0) | order_price.isna() ).all(), "'order_price' must be positive or nan"
-        is_nan_signal = open_position['is_nan_signal']
         first_trade_only = open_position['first_only']
         flip_position = open_position['flip_position']
         if close_position := self._registered_callbacks.get('close_position', None):
@@ -380,27 +446,11 @@ class PandasDataTool(BaseDataTool):
                 cprint("Position dependencies detected, using FOR LOOP in vectorized backtesting!")
                 use_for_loop = True
         
-        # set up orders
-        df['order_price'] = np.abs(df['signal']) * order_price
-        df['order_size'] = df['signal'] * 1
         
-        # create common columns and variables
-        if not is_nan_signal:
-            df['_signal_change'] = df['signal'].ffill().diff().ne(0)
-            df.loc[df['signal'].isna(), '_signal_change'] = False
-        else:
-            # treat nans as signals
-            df['_signal_change'] = df['signal'].fillna(0).diff().fillna(0).ne(0)
-        # set the first True value to False since theres no signal before it
-        _set_first_value(col='_signal_change', value=False)
-        df['_signal_streak'] = df['_signal_change'].cumsum()
-        df['_trade_streak'] = df['_signal_streak'].shift(1).bfill().astype(int)
         df['position_close'] = False
         df['position_flip'] = False
         
-        
         if not use_for_loop:
-            _open_position()
             if close_position:
                 if close_when:
                     _close_position()
@@ -486,14 +536,9 @@ class PandasDataTool(BaseDataTool):
     
     @backtest
     def preprocess_vectorized_df(self, df: pd.DataFrame) -> pd.DataFrame:
-        # add 'prev_close' and 'next_open' columns
-        grouped_df = df.groupby(self.GROUP)
-        df['prev_close'] = grouped_df['close'].shift(1)
-        df['next_open'] = grouped_df['open'].shift(-1)
-
         # rearrange columns
-        left_cols = self.INDEX + ['prev_close']
-        core_cols = ['open', 'high', 'low', 'close', 'volume', 'next_open']
+        left_cols = self.INDEX
+        core_cols = ['open', 'high', 'low', 'close', 'volume']
         remaining_cols = [col for col in df.columns if col not in left_cols + core_cols]
         df = df.loc[:, left_cols + core_cols + remaining_cols]
         

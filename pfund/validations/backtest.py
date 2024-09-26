@@ -22,7 +22,7 @@ def validate_backtest_kwargs(func):
                 if backtest_kwargs['data_source'] in PFEED_ALIASES:
                     backtest_kwargs['data_source'] = PFEED_ALIASES[backtest_kwargs['data_source']]
             else:
-                trading_venue = args[0].upper()
+                trading_venue = args[1].upper()
                 backtest_kwargs['data_source'] = trading_venue
             assert backtest_kwargs['data_source'] in SUPPORTED_DATA_FEEDS, f"{backtest_kwargs['data_source']=} not in {SUPPORTED_DATA_FEEDS}"
             backtest_kwargs_adapter = TypeAdapter(BacktestKwargs)

@@ -5,7 +5,8 @@ if TYPE_CHECKING:
         import pandas as pd
     except ImportError:
         pd = None
-    from pfund.types.common_literals import tSUPPORTED_BACKTEST_MODES, tSUPPORTED_DATA_TOOLS
+    from pfund.types.common_literals import tSUPPORTED_BACKTEST_MODES
+    from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
     from pfund.types.core import tStrategy, tModel, tFeature, tIndicator
     from pfund.models.model_base import BaseModel
     from pfund.mixins.backtest_mixin import BacktestMixin

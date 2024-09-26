@@ -36,13 +36,21 @@ mlflow = {version = "^2.16.1", optional = true}
 feast = {version = "^0.40.1", optional = true}
 ta = { version = "^0.11.0", optional = true }
 tsfresh = {version = "^0.20.3", optional = true}
+numba = {version = "^0.60.0", optional = true}
 
 [tool.poetry.extras]
 data = ["pfeed", "orjson", "pyzmq"]
 ml = ["scikit-learn", "torch", "mlflow"]
 fe = ["feast", "ta", "tsfresh"]
 analytics = ["pfolio", "papermill", "voila"]
-all = ["pfeed", "orjson", "pyzmq", "scikit-learn", "torch", "mlflow", "feast", "ta", "tsfresh", "pfolio", "papermill", "voila"]
+boost = ["numba"]
+all = [
+    "pfeed", "orjson", "pyzmq", 
+    "scikit-learn", "torch", "mlflow", 
+    "feast", "ta", "tsfresh", 
+    "pfolio", "papermill", "voila", 
+    "numba",
+]
 
 [tool.poetry.scripts]
 pfund = "pfund.main:run_cli"
