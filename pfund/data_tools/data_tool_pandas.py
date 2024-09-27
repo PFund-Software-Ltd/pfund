@@ -13,10 +13,6 @@ from pfund.data_tools.data_tool_base import BaseDataTool
 from pfund.utils.envs import backtest, train
 
 
-SUPPORTED_CLOSE_POSITION_WHEN = ['signal_change']
-tSUPPORTED_CLOSE_POSITION_WHEN = Literal['signal_change']
-
-
 cprint = lambda msg: Console().print(msg, style='bold')
 
 
@@ -166,6 +162,9 @@ class PandasDataTool(BaseDataTool):
         '''
         A signal is defined as a sequence of 1s and -1s, where 1 means a buy signal and -1 means a sell signal.
         Args:
+            buy_condition: condition to create a buy signal 1
+            sell_condition: condition to create a sell signal -1
+            signal: provides self-defined signals, buy_condition and sell_condition are ignored if provided
             is_nan_signal: 
                 if True, nans are also considered as signals
                 if False, nans are ignored when constructing signal sequences, e.g. 1,1,1,nan,nan,1,1,1 is grouped as one signal sequence
@@ -224,11 +223,10 @@ class PandasDataTool(BaseDataTool):
         product: str | None=None,  # TODO
         order_price: pd.Series | None=None,
         order_quantity: pd.Series | None=None,
-        fill_ratio: float=0.1,
-        first_only: bool=True,
-        flip_position: bool=True,
+        first_only: bool=False,
         ignore_sizing: bool=False,
-        slippage: float=0.0005,  # 5bps
+        long_only: bool=False,
+        short_only: bool=False,
     ) -> pd.DataFrame:
         '''
         Opens positions in a vectorized manner.
@@ -238,17 +236,21 @@ class PandasDataTool(BaseDataTool):
             by assuming that the close price is the current best price; otherwise it is a limit order.
         Then the orders are opened at the beginning of bar N+1,
         and filled in the duration of bar N+1, if high >= order price >= low.
+        Opened orders are considered as cancelled at the end of bar N+1 if not filled.
         Args:
             first_only: first trade only, do not trade after the first trade until signal changes
-            fill_ratio: fill ratio for the order, e.g. 0.1 means 10% of the order is filled
             ignore_sizing: ignore the 'order_quantity' and 'fill_ratio' and just use order quantity=1
+            long_only: all order_size in signal=-1 will be set to 0, meaning the order_size will be determined in close_position()
+                useful for long-only strategy with signal=-1 to close the position
+            short_only: all order_size in signal=1 will be set to 0, meaning the order_size will be determined in close_position()
+                useful for short-only strategy with signal=1 to close the position
         '''
         assert 'signal' in df.columns, "No 'signal' column is found, please use create_signal() first"
         assert '_signal_streak' in df.columns, "No '_signal_streak' column is found, please use create_signal() first"
-        assert 1 >= fill_ratio > 0, "'fill_ratio' must be between 0 and 1"
+        assert not (long_only and short_only), "Cannot be long_only and short_only at the same time"
         
-        # since 'flip_position' depends on the results from close_position(), register it as a callback
-        self._registered_callbacks['open_position'] = { 'flip_position': flip_position }
+        fill_ratio = self.Engine.fill_ratio
+        slippage = self.Engine.slippage
         
         # 1. create orders
         if order_price is None:
@@ -263,6 +265,12 @@ class PandasDataTool(BaseDataTool):
         df['order_price'] = np.abs(df['signal']) * order_price
         df['order_size'] = df['signal'] * order_quantity
         
+        if long_only or short_only:
+            opposite_side = -1 if long_only else 1
+            # By setting the order size=0, it means the size will be determined in close_position()
+            # as the position offset size, i.e. the position will not be flipped when order_size=0
+            df['order_size'] = np.where(df['signal'] == opposite_side, 0, df['order_size'])
+
         # 2. place orders
         # shift 'order_price' and 'order_size' to the next bar and act as opened limit orders in the same row
         # NOTE: order placed at the end of the previous bar = opened order at the beginning of the next bar
@@ -297,21 +305,35 @@ class PandasDataTool(BaseDataTool):
                 use_capped_liquidity, max_liquidity * opened_order_side, 
                 np.where(trade_condition, opened_order_size, np.nan)
             )
+            
+        # create useful columns that will be frequently used
+        df['_trade_side'] = np.sign(df['trade_size'])
+        df['_trade_streak'] = df['_signal_streak'].shift(1)
         
-        if first_only:
-            first_trade_mask = (
-                df
-                .assign(
-                    _trade_streak=lambda x: x['_signal_streak'].shift(1),
-                    trade_sign=lambda x: np.sign(x['trade_size'])
-                )
-                .groupby(['_trade_streak'])['trade_sign'].ffill().diff().ne(0)
+        if first_only or long_only or short_only:
+            if long_only or short_only:
+                # only applies first_trade to the opposite side
+                # e.g. if long_only, only the first trade of -1 is remained and the rest are set to nan
+                filter_side = (df['signal'].shift(1) == opposite_side)
+            else:
+                filter_side = True
+            
+            df['_first_trade'] = np.where(
+                df.groupby(['_trade_streak'])['_trade_side'].transform(
+                    lambda x: x.ffill().diff().ne(0)
+                ) & (df['_trade_side'].notna()) & filter_side, 
+                True, 
+                False
             )
-            df['trade_size'] = np.where(first_trade_mask, df['trade_size'], np.nan)
-            df['trade_price'] = np.where(first_trade_mask, df['trade_price'], np.nan)
 
-            # clean up orders (order_size) after the first trade
-            after_trade_mask = df.groupby(['_signal_streak'])['trade_size'].ffill().fillna(False).astype(bool)
+            # clean up trades after the first trade
+            df['trade_size'] = np.where(df['_first_trade'], df['trade_size'], np.nan)
+            df['trade_price'] = np.where(df['_first_trade'], df['trade_price'], np.nan)
+
+            # clean up orders after the first trade
+            after_trade_mask = df.groupby(['_signal_streak'])['trade_size'].transform(
+                lambda x: x.ffill().notna()
+            )
             df['order_size'] = np.where(after_trade_mask, np.nan, df['order_size'])
             df['order_price'] = np.where(after_trade_mask, np.nan, df['order_price'])
         return df
@@ -321,101 +343,88 @@ class PandasDataTool(BaseDataTool):
         self, 
         df: pd.DataFrame,
         product: str | None=None,  # TODO
-        when: tSUPPORTED_CLOSE_POSITION_WHEN | None='signal_change',
+        for_loop: bool=False,
         take_profit: float | None=None,
         stop_loss: float | None=None,
         time_window: int | None=None,
-        trailing_stop: float | None=None,
+        # tp_limit_price: float | None=None,  # TODO?
+        # sl_limit_price: float | None=None,  # TODO?
+        # trailing_stop: float | None=None,  # TODO?
     ) -> pd.DataFrame:
-        assert any([when, take_profit, stop_loss, time_window, trailing_stop]), \
-            "At least one of 'when', 'take_profit', 'stop_loss', 'time_window', 'trailing_stop' must be provided"
-        if when:
-            assert when in SUPPORTED_CLOSE_POSITION_WHEN, \
-                f"Supported 'when' options are {SUPPORTED_CLOSE_POSITION_WHEN}"
+        '''
+        Closes positions in a vectorized manner if 'for_loop' is False.
+        Otherwise, it will be done in a for loop.
+
+        Limitations/Trade-offs:
+        1. position side must change after signal has changed.
+            This is always true when 'for_loop' is False.
+            Reason:
+                When this statement holds, the following formula is true for calculating the average price for each trade streak:
+                avg_price = (df['trade_price'] * df['trade_size']).cumsum() / df['trade_size'].cumsum()
+            Explanation:
+                For example, if there are trades: +1, +1, +1, -1 (signal change), ...
+                where (+1, +1, +1) is trade streak #1 and the position at signal change is +2.
+                Then the avg_price formula mentioned above does not hold,
+                because avg_price is still the avg_price of trade streak #1 without the -1 trade,
+                and the -1 trade does not contribute to the avg_price calculation but only realizes the profit/loss of the position.
+                Therefore, we need to make sure that the position has flipped or closed before calculating the avg_price.
+                From then on, we can also calculate stop-loss/take-profit correctly.
+        2. To ensure #1 is always true and the position can always be closed, 
+            the actual total traded volume available is ignored when closing position.
+        3. position cannot be re-entered after being closed by stop-loss/take-profit in the same trade streak
+            This is a huge limitation for long-only/short-only strategies with only +1s/only -1s signals.
+            For example, if the strategy is long-only and depends on stop-loss to close the position,
+            a for loop is needed since #1 no longer holds in this case.
+            However, if this long-only strategy has prepared -1 signals in advance,
+            instead of relying on stop-loss to close the position,
+            then #1 still applies.
+        Args:
+            for_loop: 
+                if False, automatically close position when the first trade occurs after signal changes
+        '''
         if take_profit:
             assert take_profit > 0, "'take_profit' must be positive"
         if stop_loss:
             stop_loss = abs(stop_loss)
             assert 1 > stop_loss > 0, "'stop_loss' must be between 0 and 1"
-        # TODO:
         if time_window:
             assert time_window > 0 and isinstance(time_window, int), "'time_window' must be a positive integer"
-            raise NotImplementedError("time_window > 1 is not yet implemented")
-        # TODO:
-        if trailing_stop:
-            raise NotImplementedError("trailing_stop is not yet implemented")
-        self._registered_callbacks['close_position'] = {
-            'when': when,
-            'take_profit': take_profit,
-            'stop_loss': stop_loss,
-            'time_window': time_window,
-            'trailing_stop': trailing_stop,
-        }
+        
+        if not for_loop:
+            df['_position_flip'] = df['_trade_side'].ffill().diff().ne(0) & df['_trade_side'].notna()
+            df['_close_streak'] = df['_position_flip'].cumsum()
+            df['position'] = df.groupby('_close_streak')['trade_size'].transform(
+                lambda x: x.cumsum().ffill().fillna(0)
+            )
+            position_shift = df['position'].shift(1)
+            df['trade_size'] = np.where(
+                df['_position_flip'] & (position_shift != 0), 
+                position_shift * (-1) + df['trade_size'], 
+                df['trade_size']
+            )
+
+            # update order_size to be opened_order_size + position offset size
+            after_close_mask = df.groupby(['_close_streak'])['trade_size'].transform(
+                lambda x: x.ffill().notna()
+            )
+            df['order_size'] = np.where(
+                after_close_mask & df['signal'].notna() & (df['signal'] != np.sign(df['position'])), 
+                df['position'] * (-1) + df['order_size'], 
+                df['order_size']
+            )
+        # TODO: for loop
+        else:
+            fill_ratio = self.Engine.fill_ratio
+            slippage = self.Engine.slippage
+            raise NotImplementedError("The for-loop approach is not yet implemented for vectorized backtesting")
+        
         return df
     
     @backtest
     def _done(self, df: pd.DataFrame, debug=False) -> pd.DataFrame:
         '''Orchestrate the whole process of opening and closing positions after signals are created.
         '''
-        def _close_position():
-            '''
-            Add back orders for closing position.
-            Dependency columns: ['trade_size']
-            Updated columns: ['position_close', 'trade_price', 'trade_size', 'order_price', 'order_size']
-            '''
-            mask = (df[f'_{close_when}'].shift(1) == True)
-            df.loc[mask, 'position_close'] = True
-
-            df['_close_streak'] = df['position_close'].cumsum()
-            # if there happens to be a trade overlapping with the closing position, make it nan
-            # so that 'agg_trade' is not affected by the trade
-            df.loc[df['position_close'], 'trade_price'] = np.nan
-            df.loc[df['position_close'], 'trade_size'] = np.nan
-            df['agg_trade'] = df.groupby(['_close_streak'])['trade_size'].transform(
-                lambda x: x.cumsum().ffill().fillna(0)
-            )
-
-            # set 'position_close'=False if no trade
-            df.loc[df['agg_trade'].shift(1) == 0, 'position_close'] = False
-
-            df.loc[df['position_close'], 'trade_price'] = df['close'].shift(1)
-            df.loc[df['position_close'], 'trade_size'] =  df['agg_trade'].shift(1) * (-1)
-            
-            # update the orders
-            df.loc[df['position_close'].shift(-1, fill_value=False), 'order_price'] = df['trade_price'].shift(-1)
-            df.loc[df['position_close'].shift(-1, fill_value=False), 'order_size'] = df['trade_size'].shift(-1)
-            
-        def _flip_position():
-            '''
-            Flip position by changing 'trade_size'
-            Dependency columns: ['trade_size']
-            Updated columns: ['trade_size', 'order_size']
-            '''
-            df['position_flip'] = df['trade_size'].ffill().diff().fillna(False).ne(0)
-            df.loc[df['position_close'], 'position_flip'] = False
-            df['flip_streak'] = df['position_flip'].cumsum()
-            
-            df['agg_trade'] = df.groupby(['flip_streak'])['trade_size'].transform(
-                lambda x: x.cumsum().ffill().fillna(0)
-            )
-            # set 'position_flip'=False if no trade
-            df.loc[df['agg_trade'].shift(1) == 0, 'position_flip'] = False
-
-            # update trade_size for position flip, not orders because unlike closing position, 
-            # we don't need to update the order_price as well, so we can just update trade_size -> order_size
-            df.loc[df['position_flip'], 'trade_size'] += df['agg_trade'].shift(1) * (-1)
-            
-            # update back order_size for reference after changing trade_size
-            after_trade_mask = df.groupby(['_signal_streak'])['trade_size'].transform(
-                lambda x: x.fillna(0).cumsum().astype(bool)
-            )
-            df.loc[~after_trade_mask & df['order_price'].notna(), 'order_size'] = df['trade_size'].bfill()
-        
-        def _calculate_position():
-            df['position'] = df['trade_size'].transform(
-                lambda x: x.cumsum().ffill().fillna(0).astype(int)
-            )
-        
+        return
         def _calculate_avg_price():
             df['_avg_streak'] = df['_trade_streak'].shift(1).bfill().astype(int)
             df['_cost'] = (df['trade_price'] * df['trade_size']).fillna(0)
@@ -431,72 +440,41 @@ class PandasDataTool(BaseDataTool):
         elif 'open_position' not in self._registered_callbacks:
             return df
 
-        use_for_loop = False
-        
-        # parse registered callbacks
-        open_position = self._registered_callbacks['open_position']
-        first_trade_only = open_position['first_only']
-        flip_position = open_position['flip_position']
-        if close_position := self._registered_callbacks.get('close_position', None):
-            close_when: str = close_position['when']
-            take_profit, stop_loss = close_position['take_profit'], close_position['stop_loss']
-            time_window = close_position['time_window']
-            trailing_stop = close_position['trailing_stop']
-            if not (close_when and (take_profit or stop_loss or time_window or trailing_stop)):
-                cprint("Position dependencies detected, using FOR LOOP in vectorized backtesting!")
-                use_for_loop = True
-        
-        
-        df['position_close'] = False
-        df['position_flip'] = False
-        
-        if not use_for_loop:
-            if close_position:
-                if close_when:
-                    _close_position()
-                    _calculate_avg_price()
-                    if stop_loss:
-                        df['sl_price'] = np.where(
-                            ~df['position_close'],
-                            df['avg_price'] * (1 - np.sign(df['trade_size'].ffill()) * stop_loss),
-                            np.nan
-                        )
-                        df['sl_price'] = df['sl_price'].shift(1)
-                        trigger_condition = (df['high'] >= df['sl_price']) & (df['sl_price'] >= df['low'])
-                        df['sl_price'] = df['sl_price'].where(trigger_condition & ~df['position_close'])
-                        df['_sl_close'] = df.groupby('_avg_streak')['sl_price'].transform(
-                            lambda x: x.ffill().fillna(0).astype(bool).diff().fillna(0).ne(0)
-                        )
-                        df.loc[df['_sl_close'], 'trade_size'] = df['agg_trade'].shift(1) * (-1)
-                        # update back the trade_size and order_size after stop loss
-                        after_sl_mask = df.groupby(['_avg_streak'])['_sl_close'].transform(
-                            lambda x: x.fillna(0).cumsum().astype(bool)
-                        )
-                        df.loc[after_sl_mask & ~df['_sl_close'], 'trade_size'] = np.nan
-                        df.loc[after_sl_mask & ~df['position_close'], 'order_size'] = np.nan
-                        
-                    if take_profit:
-                        df['tp_price'] = np.where(
-                            ~df['position_close'],
-                            df['avg_price'] * (1 + np.sign(df['trade_size'].ffill()) * take_profit),
-                            np.nan
-                        )
-                        trigger_condition = (df['high'] >= df['tp_price']) & (df['tp_price'] >= df['low'])
-                        df['tp_price'] = df['tp_price'].where(trigger_condition)
-                        
-                    # TODO: 'first' will make the order of take_profit and  stop_loss different
-                    import random
-                    random.seed(8)
-                    # df['first'] = random.choices(['H', 'L', 'N'], k=df.shape[0])
+        _calculate_avg_price()
+        if stop_loss:
+            df['sl_price'] = np.where(
+                ~df['position_close'],
+                df['avg_price'] * (1 - np.sign(df['trade_size'].ffill()) * stop_loss),
+                np.nan
+            )
+            df['sl_price'] = df['sl_price'].shift(1)
+            trigger_condition = (df['high'] >= df['sl_price']) & (df['sl_price'] >= df['low'])
+            df['sl_price'] = df['sl_price'].where(trigger_condition & ~df['position_close'])
+            df['_sl_close'] = df.groupby('_avg_streak')['sl_price'].transform(
+                lambda x: x.ffill().fillna(0).astype(bool).diff().fillna(0).ne(0)
+            )
+            df.loc[df['_sl_close'], 'trade_size'] = df['agg_trade'].shift(1) * (-1)
+            # update back the trade_size and order_size after stop loss
+            after_sl_mask = df.groupby(['_avg_streak'])['_sl_close'].transform(
+                lambda x: x.fillna(0).cumsum().astype(bool)
+            )
+            df.loc[after_sl_mask & ~df['_sl_close'], 'trade_size'] = np.nan
+            df.loc[after_sl_mask & ~df['position_close'], 'order_size'] = np.nan
+            
+        if take_profit:
+            df['tp_price'] = np.where(
+                ~df['position_close'],
+                df['avg_price'] * (1 + np.sign(df['trade_size'].ffill()) * take_profit),
+                np.nan
+            )
+            trigger_condition = (df['high'] >= df['tp_price']) & (df['tp_price'] >= df['low'])
+            df['tp_price'] = df['tp_price'].where(trigger_condition)
+            
+        # TODO: 'first' will make the order of take_profit and  stop_loss different
+        import random
+        random.seed(8)
+        # df['first'] = random.choices(['H', 'L', 'N'], k=df.shape[0])
                    
-            if flip_position:
-                _flip_position()
-            _calculate_position()
-        else:
-            # TODO: consider all: first_trade_only, flip_position, close_position ...
-            raise NotImplementedError("The for-loop approach is not yet implemented for vectorized backtesting")
-        
-        
         # clean up 'order_price'/'trade_price' if the corresponding 'order_size'/trade_size' is removed
         df['order_price'] = df['order_price'].where(df['order_size'].notna())
         df['trade_price'] = df['trade_price'].where(df['trade_size'].notna())

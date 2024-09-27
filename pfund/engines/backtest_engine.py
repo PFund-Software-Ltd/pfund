@@ -50,6 +50,8 @@ class BacktestEngine(BaseEngine):
         num_chunks: int=1,
         use_ray: bool=False,
         num_cpus: int=8,
+        fill_ratio: float=0.1,
+        slippage: float=0.0005,  # 5bps
         config: ConfigHandler | None=None,
         **settings
     ):
@@ -89,6 +91,12 @@ class BacktestEngine(BaseEngine):
                 if cls.num_cpus > cls.num_chunks:
                     cls.num_chunks = cls.num_cpus
                     print(f'num_chunks is adjusted to {num_cpus} because {num_cpus=}')
+        if not hasattr(cls, 'fill_ratio'):
+            assert 1 >= fill_ratio > 0, "'fill_ratio' must be between 0 and 1"
+            cls.fill_ratio = fill_ratio
+        if not hasattr(cls, 'slippage'):
+            assert 0 <= slippage < 1, "'slippage' must be between 0 and 1"
+            cls.slippage = slippage
         return super().__new__(
             cls,
             env,
