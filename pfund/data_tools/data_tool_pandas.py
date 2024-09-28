@@ -224,7 +224,7 @@ class PandasDataTool(BaseDataTool):
         order_price: pd.Series | None=None,
         order_quantity: pd.Series | None=None,
         first_only: bool=False,
-        ignore_sizing: bool=False,
+        ignore_sizing: bool=True,
         long_only: bool=False,
         short_only: bool=False,
     ) -> pd.DataFrame:
@@ -239,7 +239,7 @@ class PandasDataTool(BaseDataTool):
         Opened orders are considered as cancelled at the end of bar N+1 if not filled.
         Args:
             first_only: first trade only, do not trade after the first trade until signal changes
-            ignore_sizing: ignore the 'order_quantity' and 'fill_ratio' and just use order quantity=1
+            ignore_sizing: if True, ignore the 'order_quantity' and 'fill_ratio' and just use order quantity=1
             long_only: all order_size in signal=-1 will be set to 0, meaning the order_size will be determined in close_position()
                 useful for long-only strategy with signal=-1 to close the position
             short_only: all order_size in signal=1 will be set to 0, meaning the order_size will be determined in close_position()
@@ -327,12 +327,16 @@ class PandasDataTool(BaseDataTool):
             )
 
             # clean up trades after the first trade
-            df['trade_size'] = np.where(df['_first_trade'], df['trade_size'], np.nan)
-            df['trade_price'] = np.where(df['_first_trade'], df['trade_price'], np.nan)
+            df['trade_size'] = np.where(df['_first_trade'] | ~filter_side, df['trade_size'], np.nan)
+            df['trade_price'] = np.where(df['_first_trade'] | ~filter_side, df['trade_price'], np.nan)
 
             # clean up orders after the first trade
-            after_trade_mask = df.groupby(['_signal_streak'])['trade_size'].transform(
-                lambda x: x.ffill().notna()
+            after_trade_mask = (
+                df
+                .assign(_filtered_trade_size=lambda x: x['trade_size'] * x['_first_trade'].replace(False, np.nan))
+                .groupby(['_signal_streak'])['_filtered_trade_size'].transform(
+                    lambda x: x.ffill().notna()
+                )
             )
             df['order_size'] = np.where(after_trade_mask, np.nan, df['order_size'])
             df['order_price'] = np.where(after_trade_mask, np.nan, df['order_price'])
@@ -378,6 +382,7 @@ class PandasDataTool(BaseDataTool):
             However, if this long-only strategy has prepared -1 signals in advance,
             instead of relying on stop-loss to close the position,
             then #1 still applies.
+
         Args:
             for_loop: 
                 if False, automatically close position when the first trade occurs after signal changes
@@ -391,27 +396,36 @@ class PandasDataTool(BaseDataTool):
             assert time_window > 0 and isinstance(time_window, int), "'time_window' must be a positive integer"
         
         if not for_loop:
-            df['_position_flip'] = df['_trade_side'].ffill().diff().ne(0) & df['_trade_side'].notna()
-            df['_close_streak'] = df['_position_flip'].cumsum()
+            df['_position_change'] = df['_trade_side'].ffill().diff().ne(0) & df['_trade_side'].notna()
+            # NOTE: close streak also includes opposite signals if not traded,
+            # e.g. +1, +1, +1, -1 (no trade), -1 (no trade), ...
+            df['_close_streak'] = df['_position_change'].cumsum()
             df['position'] = df.groupby('_close_streak')['trade_size'].transform(
                 lambda x: x.cumsum().ffill().fillna(0)
             )
-            position_shift = df['position'].shift(1)
+            position_offset_size = df['position'] * (-1)
+            position_offset_size_shift = position_offset_size.shift(1)
+            # update trade_size to be trade_size + position offset size 
             df['trade_size'] = np.where(
-                df['_position_flip'] & (position_shift != 0), 
-                position_shift * (-1) + df['trade_size'], 
+                df['_position_change'] & (position_offset_size_shift != 0), 
+                position_offset_size_shift + df['trade_size'], 
                 df['trade_size']
             )
 
-            # update order_size to be opened_order_size + position offset size
+            # update order_size to be opened_order_size + position_offset_size
             after_close_mask = df.groupby(['_close_streak'])['trade_size'].transform(
                 lambda x: x.ffill().notna()
             )
             df['order_size'] = np.where(
-                after_close_mask & df['signal'].notna() & (df['signal'] != np.sign(df['position'])), 
-                df['position'] * (-1) + df['order_size'], 
+                after_close_mask & df['signal'].notna() & (df['signal'] != np.sign(df['position'])),
+                position_offset_size + df['order_size'], 
                 df['order_size']
             )
+            
+            # TODO: 'first' column will make the order of take_profit and  stop_loss different
+            # df['first'] = random.choices(['H', 'L', 'N'], k=df.shape[0])
+            
+            
         # TODO: for loop
         else:
             fill_ratio = self.Engine.fill_ratio
@@ -421,10 +435,49 @@ class PandasDataTool(BaseDataTool):
         return df
     
     @backtest
-    def _done(self, df: pd.DataFrame, debug=False) -> pd.DataFrame:
+    def _done(
+        self, 
+        df: pd.DataFrame, 
+        debug: bool | Literal['create_signal', 'create', 'open_position', 'open', 'close_position', 'close']=False
+    ) -> pd.DataFrame:
         '''Orchestrate the whole process of opening and closing positions after signals are created.
         '''
-        return
+        if debug:
+            if debug is True:
+                keep_cols = []
+                remark_cols = [
+                    '_signal_change',
+                    '_first_trade',
+                    '_position_change',
+                    '_stop_loss',
+                    '_take_profit',
+                ]
+            else:
+                assert debug in ['create_signal', 'create', 'open_position', 'open', 'close_position', 'close'], \
+                    f"'debug' must be one of the following: {['create_signal', 'create', 'open_position', 'open', 'close_position', 'close']}"
+                if debug in ['create_signal', 'create']:
+                    keep_cols = ['_signal_streak',]
+                    remark_cols = ['_signal_change',]
+                elif debug in ['open_position', 'open']:
+                    keep_cols = ['_trade_streak',]
+                    remark_cols = ['_first_trade',]
+                elif debug in ['close_position', 'close']:
+                    keep_cols = ['_close_streak',]
+                    remark_cols = [
+                        '_position_change',
+                        '_stop_loss',
+                        '_take_profit',
+                    ]
+            df['remark'] = ''
+            for col in remark_cols:
+                if col in df.columns:
+                    df.loc[df[col], 'remark'] += f',{col[1:]}'  # remove leading '_'
+            df['remark'] = df['remark'].str.lstrip(',')  # remove leading comma
+        
+        remove_cols = [col for col in df.columns if col.startswith('_') and col not in keep_cols]
+        df.drop(columns=remove_cols, inplace=True)
+        return df
+    
         def _calculate_avg_price():
             df['_avg_streak'] = df['_trade_streak'].shift(1).bfill().astype(int)
             df['_cost'] = (df['trade_price'] * df['trade_size']).fillna(0)
@@ -470,10 +523,7 @@ class PandasDataTool(BaseDataTool):
             trigger_condition = (df['high'] >= df['tp_price']) & (df['tp_price'] >= df['low'])
             df['tp_price'] = df['tp_price'].where(trigger_condition)
             
-        # TODO: 'first' will make the order of take_profit and  stop_loss different
-        import random
-        random.seed(8)
-        # df['first'] = random.choices(['H', 'L', 'N'], k=df.shape[0])
+        
                    
         # clean up 'order_price'/'trade_price' if the corresponding 'order_size'/trade_size' is removed
         df['order_price'] = df['order_price'].where(df['order_size'].notna())

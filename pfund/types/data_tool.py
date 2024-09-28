@@ -26,7 +26,7 @@ class _BacktestDataFrame:
         order_price: tSeries | None=None,
         order_quantity: tSeries | None=None,
         first_only: bool=True,
-        ignore_sizing: bool=False,
+        ignore_sizing: bool=True,
         long_only: bool=False,
         short_only: bool=False,
     ) -> _BacktestDataFrame: ...
