@@ -443,7 +443,6 @@ class PandasDataTool(BaseDataTool):
                 (short_order & (opened_order_price <= df['high']))
             )
             
-            df['stop_price'] = np.nan
             for tp_or_sl, sign in [(stop_loss, -1), (take_profit, 1)]:
                 if tp_or_sl is None:
                     continue
@@ -519,12 +518,14 @@ class PandasDataTool(BaseDataTool):
                 df['trade_price']
             )
 
-            # clean up orders and trades after stop orders
-            first_stop_forwards_mask = stop_side_with_0s_ffill.fillna(0).ne(0) 
-            order_mask = first_stop_forwards_mask & (~df['_position_change'].shift(-1).fillna(False))
+            # clean up order, trades, and columns 'avg_price' and 'position' after stop orders
+            first_stop_order_forwards_mask = stop_side_with_0s_ffill.fillna(0).ne(0) 
+            order_mask = first_stop_order_forwards_mask & (~df['_position_change'].shift(-1).fillna(False))
             df['order_size'] = np.where(order_mask, np.nan, df['order_size'])
             df['order_price'] = np.where(order_mask, np.nan, df['order_price'])
-            trade_mask = first_stop_forwards_mask & (~df['_first_stop_order']) & (~first_stop_trade)
+            position_mask = first_stop_order_forwards_mask & (~df['_first_stop_order'])
+            df['position'] = np.where(position_mask, 0.0, df['position'])
+            trade_mask = position_mask & (~first_stop_trade)
             df['trade_size'] = np.where(trade_mask, np.nan, df['trade_size'])
             df['trade_price'] = np.where(trade_mask, np.nan, df['trade_price'])
             df['avg_price'] = np.where(trade_mask, np.nan, df['avg_price'])
@@ -550,15 +551,16 @@ class PandasDataTool(BaseDataTool):
         ).fillna(0)
         
         _calculate_avg_price()
+        df['stop_price'] = np.nan
         if take_profit or stop_loss:
-            _calculate_stop_price()    
-            df['position'] = df['trade_size'].cumsum()
-        else:
-            offset_size = df['position'].shift(1) * (-1)
-            mask = df['_position_change'] & (offset_size != 0)
-            # update trade_size and order_size
-            df['trade_size'] = np.where(mask, offset_size + df['trade_size'], df['trade_size'])
-            df['order_size'] = np.where(mask.shift(-1), df['trade_size'].shift(-1), df['order_size'])
+            _calculate_stop_price()
+        offset_size = df['position'].shift(1) * (-1)
+        mask = df['_position_change'] & (offset_size != 0) & df['stop_price'].shift(1).isna()
+        # update trade_size and order_size
+        df['trade_size'] = np.where(mask, offset_size + df['trade_size'], df['trade_size'])
+        df['order_size'] = np.where(mask.shift(-1), df['trade_size'].shift(-1), df['order_size'])
+        if df['stop_price'].isna().all():
+            df.drop(columns=['stop_price'], inplace=True)
         return df
     
     @backtest
