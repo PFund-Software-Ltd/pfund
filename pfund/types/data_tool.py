@@ -35,8 +35,6 @@ class _BacktestDataFrame:
         product: str | None=None,
         take_profit: float | None=None,
         stop_loss: float | None=None,
-        trailing_take_profit: float | None=None,
-        trailing_stop_loss: float | None=None,
     ) -> _BacktestDataFrame: ...
 
         

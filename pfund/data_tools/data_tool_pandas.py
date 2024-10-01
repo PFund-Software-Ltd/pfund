@@ -360,9 +360,6 @@ class PandasDataTool(BaseDataTool):
         product: str | None=None,  # TODO
         take_profit: float | None=None,
         stop_loss: float | None=None,
-        trailing_take_profit: float | None=None,
-        trailing_stop_loss: float | None=None,
-        # TODO: support 'first' column, which will be used to determine whether 'low' or 'high' is reached first
     ) -> pd.DataFrame:
         '''
         Closes positions in a vectorized manner.
@@ -370,8 +367,7 @@ class PandasDataTool(BaseDataTool):
         Due to limitation #6, only one trade can be created at a time, by either an opened order or a stop order.
         Therefore, trade_price and trade_size can be updated by stop orders, not just opened orders.
         
-        Since whether 'high' or 'low' is reached first cannot be known unless 'first' column with values 'H', 'L', 'N' is provided,
-        where 'H' means 'high' is reached first, 'L' means 'low' is reached first, 'N' means high and low are reached at the same time,
+        Since whether 'high' or 'low' is reached first cannot be known,
         it is always assumed that 'low' is reached first in long position and 'high' is reached first in short position
         so that stop loss is prioritized over take profit.
         
@@ -401,12 +397,11 @@ class PandasDataTool(BaseDataTool):
         4. stop_loss/take_profit only supports stop market orders, because the exact price movement after stop_loss/take_profit is unknown,
             placing limit orders might not get filled.
         5. assumes stop loss is always triggered before take profit if the order of happening cannot be determined.
-            - in long position, check 'low' first; in short position, check 'high' first, unless 'first' column is provided
+            - in long position, check 'low' first; in short position, check 'high' first
         6. trade priority of opened order, stop loss order and take profit order, only one of them can be traded at a time.
         - e.g. if long opened order and long position,
             1. if stop order is triggered immediately when placed, then it has the priority over market order
             2. if opened order is a market order, then it will be traded.
-            (checks stop loss first, assuming 'low' will be reached first if there is no 'first' column)
             3. if opened order is a limit order, then it will be traded first if order_price > stop_loss_price.
             4. if stop loss order is not triggered, then check take profit order
         '''
