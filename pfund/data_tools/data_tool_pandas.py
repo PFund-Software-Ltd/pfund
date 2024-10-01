@@ -360,7 +360,6 @@ class PandasDataTool(BaseDataTool):
         product: str | None=None,  # TODO
         take_profit: float | None=None,
         stop_loss: float | None=None,
-        time_window: int | None=None,
         trailing_take_profit: float | None=None,
         trailing_stop_loss: float | None=None,
         # TODO: support 'first' column, which will be used to determine whether 'low' or 'high' is reached first
@@ -535,8 +534,6 @@ class PandasDataTool(BaseDataTool):
         if stop_loss:
             stop_loss = abs(stop_loss)
             assert 1 > stop_loss > 0, "'stop_loss' must be between 0 and 1"
-        if time_window:
-            assert time_window > 0 and isinstance(time_window, int), "'time_window' must be a positive integer"
         
         slippage = self.Engine.slippage
         trade_side = np.sign(df['trade_size'])
