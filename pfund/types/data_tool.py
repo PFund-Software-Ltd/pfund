@@ -16,7 +16,6 @@ class _BacktestDataFrame:
         buy_condition: tSeries | None=None,
         sell_condition: tSeries | None=None,
         signal: tSeries | None=None,
-        is_nan_signal: bool=False,
         first_only: bool=False,
     ) -> _BacktestDataFrame: ...
 
@@ -25,8 +24,8 @@ class _BacktestDataFrame:
         product: str | None=None,
         order_price: tSeries | None=None,
         order_quantity: tSeries | None=None,
-        first_only: bool=True,
         ignore_sizing: bool=True,
+        first_only: bool=True,
         long_only: bool=False,
         short_only: bool=False,
     ) -> _BacktestDataFrame: ...
@@ -34,18 +33,14 @@ class _BacktestDataFrame:
     def close_position(
         self,
         product: str | None=None,
-        for_loop: bool=False,
         take_profit: float | None=None,
         stop_loss: float | None=None,
         time_window: int | None=None,
+        trailing_take_profit: float | None=None,
+        trailing_stop_loss: float | None=None,
     ) -> _BacktestDataFrame: ...
 
         
-    create = create_signal
-    open = open_position
-    close = close_position
-
-
 def __getattr__(name):
     if name == 'BacktestDataFrame':
         from pfund.utils.utils import get_engine_class

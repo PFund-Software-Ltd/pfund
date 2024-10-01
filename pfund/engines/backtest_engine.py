@@ -51,7 +51,7 @@ class BacktestEngine(BaseEngine):
         use_ray: bool=False,
         num_cpus: int=8,
         fill_ratio: float=0.1,
-        slippage: float=0.0005,  # 5bps
+        slippage: float=0.0001,  # 1bps
         config: ConfigHandler | None=None,
         **settings
     ):
