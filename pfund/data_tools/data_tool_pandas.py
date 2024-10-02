@@ -152,7 +152,6 @@ class PandasDataTool(BaseDataTool):
     def _create_signal(
         self,
         df: pd.DataFrame,
-        product: str | None=None,  # TODO
         buy_condition: pd.Series | None=None,
         sell_condition: pd.Series | None=None,
         signal: pd.Series | None=None,
@@ -216,7 +215,6 @@ class PandasDataTool(BaseDataTool):
     def _open_position(
         self, 
         df: pd.DataFrame,
-        product: str | None=None,  # TODO
         order_price: pd.Series | None=None,
         order_quantity: pd.Series | None=None,
         ignore_sizing: bool=True,
@@ -357,9 +355,9 @@ class PandasDataTool(BaseDataTool):
     def _close_position(
         self, 
         df: pd.DataFrame,
-        product: str | None=None,  # TODO
         take_profit: float | None=None,
         stop_loss: float | None=None,
+        debug: bool=False,
     ) -> pd.DataFrame:
         '''
         Closes positions in a vectorized manner.
@@ -553,71 +551,40 @@ class PandasDataTool(BaseDataTool):
         df['order_size'] = np.where(mask.shift(-1), df['trade_size'].shift(-1), df['order_size'])
         if df['stop_price'].isna().all():
             df.drop(columns=['stop_price'], inplace=True)
-        return df
+            
+        return self._done(
+            df, 
+            remark_cols=['_signal_change', '_first_trade', '_position_change', '_stop_loss', '_take_profit'] if debug else [],
+            debug_cols=[] if debug else [],
+        )
     
+    @staticmethod
     @backtest
-    def _done(
-        self, 
-        df: pd.DataFrame, 
-        debug: bool | Literal['create_signal', 'create', 'open_position', 'open', 'close_position', 'close']=False,
-        alias: bool=False
-    ) -> pd.DataFrame:
-        '''Clean up temporary columns and add column 'remark' for debugging.
+    def _done(df: pd.DataFrame, remark_cols: list[str], debug_cols: list[str]) -> pd.DataFrame:
+        '''Clean up temporary columns that start with '_' and add 'remark' column for debugging.
         Args:
-            debug:
-                - True: add all info to 'remark' column
-                - 'create_signal': add 'signal_change' to 'remark' column,
-                - 'open_position': add 'first_trade' to 'remark' column,
-                - 'close_position': 
-                    - add '_position_change', '_stop_loss', '_take_profit' to 'remark' column
-                    - keep columns '_position_streak', '_agg_costs'
-            alias:
-                - True: use alias for column names in 'remark', e.g. 'signal_change' -> 'sc'
+            remark_cols: columns to add to 'remark'
+            debug_cols: temporary columns to keep for debugging
         '''
-        if debug:
-            if debug is True:
-                keep_cols = []
-                remark_cols = [
-                    '_signal_change',
-                    '_first_trade',
-                    '_position_change',
-                    '_stop_loss',
-                    '_take_profit',
-                ]
-            else:
-                assert debug in ['create_signal', 'create', 'open_position', 'open', 'close_position', 'close'], \
-                    f"'debug' must be one of the following: {['create_signal', 'create', 'open_position', 'open', 'close_position', 'close']}"
-                if debug in ['create_signal', 'create']:
-                    keep_cols = []
-                    remark_cols = ['_signal_change',]
-                elif debug in ['open_position', 'open']:
-                    keep_cols = []
-                    remark_cols = ['_first_trade',]
-                elif debug in ['close_position', 'close']:
-                    keep_cols = ['_position_streak', '_agg_costs']
-                    remark_cols = [
-                        '_position_change',
-                        '_stop_loss',
-                        '_take_profit',
-                    ]
+        aliases = {
+            'signal_change': 'sc',
+            'first_trade': 'ft',
+            'position_change': 'pc',
+            'stop_loss': 'sl',
+            'take_profit': 'tp',
+        }
+        if remark_cols:
             df['remark'] = ''
-            aliases = {
-                'signal_change': 'sc',
-                'first_trade': 'ft',
-                'position_change': 'pc',
-                'stop_loss': 'sl',
-                'take_profit': 'tp',
-            }
             for col in remark_cols:
                 if col in df.columns:
-                    df.loc[df[col], 'remark'] += f',{col[1:] if not alias else aliases[col[1:]]}'  # [1:] removes leading '_'
-            df['remark'] = df['remark'].str.lstrip(',')  # remove leading comma
+                    df.loc[df[col], 'remark'] += f',{aliases[col[1:]]}'  # [1:] removes leading '_'
+            df['remark'] = df['remark'].str.lstrip(',')  # remove leading comma 
         
         # remove temporary columns that start with '_'
-        remove_cols = [col for col in df.columns if col.startswith('_') and col not in keep_cols]
+        remove_cols = [col for col in df.columns if col.startswith('_') and col not in debug_cols]
         df.drop(columns=remove_cols, inplace=True)
         return df
-                   
+    
     @backtest
     def preprocess_vectorized_df(self, df: pd.DataFrame) -> pd.DataFrame:
         # rearrange columns
@@ -630,7 +597,6 @@ class PandasDataTool(BaseDataTool):
         df.create_signal = lambda *args, **kwargs: self._create_signal(df, *args, **kwargs)
         df.open_position = lambda *args, **kwargs: self._open_position(df, *args, **kwargs)
         df.close_position = lambda *args, **kwargs: self._close_position(df, *args, **kwargs)
-        df.done = lambda *args, **kwargs: self._done(df, *args, **kwargs)
 
         # TODO: maybe create a subclass like SafeFrame(pd.DataFrame) to prevent users from peeking into the future?
         # e.g. df['close'] = df['close'].shift(-1) should not be allowed
@@ -651,12 +617,11 @@ class PandasDataTool(BaseDataTool):
         if no 'orders' column, then 'trade_size'/'position' must be in the df
         - derives 'trade_size'/'position' from 'position'/'trade_size'
         '''
-        print('***postprocess_vectorized_df!!!')
         # TODO: assert columns exist, e.g. signal, order_price, order_quantity, trade_price, trade_quantity, position
         # TODO: assert order_price and order_quantity not negative
         # TODO: clear columns for debugging, e.g. 'signal1', 'order_price1'
-        return
-        # df = pd.concat(df_chunks)
+        df = pd.concat(df_chunks)
+        return df
         # print(df)
         cols = df.columns
         if 'position' not in cols and 'trade_size' not in cols:

@@ -12,7 +12,6 @@ if TYPE_CHECKING:
 class _BacktestDataFrame:
     def create_signal(
         self, 
-        product: str | None=None,
         buy_condition: tSeries | None=None,
         sell_condition: tSeries | None=None,
         signal: tSeries | None=None,
@@ -21,7 +20,6 @@ class _BacktestDataFrame:
 
     def open_position(
         self,
-        product: str | None=None,
         order_price: tSeries | None=None,
         order_quantity: tSeries | None=None,
         ignore_sizing: bool=True,
@@ -32,9 +30,9 @@ class _BacktestDataFrame:
     
     def close_position(
         self,
-        product: str | None=None,
         take_profit: float | None=None,
         stop_loss: float | None=None,
+        debug: bool=False,
     ) -> _BacktestDataFrame: ...
 
         

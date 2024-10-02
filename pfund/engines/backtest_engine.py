@@ -45,12 +45,12 @@ class BacktestEngine(BaseEngine):
         mode: tSUPPORTED_BACKTEST_MODES='vectorized',
         use_signal_df: bool=False,
         assert_signals: bool=True,
-        auto_git_commit: bool=False,
-        save_backtests: bool=False,
+        commit_to_git: bool=False,
+        save_backtests: bool=True,
         num_chunks: int=1,
         use_ray: bool=False,
         num_cpus: int=8,
-        fill_ratio: float=0.1,
+        fill_ratio: float=0.1,  # 10%
         slippage: float=0.0001,  # 1bps
         config: ConfigHandler | None=None,
         **settings
@@ -77,8 +77,8 @@ class BacktestEngine(BaseEngine):
             cls.assert_signals = assert_signals
             if cls.mode == 'event_driven' and cls.use_signal_df and cls.assert_signals:
                 raise ValueError('use_signal_df must be False when assert_signals=True in event-driven backtesting')
-        if not hasattr(cls, 'auto_git_commit'):
-            cls.auto_git_commit = auto_git_commit
+        if not hasattr(cls, 'commit_to_git'):
+            cls.commit_to_git = commit_to_git
         if not hasattr(cls, 'save_backtests'):
             cls.save_backtests = save_backtests
         if not hasattr(cls, 'num_chunks'):
@@ -113,8 +113,8 @@ class BacktestEngine(BaseEngine):
         mode: tSUPPORTED_BACKTEST_MODES='vectorized',
         use_signal_df: bool=False,
         assert_signals: bool=True,
-        auto_git_commit: bool=False,
-        save_backtests: bool=False,
+        commit_to_git: bool=False,
+        save_backtests: bool=True,
         num_chunks: int=1,
         use_ray: bool=False,
         num_cpus: int=8,
@@ -311,7 +311,7 @@ class BacktestEngine(BaseEngine):
         backtest_hash = self._generate_backtest_hash(strategy)
         backtest_name = self._create_backtest_name(strategy.name, backtest_id)
         backtest_iter = self._generate_backtest_iteration(backtest_hash)
-        if self.auto_git_commit and self._git.is_git_repo():
+        if self.commit_to_git and self._git.is_git_repo():
             commit_hash = self._commit_strategy(strategy)
         else:
             commit_hash = None
@@ -374,11 +374,15 @@ class BacktestEngine(BaseEngine):
                         backtestee = model
                 backtest_result: dict = self._backtest(backtestee)
                 backtest_results.update(backtest_result)
+            # if only one backtest is run, return the backtest result without backtestee's name
+            if len(backtest_results) == 1:
+                backtest_results = backtest_results[backtestee.name]
         except Exception as err:
             error = str(err)
             self.logger.exception('Error in backtesting:')
         finally:
             self.end(reason=error)
+        
         return backtest_results
 
     def _backtest(self, backtestee: BaseStrategy | BaseModel) -> dict:
