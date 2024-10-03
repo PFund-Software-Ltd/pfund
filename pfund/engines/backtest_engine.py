@@ -348,7 +348,7 @@ class BacktestEngine(BaseEngine):
                     log_listener.stop()
                 ray.shutdown()
         end_time = time.time()
-        print(f'Backtest elapsed time: {end_time - start_time:.2f}(s)')
+        Console().print(f'Backtest elapsed time: {end_time - start_time:.3f}(s)', style='bold')
         
         
         # Post-Backtesting

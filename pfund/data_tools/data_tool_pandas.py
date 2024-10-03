@@ -255,12 +255,6 @@ class PandasDataTool(BaseDataTool):
         df['order_price'] = np.abs(df['signal']) * order_price
         df['order_size'] = df['signal'] * order_quantity
         
-        if long_only or short_only:
-            opposite_side = -1 if long_only else 1
-            # By setting the order size=0, it means the size will be determined in close_position()
-            # as the position offset size, i.e. the position will not be flipped when order_size=0
-            df['order_size'] = np.where(df['signal'] == opposite_side, 0, df['order_size'])
-
         # 2. place orders
         # shift 'order_price' and 'order_size' to the next bar and act as opened limit orders in the same row
         # NOTE: order placed at the end of the previous bar = opened order at the beginning of the next bar
@@ -303,12 +297,15 @@ class PandasDataTool(BaseDataTool):
             )
             
         if first_only or long_only or short_only:
-            if long_only or short_only:
+            if first_only:
+                opposite_side = None
+                filtered_orders = pd.Series(True, index=df.index)
+            else:  # long_only or short_only:
                 # only applies first_trade to the opposite side
                 # e.g. if long_only, only the first trade of -1 is remained and the rest are set to nan
-                filter_side = (df['signal'].shift(1) == opposite_side)
-            else:
-                filter_side = pd.Series(True, index=df.index)
+                opposite_side = -1 if long_only else 1
+                filtered_orders = (df['signal'] == opposite_side)
+            filtered_trades = filtered_orders.shift(1, fill_value=False if opposite_side is not None else True)
 
             # NOTE: whenever there is a signal change and no trade after it, add a 0 to _trade_side.
             # used to separate trade streaks with the same sign but no trades in the middle
@@ -324,7 +321,7 @@ class PandasDataTool(BaseDataTool):
             df['_first_trade'] = (
                 trade_side_with_0s_ffill.diff().ne(0)
                 & trade_price_notna  # filter out 0s in _trade_side_with_0s
-                & filter_side
+                & filtered_trades
             )
             
             # NOTE: the above is equivalent to the following, which is a groupby version
@@ -332,19 +329,29 @@ class PandasDataTool(BaseDataTool):
             # df['_first_trade'] = np.where(
             #     df.groupby(['_trade_streak'])['_trade_side'].transform(
             #         lambda x: x.ffill().diff().ne(0)
-            #     ) & (df['_trade_side'].notna()) & filter_side, 
+            #     ) & (df['_trade_side'].notna()) & filtered_trades, 
             #     True, 
             #     False
             # )
 
             # clean up orders and trades after the first trade
             first_trade_forwards_mask = trade_side_with_0s_ffill.fillna(0).ne(0) 
-            order_mask = first_trade_forwards_mask & (~df['_signal_change'])
+            order_mask = first_trade_forwards_mask & (~df['_signal_change']) & filtered_orders
             df['order_size'] = np.where(order_mask, np.nan, df['order_size'])
             df['order_price'] = np.where(order_mask, np.nan, df['order_price'])
-            trade_mask = df['_first_trade'] | ~filter_side
+            trade_mask = df['_first_trade'] | ~filtered_trades
             df['trade_size'] = np.where(trade_mask, df['trade_size'], np.nan)
             df['trade_price'] = np.where(trade_mask, df['trade_price'], np.nan)
+            
+            if long_only or short_only:
+                if opposite_side is None:
+                    opposite_side = -1 if long_only else 1
+                    filtered_orders = (df['signal'] == opposite_side)
+                    filtered_trades = filtered_orders.shift(1, fill_value=False)
+                # By setting the order size=0, it means the size will be determined in close_position()
+                # as the position offset size, i.e. the position will not be flipped when order_size=0
+                df['order_size'] = np.where(filtered_orders & (df['order_price'].notna()), 0, df['order_size'])
+                df['trade_size'] = np.where(filtered_trades & (df['trade_price'].notna()), 0, df['trade_size'])
         
         return df
     
