@@ -361,7 +361,6 @@ class PandasDataTool(BaseDataTool):
         df: pd.DataFrame,
         take_profit: float | None=None,
         stop_loss: float | None=None,
-        debug: bool=False,
     ) -> pd.DataFrame:
         '''
         Closes positions in a vectorized manner.
@@ -514,9 +513,9 @@ class PandasDataTool(BaseDataTool):
                 df['trade_price']
             )
 
-            # clean up order, trades, and columns 'avg_price' and 'position' after stop orders
+            # clean up order, trades and 'position' after stop orders
             first_stop_order_forwards_mask = stop_side_with_0s_ffill.fillna(0).ne(0) 
-            order_mask = first_stop_order_forwards_mask & (~df['_position_change'].shift(-1, fill_value=False))
+            order_mask = first_stop_order_forwards_mask & (df['signal'] == np.sign(stop_side_with_0s_ffill)) & df['stop_price'].isna()
             df['order_size'] = np.where(order_mask, np.nan, df['order_size'])
             df['order_price'] = np.where(order_mask, np.nan, df['order_price'])
             position_mask = first_stop_order_forwards_mask & (~df['_first_stop_order'])
@@ -524,7 +523,6 @@ class PandasDataTool(BaseDataTool):
             trade_mask = position_mask & (~first_stop_trade)
             df['trade_size'] = np.where(trade_mask, np.nan, df['trade_size'])
             df['trade_price'] = np.where(trade_mask, np.nan, df['trade_price'])
-            df['avg_price'] = np.where(trade_mask, np.nan, df['avg_price'])
         
         if take_profit:
             assert take_profit > 0, "'take_profit' must be positive"
@@ -547,45 +545,24 @@ class PandasDataTool(BaseDataTool):
         df['stop_price'] = np.nan
         if take_profit or stop_loss:
             _calculate_stop_price()
-        offset_size = df['position'].shift(1, fill_value=0) * (-1)
-        mask = df['_position_change'] & (offset_size != 0) & df['stop_price'].shift(1).isna()
+        df['avg_price'] = np.where(df['position'] == 0, np.nan, df['avg_price'])
+        
+        offset_order_size = df['position'] * (-1)
+        offset_trade_size = offset_order_size.shift(1, fill_value=0)
         # update trade_size and order_size
-        df['trade_size'] = np.where(mask, offset_size + df['trade_size'], df['trade_size'])
-        df['order_size'] = np.where(mask.shift(-1), df['trade_size'].shift(-1), df['order_size'])
+        df['trade_size'] = np.where(
+            df['_position_change'] & (offset_trade_size != 0) & df['stop_price'].shift(1).isna(), 
+            offset_trade_size + df['trade_size'], 
+            df['trade_size']
+        )
+        df['order_size'] = np.where(
+            (np.sign(offset_order_size) == df['signal']) & (offset_order_size != 0),
+            offset_order_size + df['order_size'], 
+            df['order_size']
+        )
         if df['stop_price'].isna().all():
             df.drop(columns=['stop_price'], inplace=True)
             
-        return self._done(
-            df, 
-            remark_cols=['_signal_change', '_first_trade', '_position_change', '_stop_loss', '_take_profit'] if debug else [],
-            debug_cols=[] if debug else [],
-        )
-    
-    @staticmethod
-    @backtest
-    def _done(df: pd.DataFrame, remark_cols: list[str], debug_cols: list[str]) -> pd.DataFrame:
-        '''Clean up temporary columns that start with '_' and add 'remark' column for debugging.
-        Args:
-            remark_cols: columns to add to 'remark'
-            debug_cols: temporary columns to keep for debugging
-        '''
-        aliases = {
-            'signal_change': 'sc',
-            'first_trade': 'ft',
-            'position_change': 'pc',
-            'stop_loss': 'sl',
-            'take_profit': 'tp',
-        }
-        if remark_cols:
-            df['remark'] = ''
-            for col in remark_cols:
-                if col in df.columns:
-                    df.loc[df[col], 'remark'] += f',{aliases[col[1:]]}'  # [1:] removes leading '_'
-            df['remark'] = df['remark'].str.lstrip(',')  # remove leading comma 
-        
-        # remove temporary columns that start with '_'
-        remove_cols = [col for col in df.columns if col.startswith('_') and col not in debug_cols]
-        df.drop(columns=remove_cols, inplace=True)
         return df
     
     @backtest
@@ -621,9 +598,37 @@ class PandasDataTool(BaseDataTool):
         - derives 'trade_size'/'position' from 'position'/'trade_size'
         '''
         # TODO: assert columns exist, e.g. signal, order_price, order_quantity, trade_price, trade_quantity, position
-        # TODO: assert order_price and order_quantity not negative
-        # TODO: clear columns for debugging, e.g. 'signal1', 'order_price1'
+        
+        def _clean_up_columns(df: pd.DataFrame) -> pd.DataFrame:
+            '''Clean up temporary columns that start with '_' and add 'remark' column for debugging.
+            Args:
+                remark_cols: columns to add to 'remark'
+                debug_cols: temporary columns to keep for debugging
+            '''
+            remark_cols = ['_signal_change', '_first_trade', '_position_change', '_stop_loss', '_take_profit']
+            aliases = {
+                'signal_change': 'sc',
+                'first_trade': 'ft',
+                'position_change': 'pc',
+                'stop_loss': 'sl',
+                'take_profit': 'tp',
+            }
+            df['remark'] = ''
+            for col in remark_cols:
+                if col in df.columns:
+                    df.loc[df[col], 'remark'] += f',{aliases[col[1:]]}'  # [1:] removes leading '_'
+            df['remark'] = df['remark'].str.lstrip(',')  # remove leading comma 
+            
+            # remove temporary columns that start with '_'
+            # TEMP
+            debug_cols = ['_position_change', '_stop_loss', '_take_profit']
+            remove_cols = [col for col in df.columns if col.startswith('_') and col not in debug_cols]
+            df.drop(columns=remove_cols, inplace=True)
+            return df
+        
+        # TODO: add order_type: 'market'/'limit'/'stop'
         df = pd.concat(df_chunks)
+        df = _clean_up_columns(df)
         return df
         # print(df)
         cols = df.columns

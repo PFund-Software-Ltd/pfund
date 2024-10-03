@@ -33,7 +33,6 @@ class _BacktestDataFrame:
         self,
         take_profit: float | None=None,
         stop_loss: float | None=None,
-        debug: bool=False,
     ) -> _BacktestDataFrame: ...
 
         
