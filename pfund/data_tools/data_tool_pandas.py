@@ -3,17 +3,14 @@ from typing import TYPE_CHECKING, Generator, Literal
 if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
 
+from pathlib import Path
 from collections import defaultdict
 
 import numpy as np
 import pandas as pd
-from rich.console import Console
 
 from pfund.data_tools.data_tool_base import BaseDataTool
 from pfund.utils.envs import backtest, train
-
-
-cprint = lambda msg: Console().print(msg, style='bold')
 
 
 # NOTE: convention: all function names that endswith "_df" will directly modify self.df, e.g. "xxx_df"
@@ -217,10 +214,11 @@ class PandasDataTool(BaseDataTool):
         df: pd.DataFrame,
         order_price: pd.Series | None=None,
         order_quantity: pd.Series | None=None,
-        ignore_sizing: bool=True,
         first_only: bool=False,
         long_only: bool=False,
         short_only: bool=False,
+        ignore_sizing: bool=True,
+        fill_ratio: float=0.1,
     ) -> pd.DataFrame:
         '''
         Opens positions in a vectorized manner.
@@ -238,16 +236,15 @@ class PandasDataTool(BaseDataTool):
                 useful for long-only strategy with signal=-1 to close the position
             short_only: all order_size in signal=1 will be set to 0, meaning the order_size will be determined in close_position()
                 useful for short-only strategy with signal=1 to close the position
+            fill_ratio: fill_ratio * volume = max liquidity for each trade
         '''
         assert 'signal' in df.columns, "No 'signal' column is found, please use create_signal() first"
         assert not (long_only and short_only), "Cannot be long_only and short_only at the same time"
         
-        fill_ratio = self.Engine.fill_ratio
-        slippage = self.Engine.slippage
+        assert 1 >= fill_ratio > 0, "'fill_ratio' must be between 0 and 1"
         
         # 1. create orders
         if order_price is None:
-            cprint("No 'order_price' is provided, using 'close' as the order price, meaning market orders are placed and slippage is applied")
             order_price = df['close']
         else:
             assert ( (order_price > 0) | order_price.isna() ).all(), "'order_price' must be positive or nan"
@@ -289,7 +286,7 @@ class PandasDataTool(BaseDataTool):
         # NOTE: the actual trade price is 'open', not prev_close
         df['trade_price'] = np.where(
             market_order_trade_condition, 
-            df['open'] * (1 + slippage * opened_order_side),
+            df['open'],  # df['open'] * (1 + slippage * opened_order_side),
             np.where(limit_order_trade_condition, opened_order_price, np.nan)
         )
         
@@ -321,7 +318,7 @@ class PandasDataTool(BaseDataTool):
             df['_trade_side_with_0s'] = np.where(
                 trade_price_notna,
                 np.sign(df['trade_size']),
-                np.where(df['_signal_change'].shift(1), 0, np.nan)
+                np.where(df['_signal_change'].shift(1, fill_value=False), 0, np.nan)
             )
             trade_side_with_0s_ffill = df['_trade_side_with_0s'].ffill()
             df['_first_trade'] = (
@@ -420,7 +417,7 @@ class PandasDataTool(BaseDataTool):
             and clean up orders and trades after stop orders.
             '''
             end_position_side = np.sign(df['position'])
-            start_position_side = end_position_side.shift(1)
+            start_position_side = end_position_side.shift(1, fill_value=0)
             prev_close = df['close'].shift(1)
             opened_order_side = df['signal'].shift(1)
             opened_order_price = df['order_price'].shift(1)
@@ -501,18 +498,18 @@ class PandasDataTool(BaseDataTool):
             df['_take_profit'] = np.where(price_diff_check < 0, True, False)
             
             # update trades created by stop orders
-            offset_size = df['position'].shift(1) * (-1)
-            first_stop_trade = df['_first_stop_order'].shift(1).fillna(False)
+            offset_size = df['position'].shift(1, fill_value=0) * (-1)
+            first_stop_trade = df['_first_stop_order'].shift(1, fill_value=False)
             df['trade_size'] = np.where(first_stop_trade, offset_size, df['trade_size'])
             df['trade_price'] = np.where(
                 first_stop_trade, 
-                df['stop_price'].shift(1) * (1 - start_position_side * slippage),
+                df['stop_price'].shift(1),  # df['stop_price'].shift(1) * (1 - start_position_side * slippage),
                 df['trade_price']
             )
 
             # clean up order, trades, and columns 'avg_price' and 'position' after stop orders
             first_stop_order_forwards_mask = stop_side_with_0s_ffill.fillna(0).ne(0) 
-            order_mask = first_stop_order_forwards_mask & (~df['_position_change'].shift(-1).fillna(False))
+            order_mask = first_stop_order_forwards_mask & (~df['_position_change'].shift(-1, fill_value=False))
             df['order_size'] = np.where(order_mask, np.nan, df['order_size'])
             df['order_price'] = np.where(order_mask, np.nan, df['order_price'])
             position_mask = first_stop_order_forwards_mask & (~df['_first_stop_order'])
@@ -528,7 +525,6 @@ class PandasDataTool(BaseDataTool):
             stop_loss = abs(stop_loss)
             assert 1 > stop_loss > 0, "'stop_loss' must be between 0 and 1"
         
-        slippage = self.Engine.slippage
         trade_side = np.sign(df['trade_size'])
 
         # position change = position closed or flipped
@@ -544,7 +540,7 @@ class PandasDataTool(BaseDataTool):
         df['stop_price'] = np.nan
         if take_profit or stop_loss:
             _calculate_stop_price()
-        offset_size = df['position'].shift(1) * (-1)
+        offset_size = df['position'].shift(1, fill_value=0) * (-1)
         mask = df['_position_change'] & (offset_size != 0) & df['stop_price'].shift(1).isna()
         # update trade_size and order_size
         df['trade_size'] = np.where(mask, offset_size + df['trade_size'], df['trade_size'])
@@ -692,7 +688,7 @@ class PandasDataTool(BaseDataTool):
     ************************************************
     '''
     @staticmethod
-    def output_df_to_parquet(df: pd.DataFrame, file_path: str, compression: str='zstd'):
+    def output_df_to_parquet(df: pd.DataFrame, file_path: str | Path, compression: str='zstd'):
         df.to_parquet(file_path, compression=compression)
 
     @staticmethod

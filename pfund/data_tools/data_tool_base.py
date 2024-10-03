@@ -3,6 +3,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
 
+import importlib
+
 
 class BaseDataTool:
     INDEX = ['ts', 'product', 'resolution']
@@ -12,8 +14,12 @@ class BaseDataTool:
     _MAX_ROWS = None
 
     def __init__(self, name: str):
-        from pfund.utils.utils import get_engine_class
         self.name = name.lower()
+        # inherit functions from pfeed's data tool as class methods
+        data_tool = importlib.import_module(f'pfeed.data_tools.data_tool_{self.name}')
+        functions = {name: func for name, func in vars(data_tool).items() if callable(func)}
+        for name, func in functions.items():
+            setattr(__class__, name, func)
         self.train_periods = {}  # {product: ('start_date', 'end_date')}
         self.val_periods = self.validation_periods = {}  # {product: ('start_date', 'end_date')}
         self.test_periods = {}  # {product: ('start_date', 'end_date')}
@@ -21,7 +27,6 @@ class BaseDataTool:
         self.val_set = self.validation_set = None
         self.test_set = None
         self.df = None
-        self.Engine = get_engine_class()
         # used in event-driven looping to avoid appending data to df one by one
         # instead, append data to _new_rows and whenever df is needed,
         # push the data in _new_rows to df

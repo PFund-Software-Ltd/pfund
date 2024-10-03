@@ -30,7 +30,7 @@ def dynamic_import(path: str):
         item_path = os.path.join(path, item)
         if os.path.isdir(item_path) and '__pycache__' not in item_path:
             for type_ in ['strategies', 'models', 'features', 'indicators', 
-                          'backtests', 'notebooks', 'spreadsheets', 'dashboards']:
+                          'notebooks', 'spreadsheets', 'dashboards']:
                 if type_ in path:
                     break
             else:
@@ -116,7 +116,8 @@ class ConfigHandler:
                 os.makedirs(path)
                 print(f'created {path}')
             sys.path.append(path)
-            dynamic_import(path)
+            if path != self.backtest_path:
+                dynamic_import(path)
         
         if self.use_fork_process and sys.platform != 'win32':
             multiprocessing.set_start_method('fork', force=True)

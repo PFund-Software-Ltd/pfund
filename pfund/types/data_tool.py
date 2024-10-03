@@ -22,10 +22,11 @@ class _BacktestDataFrame:
         self,
         order_price: tSeries | None=None,
         order_quantity: tSeries | None=None,
-        ignore_sizing: bool=True,
         first_only: bool=True,
         long_only: bool=False,
         short_only: bool=False,
+        ignore_sizing: bool=True,
+        fill_ratio: float=0.1,
     ) -> _BacktestDataFrame: ...
     
     def close_position(
