@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pfund"
-version = "0.0.1.dev13"
+version = "0.0.1"
 description = "A Complete Algo-Trading Framework for Machine Learning, enabling trading across TradFi, CeFi and DeFi. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading"
 license = "Apache-2.0"
 authors = ["Stephen Yau <softwareentrepreneer+pfund@gmail.com>"]
