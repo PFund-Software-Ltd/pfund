@@ -1,0 +1,15 @@
+# See docs at: https://mystmd.org/guide/frontmatter
+version: 1
+project:
+  id: 88201bdf-3804-4708-a086-1d9faf1044d9
+  # title:
+  # description:
+  # keywords: []
+  # authors: []
+  github: https://github.com/PFund-Software-Ltd/pfund
+  # To autogenerate a Table of Contents, run "myst init --write-toc"
+site:
+  template: book-theme
+  # options:
+  #   favicon: favicon.ico
+  #   logo: site_logo.png

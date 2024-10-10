@@ -2,7 +2,7 @@ import functools
 
 from pydantic import TypeAdapter
 from pfeed.const.common import SUPPORTED_DATA_FEEDS
-from pfeed import ALIASES as PFEED_ALIASES
+from pfeed import aliases as PFEED_ALIASES
 
 from pfund.types.backtest import BacktestKwargs
 from pfund.utils.utils import get_engine_class

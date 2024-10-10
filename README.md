@@ -1,11 +1,12 @@
 # PFund: A Complete Algo-Trading Framework powered by Machine Learning and Data Engineering, TradFi, CeFi and DeFi ready.
 
+[![Twitter Follow](https://img.shields.io/twitter/follow/pfund_ai?style=social)](https://x.com/pfund_ai)
 ![GitHub stars](https://img.shields.io/github/stars/PFund-Software-Ltd/pfund?style=social)
 ![PyPI downloads](https://img.shields.io/pypi/dm/pfund)
 [![PyPI](https://img.shields.io/pypi/v/pfund.svg)](https://pypi.org/project/pfund)
 ![PyPI - Support Python Versions](https://img.shields.io/pypi/pyversions/pfund)
-[![Jupyter Book Badge](https://raw.githubusercontent.com/PFund-Software-Ltd/pfund/main/docs/images/jupyterbook.svg
-)](https://jupyterbook.org)
+<!-- [![Jupyter Book Badge](https://raw.githubusercontent.com/PFund-Software-Ltd/pfund/main/docs/images/jupyterbook.svg
+)](https://jupyterbook.org) -->
 [![marimo](https://marimo.io/shield.svg)](https://marimo.io)
 [![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/)
 

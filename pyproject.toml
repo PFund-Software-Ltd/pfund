@@ -11,45 +11,49 @@ documentation = "https://pfund-docs.pfund.ai"
 keywords = ["trading", "algo-trading", "stocks", "cryptos", "cryptocurrencies", "TradFi", "CeFi", "DeFi", "portfolio management", "investment", "backtesting", "machine learning"]
 
 [tool.poetry.dependencies]
-python = ">=3.10 <3.13"
+python = "^3.10"
 python-dotenv = "^1.0.1"
 click = "^8.1.7"
-rich = "^13.8.1"
-tqdm = "^4.66.5"
-pyyaml = "^6.0.2"
-requests = "^2.32.3"
+rich = "^13.7.1"
+tqdm = "^4.66.2"
+duckdb = "^1.0.0"
+trogon = "^0.6.0"
+pyyaml = "^6.0.1"
+orjson = "^3.10.1"
+requests = "^2.31.0"
 schedule = "^1.2.2"
-ipython = "^8.27.0"
+ipython = "^8.23.0"
 gitpython = "^3.1.43"
-platformdirs = "^4.3.3"
+platformdirs = "^4.3.6"
 websocket-client = "^1.8.0"
 python-telegram-bot = "^21.5"
 pfeed = { version = "^0.0.2.dev1", optional = true, extras = ["all"] }
 pfolio = { version = "^0.0.1.dev4", optional = true }
-orjson = {version = "^3.10.7", optional = true}
 pyzmq = {version = "^26.2.0", optional = true}
-papermill = {version = "^2.6.0", optional = true}
+redis = { version = "^5.1.1", optional = true, extras = ["hiredis"] }
 voila = {version = "^0.5.7", optional = true}
+papermill = {version = "^2.6.0", optional = true}
 scikit-learn = {version = "^1.5.2", optional = true}
 torch = {version = "^2.4.1", optional = true}
 mlflow = {version = "^2.16.1", optional = true}
 feast = {version = "^0.40.1", optional = true}
 ta = { version = "^0.11.0", optional = true }
 tsfresh = {version = "^0.20.3", optional = true}
-numba = {version = "^0.60.0", optional = true}
+optuna = {version = "^4.0.0", optional = true}
+streamlit = {version = "^1.39.0", optional = true}
 
 [tool.poetry.extras]
-data = ["pfeed", "orjson", "pyzmq"]
+data = ["pfeed", "pyzmq", "redis"]
 ml = ["scikit-learn", "torch", "mlflow"]
 fe = ["feast", "ta", "tsfresh"]
-analytics = ["pfolio", "papermill", "voila"]
-boost = ["numba"]
+stats = ["pfolio", "papermill", "voila"]
+train = ["pfolio", "optuna", "streamlit"]
 all = [
-    "pfeed", "orjson", "pyzmq", 
+    "pfeed", "pyzmq", "redis",
     "scikit-learn", "torch", "mlflow", 
     "feast", "ta", "tsfresh", 
     "pfolio", "papermill", "voila", 
-    "numba",
+    "optuna", "streamlit",
 ]
 
 [tool.poetry.scripts]
@@ -60,28 +64,33 @@ optional = true
 
 [tool.poetry.group.dev.dependencies]
 pfeed = { path = "../pfeed", develop = true, extras = ["all"] }
-# pfolio = { path = "../pfolio", develop = true, extras = ["bayesian", "data", "portfolio", "temporary"] }
 pfolio = { path = "../pfolio", develop = true }
-pybit = "^5.6.2"
-ta-lib = "^0.4.28"
-mypy = "^1.9.0"
-ruff = "^0.3.5"
-grayskull = "^2.5.3"
+pybit = "^5.8.0"
+ta-lib = "^0.4.32"
+mypy = "^1.11.2"
+ruff = "^0.6.9"
+grayskull = "^2.7.3"
+
+[tool.poetry.group.test]
+optional = true
 
 [tool.poetry.group.test.dependencies]
-pytest = "^8.0.0"
-pytest-mock = "^3.14.0"
+pytest = "^8.3.3"
 pytest-cov = "^5.0.0"
-pytest-xdist = "^3.5.0"
-tox = "^4.14.2"
-faker = "^24.4.0"
-bandit = "^1.7.7"
-pre-commit = "^3.6.1"
+pytest-mock = "^3.14.0"
+pytest-xdist = "^3.6.1"
+tox = "^4.21.2"
+faker = "^30.1.0"
+bandit = "^1.7.10"
+pre-commit = "^4.0.0"
+
+[tool.poetry.group.doc]
+optional = true
 
 [tool.poetry.group.doc.dependencies]
 jupyter-book = "^1.0.2"
 notebook = "^7.2.2"
-sphinxawesome-theme = "^5.2.0"
+sphinxawesome-theme = "5.2.0"
 
 [build-system]
 requires = ["poetry-core"]
