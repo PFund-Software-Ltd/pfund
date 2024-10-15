@@ -5,10 +5,10 @@
 ![PyPI downloads](https://img.shields.io/pypi/dm/pfund)
 [![PyPI](https://img.shields.io/pypi/v/pfund.svg)](https://pypi.org/project/pfund)
 ![PyPI - Support Python Versions](https://img.shields.io/pypi/pyversions/pfund)
+[![marimo](https://marimo.io/shield.svg)](https://marimo.io)
 <!-- [![Jupyter Book Badge](https://raw.githubusercontent.com/PFund-Software-Ltd/pfund/main/docs/images/jupyterbook.svg
 )](https://jupyterbook.org) -->
-[![marimo](https://marimo.io/shield.svg)](https://marimo.io)
-[![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/)
+<!-- [![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/) -->
 
 [TradFi]: https://www.techopedia.com/definition/traditional-finance-tradfi
 [CeFi]: https://www.techopedia.com/definition/centralized-finance-cefi

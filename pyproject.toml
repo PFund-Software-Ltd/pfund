@@ -9,6 +9,20 @@ homepage = "https://pfund.ai"
 repository = "https://github.com/PFund-Software-Ltd/pfund"
 documentation = "https://pfund-docs.pfund.ai"
 keywords = ["trading", "algo-trading", "stocks", "cryptos", "cryptocurrencies", "TradFi", "CeFi", "DeFi", "portfolio management", "investment", "backtesting", "machine learning"]
+classifiers = [
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Information Technology",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -82,15 +96,7 @@ pytest-xdist = "^3.6.1"
 tox = "^4.21.2"
 faker = "^30.1.0"
 bandit = "^1.7.10"
-pre-commit = "^4.0.0"
-
-[tool.poetry.group.doc]
-optional = true
-
-[tool.poetry.group.doc.dependencies]
-jupyter-book = "^1.0.2"
-notebook = "^7.2.2"
-sphinxawesome-theme = "5.2.0"
+pre-commit = "^4.0.1"
 
 [build-system]
 requires = ["poetry-core"]
