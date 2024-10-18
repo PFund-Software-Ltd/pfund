@@ -182,7 +182,8 @@ docs/_build/*
 !docs/_build/html/_static/custom.css
 !docs/_build/html/_static/dark_theme.css
 
+# MyST build outputs
+docs/_build/*
+
 # tests data
 tests/data/
-# MyST build outputs
-_build

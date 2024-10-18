@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pfund"
-version = "0.0.2.dev2"
+version = "0.0.2"
 description = "A Complete Algo-Trading Framework for Machine Learning, enabling trading across TradFi, CeFi and DeFi. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading"
 license = "Apache-2.0"
 authors = ["Stephen Yau <softwareentrepreneer+pfund@gmail.com>"]
@@ -41,7 +41,7 @@ platformdirs = "^4.3.6"
 python-dotenv = "^1.0.1"
 websocket-client = "^1.8.0"
 python-telegram-bot = "^21.5"
-pfeed = { version = "^0.0.2.dev2", optional = true, extras = ["all"] }
+pfeed = { version = "^0.0.2", optional = true, extras = ["all"] }
 pfolio = { version = "^0.0.1.dev4", optional = true }
 pyzmq = {version = "^26.2.0", optional = true}
 redis = { version = "^5.1.1", optional = true, extras = ["hiredis"] }
