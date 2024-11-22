@@ -1,7 +1,8 @@
 import functools
 
 from pydantic import TypeAdapter
-from pfeed.const.enums import DataSource, Environment
+from pfeed.const.enums import DataSource 
+from pfund.const.enums import Environment
 from pfeed import aliases as PFEED_ALIASES
 
 from pfund.types.backtest import BacktestKwargs

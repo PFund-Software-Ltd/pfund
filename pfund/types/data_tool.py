@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.types.core import tSeries
- 
+
 
 class _BacktestDataFrame:
     def create_signal(
@@ -40,18 +40,19 @@ def __getattr__(name):
     if name == 'BacktestDataFrame':
         from pfund.utils.utils import get_engine_class
         from pfund.types.data_tool import _BacktestDataFrame
+        from pfeed.const.enums import DataTool
         Engine = get_engine_class()
-        if Engine.data_tool == 'pandas':
+        if Engine.data_tool == DataTool.PANDAS:
             import pandas as pd
             class PandasBacktestDataFrame(_BacktestDataFrame, pd.DataFrame):
                 pass
             return PandasBacktestDataFrame
-        elif Engine.data_tool == 'polars':
+        elif Engine.data_tool == DataTool.POLARS:
             import polars as pl
             class PolarsBacktestDataFrame(_BacktestDataFrame, pl.DataFrame):
                 pass
             return PolarsBacktestDataFrame
         # EXTEND
         else:
-            raise Exception(f'Unsupported data tool: {Engine.data_tool}')
+            raise Exception(f'Unsupported data tool: {Engine.data_tool.value}')
     raise AttributeError(f"module {__name__} has no attribute {name}")

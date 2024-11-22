@@ -16,7 +16,7 @@ from pfund.const.paths import EXCHANGE_PATH
 
 # TODO complete the endpoints
 class RestApi(BaseRestApi):
-    URLS = {
+    _URLS = {
         'PAPER': 'https://api-testnet.bybit.com',
         'LIVE': 'https://api.bybit.com'
     }
@@ -49,6 +49,10 @@ class RestApi(BaseRestApi):
     def __init__(self, env: Environment):
         exch = Path(__file__).parent.name
         super().__init__(env, exch)
+        
+    @property
+    def URLS(self) -> dict:
+        return self._URLS
 
     def _authenticate(self, req, account):
         timestamp = str(self._get_nonce())

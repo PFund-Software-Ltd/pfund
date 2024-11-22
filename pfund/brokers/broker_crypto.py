@@ -123,7 +123,7 @@ class CryptoBroker(LiveBroker):
         assert exch in CryptoExchange.__members__, f'exchange {exch} is not supported'
         if not (exchange := self.get_exchange(exch)):
             Exchange = getattr(importlib.import_module(f'pfund.exchanges.{exch.lower()}.exchange'), 'Exchange')
-            exchange = Exchange(self.env)
+            exchange = Exchange(self.env.value)
             self.exchanges[exch] = exchange
             self.connection_manager.add_api(exchange._ws_api)
             self.logger.debug(f'added {exch=}')
@@ -295,3 +295,6 @@ class CryptoBroker(LiveBroker):
 
         for o in orders:
             self.om.on_amend(o)
+
+
+CeFiBroker = CryptoBroker

@@ -69,6 +69,11 @@ class BaseWebsocketApi(ABC):
         # callback function if defined by user
         self._msg_callback = None
 
+    @property
+    @abstractmethod
+    def URLS(self) -> dict:
+        pass
+
     def _clean_up(self):
         self._zmqs = {}
         self._ws_threads = {}

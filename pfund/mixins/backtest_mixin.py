@@ -139,6 +139,8 @@ class BacktestMixin:
     @event_driven
     def _assert_consistent_signals(self):
         '''Asserts consistent signals from vectorized and event-driven backtesting, triggered in event-driven backtesting'''
+        from pfeed.const.enums import DataTool
+
         self.logger.debug(f"asserting {self.name}'s signals...")
         
         # since current strategy/model's signal_df is its consumer's prediction column
@@ -149,13 +151,13 @@ class BacktestMixin:
         self._is_signal_df_required = True
         self.load()
 
-        if self.data_tool.name == 'pandas':
+        if self.data_tool.name == DataTool.PANDAS:
             event_driven_signal_df = consumer_df[self.INDEX + self._signal_cols]
             # NOTE: since the loaded signal_df might have a few more rows than event_driven_signal_df
             # because the last bar is not pushed in event-driven backtesting.
             # truncate the signal_df to the same length as event_driven_signal_df
             vectorized_signal_df = self._signal_df.iloc[:len(event_driven_signal_df)]
-        elif self.data_tool.name == 'polars':
+        elif self.data_tool.name == DataTool.POLARS:
             event_driven_signal_df = consumer_df.select(self.INDEX + self._signal_cols)
             vectorized_signal_df = self._signal_df.slice(0, len(event_driven_signal_df))
         # TODO
@@ -292,9 +294,9 @@ class BacktestMixin:
         from pfeed.feeds import YahooFinanceFeed, BybitFeed
         data_source = data_source.upper()
         if data_source == 'YAHOO_FINANCE':
-            feed = YahooFinanceFeed(data_tool=self.data_tool.name)
+            feed = YahooFinanceFeed(data_tool=str(self.data_tool))
         elif data_source == 'BYBIT':
-            feed = BybitFeed(data_tool=self.data_tool.name)
+            feed = BybitFeed(data_tool=str(self.data_tool))
         # TODO: other feeds
         else:
             raise NotImplementedError

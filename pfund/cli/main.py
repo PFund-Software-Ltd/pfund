@@ -1,9 +1,10 @@
 import click
 from trogon import tui
 
-from pfund.config_handler import ConfigHandler
+from pfund.config_handler import get_config
 from pfund.cli.commands.docker_compose import docker_compose
 from pfund.cli.commands.config import config
+from pfund.cli.commands.doc import doc
 
 
 @tui(command='tui', help="Open terminal UI")
@@ -13,8 +14,9 @@ from pfund.cli.commands.config import config
 def pfund_group(ctx):
     """pfund's CLI"""
     ctx.ensure_object(dict)
-    ctx.obj['config'] = ConfigHandler.load_config()
+    ctx.obj['config'] = get_config(verbose=False)
 
 
 pfund_group.add_command(docker_compose)
 pfund_group.add_command(config)
+pfund_group.add_command(doc)

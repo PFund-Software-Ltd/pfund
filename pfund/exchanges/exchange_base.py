@@ -12,6 +12,7 @@ from pfund.adapter import Adapter
 from pfund.products import CryptoProduct
 from pfund.accounts import CryptoAccount
 from pfund.const.paths import EXCHANGE_PATH, PROJ_CONFIG_PATH
+from pfund.types.literals import tENVIRONMENT
 from pfund.const.enums import Environment
 from pfund.config.configuration import Configuration
 from pfund.zeromq import ZeroMQ
@@ -25,8 +26,8 @@ class BaseExchange:
     SUPPORT_PLACE_BATCH_ORDERS = False
     SUPPORT_CANCEL_BATCH_ORDERS = False 
 
-    def __init__(self, env: Environment, name: str):
-        self.env = env
+    def __init__(self, env: tENVIRONMENT, name: str):
+        self.env = Environment[env.upper()]
         self.bkr = Broker.CRYPTO
         self.name = self.exch = CryptoExchange[name.upper()]
         self.logger = logging.getLogger(self.name.lower())

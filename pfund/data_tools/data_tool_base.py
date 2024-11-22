@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    from pfeed.types.literals import tDATA_TOOL
     from pfund.datas.data_base import BaseData
 
 import importlib
@@ -13,10 +14,11 @@ class BaseDataTool:
     _MIN_ROWS = 1_000
     _MAX_ROWS = None
 
-    def __init__(self, name: str):
-        self.name = name.lower()
+    def __init__(self, name: tDATA_TOOL):
+        from pfeed.const.enums import DataTool
+        self.name = DataTool[name.upper()]
         # inherit functions from pfeed's data tool as class methods
-        data_tool = importlib.import_module(f'pfeed.data_tools.data_tool_{self.name}')
+        data_tool = importlib.import_module(f'pfeed.data_tools.data_tool_{self.name.value.lower()}')
         functions = {name: func for name, func in vars(data_tool).items() if callable(func)}
         for name, func in functions.items():
             setattr(__class__, name, func)
@@ -33,6 +35,9 @@ class BaseDataTool:
         self._new_rows = []  # [{col: value, ...}]
         self._raw_dfs = {}  # {data: df}
     
+    def __str__(self):
+        return self.name.value
+
     @classmethod
     def set_min_rows(cls, min_rows: int):
         cls._MIN_ROWS = min_rows

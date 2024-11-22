@@ -26,15 +26,17 @@ class BaseIndicator(BaseModel):
             - type 2 (ta function):
                 e.g. indicator = lambda df: ta.volatility.bollinger_mavg(close=df['close'], ...)
         '''
+        from pfeed.const.enums import DataTool
+        
         super().__init__(indicator, *args, **kwargs)
         self.type = 'indicator'
         
-        if self.data_tool.name == 'pandas':
+        if self.data_tool.name == DataTool.PANDAS:
             self.predict = self._predict_pandas
-        elif self.data_tool.name == 'polars':
+        elif self.data_tool.name == DataTool.POLARS:
             self.predict = self._predict_polars
         else:
-            raise ValueError(f'Unsupported data tool: {self.data_tool.name}')
+            raise ValueError(f'Unsupported data tool: {self.data_tool.name.value}')
     
     def get_default_name(self):
         return self.get_indicator_name()

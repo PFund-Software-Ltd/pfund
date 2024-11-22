@@ -1,66 +1,93 @@
-import os
-import yaml
-from pathlib import Path
-from pprint import pformat
-
 import click
 
-from pfund.const.paths import USER_CONFIG_FILE_PATH
-from pfund.config_handler import ConfigHandler
+from pfund.const.paths import PROJ_NAME
 
 
-def save_config(config: ConfigHandler, config_file_path: str | Path):
-    if isinstance(config_file_path, str):
-        config_file_path = Path(config_file_path)
-    config_file_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(config_file_path, 'w') as f:
-        yaml.dump(config.__dict__, f, default_flow_style=False)
-        
-
-def remove_config(config_file_path: str | Path):
-    config_file_path = Path(config_file_path)
-    if config_file_path.is_file():
-        os.remove(config_file_path)
+@click.group()
+def config():
+    """Manage configuration settings."""
+    pass
 
 
-@click.command()
+@config.command()
 @click.pass_context
-@click.option('--data-path', type=click.Path(resolve_path=True), help='Set the data path for storing strategies, models, features and indicators')
-@click.option('--log-path', type=click.Path(resolve_path=True), help='Set the log path')
-@click.option('--logging-file', 'logging_config_file_path', type=click.Path(resolve_path=True, exists=True), help='Set the logging config file path')
-@click.option('--logging-config', type=dict, help='Set the logging config')
-@click.option('--use-fork-process', type=bool, help='If True, multiprocessing.set_start_method("fork")')
-@click.option('--use-custom-excepthook', type=bool, help='If True, log uncaught exceptions to file')
-@click.option('--env-file', 'env_file_path', type=click.Path(resolve_path=True), help='Set the path to the .env file')
-@click.option('--debug', '-d', type=bool, help='If True, enable debug mode where logs at DEBUG level will be printed')
-@click.option('--list', '-l', 'is_list', is_flag=True, is_eager=True, help='List all available options')
-@click.option('--reset', 'is_reset', is_flag=True, is_eager=True, help='Reset the configuration to defaults') 
-def config(ctx, is_list, is_reset, **kwargs):
-    """Configures pfund settings."""
-    config: ConfigHandler = ctx.obj['config']
-    
-    # Filter out options that were not provided by the user
-    provided_options = {k: v for k, v in kwargs.items() if v is not None}
-    
-    if is_list:  # Check if --list was used
-        assert not provided_options, "No options should be provided with --list"
-        config_dict = config.__dict__
-        config_dict.update({'config_file_path': USER_CONFIG_FILE_PATH})
-        click.echo(f"PFund's config:\n{pformat(config_dict)}")
-        return
+def list(ctx):
+    """List all available options."""
+    from pprint import pformat
+    from dataclasses import asdict
+    config_dict = asdict(ctx.obj['config'])
+    content = click.style(pformat(config_dict), fg='green')
+    click.echo(f"{PROJ_NAME} config:\n{content}")
 
-    if is_reset:  # Check if --reset was used
-        assert not provided_options, "No options should be provided with --reset"
-        remove_config(USER_CONFIG_FILE_PATH)
-        click.echo("PFund's config successfully reset.")
-    
-    # prints out current config if no options are provided
-    if not provided_options and not is_list and not is_reset:
-        raise click.UsageError("No options provided. Use --list to see all available options.")
+
+@config.command()
+@click.pass_context
+def reset(ctx):
+    """Reset the configuration to defaults."""
+    ctx.obj['config'].reset()
+    click.echo(f"{PROJ_NAME} config reset successfully.")
+
+
+@config.command()
+@click.option('--data-path', '--dp', type=click.Path(resolve_path=True), help='Set the data path')
+@click.option('--log-path', '--lp', type=click.Path(resolve_path=True), help='Set the log path')
+@click.option('--logging-file', '-l', 'logging_config_file_path', type=click.Path(resolve_path=True, exists=True), help='Set the logging config file path')
+@click.option('--docker-file', '-d', 'docker_compose_file_path', type=click.Path(exists=True), help='Set the docker-compose.yml file path')
+@click.option('--env-file', '-e', 'env_file_path', type=click.Path(resolve_path=True, exists=True), help='Path to the .env file')
+@click.option('--fork-process', '-f', type=bool, help='If True, multiprocessing.set_start_method("fork")')
+@click.option('--custom-excepthook', '-c', type=bool, help='If True, log uncaught exceptions to file')
+@click.option('--debug', '-D', type=bool, help='If True, enable debug mode where logs at DEBUG level will be printed')
+def set(**kwargs):
+    """Configures pfund settings."""
+    from pfund.config_handler import configure
+    provided_options = {k: v for k, v in kwargs.items() if v is not None}
+    if not provided_options:
+        raise click.UsageError(f"No options provided. Please run '{PROJ_NAME} config set --help' to see all available options.")
     else:
-        for option, value in provided_options.items():
-            setattr(config, option, value)
-            click.echo(f"{option} set to: {value}")
+        configure(write=True, **kwargs)
+        click.echo(f"{PROJ_NAME} config updated successfully.")
+
+
+@config.command()
+@click.option('--config-file', '-c', is_flag=True, help=f'Open the {PROJ_NAME}_config.yml file')
+@click.option('--env-file', '-e', is_flag=True, help='Open the .env file')
+@click.option('--docker-file', '-d', is_flag=True, help='Open the docker-compose.yml file')
+@click.option('--log-file', '-l', is_flag=True, help='Open the logging.yaml file for logging config')
+@click.option('--default-editor', '-E', is_flag=True, help='Use default editor')
+def open(config_file, env_file, log_file, docker_file, default_editor):
+    """Opens the config files, e.g. logging.yml, docker-compose.yml, .env."""
+    from pfund.const.paths import CONFIG_FILE_PATH, CONFIG_PATH
+    
+    if sum([config_file, env_file, log_file, docker_file]) > 1:
+        click.echo('Please specify only one file to open')
+        return
+    else:
+        if config_file:
+            file_path = CONFIG_FILE_PATH
+        elif env_file:
+            file_path = CONFIG_PATH / '.env'
+        elif log_file:
+            file_path = CONFIG_PATH / 'logging.yml'
+        elif docker_file:
+            file_path = CONFIG_PATH / 'docker-compose.yml'
+        else:
+            click.echo(f'Please specify a file to open, run "{PROJ_NAME} config open --help" for more info')
+            return
+    
+    if default_editor:
+        click.edit(filename=file_path)
+    else:
+        open_with_vscode(file_path)
         
-        save_config(config, USER_CONFIG_FILE_PATH)
-        click.echo(f"config saved to {USER_CONFIG_FILE_PATH}.")
+        
+def open_with_vscode(file_path):
+    import subprocess
+    try:
+        subprocess.run(["code", str(file_path)], check=True)
+        click.echo(f"Opened {file_path} with VS Code")
+    except subprocess.CalledProcessError:
+        click.echo("Failed to open with VS Code. Falling back to default editor.")
+        click.edit(filename=file_path)
+    except FileNotFoundError:
+        click.echo("VS Code command 'code' not found. Falling back to default editor.")
+        click.edit(filename=file_path)

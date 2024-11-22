@@ -14,7 +14,7 @@ from pfund.const.enums import Environment
 
 class WebsocketApi(BaseWebsocketApi):
     DEFAULT_ORDERBOOK_DEPTH = 1
-    URLS = {
+    _URLS = {
         'PAPER': {
             'public': 'wss://stream-testnet.bybit.com/v5/public',
             'private': 'wss://stream-testnet.bybit.com/v5/private',
@@ -50,6 +50,10 @@ class WebsocketApi(BaseWebsocketApi):
     def __init__(self, env: Environment, adapter):
         exch = Path(__file__).parent.name
         super().__init__(env, exch, adapter)
+
+    @property
+    def URLS(self) -> dict:
+        return self._URLS
 
     def _ping(self):
         msg = {"op": "ping"}

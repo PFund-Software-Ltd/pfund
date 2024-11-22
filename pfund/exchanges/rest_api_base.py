@@ -1,6 +1,7 @@
 import time
 import inspect
 import traceback
+from abc import ABC, abstractmethod
 from pprint import pprint
 
 from typing import Literal
@@ -10,13 +11,19 @@ from requests import Session, Request, Response
 from pfund.accounts import CryptoAccount
 from pfund.const.enums import Environment
 
-class BaseRestApi:
+
+class BaseRestApi(ABC):
     def __init__(self, env: Environment, exch: str):
         self.env = env
         self.name = self.exch = exch.upper()
         self._url = self.URLS.get(self.env.value, '')
         self._session = Session()
 
+    @property
+    @abstractmethod
+    def URLS(self) -> dict:
+        pass
+    
     @staticmethod
     def _get_nonce():
         return int(time.time() * 1000)
