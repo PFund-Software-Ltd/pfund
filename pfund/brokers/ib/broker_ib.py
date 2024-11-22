@@ -12,12 +12,13 @@ from pfund.balances import IBBalance
 from pfund.utils.utils import convert_to_uppercases
 from pfund.brokers.broker_live import LiveBroker
 from pfund.brokers.ib.ib_api import IBApi
+from pfund.const.enums import PublicDataChannel, PrivateDataChannel
 
 
 class IBBroker(LiveBroker):
     def __init__(self, env: str, **configs):
         super().__init__(env, 'IB', **configs)
-        config_path = f'{PROJ_CONFIG_PATH}/{self.bkr.lower()}'
+        config_path = f'{PROJ_CONFIG_PATH}/{self.bkr.value.lower()}'
         self.configs = Configuration(config_path, 'config')
         self.adapter = Adapter(config_path, self.configs.load_config_section('adapter'))
         self.account = None
@@ -54,10 +55,10 @@ class IBBroker(LiveBroker):
             ptype = 'OPT'
         return ptype
 
-    def add_channel(self, channel, type_, **kwargs):
+    def add_channel(self, channel: PublicDataChannel | PrivateDataChannel, type_, **kwargs):
         if type_.lower() == 'public':
             assert 'product' in kwargs, 'Keyword argument "product" is missing'
-            if channel == 'kline':
+            if channel == PublicDataChannel.KLINE:
                 assert 'period' in kwargs and 'timeframe' in kwargs, 'Keyword arguments "period" or/and "timeframe" is missing'
         elif type_.lower() == 'private':
             assert 'account' in kwargs, 'Keyword argument "account" is missing'
@@ -82,11 +83,11 @@ class IBBroker(LiveBroker):
                 return
             timeframe = data.timeframe
             if timeframe.is_quote():
-                channel = 'orderbook'
+                channel = PublicDataChannel.ORDERBOOK
             elif timeframe.is_tick():
-                channel = 'tradebook'
+                channel = PublicDataChannel.TRADEBOOK
             else:
-                channel = 'kline'
+                channel = PublicDataChannel.KLINE
             self.add_channel(channel, 'public', product=data.product, period=data.period, timeframe=str(timeframe), **kwargs)
         else:
             raise NotImplementedError

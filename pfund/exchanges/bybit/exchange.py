@@ -4,19 +4,24 @@ import datetime
 from decimal import Decimal
 from pathlib import Path
 
-from typing import Callable, Any, TYPE_CHECKING
+from typing import Callable, Any, TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfund.types.bybit import Category
     from websocket import WebSocket
 
+from pfund.const.enums import Environment
 from pfund.exchanges.exchange_base import BaseExchange
 from pfund.accounts import CryptoAccount
 from pfund.products import CryptoProduct
 from pfund.orders import CryptoOrder
 
 
+Category = Literal['linear', 'inverse', 'spot', 'option']
+
+
 class Exchange(BaseExchange):
     SUPPORTED_CATEGORIES = ['linear', 'inverse', 'spot', 'option']
+    SUPPORTED_ACCOUNT_TYPES = ['UNIFIED']
+    
     # NOTE, bybit only supports place_batch_orders for category `options`
     # TODO, come back to this if bybit supports more
     # SUPPORT_PLACE_BATCH_ORDERS = True
@@ -34,7 +39,7 @@ class Exchange(BaseExchange):
     _MAX_NUM_OF_PLACE_BATCH_ORDERS = 20
     _MAX_NUM_OF_CANEL_BATCH_ORDERS = 20
 
-    def __init__(self, env: str):
+    def __init__(self, env: Environment):
         exch = Path(__file__).parent.name
         super().__init__(env, exch)
     

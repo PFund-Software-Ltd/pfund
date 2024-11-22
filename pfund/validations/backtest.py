@@ -1,7 +1,7 @@
 import functools
 
 from pydantic import TypeAdapter
-from pfeed.const.common import SUPPORTED_DATA_FEEDS
+from pfeed.const.enums import DataSource, Environment
 from pfeed import aliases as PFEED_ALIASES
 
 from pfund.types.backtest import BacktestKwargs
@@ -24,14 +24,14 @@ def validate_backtest_kwargs(func):
             else:
                 trading_venue = args[1].upper()
                 backtest_kwargs['data_source'] = trading_venue
-            assert backtest_kwargs['data_source'] in SUPPORTED_DATA_FEEDS, f"{backtest_kwargs['data_source']=} not in {SUPPORTED_DATA_FEEDS}"
+            assert backtest_kwargs['data_source'] in DataSource.__members__, f"{backtest_kwargs['data_source']=} not in {list(DataSource.__members__)}"
             backtest_kwargs_adapter = TypeAdapter(BacktestKwargs)
             backtest_kwargs_adapter.validate_python(backtest_kwargs)
             has_date_range = 'start_date' in backtest_kwargs and 'end_date' in backtest_kwargs
             has_rollback = 'rollback_period' in backtest_kwargs
             if has_date_range == has_rollback:
                 raise ValueError("Please provide either ('start_date', 'end_date') or 'rollback_period' in kwargs 'backtest', but not both")
-        if Engine.env == 'TRAIN':
+        if Engine.env == Environment.TRAIN:
             if 'train' not in kwargs or not kwargs['train']:
                 raise Exception(f'kwargs "train" is missing or empty in {func.__name__}{args[1:]}')
         return func(*args, **kwargs)

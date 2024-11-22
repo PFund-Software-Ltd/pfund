@@ -5,8 +5,7 @@ if TYPE_CHECKING:
         import pandas as pd
     except ImportError:
         pd = None
-    from pfund.types.common_literals import tSUPPORTED_BACKTEST_MODES
-    from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
+    from pfeed.types.literals import tDATA_TOOL
     from pfund.types.core import tStrategy, tModel, tFeature, tIndicator
     from pfund.models.model_base import BaseModel
     from pfund.mixins.backtest_mixin import BacktestMixin
@@ -29,6 +28,7 @@ from pfund.engines.base_engine import BaseEngine
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.brokers.broker_backtest import BacktestBroker
 from pfund.config_handler import ConfigHandler
+from pfund.const.enums import BacktestMode
 
 
 class BacktestEngine(BaseEngine):
@@ -36,8 +36,8 @@ class BacktestEngine(BaseEngine):
         cls,
         *,
         env: Literal['BACKTEST', 'TRAIN']='BACKTEST',
-        data_tool: tSUPPORTED_DATA_TOOLS='pandas',
-        mode: tSUPPORTED_BACKTEST_MODES='vectorized',
+        data_tool: tDATA_TOOL='pandas',
+        mode: Literal['vectorized' | 'event_driven']='vectorized',
         use_signal_df: bool=False,
         assert_signals: bool=True,
         commit_to_git: bool=False,
@@ -59,7 +59,7 @@ class BacktestEngine(BaseEngine):
                 by collecting results during event-driven backtesting.      
         '''
         if not hasattr(cls, 'mode'):
-            cls.mode = mode.lower()
+            cls.mode = BacktestMode[mode.upper()]
         if not hasattr(cls, 'use_signal_df'):
             cls.use_signal_df = use_signal_df
             if use_signal_df:
@@ -69,7 +69,7 @@ class BacktestEngine(BaseEngine):
                 )
         if not hasattr(cls, 'assert_signals'):
             cls.assert_signals = assert_signals
-            if cls.mode == 'event_driven' and cls.use_signal_df and cls.assert_signals:
+            if cls.mode == BacktestMode.EVENT_DRIVEN and cls.use_signal_df and cls.assert_signals:
                 raise ValueError('use_signal_df must be False when assert_signals=True in event-driven backtesting')
         if not hasattr(cls, 'commit_to_git'):
             cls.commit_to_git = commit_to_git
@@ -101,8 +101,8 @@ class BacktestEngine(BaseEngine):
         self,
         *,
         env: Literal['BACKTEST', 'TRAIN']='BACKTEST',
-        data_tool: tSUPPORTED_DATA_TOOLS='pandas',
-        mode: tSUPPORTED_BACKTEST_MODES='vectorized',
+        data_tool: tDATA_TOOL='pandas',
+        mode: Literal['vectorized' | 'event_driven']='vectorized',
         use_signal_df: bool=False,
         assert_signals: bool=True,
         commit_to_git: bool=False,
@@ -222,7 +222,7 @@ class BacktestEngine(BaseEngine):
         return broker
     
     def _assert_backtest_function(self, backtestee: BaseStrategy | BaseModel):
-        assert self.mode == 'vectorized', 'assert_backtest_function() is only for vectorized backtesting'
+        assert self.mode == BacktestMode.VECTORIZED, 'assert_backtest_function() is only for vectorized backtesting'
         if not hasattr(backtestee, 'backtest'):
             raise Exception(f'class "{backtestee.name}" does not have backtest() method, cannot run vectorized backtesting')
         sig = inspect.signature(backtestee.backtest)
@@ -240,9 +240,9 @@ class BacktestEngine(BaseEngine):
             for strat, strategy in self.strategy_manager.strategies.items():
                 backtestee = strategy
                 if strat == '_dummy':
-                    if self.mode == 'vectorized':
+                    if self.mode == BacktestMode.VECTORIZED:
                         continue
-                    elif self.mode == 'event_driven':
+                    elif self.mode == BacktestMode.EVENT_DRIVEN:
                         # dummy strategy has exactly one model
                         model = list(strategy.models.values())[0]
                         backtestee = model
@@ -265,10 +265,10 @@ class BacktestEngine(BaseEngine):
         df = backtestee.get_df(copy=True)
         
         # Pre-Backtesting
-        if self.mode == 'vectorized':
+        if self.mode == BacktestMode.VECTORIZED:
             self._assert_backtest_function(backtestee)
             df_chunks = []
-        elif self.mode == 'event_driven':
+        elif self.mode == BacktestMode.EVENT_DRIVEN:
             # NOTE: clear dfs so that strategies/models don't know anything about the incoming data
             backtestee.clear_dfs()
         else:
@@ -286,11 +286,11 @@ class BacktestEngine(BaseEngine):
             if self.use_ray:
                 ray_tasks.append((df_chunk, chunk_num))
             else:
-                if self.mode == 'vectorized':
+                if self.mode == BacktestMode.VECTORIZED:
                     df_chunk = dtl.preprocess_vectorized_df(df_chunk)
                     backtestee.backtest(df_chunk)
                     df_chunks.append(df_chunk)
-                elif self.mode == 'event_driven':
+                elif self.mode == BacktestMode.EVENT_DRIVEN:
                     df_chunk = dtl.preprocess_event_driven_df(df_chunk)
                     self._event_driven_backtest(df_chunk, chunk_num=chunk_num)
                 tqdm_bar.update(1)
@@ -309,10 +309,10 @@ class BacktestEngine(BaseEngine):
                     if not logger.handlers:
                         logger.addHandler(QueueHandler(log_queue))
                         logger.setLevel(logging.DEBUG)
-                    if self.mode == 'vectorized':
+                    if self.mode == BacktestMode.VECTORIZED:
                         _df_chunk = dtl.preprocess_vectorized_df(_df_chunk, backtestee)
                         backtestee.backtest(_df_chunk)
-                    elif self.mode == 'event_driven':
+                    elif self.mode == BacktestMode.EVENT_DRIVEN:
                         _df_chunk = dtl.preprocess_event_driven_df(_df_chunk)
                         self._event_driven_backtest(_df_chunk, chunk_num=_chunk_num, batch_num=_batch_num)
                 except Exception:
@@ -353,10 +353,10 @@ class BacktestEngine(BaseEngine):
         
         # Post-Backtesting
         if backtestee.type == 'strategy':
-            if self.mode == 'vectorized':
+            if self.mode == BacktestMode.VECTORIZED:
                 df = dtl.postprocess_vectorized_df(df_chunks)
             # TODO
-            elif self.mode == 'event_driven':
+            elif self.mode == BacktestMode.EVENT_DRIVEN:
                 pass
             backtest_history: dict = self.history.create(backtestee, df, start_time, end_time)
             backtest_result[backtestee.name] = backtest_history

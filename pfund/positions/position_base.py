@@ -53,4 +53,4 @@ class BasePosition:
         return f'Broker={self.bkr}|Exchange={self.exch}|Account={self.acc}|Product={self.pdt}|Position={self._position}'
 
     def __repr__(self):
-        return f'{self.bkr}-{self.exch}-{self.acc}-{self.pdt}-{self._position}'
+        return f'{self.bkr}:{self.exch}:{self.acc}:{self.pdt}:{self._position}'

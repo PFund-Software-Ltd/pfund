@@ -6,7 +6,7 @@ from abc import ABC
 
 from typing import Literal, TYPE_CHECKING, overload
 if TYPE_CHECKING:
-    from pfund.types.common_literals import tSUPPORTED_TRADING_VENUES, tSUPPORTED_BROKERS, tSUPPORTED_CRYPTO_EXCHANGES
+    from pfund.types.literals import tTRADING_VENUE, tBROKER, tCRYPTO_EXCHANGE
     from pfund.brokers import BaseBroker
     from pfund.products import BaseProduct
     from pfund.positions import BasePosition, CryptoPosition, IBPosition
@@ -94,7 +94,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             'models': [model.to_dict() for model in self.models.values()],
         }
     
-    def get_trading_venues(self) -> list[tSUPPORTED_TRADING_VENUES]:
+    def get_trading_venues(self) -> list[tTRADING_VENUE]:
         return list(self.accounts.keys())
     
     def set_name(self, name: str):
@@ -127,7 +127,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self._zmq.stop()
         self._zmq = None
     
-    def add_broker(self, bkr: tSUPPORTED_BROKERS) -> BaseBroker:
+    def add_broker(self, bkr: tBROKER) -> BaseBroker:
         return self.engine.add_broker(bkr)
     
     @overload
@@ -155,19 +155,19 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         return [balance for ccy_to_balance in self.balances.values() for balance in ccy_to_balance.values()]
     
     @overload
-    def get_account(self, trading_venue: tSUPPORTED_CRYPTO_EXCHANGES, acc: str='') -> CryptoAccount: ...
+    def get_account(self, trading_venue: tCRYPTO_EXCHANGE, acc: str='') -> CryptoAccount: ...
         
     @overload
     def get_account(self, trading_venue: Literal['IB'], acc: str='') -> IBAccount: ...
     
-    def get_account(self, trading_venue: tSUPPORTED_TRADING_VENUES, acc: str='') -> BaseAccount:
+    def get_account(self, trading_venue: tTRADING_VENUE, acc: str='') -> BaseAccount:
         trading_venue, acc = trading_venue.upper(), acc.upper()
         if not acc:
             acc = next(iter(self.accounts[trading_venue]))
             self.logger.warning(f"{trading_venue} account not specified, using first account '{acc}'")
         return self.accounts[trading_venue][acc]
     
-    def add_account(self, trading_venue: tSUPPORTED_TRADING_VENUES, acc: str='', **kwargs) -> BaseAccount:
+    def add_account(self, trading_venue: tTRADING_VENUE, acc: str='', **kwargs) -> BaseAccount:
         trading_venue, acc = trading_venue.upper(), acc.upper()
         bkr = self._derive_bkr_from_trading_venue(trading_venue)
         broker = self.add_broker(bkr)
@@ -188,7 +188,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     
     def add_data(
         self, 
-        trading_venue: tSUPPORTED_TRADING_VENUES,
+        trading_venue: tTRADING_VENUE,
         product: str,
         resolutions: list[str] | str,
         **kwargs

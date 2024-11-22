@@ -1,14 +1,12 @@
 from decimal import Decimal
 
 from pfund.products.product_base import BaseProduct
-from pfund.const.common import (
-    SUPPORTED_CRYPTO_PRODUCT_TYPES, 
-    SUPPORTED_CRYPTO_MONTH_CODES, 
-    CRYPTO_PRODUCT_TYPES_WITH_MATURITY,
-)
+from pfund.const.enums import CeFiProductType, CryptoMonthCode
 
 
 class CryptoProduct(BaseProduct):
+    _MATURITY_PRODUCT_TYPES = ['FUT', 'IFUT', 'OPT']
+
     def __init__(
         self, 
         exch: str, 
@@ -19,7 +17,7 @@ class CryptoProduct(BaseProduct):
         **kwargs
     ):
         super().__init__('CRYPTO', exch, base_currency, quote_currency, product_type, *args, **kwargs)
-        assert self.product_type in SUPPORTED_CRYPTO_PRODUCT_TYPES
+        assert self.product_type in CeFiProductType.__members__
         # `args` will be joined by '_' to form a complete `name`, e.g. BTC_USDT_FUT_CM
         self.name = self.pdt = '_'.join(self.name.split('_') + list(args))
         # used by exchanges like bybit, okx, e.g., bybit has 4 categories ['linear', 'inverse', 'spot', 'option']
@@ -37,10 +35,10 @@ class CryptoProduct(BaseProduct):
             setattr(self, k, v)
 
     def _extract_month_code(self, args):
-        if self.product_type in CRYPTO_PRODUCT_TYPES_WITH_MATURITY and args:
+        if self.product_type in self._MATURITY_PRODUCT_TYPES and args:
             month_code = args[0]
-            assert month_code in SUPPORTED_CRYPTO_MONTH_CODES, \
-            f'{self.exch} {self.pdt} month code is invalid, valid options are: {SUPPORTED_CRYPTO_MONTH_CODES}'
+            assert month_code in CryptoMonthCode.__members__, \
+            f'{self.exch} {self.pdt} month code is invalid, valid options are: {list(CryptoMonthCode.__members__)}'
             return month_code
         else:
             return None

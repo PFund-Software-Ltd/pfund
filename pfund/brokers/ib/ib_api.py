@@ -10,7 +10,7 @@ from typing import Callable
 
 from pfund.brokers.ib.ib_client import IBClient
 from pfund.brokers.ib.ib_wrapper import *
-from pfund.const.common import SUPPORTED_DATA_CHANNELS
+from pfund.const.enums import PublicDataChannel, PrivateDataChannel
 from pfund.zeromq import ZeroMQ
 
 
@@ -108,7 +108,7 @@ class IBApi(IBClient, IBWrapper):
         else:
             self.logger.warning(f'{self.bkr} is already disconnected')
 
-    def _create_public_channel(self, channel, product, **kwargs):
+    def _create_public_channel(self, channel: PublicDataChannel, product, **kwargs):
         """Creates publich channel for internal use.
         Since IB's subscription does not require channel name,
         this function creates channel only for internal use, clarity and consistency.
@@ -116,8 +116,8 @@ class IBApi(IBClient, IBWrapper):
         pdt = product.pdt
         epdt = self._adapter(pdt)
         echannel = self._adapter(channel)
-        if channel in SUPPORTED_DATA_CHANNELS:
-            if channel == 'orderbook':
+        if channel in PublicDataChannel:
+            if channel == PublicDataChannel.ORDERBOOK:
                 full_channel = '.'.join([channel, pdt])
                 self._orderbook_level[pdt] = int(kwargs.get('orderbook_level', self.DEFAULT_ORDERBOOK_LEVEL))
                 if self._orderbook_level[pdt] not in self.SUPPORTED_ORDERBOOK_LEVELS:
@@ -128,9 +128,9 @@ class IBApi(IBClient, IBWrapper):
                     self._orderbook_depth[pdt] = int(kwargs['num_rows'])
                 else:
                     self._orderbook_depth[pdt] = self.DEFAULT_ORDERBOOK_DEPTH
-            elif channel == 'tradebook':
+            elif channel == PublicDataChannel.TRADEBOOK:
                 full_channel = '.'.join([echannel, epdt])
-            elif channel == 'kline':
+            elif channel == PublicDataChannel.KLINE:
                 period, timeframe = kwargs['period'], kwargs['timeframe']
                 if timeframe not in self.SUPPORTED_TIMEFRAMES_AND_PERIODS.keys():
                     raise NotImplementedError(f'({channel}.{pdt}) {timeframe=} for kline is not supported, only timeframes in {list(self.SUPPORTED_TIMEFRAMES_AND_PERIODS)} are supported')
@@ -144,7 +144,7 @@ class IBApi(IBClient, IBWrapper):
         self._ib_params_for_channels_subscription[full_channel] = kwargs
         return full_channel
 
-    def _create_private_channel(self, channel, **kwargs):
+    def _create_private_channel(self, channel: PrivateDataChannel, **kwargs):
         echannel = self._adapter(channel)
         account = kwargs['account']
         full_channel = '.'.join([echannel, account.name])

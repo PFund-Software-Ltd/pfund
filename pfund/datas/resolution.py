@@ -1,35 +1,57 @@
 import re
 
 from pfund.datas.timeframe import Timeframe, TimeframeUnits
-from pfund.const.common import SUPPORTED_TIMEFRAMES
+from pfund.const.enums import Timeframe as TimeframeEnum
 
 
 class Resolution:
     def __init__(self, resolution: str):
-        assert re.match(r"^\d+[a-zA-Z]+$", resolution), f"Invalid {resolution=}, pattern should be e.g. '1d', '2m', '3h' etc."
+        '''
+        Args:
+            resolution: e.g. '1m', '1minute', '1quote_L1'
+            If the input is a data_type (e.g. 'minute', 'daily'), 
+            it will be converted to resolution by adding '1' to the beginning.
+            e.g. 'minute' -> '1m', 'daily' -> '1d'
+        '''
+        # Add "1" if the resolution doesn't start with a number
+        if not re.match(r"^\d", resolution):
+            resolution = "1" + resolution
+        assert re.match(r"^\d+[a-zA-Z]+(?:_[lL][1-3])?$", resolution), f"Invalid {resolution=}, pattern should be e.g. '1d', '2m', '3h', '1quote_L1' etc."
+        resolution, *orderbook_level = resolution.strip().split('_')
         self._resolution = self._standardize(resolution)
         # split resolution (e.g. '1m') into period (e.g. '1') and timeframe (e.g. 'm')
         self.period, timeframe = re.split('(\d+)', self._resolution.strip())[1:]
         self.period = int(self.period)
         assert self.period > 0
         self.timeframe = Timeframe(timeframe)
+        if orderbook_level:
+            self.orderbook_level = orderbook_level[0].upper()
+        elif self.is_quote():
+            self.orderbook_level = 'L1'  # Default to L1
+            print("\033[1m" + f"Warning: {resolution=} is missing orderbook level, defaulting to L1" + "\033[0m")
+        else:
+            self.orderbook_level = ''
 
-    def _standardize(self, resolution):
+    def _standardize(self, resolution: str) -> str:
         '''Standardize resolution
         e.g. convert '1minute' to '1m'
         '''
         period, timeframe = re.split('(\d+)', resolution.strip())[1:]
-        if timeframe not in SUPPORTED_TIMEFRAMES:
-            raise NotImplementedError(f'{timeframe=} ({resolution=}) is not supported')
-        if timeframe in ['months', 'month', 'M']:
-            standardized_resolution = period + 'M'
+        if timeframe in ['months', 'month', 'M', 'monthly']:
+            timeframe = 'M'
         else:
-            standardized_resolution = period + timeframe[0]
+            timeframe = timeframe[0].lower()
+        assert timeframe in TimeframeEnum.__members__, f'{timeframe=} ({resolution=}) is not supported'
+        standardized_resolution = period + timeframe
         return standardized_resolution
 
-    def _value(self):
+    def _value(self) -> int:
         unit: TimeframeUnits = self.timeframe.unit
-        return self.period * unit.value
+        if self.orderbook_level:
+            level: int = int(self.orderbook_level[-1])
+        else:
+            level = 1
+        return self.period * unit.value * level
 
     def is_quote(self):
         return self.timeframe.is_quote()
@@ -59,10 +81,16 @@ class Resolution:
         return self.timeframe.is_year()
     
     def __str__(self):
-        return str(self.period) + '_' + str(self.timeframe)
+        strings = [str(self.period), str(self.timeframe)]
+        if self.orderbook_level:
+            strings.append(self.orderbook_level.replace('L', 'LEVEL'))
+        return '_'.join(strings)
 
     def __repr__(self):
-        return self._resolution
+        strings = [self._resolution]
+        if self.orderbook_level:
+            strings.append(self.orderbook_level)
+        return '_'.join(strings)
 
     def __hash__(self):
         return self._value()

@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfund.orders.order_base import BaseOrder
     from pfund.exchanges.exchange_base import BaseExchange
-    from pfund.types.common_literals import tSUPPORTED_CRYPTO_EXCHANGES
+    from pfund.types.literals import tCRYPTO_EXCHANGE, tENVIRONMENT
 
 from pfund.products import CryptoProduct
 from pfund.orders import CryptoOrder
@@ -18,11 +18,11 @@ from pfund.balances import CryptoBalance
 from pfund.accounts import CryptoAccount
 from pfund.utils.utils import convert_to_uppercases
 from pfund.brokers.broker_live import LiveBroker
-from pfund.const.common import SUPPORTED_CRYPTO_EXCHANGES, SUPPORTED_CRYPTO_PRODUCT_TYPES
+from pfund.const.enums import CryptoExchange, PublicDataChannel, PrivateDataChannel
 
 
 class CryptoBroker(LiveBroker):
-    def __init__(self, env: str):
+    def __init__(self, env: tENVIRONMENT):
         super().__init__(env, 'CRYPTO')
         self.exchanges = {}
     
@@ -50,7 +50,7 @@ class CryptoBroker(LiveBroker):
     def add_custom_data(self):
         pass
 
-    def add_data(self, exch: tSUPPORTED_CRYPTO_EXCHANGES, pdt: str, resolutions: list[str] | str, **kwargs):
+    def add_data(self, exch: tCRYPTO_EXCHANGE, pdt: str, resolutions: list[str] | str, **kwargs):
         exch, pdt = exch.upper(), pdt.upper()
         product = self.add_product(exch, pdt, **kwargs)
         datas = self.data_manager.add_data(product, resolutions, **kwargs)
@@ -58,18 +58,18 @@ class CryptoBroker(LiveBroker):
             self.add_data_channel(exch, data, **kwargs)
         return datas
     
-    def add_data_channel(self, exch: tSUPPORTED_CRYPTO_EXCHANGES, data, **kwargs):
+    def add_data_channel(self, exch: tCRYPTO_EXCHANGE, data, **kwargs):
         exchange = self.exchanges[exch]
         if data.is_time_based():
             if data.is_resamplee():
                 return
             timeframe = data.timeframe
             if timeframe.is_quote():
-                channel = 'orderbook'
+                channel = PublicDataChannel.ORDERBOOK
             elif timeframe.is_tick():
-                channel = 'tradebook'
+                channel = PublicDataChannel.TRADEBOOK
             else:
-                channel = 'kline'
+                channel = PublicDataChannel.KLINE
             exchange.add_channel(channel, 'public', product=data.product, period=data.period, timeframe=repr(timeframe), **kwargs)
         else:
             raise NotImplementedError
@@ -78,10 +78,10 @@ class CryptoBroker(LiveBroker):
         if not (datas := self.data_manager.remove_data(product, resolution=resolution)):
             self.remove_product(product.exch, product.pdt)
             
-    def get_account(self, exch: tSUPPORTED_CRYPTO_EXCHANGES, acc: str) -> CryptoAccount | None:
+    def get_account(self, exch: tCRYPTO_EXCHANGE, acc: str) -> CryptoAccount | None:
         return self._accounts[exch.upper()].get(acc.upper(), None)
     
-    def add_account(self, exch: tSUPPORTED_CRYPTO_EXCHANGES='', key: str='', secret: str='', acc: str='', **kwargs) -> CryptoAccount:
+    def add_account(self, exch: tCRYPTO_EXCHANGE='', key: str='', secret: str='', acc: str='', **kwargs) -> CryptoAccount:
         assert exch, 'kwarg "exch" must be provided'
         acc = acc.upper()
         if not (account := self.get_account(exch, acc)):
@@ -94,10 +94,10 @@ class CryptoBroker(LiveBroker):
             self.logger.warning(f'{account=} has already been added, please make sure the account names are not duplicated')
         return account
     
-    def get_product(self, exch: tSUPPORTED_CRYPTO_EXCHANGES, pdt: str) -> CryptoProduct | None:
+    def get_product(self, exch: tCRYPTO_EXCHANGE, pdt: str) -> CryptoProduct | None:
         return self._products[exch.upper()].get(pdt.upper(), None)
 
-    def add_product(self, exch: tSUPPORTED_CRYPTO_EXCHANGES, pdt: str, **kwargs) -> CryptoProduct:
+    def add_product(self, exch: tCRYPTO_EXCHANGE, pdt: str, **kwargs) -> CryptoProduct:
         exch, pdt = exch.upper(), pdt.upper()
         if not (product := self.get_product(exch, pdt)):
             exchange = self.add_exchange(exch)
@@ -107,7 +107,7 @@ class CryptoBroker(LiveBroker):
             self.logger.debug(f'added {product=}')
         return product
     
-    def remove_product(self, exch: tSUPPORTED_CRYPTO_EXCHANGES, pdt: str):
+    def remove_product(self, exch: tCRYPTO_EXCHANGE, pdt: str):
         exch, pdt = exch.upper(), pdt.upper()
         if exch in self._products and pdt in self._products[exch]:
             del self._products[exch][pdt]
@@ -115,12 +115,12 @@ class CryptoBroker(LiveBroker):
             del self._products[exch]
             self.remove_exchange(exch)
 
-    def get_exchange(self, exch: tSUPPORTED_CRYPTO_EXCHANGES) -> BaseExchange | None:
+    def get_exchange(self, exch: tCRYPTO_EXCHANGE) -> BaseExchange | None:
         return self.exchanges.get(exch.upper(), None)
 
-    def add_exchange(self, exch: tSUPPORTED_CRYPTO_EXCHANGES) -> BaseExchange:
+    def add_exchange(self, exch: tCRYPTO_EXCHANGE) -> BaseExchange:
         exch = exch.upper()
-        assert exch in SUPPORTED_CRYPTO_EXCHANGES, f'exchange {exch} is not supported'
+        assert exch in CryptoExchange.__members__, f'exchange {exch} is not supported'
         if not (exchange := self.get_exchange(exch)):
             Exchange = getattr(importlib.import_module(f'pfund.exchanges.{exch.lower()}.exchange'), 'Exchange')
             exchange = Exchange(self.env)
@@ -129,7 +129,7 @@ class CryptoBroker(LiveBroker):
             self.logger.debug(f'added {exch=}')
         return exchange
     
-    def remove_exchange(self, exch: tSUPPORTED_CRYPTO_EXCHANGES):
+    def remove_exchange(self, exch: tCRYPTO_EXCHANGE):
         exch = exch.upper()
         if exch in self.exchanges:
             exchange = self.exchanges[exch]
@@ -137,7 +137,7 @@ class CryptoBroker(LiveBroker):
             self.connection_manager.remove_api(exchange._ws_api)
             self.logger.debug(f'removed {exch=}')
     
-    def add_balance(self, exch: tSUPPORTED_CRYPTO_EXCHANGES, acc: str, ccy: str) -> CryptoBalance:
+    def add_balance(self, exch: tCRYPTO_EXCHANGE, acc: str, ccy: str) -> CryptoBalance:
         exch, acc, ccy = convert_to_uppercases(exch, acc, ccy)
         if not (balance := self.get_balances(exch, acc=acc, ccy=ccy)):
             self.add_exchange(exch)
@@ -147,7 +147,7 @@ class CryptoBroker(LiveBroker):
             self.logger.debug(f'added {balance=}')
         return balance
 
-    def add_position(self, exch: tSUPPORTED_CRYPTO_EXCHANGES, acc: str, pdt: str) -> CryptoPosition:
+    def add_position(self, exch: tCRYPTO_EXCHANGE, acc: str, pdt: str) -> CryptoPosition:
         exch, acc, pdt = convert_to_uppercases(exch, acc, pdt)
         if not (position := self.get_positions(exch, acc=acc, pdt=pdt)):
             account = self.get_account(exch, acc)
@@ -165,7 +165,7 @@ class CryptoBroker(LiveBroker):
         func = inspect.stack()[0][3]
         Thread(target=work, name=func+'_thread', daemon=True).start()
 
-    def get_orders(self, exch: tSUPPORTED_CRYPTO_EXCHANGES, acc: str, pdt: str='', oid: str='', eoid: str='', is_api_call=False, **kwargs) -> dict | None:
+    def get_orders(self, exch: tCRYPTO_EXCHANGE, acc: str, pdt: str='', oid: str='', eoid: str='', is_api_call=False, **kwargs) -> dict | None:
         exch, acc, pdt = convert_to_uppercases(exch, acc, pdt)
         if not is_api_call:
             return self.order_manager.get_orders(exch, acc, pdt=pdt, oid=oid, eoid=eoid)
@@ -182,7 +182,7 @@ class CryptoBroker(LiveBroker):
         func = inspect.stack()[0][3]
         Thread(target=work, name=func+'_thread', daemon=True).start()
 
-    def get_trades(self, exch: tSUPPORTED_CRYPTO_EXCHANGES, acc: str, pdt: str='', is_api_call=False, **kwargs) -> dict | None:
+    def get_trades(self, exch: tCRYPTO_EXCHANGE, acc: str, pdt: str='', is_api_call=False, **kwargs) -> dict | None:
         exch, acc, pdt = convert_to_uppercases(exch, acc, pdt)
         if not is_api_call:
             return self.order_manager.get_trades(...)
@@ -199,7 +199,7 @@ class CryptoBroker(LiveBroker):
         func = inspect.stack()[0][3]
         Thread(target=work, name=func+'_thread', daemon=True).start()
 
-    def get_balances(self, exch: tSUPPORTED_CRYPTO_EXCHANGES, acc: str='', ccy: str='', is_api_call=False, **kwargs) -> dict | None:
+    def get_balances(self, exch: tCRYPTO_EXCHANGE, acc: str='', ccy: str='', is_api_call=False, **kwargs) -> dict | None:
         exch, acc, ccy = convert_to_uppercases(exch, acc, ccy)
         if not is_api_call:
             return self.portfolio_manager.get_balances(exch, acc, ccy=ccy)
@@ -216,7 +216,7 @@ class CryptoBroker(LiveBroker):
         func = inspect.stack()[0][3]
         Thread(target=work, name=func+'_thread', daemon=True).start()
 
-    def get_positions(self, exch: tSUPPORTED_CRYPTO_EXCHANGES, acc: str='', pdt: str='', is_api_call=False, **kwargs) -> dict | None:
+    def get_positions(self, exch: tCRYPTO_EXCHANGE, acc: str='', pdt: str='', is_api_call=False, **kwargs) -> dict | None:
         exch, acc, pdt = convert_to_uppercases(exch, acc, pdt)
         if not is_api_call:
             return self.portfolio_manager.get_positions(exch, acc=acc, pdt=pdt)

@@ -37,7 +37,7 @@ class BaseProduct(ABC):
         return f'Broker={self.bkr}|Exchange={self.exch}|Product={self.pdt}'
 
     def __repr__(self):
-        return f'{self.bkr}-{self.exch}-{self.pdt}'
+        return f'{self.bkr}:{self.exch}:{self.pdt}'
     
     def __eq__(self, other):
         if not isinstance(other, BaseProduct):

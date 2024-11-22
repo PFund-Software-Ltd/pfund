@@ -1,15 +1,17 @@
 from pfund.externals.ibapi.contract import Contract
-from pfund.products.product_base import BaseProduct
+from pfund.products.product_tradfi import TradFiProduct
 from pfund.utils.utils import convert_to_uppercases
-from pfund.const.common import SUPPORTED_TRADFI_PRODUCT_TYPES
+from pfund.const.enums import TradFiProductType
 
 
-class IBProduct(BaseProduct, Contract):
+class IBProduct(TradFiProduct, Contract):
+    # product types that will contribute to your total assets
+    _PRODUCT_TYPES_AS_ASSETS = ['CRYPTO', 'STK', 'ETF', 'OPT', 'FX', 'BOND', 'MTF', 'CMDTY']  
 
     @staticmethod
     def create_product_name(bccy, qccy, ptype, *args, **kwargs):
         bccy, qccy, ptype, *args = convert_to_uppercases(bccy, qccy, ptype, *args)
-        name = BaseProduct.create_product_name(bccy, qccy, ptype, *args, **kwargs)
+        name = TradFiProduct.create_product_name(bccy, qccy, ptype, *args, **kwargs)
         if ptype in ['FUT', 'OPT']:
             
             if 'lastTradeDateOrContractMonth' in kwargs:
@@ -29,6 +31,9 @@ class IBProduct(BaseProduct, Contract):
     @staticmethod
     def parse_product_name(pdt):
         return pdt.upper().split('_')
+    
+    def is_asset(self):
+        return True if self.product_type in self._PRODUCT_TYPES_AS_ASSETS else False
 
     def __init__(
         self, 
@@ -39,9 +44,9 @@ class IBProduct(BaseProduct, Contract):
         *args, 
         **kwargs
     ):
-        BaseProduct.__init__(self, 'IB', exch, base_currency, quote_currency, product_type, *args, **kwargs)
+        TradFiProduct.__init__(self, 'IB', exch, base_currency, quote_currency, product_type, *args, **kwargs)
         Contract.__init__(self)  # inherits attributes from `Contract` (official class from IB)
-        assert self.product_type in SUPPORTED_TRADFI_PRODUCT_TYPES, f'{self.product_type} is not supported, {SUPPORTED_TRADFI_PRODUCT_TYPES=}'
+        assert self.product_type in TradFiProductType.__members__, f'{self.product_type} is not supported, supported product types: {list(TradFiProductType.__members__)}'
 
         self.symbol = self.base_currency
         self.currency = self.quote_currency

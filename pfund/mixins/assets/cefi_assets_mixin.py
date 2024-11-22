@@ -1,9 +1,9 @@
 from collections import defaultdict
 
-from pfund.const.common import SUPPORTED_CRYPTO_PRODUCT_TYPES
+from pfund.const.enums import CeFiProductType
 
 
-class CryptoAssetsMixin:
+class CeFiAssetsMixin:
     def setup_assets(self):
         self.spots = self.cryptos = defaultdict(dict)  # {exch: {pdt: e.g. position/product}}
         self.perps = defaultdict(dict)
@@ -23,7 +23,7 @@ class CryptoAssetsMixin:
         
     def _get_assets(self, ptype: str) -> defaultdict[str, dict]:
         ptype = ptype.upper()
-        if ptype not in SUPPORTED_CRYPTO_PRODUCT_TYPES:
-            raise KeyError(f'Invalid {ptype=}, {SUPPORTED_CRYPTO_PRODUCT_TYPES=}')
+        if ptype not in CeFiProductType.__members__:
+            raise KeyError(f'Invalid {ptype=}, supported product type: {list(CeFiProductType.__members__)}')
         else:
             return self._all_assets[ptype]

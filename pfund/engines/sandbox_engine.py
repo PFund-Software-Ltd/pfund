@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
+    from pfeed.types.literals import tDATA_TOOL
     from pfund.config_handler import ConfigHandler
 
 from pfund.engines.trade_engine import TradeEngine
@@ -12,7 +12,7 @@ class SandboxEngine(TradeEngine):
     def __new__(
         cls, 
         *, 
-        data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
+        data_tool: tDATA_TOOL='pandas', 
         df_min_rows: int=1_000,
         df_max_rows: int=3_000,
         zmq_port=5557,
@@ -33,7 +33,7 @@ class SandboxEngine(TradeEngine):
     def __init__(
         self, 
         *, 
-        data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
+        data_tool: tDATA_TOOL='pandas', 
         df_min_rows: int=1_000,
         df_max_rows: int=3_000,
         zmq_port=5557, 

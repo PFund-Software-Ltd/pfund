@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from sklearn.pipeline import Pipeline
     from pfund.models import PytorchModel, SklearnModel
     from pfund.indicators.indicator_base import TaFunction, TalibFunction
-    from pfund.types.common_literals import tSUPPORTED_TRADING_VENUES
+    from pfund.types.literals import tTRADING_VENUE
     from pfund.datas.data_base import BaseData
     MachineLearningModel = Union[
         nn.Module,
@@ -189,7 +189,7 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
     
     def add_data(
         self, 
-        trading_venue: tSUPPORTED_TRADING_VENUES, 
+        trading_venue: tTRADING_VENUE, 
         product: str, 
         resolutions: list[str] | str, 
         **kwargs

@@ -51,13 +51,17 @@ ALIASES = {
     'lts': 'last_traded_size',
     'ltt': 'last_traded_time',
 
-    'PERP': 'linear perpetual',
-    'IPERP': 'inverse perpetual',
-    'FUT': 'linear futures',
-    'IFUT': 'inverse futures',
-    'OPT': 'linear options',
+    'SPOT': 'cryptocurrency',
+    'PERP': 'perpetual_contract',  # linear perpetual
+    'IPERP': 'inverse_perpetual_contract',
+    'FUT': 'futures_contract',  # linear futures
+    'IFUT': 'inverse_futures_contract',
+    'OPT': 'options_contract',  # linear options
     'STK': 'stock',
     'CMDTY': 'commodity',
+    'FX': 'forex',
+    'MTF': 'mutual_fund',
+    'ETF': 'exchange_traded_fund',
     'CW': 'current_week',
     'NW': 'next_week',
     'CM': 'current_month',

@@ -1,16 +1,16 @@
 from __future__ import annotations
-
+from typing import Literal
+    
 import os
 import json
 from pathlib import Path
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from pfund.types.common_literals import tSUPPORTED_CODE_EDITORS, tSUPPORTED_TEMPLATE_TYPES
-
 from pfund.utils import utils
 from pfund.config_handler import ConfigHandler
 from pfund.const.paths import PROJ_PATH
+
+
+tCODE_EDITOR = Literal['vscode', 'pycharm']
 
 
 class Analyzer:    
@@ -48,7 +48,7 @@ class Analyzer:
         return False
     
     @staticmethod
-    def _derive_template_type(template: str) -> tSUPPORTED_TEMPLATE_TYPES:
+    def _derive_template_type(template: str) -> Literal['notebook', 'spreadsheet', 'dashboard']:
         if '.ipynb' in template:
             template_type = 'notebook'
         elif '.grid' in template:
@@ -74,7 +74,7 @@ class Analyzer:
         else:
             raise FileNotFoundError(f"Template {template} not found in pfund's templates or user's templates")
     
-    def _get_editor_cmd(self, editor: tSUPPORTED_CODE_EDITORS) -> str:
+    def _get_editor_cmd(self, editor: tCODE_EDITOR) -> str:
         if editor == 'vscode':
             cmd = 'code'
             if utils.is_command_available(cmd):
@@ -100,7 +100,7 @@ class Analyzer:
         show_results_only: bool=True,
         open_outputs: bool=False,
         outputs_path: str | None=None,
-        editor: tSUPPORTED_CODE_EDITORS='vscode'
+        editor: tCODE_EDITOR='vscode'
     ) -> None:
         '''
         Args:

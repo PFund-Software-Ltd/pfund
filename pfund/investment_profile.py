@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.types.common_literals import tSUPPORTED_TRADFI_PRODUCT_TYPES, tSUPPORTED_CRYPTO_PRODUCT_TYPES
+    from pfund.types.literals import tTRADFI_PRODUCT_TYPE, tCEFI_PRODUCT_TYPE
 
 
 # TODO
@@ -13,6 +13,6 @@ class InvestmentProfile:
     investment_objectives: list[str]
     risk_tolerance: str
     investment_horizon: str
-    asset_classes: list[tSUPPORTED_TRADFI_PRODUCT_TYPES | tSUPPORTED_CRYPTO_PRODUCT_TYPES]
+    asset_classes: list[tTRADFI_PRODUCT_TYPE | tCEFI_PRODUCT_TYPE]
     diversification: str
     rebalancing_period: str

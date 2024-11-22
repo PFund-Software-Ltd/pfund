@@ -6,7 +6,7 @@ if TYPE_CHECKING:
 
 from collections import defaultdict
 
-from pfund.portfolios import BasePortfolio, CryptoPortfolio, DefiPortfolio, TradfiPortfolio
+from pfund.portfolios import BasePortfolio, CeFiPortfolio, DeFiPortfolio, TradFiPortfolio
 from pfund.mixins.assets import AllAssetsMixin
 
 
@@ -22,7 +22,7 @@ class Portfolio(AllAssetsMixin, BasePortfolio):
             positions_per_bkr = [position for position in positions if position.bkr == bkr]
             balances_per_bkr = [balance for balance in balances if balance.bkr == bkr]
             portfolio: BasePortfolio = self._add_sub_portfolio(bkr, positions_per_bkr, balances_per_bkr)
-            # e.g. allows using 'portfolio.crypto' to access CryptoPortfolio
+            # e.g. allows using 'portfolio.crypto' to access CeFiPortfolio
             setattr(self, bkr.lower(), portfolio)
         
         # TODO: use global() to dynamically create attributes?
@@ -60,10 +60,10 @@ class Portfolio(AllAssetsMixin, BasePortfolio):
     def _add_sub_portfolio(self, bkr: str, positions: list[BasePosition], balances: list[BaseBalance]) -> BasePortfolio:
         if bkr not in self._sub_portfolios:
             if bkr == 'CRYPTO':
-                portfolio = CryptoPortfolio.from_positions_and_balances(positions=positions, balances=balances)
+                portfolio = CeFiPortfolio.from_positions_and_balances(positions=positions, balances=balances)
             elif bkr == 'DEFI':
-                portfolio = DefiPortfolio.from_positions_and_balances(positions=positions, balances=balances)
+                portfolio = DeFiPortfolio.from_positions_and_balances(positions=positions, balances=balances)
             else:
-                portfolio = TradfiPortfolio.from_positions_and_balances(positions=positions, balances=balances)
+                portfolio = TradFiPortfolio.from_positions_and_balances(positions=positions, balances=balances)
             self._sub_portfolios[bkr] = portfolio
         return self._sub_portfolios[bkr]

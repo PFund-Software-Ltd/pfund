@@ -23,4 +23,4 @@ class IBBalance(BaseBalance):
         return f'Broker={self.bkr}|Account={self.acc}|Currency={self.ccy}|Balance={self._balance}'
     
     def __repr__(self):
-        return f'{self.bkr}-{self.acc}-{self.ccy}-{self._balance}'
+        return f'{self.bkr}:{self.acc}:{self.ccy}:{self._balance}'

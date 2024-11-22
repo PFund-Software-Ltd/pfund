@@ -10,4 +10,4 @@ class CryptoBalance(BaseBalance):
         return f'Broker={self.bkr}|Exchange={self.exch}|Account={self.acc}|Currency={self.ccy}|Balance={self._balance}'
     
     def __repr__(self):
-        return f'{self.bkr}-{self.exch}-{self.acc}-{self.ccy}-{self._balance}'
+        return f'{self.bkr}:{self.exch}:{self.acc}:{self.ccy}:{self._balance}'

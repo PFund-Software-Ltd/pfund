@@ -12,6 +12,11 @@ from pfund.models import Model, Feature, PytorchModel, SklearnModel
 from pfund.indicators import Indicator, TalibIndicator, TaIndicator
 
 
+def what_is(alias: str) -> str | None:
+    if alias in aliases or alias.upper() in aliases:
+        return aliases.get(alias, aliases.get(alias.upper(), None))
+
+
 __version__ = version('pfund')
 __all__ = (
     '__version__',

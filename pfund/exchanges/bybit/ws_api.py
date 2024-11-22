@@ -7,8 +7,9 @@ except ImportError:
 import hmac
 from decimal import Decimal
 
-from pfund.const.common import SUPPORTED_DATA_CHANNELS
+from pfund.const.enums import PublicDataChannel, PrivateDataChannel
 from pfund.exchanges.ws_api_base import BaseWebsocketApi
+from pfund.const.enums import Environment
 
 
 class WebsocketApi(BaseWebsocketApi):
@@ -46,7 +47,7 @@ class WebsocketApi(BaseWebsocketApi):
         'spot': 10
     }
 
-    def __init__(self, env, adapter):
+    def __init__(self, env: Environment, adapter):
         exch = Path(__file__).parent.name
         super().__init__(env, exch, adapter)
 
@@ -81,12 +82,12 @@ class WebsocketApi(BaseWebsocketApi):
             ws_url = self._urls['private']
         return ws_url
 
-    def _create_public_channel(self, channel, product, **kwargs):
+    def _create_public_channel(self, channel: PublicDataChannel, product, **kwargs):
         pdt = product.pdt
         epdt = self._adapter(pdt, ref_key=product.category)
         echannel = self._adapter(channel)
-        if channel in SUPPORTED_DATA_CHANNELS:
-            if channel == 'orderbook':
+        if channel in PublicDataChannel:
+            if channel == PublicDataChannel.ORDERBOOK:
                 self._orderbook_levels[pdt] = int(kwargs.get('orderbook_level', self.DEFAULT_ORDERBOOK_LEVEL))
                 if self._orderbook_levels[pdt] not in self.SUPPORTED_ORDERBOOK_LEVELS:
                     raise NotImplementedError(f'{pdt} orderbook_level={self._orderbook_levels[pdt]} is not supported')
@@ -104,9 +105,9 @@ class WebsocketApi(BaseWebsocketApi):
                     subscribed_orderbook_depth = self._orderbook_depths[pdt]
                 self._orderbook_depths[pdt] = min(self._orderbook_depths[pdt], subscribed_orderbook_depth)
                 full_channel = '.'.join([echannel, str(subscribed_orderbook_depth), epdt])
-            elif channel == 'tradebook':
+            elif channel == PublicDataChannel.TRADEBOOK:
                 full_channel = '.'.join([echannel, epdt])
-            elif channel == 'kline':
+            elif channel == PublicDataChannel.KLINE:
                 period, timeframe = kwargs['period'], kwargs['timeframe']
                 if timeframe not in self.SUPPORTED_TIMEFRAMES_AND_PERIODS.keys():
                     raise NotImplementedError(f'({channel}.{pdt}) {timeframe=} for kline is not supported, only timeframes in {list(self.SUPPORTED_TIMEFRAMES_AND_PERIODS)} are supported')
@@ -119,7 +120,7 @@ class WebsocketApi(BaseWebsocketApi):
             full_channel = '.'.join([echannel, epdt])
         return full_channel
 
-    def _create_private_channel(self, channel, **kwargs):
+    def _create_private_channel(self, channel: PrivateDataChannel, **kwargs):
         echannel = self._adapter(channel)
         full_channel = echannel
         return full_channel

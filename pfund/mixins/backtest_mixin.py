@@ -5,12 +5,11 @@ if TYPE_CHECKING:
     import pandas as pd
     import polars as pl
     from pfeed.feeds.base_feed import BaseFeed
-    from pfeed.types.common_literals import tSUPPORTED_DATA_FEEDS
+    from pfeed.types.literals import tDATA_SOURCE
     from pfund.types.core import tModel
     from pfund.datas.data_base import BaseData
-    from pfund.products.product_base import BaseProduct
     from pfund.strategies.strategy_base import BaseStrategy
-    from pfund.types.common_literals import tSUPPORTED_TRADING_VENUES
+    from pfund.types.literals import tTRADING_VENUE
 
 import time
 
@@ -21,6 +20,7 @@ from pfund.validations.backtest import validate_backtest_kwargs
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.models.model_base import BaseModel
 from pfund.indicators.talib_indicator import TalibIndicator
+from pfund.const.enums import BacktestMode
 
 
 # FIXME: clean up, should add to types?
@@ -75,7 +75,7 @@ class BacktestMixin:
     
     def on_stop(self):
         super().on_stop()
-        if self.engine.mode == 'event_driven' and self.engine.assert_signals and self._has_signal_df():
+        if self.engine.mode == BacktestMode.EVENT_DRIVEN and self.engine.assert_signals and self._has_signal_df():
             self._assert_consistent_signals()
             
     def _next(self, data: BaseData) -> torch.Tensor | np.ndarray:
@@ -100,9 +100,9 @@ class BacktestMixin:
     def _check_if_signal_df_required(self) -> bool:
         if self._is_dummy_strategy:
             return False
-        elif self.engine.mode == 'vectorized':
+        elif self.engine.mode == BacktestMode.VECTORIZED:
             return True
-        elif self.engine.mode == 'event_driven':
+        elif self.engine.mode == BacktestMode.EVENT_DRIVEN:
             return self.engine.use_signal_df
     
     def _check_if_append_to_df(self):
@@ -169,7 +169,7 @@ class BacktestMixin:
     def _prepare_df(self):
         if self._is_dummy_strategy and isinstance(self, BaseStrategy):
             return
-        ts_col_type = 'timestamp' if self.engine.mode == 'event_driven' else 'datetime'
+        ts_col_type = 'timestamp' if self.engine.mode == BacktestMode.EVENT_DRIVEN else 'datetime'
         self.dtl.prepare_df(ts_col_type=ts_col_type)
         if self._is_signal_df_required:
             self._merge_signal_dfs_with_df()
@@ -183,7 +183,7 @@ class BacktestMixin:
             self.dtl.merge_signal_dfs_with_df(signal_dfs)
     
     def clear_dfs(self):
-        assert self.engine.mode == 'event_driven'
+        assert self.engine.mode == BacktestMode.EVENT_DRIVEN
         if not self._is_signal_df_required:
             self._data_tool.clear_df()
         if isinstance(self, BaseStrategy):
@@ -202,10 +202,10 @@ class BacktestMixin:
     @validate_backtest_kwargs
     def add_data(
         self, 
-        trading_venue: tSUPPORTED_TRADING_VENUES, 
+        trading_venue: tTRADING_VENUE, 
         product: str,
         resolutions: list[str] | str,
-        backtest: BacktestKwargs | None=None,
+        backtest: BacktestKwargs | dict | None=None,
         train: dict | None=None,
         **kwargs
     ) -> list[BaseData]:
@@ -257,7 +257,7 @@ class BacktestMixin:
         )
     
     def _prepare_kwargs(self, feed: BaseFeed, resolutions, kwargs: dict):
-        if self.engine.mode == 'vectorized':
+        if self.engine.mode == BacktestMode.VECTORIZED:
             # clear kwargs that are only for event driven backtesting
             for k in _EVENT_DRIVEN_BACKTEST_KWARGS:
                 if k == 'auto_resample':
@@ -265,7 +265,7 @@ class BacktestMixin:
                 else:
                     kwargs[k] = {}
         # FIXME
-        elif self.engine.mode == 'event_driven':
+        elif self.engine.mode == BacktestMode.EVENT_DRIVEN:
             if 'is_skip_first_bar' not in kwargs:
                 kwargs['is_skip_first_bar'] = False
         
@@ -288,7 +288,7 @@ class BacktestMixin:
         
         return kwargs
     
-    def get_feed(self, data_source: tSUPPORTED_DATA_FEEDS) -> BaseFeed:
+    def get_feed(self, data_source: tDATA_SOURCE) -> BaseFeed:
         from pfeed.feeds import YahooFinanceFeed, BybitFeed
         data_source = data_source.upper()
         if data_source == 'YAHOO_FINANCE':

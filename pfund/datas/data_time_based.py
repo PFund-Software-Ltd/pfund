@@ -16,7 +16,7 @@ class TimeBasedData(BaseData):
         self._resamplees = []  # opposite of resampler
 
     def __repr__(self):
-        return f'{repr(self.product)}-{repr(self.resolution)}'
+        return f'{repr(self.product)}:{repr(self.resolution)}'
 
     def __str__(self):
         return f'{self.product}|Data={self.resolution}'

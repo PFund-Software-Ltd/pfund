@@ -7,7 +7,7 @@ from collections import defaultdict
 
 from rich.console import Console
 
-from pfund.universes import BaseUniverse, CryptoUniverse, TradfiUniverse, DefiUniverse
+from pfund.universes import BaseUniverse, CeFiUniverse, TradFiUniverse, DeFiUniverse
 from pfund.mixins.assets import AllAssetsMixin
 
 
@@ -22,7 +22,7 @@ class Universe(AllAssetsMixin, BaseUniverse):
         for bkr in {product.bkr for product in products}:
             products_per_bkr = [product for product in products if product.bkr == bkr]
             universe: BaseUniverse = self._add_sub_universe(bkr, products_per_bkr)
-            # e.g. allows using 'universe.crypto' to access CryptoUniverse
+            # e.g. allows using 'universe.crypto' to access CeFiUniverse
             setattr(self, bkr.lower(), universe)
 
         # TODO: use global() to dynamically create attributes?
@@ -65,10 +65,10 @@ class Universe(AllAssetsMixin, BaseUniverse):
     def _add_sub_universe(self, bkr: str, products: list[BaseProduct]) -> BaseUniverse:
         if bkr not in self._sub_universes:
             if bkr == 'CRYPTO':
-                universe = CryptoUniverse.from_products(products)
+                universe = CeFiUniverse.from_products(products)
             elif bkr == 'DEFI':
-                universe = DefiUniverse.from_products(products)
+                universe = DeFiUniverse.from_products(products)
             else:
-                universe = TradfiUniverse.from_products(products)
+                universe = TradFiUniverse.from_products(products)
             self._sub_universes[bkr] = universe
         return self._sub_universes[bkr]

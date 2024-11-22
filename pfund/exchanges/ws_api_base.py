@@ -19,6 +19,7 @@ from websocket import WebSocketApp, WebSocketConnectionClosedException
 from pfund.managers.order_manager import OrderUpdateSource
 from pfund.zeromq import ZeroMQ
 from pfund.utils.utils import step_into
+from pfund.const.enums import PublicDataChannel, PrivateDataChannel, Environment
 
 
 class BaseWebsocketApi(ABC):
@@ -27,13 +28,13 @@ class BaseWebsocketApi(ABC):
     SUPPORTED_ORDERBOOK_LEVELS = []
     SUPPORTED_TIMEFRAMES_AND_PERIODS = {}
 
-    def __init__(self, env, name, adapter):
-        self.env = env.upper()
+    def __init__(self, env: Environment, name: str, adapter):
+        self.env = env
         self.bkr = 'CRYPTO'
         self.name = self.exch = name.upper()
         self.logger = logging.getLogger(self.exch.lower() + '_' + 'ws')
         self._adapter = adapter
-        self._urls: dict|str = self.URLS.get(self.env, '')
+        self._urls: dict|str = self.URLS.get(self.env.value, '')
         self._is_use_private_ws_server = self._check_if_use_private_ws_server()
         self._servers = [self.exch]
         self._full_channels = {'public': [], 'private': []}
@@ -179,7 +180,7 @@ class BaseWebsocketApi(ABC):
         self._products[product.name] = product
         self.logger.debug(f'added product {product.name}')
 
-    def add_channel(self, channel, type_, product=None, **kwargs):
+    def add_channel(self, channel: PublicDataChannel | PrivateDataChannel, type_, product=None, **kwargs):
         if type_.lower() == 'public':
             assert product is not None
             if product.category:

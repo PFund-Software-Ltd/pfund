@@ -16,6 +16,7 @@ import datetime
 from rich.console import Console
 
 from pfund.utils import utils
+from pfund.const.enums import BacktestMode
 
 
 class BacktestHistory:
@@ -168,10 +169,10 @@ class BacktestHistory:
         '''Writes backtest history to a parquet file and adds the file path to backtest.json'''
         backtest_name = backtest_history['backtest_name']
         backtest_path: Path = self._create_backtest_path(backtest_name)
-        if self.mode == 'vectorized':
+        if self.mode == BacktestMode.VECTORIZED:
             output_file_path = backtest_path / f'{backtest_name}.parquet'
             strategy.dtl.output_df_to_parquet(df, output_file_path)
-        elif self.mode == 'event_driven':
+        elif self.mode == BacktestMode.EVENT_DRIVEN:
             # TODO: output trades? or orders? or df?
             output_file_path = ...
         backtest_history['result'] = str(output_file_path)

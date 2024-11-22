@@ -3,6 +3,7 @@ import pytest
 
 import pfund as pf
 from pfund import BacktestEngine
+from pfund.const.enums import Environment
 
 
 @pytest.mark.smoke
@@ -12,7 +13,7 @@ def test_init(mocker):
     engine = BacktestEngine()
     assert BacktestEngine.__new__.call_count == 1
     assert BacktestEngine.__init__.call_count == 1
-    assert BacktestEngine.env == 'BACKTEST'
+    assert BacktestEngine.env == Environment.BACKTEST
     assert os.getenv('env') == 'BACKTEST'
     assert engine._initialized is True
 

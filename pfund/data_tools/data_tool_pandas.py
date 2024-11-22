@@ -654,7 +654,7 @@ class PandasDataTool(BaseDataTool):
             return resolution.is_quote(), resolution.is_tick()
         
         # add 'broker', 'is_quote', 'is_tick' columns
-        df['broker'] = df['product'].str.split('-').str[0]
+        df['broker'] = df['product'].str.split(':').str[0]
         df['is_quote'], df['is_tick'] = zip(*df['resolution'].apply(_check_resolution))
         
         # arrange columns

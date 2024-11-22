@@ -12,8 +12,10 @@ from pfund.adapter import Adapter
 from pfund.products import CryptoProduct
 from pfund.accounts import CryptoAccount
 from pfund.const.paths import EXCHANGE_PATH, PROJ_CONFIG_PATH
+from pfund.const.enums import Environment
 from pfund.config.configuration import Configuration
 from pfund.zeromq import ZeroMQ
+from pfund.const.enums import Broker, CryptoExchange
 from pfund.utils.utils import step_into, convert_to_uppercases
 
 
@@ -23,10 +25,10 @@ class BaseExchange:
     SUPPORT_PLACE_BATCH_ORDERS = False
     SUPPORT_CANCEL_BATCH_ORDERS = False 
 
-    def __init__(self, env, name):
-        self.env = env.upper()
-        self.bkr = 'CRYPTO'
-        self.name = self.exch = name.upper()
+    def __init__(self, env: Environment, name: str):
+        self.env = env
+        self.bkr = Broker.CRYPTO
+        self.name = self.exch = CryptoExchange[name.upper()]
         self.logger = logging.getLogger(self.name.lower())
         config_path = f'{PROJ_CONFIG_PATH}/{self.exch.lower()}'
         if hasattr(self, 'category'):
@@ -297,7 +299,7 @@ class BaseExchange:
             else:
                 raise Exception(f'{self.exch} unhandled {res_type=}')
         if self._zmq and orders['data']:
-            zmq_msg = (2, 1, (self.bkr, self.exch, account.acc, orders))
+            zmq_msg = (2, 1, (self.bkr.value, self.exch.value, account.acc, orders))
             self._zmq.send(*zmq_msg, receiver='engine')
         return orders
 
@@ -327,7 +329,7 @@ class BaseExchange:
             else:
                 raise Exception(f'{self.exch} unhandled {res_type=}')
         if self._zmq and balances['data']:
-            zmq_msg = (3, 1, (self.bkr, self.exch, account.acc, balances,))
+            zmq_msg = (3, 1, (self.bkr.value, self.exch.value, account.acc, balances,))
             self._zmq.send(*zmq_msg, receiver='engine')
         return balances
 
@@ -361,7 +363,7 @@ class BaseExchange:
             else:
                 raise Exception(f'{self.exch} unhandled {res_type=}')
         if self._zmq and positions['data']:
-            zmq_msg = (3, 2, (self.bkr, self.exch, account.acc, positions,))
+            zmq_msg = (3, 2, (self.bkr.value, self.exch.value, account.acc, positions,))
             self._zmq.send(*zmq_msg, receiver='engine')
         return positions
 
@@ -390,7 +392,7 @@ class BaseExchange:
             else:
                 raise Exception(f'{self.exch} unhandled {res_type=}')
         if self._zmq and trades['data']:
-            zmq_msg = (2, 1, (self.bkr, self.exch, account.acc, trades))
+            zmq_msg = (2, 1, (self.bkr.value, self.exch.value, account.acc, trades))
             self._zmq.send(*zmq_msg, receiver='engine')
         return trades
     
@@ -411,7 +413,7 @@ class BaseExchange:
             else:
                 raise Exception(f'{self.exch} unhandled {res_type=}')
         if self._zmq and order['data']:
-            zmq_msg = (2, 1, (self.bkr, self.exch, account.acc, order))
+            zmq_msg = (2, 1, (self.bkr.value, self.exch.value, account.acc, order))
             self._zmq.send(*zmq_msg, receiver='engine')
         return order
 
@@ -432,7 +434,7 @@ class BaseExchange:
             else:
                 raise Exception(f'{self.exch} unhandled {res_type=}')
         if self._zmq and order['data']:
-            zmq_msg = (2, 1, (self.bkr, self.exch, account.acc, order))
+            zmq_msg = (2, 1, (self.bkr.value, self.exch.value, account.acc, order))
             self._zmq.send(*zmq_msg, receiver='engine')
         return order
 

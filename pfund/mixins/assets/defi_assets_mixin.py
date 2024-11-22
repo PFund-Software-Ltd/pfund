@@ -1,7 +1,7 @@
 from collections import defaultdict
 
 
-class DefiAssetsMixin:
+class DeFiAssetsMixin:
     def setup_assets(self):
         # FIXME: drafted by ChatGPT
         self.liquidity_pools = {} 

@@ -1,3 +1,6 @@
+from pfund.const.enums import Environment, Broker
+
+
 class BaseAccount:
     num = 0
 
@@ -6,9 +9,9 @@ class BaseAccount:
         cls.num += 1
         return str(cls.num)
     
-    def __init__(self, env: str, bkr: str, acc: str='', **kwargs):
-        self.env = env.upper()
-        self.bkr = bkr.upper()
+    def __init__(self, env: Environment, bkr: Broker, acc: str='', **kwargs):
+        self.env = env
+        self.bkr = bkr
         acc = acc or 'ACC-' + self.add_account_num()  # may have same oid if running multiple bots; must less than 36 chars for binance
         self.name = self.acc = acc.upper()
         for k, v in kwargs.items():
@@ -17,10 +20,10 @@ class BaseAccount:
             self.strat = ''
 
     def __str__(self):
-        return f'Broker={self.bkr}|Account={self.name}|Strategy={self.strat}'
+        return f'Broker={self.bkr.value}|Account={self.name}|Strategy={self.strat}'
 
     def __repr__(self):
-        return f'{self.bkr}-{self.name}'
+        return f'{self.bkr.value}:{self.name}'
 
     def __eq__(self, other):
         if not isinstance(other, BaseAccount):

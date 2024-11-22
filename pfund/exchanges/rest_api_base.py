@@ -8,13 +8,13 @@ from typing import Literal
 from requests import Session, Request, Response
 
 from pfund.accounts import CryptoAccount
-
+from pfund.const.enums import Environment
 
 class BaseRestApi:
-    def __init__(self, env, exch):
-        self.env = env.upper()
+    def __init__(self, env: Environment, exch: str):
+        self.env = env
         self.name = self.exch = exch.upper()
-        self._url = self.URLS.get(self.env, '')
+        self._url = self.URLS.get(self.env.value, '')
         self._session = Session()
 
     @staticmethod

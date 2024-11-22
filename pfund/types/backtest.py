@@ -1,10 +1,10 @@
 from typing_extensions import TypedDict
 
-from pfeed.types.common_literals import tSUPPORTED_DATA_FEEDS
+from pfeed.types.literals import tDATA_SOURCE
 
 
 class BacktestKwargs(TypedDict, total=False):
-    data_source: tSUPPORTED_DATA_FEEDS
+    data_source: tDATA_SOURCE
     start_date: str
     end_date: str
     rollback_period: str

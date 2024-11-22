@@ -113,7 +113,7 @@ class PolarsDataTool(BaseDataTool):
     
         df = df.with_columns(
             # add 'broker', 'is_quote', 'is_tick' columns
-            pl.col('product').str.split("-").list.get(0).alias("broker"),
+            pl.col('product').str.split(":").list.get(0).alias("broker"),
             pl.col('resolution').map_elements(
                 _check_resolution,
                 return_dtype=pl.Struct([

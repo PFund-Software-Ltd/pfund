@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
-    from pfund.types.common_literals import tSUPPORTED_BACKTEST_MODES
+    from pfeed.types.literals import tDATA_TOOL
 
 from pfund.engines.backtest_engine import BacktestEngine
 from pfund.config_handler import ConfigHandler
@@ -13,8 +12,8 @@ class TrainEngine(BacktestEngine):
     def __new__(
         cls, 
         *, 
-        data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
-        mode: tSUPPORTED_BACKTEST_MODES='vectorized', 
+        data_tool: tDATA_TOOL='pandas', 
+        mode: Literal['vectorized' | 'event_driven']='vectorized', 
         config: ConfigHandler | None=None, 
         **settings
     ):
@@ -30,8 +29,8 @@ class TrainEngine(BacktestEngine):
     def __init__(
         self,
         *,
-        data_tool: tSUPPORTED_DATA_TOOLS='pandas',
-        mode: tSUPPORTED_BACKTEST_MODES='vectorized',
+        data_tool: tDATA_TOOL='pandas',
+        mode: Literal['vectorized' | 'event_driven']='vectorized',
         config: ConfigHandler | None=None,
         **settings
     ):

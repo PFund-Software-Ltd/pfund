@@ -10,6 +10,7 @@ except ImportError:
 from requests import Response
 
 from pfund.exchanges.rest_api_base import BaseRestApi
+from pfund.const.enums import Environment
 from pfund.const.paths import EXCHANGE_PATH
 
 
@@ -45,7 +46,7 @@ class RestApi(BaseRestApi):
         'get_balances': ('GET', '/v5/account/wallet-balance'),
     }
     
-    def __init__(self, env):
+    def __init__(self, env: Environment):
         exch = Path(__file__).parent.name
         super().__init__(env, exch)
 

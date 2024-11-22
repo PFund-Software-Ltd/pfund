@@ -16,7 +16,7 @@ from threading import Thread
 
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
+    from pfeed.types.literals import tDATA_TOOL
 
 import schedule
 
@@ -33,7 +33,7 @@ class TradeEngine(BaseEngine):
         cls, 
         *, 
         env: Literal['SANDBOX', 'PAPER', 'LIVE']='PAPER', 
-        data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
+        data_tool: tDATA_TOOL='pandas', 
         df_min_rows: int=1_000,
         df_max_rows: int=3_000,
         zmq_port=5557, 
@@ -60,7 +60,7 @@ class TradeEngine(BaseEngine):
         self,
         *,
         env: Literal['SANDBOX', 'PAPER', 'LIVE']='PAPER',
-        data_tool: tSUPPORTED_DATA_TOOLS='pandas',
+        data_tool: tDATA_TOOL='pandas',
         df_min_rows: int=1_000,
         df_max_rows: int=3_000,
         zmq_port=5557,

@@ -4,13 +4,15 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
     from pfund.products.product_base import BaseProduct
+    from pfund.types.literals import tENVIRONMENT
 
 from pfund.brokers.broker_base import BaseBroker
 from pfund.managers import ConnectionManager, DataManager, OrderManager, PortfolioManager, RiskManager
+from pfund.const.enums import Broker
 
 
 class LiveBroker(BaseBroker):
-    def __init__(self, env, name):
+    def __init__(self, env: tENVIRONMENT, name: str):
         super().__init__(env, name)
         self._zmq = None
         self.connection_manager = self.cm = ConnectionManager(self)
@@ -21,7 +23,7 @@ class LiveBroker(BaseBroker):
 
     @property
     def balances(self):
-        return self.portfolio_manager.balances[self.bkr] if self.bkr != 'CRYPTO' else self.portfolio_manager.balances
+        return self.portfolio_manager.balances[self.bkr.value] if self.bkr != Broker.CRYPTO else self.portfolio_manager.balances
     
     @property
     def positions(self):

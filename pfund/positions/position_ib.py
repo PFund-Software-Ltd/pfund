@@ -4,7 +4,6 @@ from dataclasses import dataclass, replace
 
 from numpy import sign
 
-from pfund.const.common import PRODUCT_TYPES_AS_ASSETS
 from pfund.positions.position_base import BasePosition
 
 
@@ -24,7 +23,7 @@ class IBPosition(BasePosition):
         super().__init__(account, product)
         # if true, it is a virtual position, e.g. USD_CAD_CASH = +1 (bought 1 USD and sold `x` CAD)
         self._is_virtual = True if product.ptype in ['CRYPTO', 'CASH'] else False
-        if product.ptype in PRODUCT_TYPES_AS_ASSETS and not self._is_virtual:
+        if product.is_asset() and not self._is_virtual:
             self._is_security = True
         else:
             self._is_security = False
