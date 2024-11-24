@@ -16,7 +16,7 @@ from rich.console import Console
 
 from pfund.utils.utils import Singleton
 from pfund.const.enums import Environment, Broker
-from pfund.config_handler import ConfigHandler
+from pfund.config_handler import ConfigHandler, get_config
 
 
 ENV_COLORS = {
@@ -56,7 +56,7 @@ class BaseEngine(Singleton):
             cls.data_tool = DataTool[data_tool.upper()]
             cls.DataTool = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool.lower()}'), f'{data_tool.capitalize()}DataTool')
         if not hasattr(cls, 'config'):
-            cls.config: ConfigHandler = config if config else ConfigHandler.load_config()
+            cls.config: ConfigHandler = config if config else get_config()
             log_path = f'{cls.config.log_path}/{cls.env.value.lower()}'
             logging_config_file_path = cls.config.logging_config_file_path
             cls.logging_configurator: LoggingDictConfigurator  = set_up_loggers(log_path, logging_config_file_path, user_logging_config=cls.config.logging_config)

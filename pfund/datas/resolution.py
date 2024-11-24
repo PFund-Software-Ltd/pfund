@@ -80,6 +80,16 @@ class Resolution:
     def is_year(self):
         return self.timeframe.is_year()
     
+    def higher(self, ignore_period: bool=False):
+        '''Rotate to the next higher resolution. e.g. 1m > 1h, higher resolution = lower timeframe'''
+        period = str(self.period) if not ignore_period else '1'
+        return Resolution(period + repr(self.timeframe.lower()))
+    
+    def lower(self, ignore_period: bool=False):
+        '''Rotate to the next lower resolution. e.g. 1h < 1m, lower resolution = higher timeframe'''
+        period = str(self.period) if not ignore_period else '1'
+        return Resolution(period + repr(self.timeframe.higher()))
+    
     def __str__(self):
         strings = [str(self.period), str(self.timeframe)]
         if self.orderbook_level:

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from pfund.utils import utils
-from pfund.config_handler import ConfigHandler
+from pfund.config_handler import get_config
 from pfund.const.paths import PROJ_PATH
 
 
@@ -18,7 +18,7 @@ class Analyzer:
         Engine = utils.get_engine_class()
         config = Engine.config
     except:
-        config = ConfigHandler.load_config()
+        config = get_config()
     
     notebook_path = Path(config.notebook_path)
     spreadsheet_path = Path(config.spreadsheet_path)

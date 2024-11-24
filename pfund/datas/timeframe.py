@@ -17,6 +17,24 @@ class Timeframe:
         self._timeframe = timeframe
         self.unit = TimeframeUnits[timeframe]
     
+    def higher(self):
+        """Rotate to the next higher timeframe. e.g. HOUR is higher than MINUTE."""
+        sorted_units = list(TimeframeUnits)  # Enum members in sorted order
+        current_index = sorted_units.index(self.unit)
+        next_index = current_index + 1
+        if next_index < len(sorted_units):
+            return Timeframe(sorted_units[next_index].name)
+        return self  # Already at the highest unit
+
+    def lower(self):
+        """Rotate to the next lower timeframe."""
+        sorted_units = list(TimeframeUnits)  # Enum members in sorted order
+        current_index = sorted_units.index(self.unit)
+        prev_index = current_index - 1
+        if prev_index >= 0:
+            return Timeframe(sorted_units[prev_index].name)
+        return self  # Already at the lowest unit
+    
     def is_quote(self):
         return self.unit == -2
 
