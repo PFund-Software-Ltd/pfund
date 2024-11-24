@@ -24,11 +24,10 @@ class Resolution:
         self.period = int(self.period)
         assert self.period > 0
         self.timeframe = Timeframe(timeframe)
-        if orderbook_level:
-            self.orderbook_level = orderbook_level[0].upper()
-        elif self.is_quote():
-            self.orderbook_level = 'L1'  # Default to L1
-            print("\033[1m" + f"Warning: {resolution=} is missing orderbook level, defaulting to L1" + "\033[0m")
+        if self.is_quote():
+            default_orderbook_level = 'L1'
+            self.orderbook_level = orderbook_level[0].upper() if orderbook_level else default_orderbook_level
+            print("\033[1m" + f"Warning: {resolution=} is missing orderbook level, defaulting to {default_orderbook_level}" + "\033[0m")
         else:
             self.orderbook_level = ''
 
@@ -37,7 +36,7 @@ class Resolution:
         e.g. convert '1minute' to '1m'
         '''
         period, timeframe = re.split('(\d+)', resolution.strip())[1:]
-        if timeframe in ['months', 'month', 'M', 'monthly']:
+        if timeframe.lower() in ['month', 'months'] or timeframe == 'M':
             timeframe = 'M'
         else:
             timeframe = timeframe[0].lower()
@@ -80,15 +79,31 @@ class Resolution:
     def is_year(self):
         return self.timeframe.is_year()
     
-    def higher(self, ignore_period: bool=False):
+    def higher(self, ignore_period: bool=True, orderbook_level: str='L1'):
         '''Rotate to the next higher resolution. e.g. 1m > 1h, higher resolution = lower timeframe'''
         period = str(self.period) if not ignore_period else '1'
-        return Resolution(period + repr(self.timeframe.lower()))
+        return Resolution(period + repr(self.timeframe.lower()) + '_' + orderbook_level)
     
-    def lower(self, ignore_period: bool=False):
+    def lower(self, ignore_period: bool=True):
         '''Rotate to the next lower resolution. e.g. 1h < 1m, lower resolution = higher timeframe'''
         period = str(self.period) if not ignore_period else '1'
         return Resolution(period + repr(self.timeframe.higher()))
+    
+    def get_higher_resolutions(self, ignore_period: bool=True, orderbook_level: str='L1'):
+        higher_resolutions: list[Resolution] = []
+        resolution = self
+        while (higher_resolution := resolution.higher(ignore_period=ignore_period, orderbook_level=orderbook_level)) != resolution:
+            higher_resolutions.append(higher_resolution)
+            resolution = higher_resolution
+        return higher_resolutions
+    
+    def get_lower_resolutions(self, ignore_period: bool=True):
+        lower_resolutions: list[Resolution] = []
+        resolution = self
+        while (lower_resolution := resolution.lower(ignore_period=ignore_period)) != resolution:
+            lower_resolutions.append(lower_resolution)
+            resolution = lower_resolution
+        return lower_resolutions
     
     def __str__(self):
         strings = [str(self.period), str(self.timeframe)]
