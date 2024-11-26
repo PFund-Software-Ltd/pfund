@@ -1,6 +1,6 @@
 from typing_extensions import TypedDict
 
-from pfeed.types.literals import tDATA_SOURCE
+from pfeed.types.literals import tDATA_SOURCE, tSTORAGE
 
 
 class BacktestKwargs(TypedDict, total=False):
@@ -8,3 +8,4 @@ class BacktestKwargs(TypedDict, total=False):
     start_date: str
     end_date: str
     rollback_period: str
+    from_storage: tSTORAGE | None

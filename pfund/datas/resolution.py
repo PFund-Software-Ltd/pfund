@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 
 from pfund.datas.timeframe import Timeframe, TimeframeUnits
@@ -79,28 +81,37 @@ class Resolution:
     def is_year(self):
         return self.timeframe.is_year()
     
-    def higher(self, ignore_period: bool=True, orderbook_level: str='L1'):
+    def higher(self, ignore_period: bool=True, orderbook_level: str='L1') -> Resolution:
         '''Rotate to the next higher resolution. e.g. 1m > 1h, higher resolution = lower timeframe'''
         period = str(self.period) if not ignore_period else '1'
         return Resolution(period + repr(self.timeframe.lower()) + '_' + orderbook_level)
     
-    def lower(self, ignore_period: bool=True):
+    def lower(self, ignore_period: bool=True) -> Resolution:
         '''Rotate to the next lower resolution. e.g. 1h < 1m, lower resolution = higher timeframe'''
         period = str(self.period) if not ignore_period else '1'
         return Resolution(period + repr(self.timeframe.higher()))
     
-    def get_higher_resolutions(self, ignore_period: bool=True, orderbook_level: str='L1'):
+    def get_higher_resolutions(self, ignore_period: bool=True, highest_resolution: Resolution | str | None=None, orderbook_level: str='L1', exclude_quote: bool=False) -> list[Resolution]:
         higher_resolutions: list[Resolution] = []
         resolution = self
+        if isinstance(highest_resolution, str):
+            highest_resolution = Resolution(highest_resolution)
         while (higher_resolution := resolution.higher(ignore_period=ignore_period, orderbook_level=orderbook_level)) != resolution:
-            higher_resolutions.append(higher_resolution)
+            if highest_resolution and higher_resolution > highest_resolution:
+                break
+            if not (exclude_quote and higher_resolution.is_quote()):
+                higher_resolutions.append(higher_resolution)
             resolution = higher_resolution
         return higher_resolutions
     
-    def get_lower_resolutions(self, ignore_period: bool=True):
+    def get_lower_resolutions(self, ignore_period: bool=True, lowest_resolution: Resolution | str | None=None) -> list[Resolution]:
         lower_resolutions: list[Resolution] = []
         resolution = self
+        if isinstance(lowest_resolution, str):
+            lowest_resolution = Resolution(lowest_resolution)
         while (lower_resolution := resolution.lower(ignore_period=ignore_period)) != resolution:
+            if lowest_resolution and lower_resolution < lowest_resolution:
+                break
             lower_resolutions.append(lower_resolution)
             resolution = lower_resolution
         return lower_resolutions

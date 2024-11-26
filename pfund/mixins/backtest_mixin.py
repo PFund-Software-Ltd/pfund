@@ -326,6 +326,7 @@ class BacktestMixin:
                 rollback_period=backtest.get('rollback_period', ''), 
                 start_date=backtest.get('start_date', ''), 
                 end_date=backtest.get('end_date', ''), 
+                from_storage=backtest.get('from_storage', None),
                 **feed_kwargs
             )
             dfs.append(df)
