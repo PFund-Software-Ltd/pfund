@@ -34,7 +34,9 @@ pyyaml = "^6.0.1"
 duckdb = "^1.0.0"
 trogon = "^0.6.0"
 orjson = "^3.10.1"
+joblib = "^1.4.2"
 ipython = "^8.23.0"
+pydantic = "^2.7.0"
 requests = "^2.31.0"
 schedule = "^1.2.2"
 gitpython = "^3.1.43"
@@ -86,7 +88,6 @@ pybit = "^5.8.0"
 ta-lib = "^0.4.32"
 mypy = "^1.11.2"
 ruff = "^0.6.9"
-grayskull = "^2.7.3"
 
 [tool.poetry.group.test]
 optional = true

@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from pfund.orders.order_base import BaseOrder
     from pfund.datas import BaseData
     from pfund.types import data_tool
+    from pfund.types.data import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
 
 from pfund.strategies.strategy_meta import MetaStrategy
 from pfund.utils.utils import get_engine_class
@@ -191,18 +192,51 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         trading_venue: tTRADING_VENUE,
         product: str,
         resolutions: list[str] | str,
-        **kwargs
+        resamples: dict[str, str] | None=None,
+        auto_resample=None,  # FIXME
+        quote_data: QuoteDataKwargs | None=None,
+        tick_data: TickDataKwargs | None=None,
+        bar_data: BarDataKwargs | None=None,
+        **product_specs
     ) -> list[BaseData]:
-        tv, pdt = trading_venue.upper(), product.upper()
+        '''
+        Args:
+            product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
+            product_specs: product specifications, e.g. expiration, strike_price etc.
+            skip_first_bar: for bar/kline/candlestick data, the first bar is very likely incomplete
+                so users can choose to skip it
+            orderbook_depth: for orderbook data, the depth of the orderbook to subscribe to
+                if not provided, use the default depth set in the exchange
+        '''
+        tv, product_basis = trading_venue.upper(), product.upper()
         if isinstance(resolutions, str):
             resolutions = [resolutions]
         bkr = self._derive_bkr_from_trading_venue(tv)
         broker = self.add_broker(bkr)
         if bkr == 'CRYPTO':
             exch = tv
-            datas = broker.add_data(exch, pdt, resolutions, **kwargs)
+            datas = broker.add_data(
+                exch, 
+                product_basis, 
+                resolutions, 
+                resamples=resamples,
+                auto_resample=auto_resample,
+                quote_data=quote_data,
+                tick_data=tick_data,
+                bar_data=bar_data,
+                **product_specs
+            )
         else:
-            datas = broker.add_data(pdt, resolutions, **kwargs)
+            datas = broker.add_data(
+                product_basis, 
+                resolutions, 
+                resamples=resamples,
+                auto_resample=auto_resample,
+                quote_data=quote_data,
+                tick_data=tick_data,
+                bar_data=bar_data,
+                **product_specs
+            )
 
         for data in datas:
             if data.is_time_based():
@@ -220,7 +254,17 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
                 broker._add_listener(listener=self, listener_key=data, event_type='public')
             else:
                 for consumer in self._consumers:
-                    consumer.add_data(tv, pdt, resolutions, **kwargs)
+                    consumer.add_data(
+                        tv, 
+                        product_basis, 
+                        resolutions, 
+                        resamples=resamples,
+                        auto_resample=auto_resample,
+                        quote_data=quote_data,
+                        tick_data=tick_data,
+                        bar_data=bar_data,
+                        **product_specs
+                    )
                     consumer._add_listener(listener=self, listener_key=data)
                 
         return datas
@@ -228,6 +272,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     # TODO, for website to remove data from a strategy
     # should check if broker still has listeners, if not, remove the data from broker
     # also need to consider products, need to remove product if no data is left
+    # TODO: should call broker.remove_data()
     def remove_data(self, product: BaseProduct, resolution: str):
         if datas := self.get_data(product, resolution=resolution):
             datas = list(datas.values()) if not resolution else list(datas)

@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.types.literals import tTRADING_VENUE
+    from pfund.types.data import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
 
 import time
 
@@ -207,6 +208,11 @@ class BacktestMixin:
         trading_venue: tTRADING_VENUE, 
         product: str,
         resolutions: list[str] | str,
+        resamples: dict[str, str] | None=None,
+        auto_resample=None,  # FIXME
+        quote_data: QuoteDataKwargs | None=None,
+        tick_data: TickDataKwargs | None=None,
+        bar_data: BarDataKwargs | None=None,
         backtest: BacktestKwargs | dict | None=None,
         train: dict | None=None,
         **kwargs
@@ -214,7 +220,17 @@ class BacktestMixin:
         self._add_data_signature(trading_venue, product, resolutions, backtest=backtest, train=train, **kwargs)
         feed: BaseFeed = self.get_feed(backtest['data_source'])
         kwargs = self._prepare_kwargs(feed, resolutions, kwargs)
-        datas = super().add_data(trading_venue, product, resolutions, **kwargs)
+        datas = super().add_data(
+            trading_venue, 
+            product, 
+            resolutions, 
+            resamples=resamples,
+            auto_resample=auto_resample,
+            quote_data=quote_data,
+            tick_data=tick_data,
+            bar_data=bar_data,
+            **kwargs
+        )
         dfs = self.get_historical_data(feed, datas, backtest)
         for data, df in zip(datas, dfs):
             self._add_raw_df(data, df)
@@ -268,8 +284,8 @@ class BacktestMixin:
                     kwargs[k] = {}
         # FIXME
         elif self.engine.mode == BacktestMode.EVENT_DRIVEN:
-            if 'is_skip_first_bar' not in kwargs:
-                kwargs['is_skip_first_bar'] = False
+            if 'skip_first_bar' not in kwargs:
+                kwargs['skip_first_bar'] = False
         
             # add 'shifts' to kwargs:
             # HACK: since Yahoo Finance hourly data starts from 9:30 to 10:30 etc.
@@ -318,10 +334,9 @@ class BacktestMixin:
                 if data.is_resamplee():
                     continue
             product = data.product
-            if feed.name == 'YAHOO_FINANCE':
-                feed_kwargs['product'] = product.pdt
             df = feed.get_historical_data(
-                product.symbol if feed.name == 'YAHOO_FINANCE' else product.pdt, 
+                product.name, 
+                symbol=product.symbol,
                 resolution=data.resol,
                 rollback_period=backtest.get('rollback_period', ''), 
                 start_date=backtest.get('start_date', ''), 

@@ -1,24 +1,24 @@
 from __future__ import annotations
+from typing import TYPE_CHECKING, Literal
+if TYPE_CHECKING:
+    from pfund.products.product_base import BaseProduct
+    from pfund.orders.order_base import BaseOrder
+    from pfund.exchanges.exchange_base import BaseExchange
+    from pfund.datas.data_base import BaseData
+    from pfund.types.literals import tCRYPTO_EXCHANGE, tENVIRONMENT
+    from pfund.types.data import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
 
 import inspect
 import importlib
 from threading import Thread
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from pfund.products.product_base import BaseProduct
-    from pfund.orders.order_base import BaseOrder
-    from pfund.exchanges.exchange_base import BaseExchange
-    from pfund.types.literals import tCRYPTO_EXCHANGE, tENVIRONMENT
-
-from pfund.products import CryptoProduct
 from pfund.orders import CryptoOrder
 from pfund.positions import CryptoPosition
 from pfund.balances import CryptoBalance
 from pfund.accounts import CryptoAccount
 from pfund.utils.utils import convert_to_uppercases
 from pfund.brokers.broker_live import LiveBroker
-from pfund.const.enums import CryptoExchange, PublicDataChannel, PrivateDataChannel
+from pfund.const.enums import CryptoExchange, PublicDataChannel, PrivateDataChannel, DataChannelType
 
 
 class CryptoBroker(LiveBroker):
@@ -50,42 +50,91 @@ class CryptoBroker(LiveBroker):
     def add_custom_data(self):
         pass
 
-    def add_data(self, exch: tCRYPTO_EXCHANGE, pdt: str, resolutions: list[str] | str, **kwargs):
-        exch, pdt = exch.upper(), pdt.upper()
-        product = self.add_product(exch, pdt, **kwargs)
-        datas = self.data_manager.add_data(product, resolutions, **kwargs)
+    def add_data(
+        self, 
+        exch: tCRYPTO_EXCHANGE, 
+        product: str,
+        resolutions: list[str] | str, 
+        resamples: dict[str, str] | None=None,
+        auto_resample=None,  # FIXME
+        quote_data: QuoteDataKwargs | None=None,
+        tick_data: TickDataKwargs | None=None,
+        bar_data: BarDataKwargs | None=None,
+        **product_specs
+    ):
+        '''
+        Args:
+            product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
+            product_specs: product specifications, e.g. expiration, strike_price etc.
+        '''
+        exch, product_basis = exch.upper(), product.upper()
+        product = self.add_product(exch, product_basis, **product_specs)
+        datas = self.data_manager.add_data(
+            product, 
+            resolutions, 
+            resamples=resamples,
+            auto_resample=auto_resample,
+            quote_data=quote_data,
+            tick_data=tick_data,
+            bar_data=bar_data,
+        )
         for data in datas:
-            self.add_data_channel(exch, data, **kwargs)
+            if channel := self._create_public_data_channel(data):
+                self.add_channel(exch, channel, data)
         return datas
     
-    def add_data_channel(self, exch: tCRYPTO_EXCHANGE, data, **kwargs):
+    def add_channel(
+        self, 
+        exch: tCRYPTO_EXCHANGE, 
+        channel: PublicDataChannel | PrivateDataChannel | str,
+        channel_type: Literal['public', 'private']='',
+        data: BaseData | None=None
+    ):
+        '''
+        Args:
+            exch: exchange name, e.g. 'BYBIT'
+            channel: PublicDataChannel, PrivateDataChannel, or exchange-specific string
+                If PublicDataChannel: ORDERBOOK, TRADEBOOK, or KLINE
+                If PrivateDataChannel: BALANCE, POSITION, ORDER, or TRADE
+                If string: exchange-specific channel name, e.g. 'tickers.{symbol}' for Bybit
+            channel_type: only required if channel is an exchange-specific string
+                'public' for public data channels
+                'private' for private data channels
+            data: BaseData object, required for public channels
+                Contains product and resolution information needed for subscription
+        '''
         exchange = self.exchanges[exch]
-        if data.is_time_based():
-            if data.is_resamplee():
-                return
-            timeframe = data.timeframe
-            if timeframe.is_quote():
-                channel = PublicDataChannel.ORDERBOOK
-            elif timeframe.is_tick():
-                channel = PublicDataChannel.TRADEBOOK
-            else:
-                channel = PublicDataChannel.KLINE
-            exchange.add_channel(channel, 'public', product=data.product, period=data.period, timeframe=repr(timeframe), **kwargs)
-        else:
-            raise NotImplementedError
+        if channel in PublicDataChannel:
+            assert data, f'data must be provided for {channel}'
+        channel_type: DataChannelType = self._create_data_channel_type(channel, channel_type=channel_type)
+        exchange.add_channel(channel, channel_type, data=data)
+    
+    # useful when user wants to remove a private channel, since all private channels are added by default
+    def remove_channel(
+        self, 
+        exch: tCRYPTO_EXCHANGE, 
+        channel: PublicDataChannel | PrivateDataChannel | str,
+        channel_type: Literal['public', 'private']='',
+        data: BaseData | None=None
+    ):
+        exchange = self.exchanges[exch]
+        channel_type: DataChannelType = self._create_data_channel_type(channel, channel_type=channel_type)
+        exchange.remove_channel(channel, channel_type, data=data)
 
     def remove_data(self, product: BaseProduct, resolution: str):
-        if not (datas := self.data_manager.remove_data(product, resolution=resolution)):
-            self.remove_product(product.exch, product.pdt)
+        self.remove_product(product)
+        data: BaseData = self.data_manager.remove_data(product, resolution)
+        if channel := self._create_public_data_channel(data):
+            self.remove_channel(product.exch, channel, data=data)
             
     def get_account(self, exch: tCRYPTO_EXCHANGE, acc: str) -> CryptoAccount | None:
         return self._accounts[exch.upper()].get(acc.upper(), None)
     
-    def add_account(self, exch: tCRYPTO_EXCHANGE='', key: str='', secret: str='', acc: str='', **kwargs) -> CryptoAccount:
+    def add_account(self, exch: tCRYPTO_EXCHANGE='', key: str='', secret: str='', name: str='', **kwargs) -> CryptoAccount:
         assert exch, 'kwarg "exch" must be provided'
-        acc = acc.upper()
-        if not (account := self.get_account(exch, acc)):
-            account = CryptoAccount(self.env, exch, key=key, secret=secret, acc=acc, **kwargs)
+        name = name.upper()
+        if not (account := self.get_account(exch, name)):
+            account = CryptoAccount(self.env, exch, key=key, secret=secret, name=name, **kwargs)
             exchange = self.add_exchange(exch)
             exchange.add_account(account)
             self._accounts[exch][account.name] = account
@@ -94,21 +143,21 @@ class CryptoBroker(LiveBroker):
             self.logger.warning(f'{account=} has already been added, please make sure the account names are not duplicated')
         return account
     
-    def get_product(self, exch: tCRYPTO_EXCHANGE, pdt: str) -> CryptoProduct | None:
+    def get_product(self, exch: tCRYPTO_EXCHANGE, pdt: str) -> BaseProduct | None:
         return self._products[exch.upper()].get(pdt.upper(), None)
 
-    def add_product(self, exch: tCRYPTO_EXCHANGE, pdt: str, **kwargs) -> CryptoProduct:
-        exch, pdt = exch.upper(), pdt.upper()
-        if not (product := self.get_product(exch, pdt)):
-            exchange = self.add_exchange(exch)
-            product = exchange.create_product(pdt, **kwargs)
-            exchange.add_product(product, **kwargs)
+    def add_product(self, exch: tCRYPTO_EXCHANGE, product_basis: str, **product_specs) -> BaseProduct:
+        exch, product_basis = exch.upper(), product_basis.upper()
+        exchange = self.add_exchange(exch)
+        product = exchange.create_product(product_basis, **product_specs)
+        if not (product := self.get_product(exch, product.name)):
+            exchange.add_product(product)
             self._products[exch][product.name] = product
             self.logger.debug(f'added {product=}')
         return product
     
-    def remove_product(self, exch: tCRYPTO_EXCHANGE, pdt: str):
-        exch, pdt = exch.upper(), pdt.upper()
+    def remove_product(self, product: BaseProduct):
+        exch, pdt = product.exch, product.name
         if exch in self._products and pdt in self._products[exch]:
             del self._products[exch][pdt]
         if not self._products[exch]:
@@ -225,10 +274,10 @@ class CryptoBroker(LiveBroker):
             account = self.get_account(exch, acc)
             return exchange.get_positions(account, pdt=pdt, **kwargs)
 
-    def create_order(self, account: CryptoAccount, product: CryptoProduct, side: int, quantity: float, price=None, **kwargs):
+    def create_order(self, account: CryptoAccount, product: BaseProduct, side: int, quantity: float, price=None, **kwargs):
         return CryptoOrder(account, product, side, qty=quantity, px=price, **kwargs)
     
-    def place_orders(self, account: CryptoAccount, product: CryptoProduct, orders: list[BaseOrder]):
+    def place_orders(self, account: CryptoAccount, product: BaseProduct, orders: list[BaseOrder]):
         exchange = self.get_exchange(account.exch)
         # TODO
         # self.rm checks risk
@@ -257,7 +306,7 @@ class CryptoBroker(LiveBroker):
                 if ws_msg is not None:
                     self._zmq.send(ws_msg)
 
-    def cancel_orders(self, account: CryptoAccount, product: CryptoProduct, orders: list[BaseOrder]):
+    def cancel_orders(self, account: CryptoAccount, product: BaseProduct, orders: list[BaseOrder]):
         exchange = self.get_exchange(account.exch)
 
         num_orders = 0
@@ -289,7 +338,7 @@ class CryptoBroker(LiveBroker):
         pass
 
     # TODO
-    def amend_orders(self, account: CryptoAccount, product: CryptoProduct, orders: list[BaseOrder]):
+    def amend_orders(self, account: CryptoAccount, product: BaseProduct, orders: list[BaseOrder]):
         # TODO, self.rm checks risk
         # if failed risk check, reset amend_px and amend_qty
 

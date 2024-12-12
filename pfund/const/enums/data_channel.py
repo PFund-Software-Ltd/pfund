@@ -12,3 +12,8 @@ class PrivateDataChannel(StrEnum):
     POSITION = 'POSITION'
     ORDER = 'ORDER'
     TRADE = 'TRADE'
+
+
+class DataChannelType(StrEnum):
+    PUBLIC = 'PUBLIC'
+    PRIVATE = 'PRIVATE'

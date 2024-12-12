@@ -2,7 +2,7 @@ class BaseData:
     def __init__(self, product):
         self.bkr = product.bkr
         self.exch = product.exch
-        self.pdt = product.pdt
+        self.pdt = product.name
         self.product = product
     
     def is_crypto(self):

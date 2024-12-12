@@ -17,6 +17,7 @@ from pfund.const.paths import (
     LOG_PATH, 
     CONFIG_PATH, 
     DATA_PATH, 
+    CACHE_PATH,
     CONFIG_FILE_PATH
 )
 
@@ -61,6 +62,7 @@ def _dynamic_import(path: str):
 class ConfigHandler:
     data_path: str = str(DATA_PATH)
     log_path: str = str(LOG_PATH)
+    cache_path: str = str(CACHE_PATH)
     logging_config_file_path: str = f'{CONFIG_PATH}/logging.yml'
     docker_compose_file_path: str = f'{CONFIG_PATH}/docker-compose.yml'
     fork_process: bool = True
@@ -86,15 +88,37 @@ class ConfigHandler:
     def load(cls):
         '''Loads user's config file and returns a ConfigHandler object'''
         CONFIG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        # Create default config from dataclass fields
+        default_config = {
+            field.name: field.default 
+            for field in cls.__dataclass_fields__.values()
+            if not field.name.startswith('_')  # Skip private fields
+        }
+        needs_update = False
         if CONFIG_FILE_PATH.is_file():
             with open(CONFIG_FILE_PATH, 'r') as f:
-                config = yaml.safe_load(f) or {}
+                saved_config = yaml.safe_load(f) or {}
                 if cls._verbose:
                     print(f"{PROJ_NAME} config loaded from {CONFIG_FILE_PATH}.")
+                # Check for new or removed fields
+                new_fields = set(default_config.keys()) - set(saved_config.keys())
+                removed_fields = set(saved_config.keys()) - set(default_config.keys())
+                needs_update = bool(new_fields or removed_fields)
+                
+                if cls._verbose and needs_update:
+                    if new_fields:
+                        print(f"New config fields detected: {new_fields}")
+                    if removed_fields:
+                        print(f"Removed config fields detected: {removed_fields}")
+                        
+                # Filter out removed fields and merge with defaults
+                saved_config = {k: v for k, v in saved_config.items() if k in default_config}
+                config = {**default_config, **saved_config}
         else:
-            config = {}
+            config = default_config
+            needs_update = True
         config_handler = cls(**config)
-        if not config:
+        if needs_update:
             config_handler.dump()
         return config_handler
     
@@ -175,14 +199,18 @@ class ConfigHandler:
                 print(f'Error creating or copying {path.name}: {e}')
         
     def _initialize_configs(self):
-        for path in [self.strategy_path, self.model_path, self.feature_path, self.indicator_path,
-                     self.backtest_path, self.notebook_path, self.spreadsheet_path, self.dashboard_path]:
+        for path in [
+            self.cache_path, self.log_path,
+            self.strategy_path, self.model_path, self.feature_path, self.indicator_path,
+            self.backtest_path, self.notebook_path, self.spreadsheet_path, self.dashboard_path, 
+            self.artifact_path,
+        ]:
             if not os.path.exists(path):
                 os.makedirs(path)
                 if self._verbose:
                     print(f'created {path}')
             sys.path.append(path)
-            if path != self.backtest_path:
+            if path not in [self.backtest_path, self.cache_path, self.log_path]:
                 _dynamic_import(path)
         
         if self.fork_process and sys.platform != 'win32':

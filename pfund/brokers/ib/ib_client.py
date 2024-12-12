@@ -64,8 +64,8 @@ class IBClient(EClient):
         # market data subscription is for both bid/ask and last price/qty
         # if e.g. the 'orderbook' channel has already requested market data, 
         # do not request again for the 'tradebook' channel
-        if product.pdt in self._pdts_requested_market_data:
-            self.logger.debug(f'{self.bkr} has already requested {product.pdt} market data, do not request again')
+        if product.name in self._pdts_requested_market_data:
+            self.logger.debug(f'{self.bkr} has already requested {product.name} market data, do not request again')
             return
         self.reqMktData(
             self._request_id,
@@ -76,8 +76,8 @@ class IBClient(EClient):
             kwargs.get('regulatorySnapshot', False),
             []
         )
-        self.logger.debug(f'{self.bkr} requested (req_id={self._request_id}) {product.pdt} market data')
-        self._pdts_requested_market_data.append(product.pdt)
+        self.logger.debug(f'{self.bkr} requested (req_id={self._request_id}) {product.name} market data')
+        self._pdts_requested_market_data.append(product.name)
         self._update_request_id_and_corresponding_product(product)
 
     def _request_tick_by_tick_data(self, tick_type: Literal['Last', 'AllLast', 'BidAsk', 'MidPoint'], **kwargs):
@@ -91,13 +91,13 @@ class IBClient(EClient):
             kwargs.get('numberOfTicks', 0),
             kwargs.get('ignoreSize', False),
         )
-        self.logger.debug(f'{self.bkr} requested (req_id={self._request_id}) {product.pdt} tick by tick data ({tick_type=})')
+        self.logger.debug(f'{self.bkr} requested (req_id={self._request_id}) {product.name} tick by tick data ({tick_type=})')
         self._update_request_id_and_corresponding_product(product)
 
     def _request_market_depth(self, **kwargs):
         """Level 2 orderbook"""
         product = kwargs['product']
-        orderbook_depth = self._orderbook_depth[product.pdt]
+        orderbook_depth = self._orderbook_depth[product.name]
         self.reqMktDepth(
             self._request_id,
             product,
@@ -105,7 +105,7 @@ class IBClient(EClient):
             kwargs.get('isSmartDepth', False), 
             []  # for IB internal use only                       
         )
-        self.logger.debug(f'{self.bkr} requested (req_id={self._request_id}) {product.pdt} market depth ({orderbook_depth=})')
+        self.logger.debug(f'{self.bkr} requested (req_id={self._request_id}) {product.name} market depth ({orderbook_depth=})')
         self._update_request_id_and_corresponding_product(product)
 
     def _request_real_time_bar(self, **kwargs):
@@ -119,7 +119,7 @@ class IBClient(EClient):
             kwargs.get('useRTH', False),
             []  # for IB internal use only
         )
-        self.logger.debug(f'{self.bkr} requested (req_id={self._request_id}) {product.pdt} real time bar ({bar_size=})')
+        self.logger.debug(f'{self.bkr} requested (req_id={self._request_id}) {product.name} real time bar ({bar_size=})')
         self._update_request_id_and_corresponding_product(product)
 
 

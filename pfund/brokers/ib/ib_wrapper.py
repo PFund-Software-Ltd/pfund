@@ -66,14 +66,14 @@ class IBWrapper(EWrapper):
                 return
             if tickType == TickTypeEnum.BID_SIZE:
                 bids = ((px, size),)
-                zmq_msg = (1, 1, (self.bkr, product.exch, product.pdt, bids, (), None))
+                zmq_msg = (1, 1, (self.bkr, product.exch, product.name, bids, (), None))
                 self._zmq.send(*zmq_msg)
             elif tickType == TickTypeEnum.ASK_SIZE:
                 asks = ((px, size),)
-                zmq_msg = (1, 1, (self.bkr, product.exch, product.pdt, (), asks, None))
+                zmq_msg = (1, 1, (self.bkr, product.exch, product.name, (), asks, None))
                 self._zmq.send(*zmq_msg)
             elif tickType == TickTypeEnum.LAST_SIZE:
-                zmq_msg = (1, 2, (self.bkr, product.exch, product.pdt, px, size, None))
+                zmq_msg = (1, 2, (self.bkr, product.exch, product.name, px, size, None))
                 self._zmq.send(*zmq_msg)
         else:
             # TEMP, this is normal, but wanna log it to confirm
@@ -86,7 +86,7 @@ class IBWrapper(EWrapper):
         bids = ((Decimal(bidPrice), bidSize),)
         asks = ((Decimal(askPrice), askSize),)
         other_info = {'tickAttribBidAsk': tickAttribBidAsk}
-        zmq_msg = (1, 1, (self.bkr, product.exch, product.pdt, bids, asks, time, other_info))
+        zmq_msg = (1, 1, (self.bkr, product.exch, product.name, bids, asks, time, other_info))
         self._zmq.send(*zmq_msg)
         super().tickByTickBidAsk(reqId, time, bidPrice, askPrice, bidSize, askSize, tickAttribBidAsk)
 
@@ -106,7 +106,7 @@ class IBWrapper(EWrapper):
             'exchange': exchange,
             'specialConditions': specialConditions
         }
-        zmq_msg = (1, 2, (self.bkr, product.exch, product.pdt, price, size, time, other_info))
+        zmq_msg = (1, 2, (self.bkr, product.exch, product.name, price, size, time, other_info))
         self._zmq.send(*zmq_msg)
         super().tickByTickAllLast(reqId, tickType, time, price, size, tickAttribLast, exchange, specialConditions)
 
@@ -129,7 +129,7 @@ class IBWrapper(EWrapper):
             'wap': wap,
             'count': count
         }
-        zmq_msg = (1, 3, (self.bkr, product.exch, product.pdt, resolution, o, h, l, c, v, ts, other_info))
+        zmq_msg = (1, 3, (self.bkr, product.exch, product.name, resolution, o, h, l, c, v, ts, other_info))
         self._zmq.send(*zmq_msg)
         super().realtimeBar(reqId, time, open_, high, low, close, volume, wap, count)
 

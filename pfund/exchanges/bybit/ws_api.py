@@ -1,3 +1,9 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.adapter import Adapter
+    from pfund.datas.data_base import BaseData
+
 import time
 from pathlib import Path
 try:
@@ -13,7 +19,6 @@ from pfund.const.enums import Environment
 
 
 class WebsocketApi(BaseWebsocketApi):
-    DEFAULT_ORDERBOOK_DEPTH = 1
     _URLS = {
         'PAPER': {
             'public': 'wss://stream-testnet.bybit.com/v5/public',
@@ -47,13 +52,9 @@ class WebsocketApi(BaseWebsocketApi):
         'spot': 10
     }
 
-    def __init__(self, env: Environment, adapter):
+    def __init__(self, env: Environment, adapter: Adapter):
         exch = Path(__file__).parent.name
         super().__init__(env, exch, adapter)
-
-    @property
-    def URLS(self) -> dict:
-        return self._URLS
 
     def _ping(self):
         msg = {"op": "ping"}
@@ -86,16 +87,17 @@ class WebsocketApi(BaseWebsocketApi):
             ws_url = self._urls['private']
         return ws_url
 
-    def _create_public_channel(self, channel: PublicDataChannel, product, **kwargs):
-        pdt = product.pdt
-        epdt = self._adapter(pdt, ref_key=product.category)
-        echannel = self._adapter(channel)
+    def _create_public_channel(self, channel: PublicDataChannel | str, data: BaseData | None=None):
         if channel in PublicDataChannel:
+            product = data.product
+            pdt = product.name
+            epdt = self._adapter(pdt, group=product.category)
+            echannel = self._adapter(channel, group='channel')
             if channel == PublicDataChannel.ORDERBOOK:
-                self._orderbook_levels[pdt] = int(kwargs.get('orderbook_level', self.DEFAULT_ORDERBOOK_LEVEL))
+                self._orderbook_levels[pdt] = data.orderbook_level
                 if self._orderbook_levels[pdt] not in self.SUPPORTED_ORDERBOOK_LEVELS:
                     raise NotImplementedError(f'{pdt} orderbook_level={self._orderbook_levels[pdt]} is not supported')
-                self._orderbook_depths[pdt] = int(kwargs.get('orderbook_depth', self.DEFAULT_ORDERBOOK_DEPTH))
+                self._orderbook_depths[pdt] = data.orderbook_depth
                 if product.category:
                     supported_periods = self.SUPPORTED_TIMEFRAMES_AND_PERIODS['q'][product.category]
                 else:
@@ -112,20 +114,21 @@ class WebsocketApi(BaseWebsocketApi):
             elif channel == PublicDataChannel.TRADEBOOK:
                 full_channel = '.'.join([echannel, epdt])
             elif channel == PublicDataChannel.KLINE:
-                period, timeframe = kwargs['period'], kwargs['timeframe']
+                period, timeframe = data.period, repr(data.timeframe)
                 if timeframe not in self.SUPPORTED_TIMEFRAMES_AND_PERIODS.keys():
                     raise NotImplementedError(f'({channel}.{pdt}) {timeframe=} for kline is not supported, only timeframes in {list(self.SUPPORTED_TIMEFRAMES_AND_PERIODS)} are supported')
                 resolution = str(period) + timeframe
-                eresolution = self._adapter(resolution)
+                eresolution = self._adapter(resolution, group='resolution')
                 full_channel = '.'.join([echannel, eresolution, epdt])
             else:
                 raise NotImplementedError(f'{channel=} is not supported')
         else:  # channels like 'tickers.{symbol}', 'liquidation.{symbol}'
+            epdt = product.symbol
             full_channel = '.'.join([echannel, epdt])
         return full_channel
 
-    def _create_private_channel(self, channel: PrivateDataChannel, **kwargs):
-        echannel = self._adapter(channel)
+    def _create_private_channel(self, channel: PrivateDataChannel | str):
+        echannel = self._adapter(channel, group='channel')
         full_channel = echannel
         return full_channel
 
@@ -226,7 +229,7 @@ class WebsocketApi(BaseWebsocketApi):
     def _process_orderbook_l2_msg(self, ws_name, full_channel, msg):
         quote = {'ts': None, 'data': {'bids': None, 'asks': None}, 'other_info': {}}
         echannel, orderbook_depth, epdt = full_channel.split('.')
-        pdt = self._adapter(epdt, ref_key=ws_name)
+        pdt = self._adapter(epdt, group=ws_name)
         data = msg['data']
         seq_num = int(data['seq'])
         msg_type = msg['type']
@@ -311,7 +314,7 @@ class WebsocketApi(BaseWebsocketApi):
             }
         }
         echannel, epdt = full_channel.split('.')
-        pdt = self._adapter(epdt, ref_key=ws_name)
+        pdt = self._adapter(epdt, group=ws_name)
         return super()._process_tradebook_msg(ws_name, msg, pdt, schema)
     
     def _process_kline_msg(self, ws_name, full_channel, msg):
@@ -327,20 +330,10 @@ class WebsocketApi(BaseWebsocketApi):
                 'volume': ('volume', float),
                 'ts': ('timestamp', float),
             }
-            # TODO: (move to OKX ws_api):
-            # 'ts_adj': 1/10**3,
-            # 'data': {
-            #     'open': (1, float),
-            #     'high': (2, float),
-            #     'low': (3, float),
-            #     'close': (4, float),
-            #     'volume': (5, float),
-            #     'ts': (0, float),
-            # }
         }
         echannel, eresolution, epdt = full_channel.split('.')
-        resolution = self._adapter(eresolution)
-        pdt = self._adapter(epdt, ref_key=ws_name)
+        resolution = self._adapter(eresolution, group='resolution')
+        pdt = self._adapter(epdt, group=ws_name)
         return super()._process_kline_msg(ws_name, msg, resolution, pdt, schema)
 
     def _process_position_msg(self, ws_name, msg):

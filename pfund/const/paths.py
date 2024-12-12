@@ -7,10 +7,6 @@ PROJ_NAME = Path(__file__).resolve().parents[1].name
 MAIN_PATH = Path(__file__).resolve().parents[2]
 PROJ_PATH = MAIN_PATH / PROJ_NAME
 
-EXCHANGE_PATH = PROJ_PATH / 'exchanges'
-PROJ_CONFIG_PATH = PROJ_PATH / 'config'
-
-
 # user paths
 LOG_PATH = Path(user_log_dir()) / PROJ_NAME
 CONFIG_PATH = Path(user_config_dir()) / PROJ_NAME

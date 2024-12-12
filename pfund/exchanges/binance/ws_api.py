@@ -2,15 +2,24 @@ from pathlib import Path
 
 from pfund.exchanges.ws_api_base import BaseWebsocketApi
 from pfund.const.enums import PublicDataChannel, PrivateDataChannel
+from pfund.const.enums import Environment
+from pfund.exchanges.binance.ws_api_spot import WebsocketApiSpot
+from pfund.exchanges.binance.ws_api_linear import WebsocketApiLinear
+from pfund.exchanges.binance.ws_api_inverse import WebsocketApiInverse
+from pfund.exchanges.binance.ws_api_option import WebsocketApiOption
 
 
 # TODO
 class WebsocketApi(BaseWebsocketApi):
-    URLS = {}
+    _URLS = {}
     
-    def __init__(self, env, adapter):
+    def __init__(self, env: Environment, adapter):
         exch = Path(__file__).parent.name
         super().__init__(env, exch, adapter)
+        self._ws_api_spot = WebsocketApiSpot(env)
+        self._ws_api_linear = WebsocketApiLinear(env)
+        self._ws_api_inverse = WebsocketApiInverse(env)
+        self._ws_api_option = WebsocketApiOption(env)
 
     def _on_message(self, ws, msg):
         pass

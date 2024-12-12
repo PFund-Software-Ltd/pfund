@@ -1,3 +1,11 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.types.literals import tCRYPTO_EXCHANGE
+    from pfund.const.enums import Environment
+    from pfund.products.product_base import BaseProduct
+    from pfund.datas.data_base import BaseData
+
 import os
 import time
 try:
@@ -18,25 +26,27 @@ from websocket import WebSocketApp, WebSocketConnectionClosedException
 
 from pfund.managers.order_manager import OrderUpdateSource
 from pfund.zeromq import ZeroMQ
-from pfund.utils.utils import step_into
-from pfund.const.enums import PublicDataChannel, PrivateDataChannel, Environment
+from pfund.adapter import Adapter
+from pfund.const.enums import PublicDataChannel, PrivateDataChannel, DataChannelType
 
 
 class BaseWebsocketApi(ABC):
-    DEFAULT_ORDERBOOK_LEVEL = 2
-    DEFAULT_ORDERBOOK_DEPTH = 5
+    _URLS = {}
     SUPPORTED_ORDERBOOK_LEVELS = []
     SUPPORTED_TIMEFRAMES_AND_PERIODS = {}
 
-    def __init__(self, env: Environment, name: str, adapter):
+    def __init__(self, env: Environment, name: tCRYPTO_EXCHANGE, adapter: Adapter):
         self.env = env
         self.bkr = 'CRYPTO'
         self.name = self.exch = name.upper()
         self.logger = logging.getLogger(self.exch.lower() + '_' + 'ws')
         self._adapter = adapter
         self._urls: dict|str = self.URLS.get(self.env.value, '')
-        self._is_use_private_ws_server = self._check_if_use_private_ws_server()
-        self._servers = [self.exch]
+        self._use_separate_private_ws_url = self._check_if_use_separate_private_ws_url()
+        
+        # REVIEW: is it necessary to have self.exch as a default server?
+        self._servers = [self.exch]  
+        
         self._full_channels = {'public': [], 'private': []}
         self._products = {}  # {pdt1: product1, pdt2: product2}
         self._accounts = {}
@@ -70,9 +80,8 @@ class BaseWebsocketApi(ABC):
         self._msg_callback = None
 
     @property
-    @abstractmethod
     def URLS(self) -> dict:
-        pass
+        return self._URLS
 
     def _clean_up(self):
         self._zmqs = {}
@@ -85,7 +94,7 @@ class BaseWebsocketApi(ABC):
         self._asks_l2 = defaultdict(dict)
         self._last_quote_nums = defaultdict(int)
 
-    def _check_if_use_private_ws_server(self):
+    def _check_if_use_separate_private_ws_url(self):
         if type(self._urls) is dict and self._urls['public'] != self._urls['private']:
             return True
         return False
@@ -136,12 +145,12 @@ class BaseWebsocketApi(ABC):
         zmq_ports = TradeEngine.zmq_ports
         for ws_name in self.get_all_ws_names():
             if ws_name in self._servers:
-                if self._is_use_private_ws_server:
+                if self._use_separate_private_ws_url:
                     port = zmq_ports[self.exch]['ws_api']['public'][ws_name]
                 else:
                     port = zmq_ports[self.exch]['ws_api']
             elif ws_name in self._accounts:
-                if self._is_use_private_ws_server:
+                if self._use_separate_private_ws_url:
                     port = zmq_ports[self.exch]['ws_api']['private'][ws_name]
                 else:
                     continue
@@ -169,6 +178,7 @@ class BaseWebsocketApi(ABC):
         if category not in self._servers:
             self._servers.append(category)
             self.logger.debug(f'added server "{category}"')
+            # FIXME: remove the default server
             if self.exch in self._servers:
                 self._servers.remove(self.exch)
 
@@ -177,25 +187,58 @@ class BaseWebsocketApi(ABC):
         self._accounts[account.name] = account
         self.logger.debug(f'added account {account.name}')
 
-    def add_product(self, product, **kwargs):
+    def add_product(self, product: BaseProduct):
         if product.name in self._products:
             return
         if product.category:
             self.add_server(product.category)
         self._products[product.name] = product
         self.logger.debug(f'added product {product.name}')
+    
+    def remove_product(self, product: BaseProduct):
+        if product.name in self._products:
+            del self._products[product.name]
+            self.logger.debug(f'removed product {product.name}')
+        # TODO: remove server
 
-    def add_channel(self, channel: PublicDataChannel | PrivateDataChannel, type_, product=None, **kwargs):
-        if type_.lower() == 'public':
-            assert product is not None
-            if product.category:
-                self.add_server(product.category)
-            full_channel = self._create_public_channel(channel, product, **kwargs)
-        elif type_.lower() == 'private':
-            full_channel = self._create_private_channel(channel, **kwargs)
-        if full_channel not in self._full_channels[type_]:
-            self._full_channels[type_].append(full_channel)
+    def add_channel(
+        self,
+        channel: PublicDataChannel | PrivateDataChannel | str,
+        channel_type: DataChannelType,
+        data: BaseData | None=None
+    ):
+        if channel in PublicDataChannel:
+            self.add_product(data.product)
+        full_channel = self._create_full_channel(channel, channel_type, data)
+        channel_type = channel_type.value.lower()
+        if full_channel not in self._full_channels[channel_type]:
+            self._full_channels[channel_type].append(full_channel)
             self.logger.debug(f'added channel={full_channel}')
+    
+    def _create_full_channel(
+        self, 
+        channel: PublicDataChannel | PrivateDataChannel | str, 
+        channel_type: DataChannelType, 
+        data: BaseData | None=None
+    ) -> str:
+        if channel_type == DataChannelType.PUBLIC:
+            return self._create_public_channel(channel, data=data)
+        elif channel_type == DataChannelType.PRIVATE:
+            return self._create_private_channel(channel)
+    
+    def remove_channel(
+        self, 
+        channel: PublicDataChannel | PrivateDataChannel | str,
+        channel_type: DataChannelType,
+        data: BaseData | None=None
+    ):
+        if channel in PublicDataChannel:
+            self.remove_product(data.product)
+        full_channel = self._create_full_channel(channel, channel_type, data)
+        channel_type = channel_type.value.lower()
+        if full_channel in self._full_channels[channel_type]:
+            self._full_channels[channel_type].remove(full_channel)
+            self.logger.debug(f'removed channel={full_channel}')
 
     # send msg to engine->connection manager to indicate it is connected 
     # to connection manager, a successful connection = connected + authenticated + subscribed + other stuff (e.g. snapshots ready)
@@ -288,7 +331,7 @@ class BaseWebsocketApi(ABC):
         for ws_name in ws_names:
             is_private_ws = ws_name in self._accounts
             # if no separate server for private_ws, it will share the same server with public_ws
-            if is_private_ws and not self._is_use_private_ws_server:
+            if is_private_ws and not self._use_separate_private_ws_url:
                 continue
             ws_url = self._create_ws_url(ws_name)
             self.logger.debug(f'ws={ws_name} is connecting to {ws_url}')
@@ -362,7 +405,7 @@ class BaseWebsocketApi(ABC):
 
     def _on_open(self, ws):
         self._on_connected(ws.name)
-        if not self._is_use_private_ws_server:
+        if not self._use_separate_private_ws_url:
             for acc in self._accounts:
                 self._authenticate(acc)
         else:
@@ -498,13 +541,13 @@ class BaseWebsocketApi(ABC):
             for position in res:
                 category = step_into(position, schema['category']) if 'category' in schema else ''
                 epdt = step_into(position, schema['pdt'])
-                pdt = self._adapter(epdt, ref_key=category)
+                pdt = self._adapter(epdt, group=category)
                 qty = float(step_into(position, schema['data']['qty'][0]))
                 if qty == 0 and pdt not in self._products:
                     continue
                 if 'side' in schema:
                     eside = step_into(position, schema['side'])
-                    side = self._adapter(eside, ref_key='sides')
+                    side = self._adapter(eside, group='side')
                 # e.g. BINANCE_USDT only returns position size (signed qty)
                 elif 'size' in schema:
                     side = sign(step_into(position, schema['size']))
@@ -559,11 +602,11 @@ class BaseWebsocketApi(ABC):
             for order in res:
                 category = step_into(order, schema['category']) if 'category' in schema else ''
                 epdt = step_into(order, schema['pdt'])
-                pdt = self._adapter(epdt, ref_key=category)
+                pdt = self._adapter(epdt, group=category)
                 update = {}
                 for k, (ek, *sequence) in schema['data'].items():
-                    ref_key = k + 's' if k in ['tif', 'side'] else ''
-                    initial_value = self._adapter(step_into(order, ek), ref_key=ref_key)
+                    group = k + 's' if k in ['tif', 'side'] else ''
+                    initial_value = self._adapter(step_into(order, ek), group=group)
                     v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
                     update[k] = v
                 orders['data'][pdt].append(update)
@@ -588,11 +631,11 @@ class BaseWebsocketApi(ABC):
             for trade in res:
                 category = step_into(trade, schema['category']) if 'category' in schema else ''
                 epdt = step_into(trade, schema['pdt'])
-                pdt = self._adapter(epdt, ref_key=category)
+                pdt = self._adapter(epdt, group=category)
                 update = {}
                 for k, (ek, *sequence) in schema['data'].items():
-                    ref_key = k + 's' if k in ['tif', 'side'] else ''
-                    initial_value = self._adapter(step_into(trade, ek), ref_key=ref_key)
+                    group = k + 's' if k in ['tif', 'side'] else ''
+                    initial_value = self._adapter(step_into(trade, ek), group=group)
                     v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
                     update[k] = v
                 trades['data'][pdt].append(update)
@@ -629,4 +672,3 @@ class BaseWebsocketApi(ABC):
     @abstractmethod
     def _unsubscribe(self, ws, full_channels: list[str]):
         pass
-

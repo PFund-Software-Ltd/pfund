@@ -25,7 +25,7 @@ class IBApi(IBClient, IBWrapper):
     # EXTEND
     PTYPES_WITHOUT_TICK_BY_TICK_DATA = ['OPT']
     # product types which cannot subscribe to 'Last'/'AllLast' in reqTickByTickData()
-    PTYPES_WITHOUT_TICK_BY_TICK_LAST_DATA = ['OPT', 'CASH']
+    PTYPES_WITHOUT_TICK_BY_TICK_LAST_DATA = ['OPT', 'FX']
 
     def __init__(self, env, adapter):
         IBClient.__init__(self)
@@ -113,7 +113,7 @@ class IBApi(IBClient, IBWrapper):
         Since IB's subscription does not require channel name,
         this function creates channel only for internal use, clarity and consistency.
         """
-        pdt = product.pdt
+        pdt = product.name
         epdt = self._adapter(pdt)
         echannel = self._adapter(channel)
         if channel in PublicDataChannel:
@@ -248,7 +248,7 @@ class IBApi(IBClient, IBWrapper):
             else:
                 bids, asks = self._bids[pdt], None
                 _update(bids)
-            zmq_msg = (1, 1, (self.bkr, product.exch, product.pdt, bids, asks, None, kwargs))
+            zmq_msg = (1, 1, (self.bkr, product.exch, product.name, bids, asks, None, kwargs))
             self._zmq.send(*zmq_msg, receiver='engine')
         except:
             self.logger.exception(f'_update_orderbook exception ({position=} {operation=} {side=} {px=} {qty=} {kwargs=}):')

@@ -1,3 +1,10 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pfund.products import BaseProduct
+    from pfund.accounts import BaseAccount
+
 import time
 import logging
 import hashlib
@@ -8,8 +15,6 @@ from decimal import Decimal
 from typing import Literal
 
 from pfund.orders.order_statuses import *
-from pfund.products.product_base import BaseProduct
-from pfund.accounts.account_base import BaseAccount
 
 
 class BaseOrder:
@@ -36,7 +41,7 @@ class BaseOrder:
         self.bkr = product.bkr
         self.exch = product.exch
         self.tv = self.trading_venue = self.exch if self.bkr == 'CRYPTO' else self.bkr
-        self.pdt = product.pdt
+        self.pdt = product.name
         self.product = product
 
         if type(side) is str:

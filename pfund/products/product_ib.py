@@ -1,10 +1,9 @@
 from pfund.externals.ibapi.contract import Contract
-from pfund.products.product_tradfi import TradFiProduct
 from pfund.utils.utils import convert_to_uppercases
 from pfund.const.enums import TradFiProductType
 
 
-class IBProduct(TradFiProduct, Contract):
+class IBProduct(Contract):
     # product types that will contribute to your total assets
     _PRODUCT_TYPES_AS_ASSETS = ['CRYPTO', 'STK', 'ETF', 'OPT', 'FX', 'BOND', 'MTF', 'CMDTY']  
 

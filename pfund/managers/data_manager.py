@@ -1,21 +1,21 @@
 from __future__ import annotations
-
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
+    from pfund.products.product_base import BaseProduct
+    from pfund.types.data import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
+    from pfund.brokers.broker_live import LiveBroker
 
 import time
 from collections import defaultdict
 import importlib
 
 from pfund.datas.resolution import Resolution
-from pfund.datas import QuoteData, TickData, BarData
-from pfund.products.product_base import BaseProduct
 from pfund.managers.base_manager import BaseManager
 
 
 class DataManager(BaseManager):
-    def __init__(self, broker):
+    def __init__(self, broker: LiveBroker):
         super().__init__('data_manager', broker)
         # datas = {repr(product): {repr(resolution): data}}
         self._datas = defaultdict(dict)
@@ -74,20 +74,28 @@ class DataManager(BaseManager):
                     elif event == 'bar':
                         # for resampled data, the first bar is very likely incomplete
                         # so users can choose to skip it
-                        if not data.is_skip_first_bar():
+                        if not data.skip_first_bar():
                             strategy.update_bar(data, **kwargs)
                         data.clear()
             # TODO
             # else:
             #     self._zmq
 
-    def _create_time_based_data(self, product: BaseProduct, resolution: Resolution, **kwargs):
+    def _create_time_based_data(
+        self, 
+        product: BaseProduct, 
+        resolution: Resolution, 
+        quote_data: QuoteDataKwargs | None=None, 
+        tick_data: TickDataKwargs | None=None, 
+        bar_data: BarDataKwargs | None=None
+    ):
+        from pfund.datas import QuoteData, TickData, BarData
         if resolution.is_quote():
-            data = QuoteData(product, resolution, **kwargs)
+            data = QuoteData(product, resolution, **quote_data)
         elif resolution.is_tick():
-            data = TickData(product, resolution, **kwargs)
+            data = TickData(product, resolution, **tick_data)
         else:
-            data = BarData(product, resolution, **kwargs)
+            data = BarData(product, resolution, **bar_data)
         return data
     
     def _auto_resample(self, product: BaseProduct, resamples: dict[Resolution, Resolution], resolutions: list[Resolution], auto_resample: dict[str, bool], supported_timeframes_and_periods):
@@ -162,18 +170,35 @@ class DataManager(BaseManager):
         else:
             raise Exception(f'{product} {resolution} data not found')
 
-    def add_data(self, product: BaseProduct, resolutions: list[str], **kwargs) -> list[BaseData]:
+    def add_data(
+        self, 
+        product: BaseProduct, 
+        resolutions: list[str], 
+        resamples: dict[str, str] | None=None,
+        auto_resample=None,  # FIXME
+        quote_data: QuoteDataKwargs | None=None,
+        tick_data: TickDataKwargs | None=None,
+        bar_data: BarDataKwargs | None=None,
+    ) -> list[BaseData]:
         datas = []
         resolutions = [Resolution(resolution) for resolution in set(resolutions)]  # use set() to remove duplicates
         for resolution in resolutions:
             if not (data := self.get_data(product, resolution=resolution)):
-                data = self._create_time_based_data(product, resolution, **kwargs)
+                data = self._create_time_based_data(
+                    product, 
+                    resolution, 
+                    quote_data=quote_data, 
+                    tick_data=tick_data, 
+                    bar_data=bar_data
+                )
             self.set_data(product, resolution, data)
             datas.append(data)
         
         resamples = {Resolution(resamplee_resolution): Resolution(resampler_resolution) for resamplee_resolution, resampler_resolution in kwargs.get('resamples', {}).items()}
+        # FIXME
         default_auto_resample = {'by_official_resolution': True, 'by_highest_resolution': True}
-        auto_resample = kwargs.get('auto_resample', default_auto_resample)
+        auto_resample = auto_resample or default_auto_resample
+        # FIXME
         supported_timeframes_and_periods = kwargs.get('supported_timeframes_and_periods', None)
         resamples = self._auto_resample(product, resamples, resolutions, auto_resample, supported_timeframes_and_periods)
             

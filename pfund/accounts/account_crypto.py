@@ -3,13 +3,12 @@ from pfund.const.enums import Environment, Broker, CryptoExchange
 
 
 class CryptoAccount(BaseAccount):
-    def __init__(self, env: Environment, exch: str, key='', secret='', acc='', **kwargs):
+    def __init__(self, env: Environment, exch: str, key='', secret='', name='', **kwargs):
         self.exch = CryptoExchange[exch.upper()]
         if self.exch == CryptoExchange.BYBIT:
-            from pfund.exchanges.bybit.exchange import Exchange as Bybit
-            assert 'account_type' in kwargs and kwargs['account_type'].upper() in Bybit.SUPPORTED_ACCOUNT_TYPES, \
-            f"kwarg 'account_type' must be provided for exchange {self.exch}, {Bybit.SUPPORTED_ACCOUNT_TYPES=}"
-        super().__init__(env, Broker.CRYPTO, acc=acc, key=key, secret=secret, **kwargs)
+            from pfund import print_warning
+            print_warning('account type is "UNIFIED" for Bybit by default, please make sure it is set correctly on Bybit\'s website')
+        super().__init__(env, Broker.CRYPTO, name=name, key=key, secret=secret, **kwargs)
         if self.env in [Environment.PAPER, Environment.LIVE]:
             assert key, f'API `key` must be provided for {self.env} trading environment'
             assert secret, f'API `secret` must be provided for {self.env} trading environment'

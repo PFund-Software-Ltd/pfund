@@ -17,6 +17,11 @@ def what_is(alias: str) -> str | None:
         return aliases.get(alias, aliases.get(alias.upper(), None))
 
 
+print_error = lambda msg: print(f'\033[91m{msg}\033[0m')
+print_warning = lambda msg: print(f'\033[93m{msg}\033[0m')
+
+
+
 __version__ = version('pfund')
 __all__ = (
     '__version__',

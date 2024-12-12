@@ -111,7 +111,7 @@ class TradeEngine(BaseEngine):
             if broker.name == 'CRYPTO':
                 for exchange in broker.exchanges.values():
                     self.zmq_ports[exchange.name] = {'rest_api': _get_port()}
-                    if not exchange.is_use_private_ws_server():
+                    if not exchange.use_separate_private_ws_url():
                         self.zmq_ports[exchange.name]['ws_api'] = _get_port()
                     else:
                         self.zmq_ports[exchange.name]['ws_api'] = {'public': {}, 'private': {}}

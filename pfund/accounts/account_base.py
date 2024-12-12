@@ -9,11 +9,11 @@ class BaseAccount:
         cls.num += 1
         return str(cls.num)
     
-    def __init__(self, env: Environment, bkr: Broker, acc: str='', **kwargs):
+    def __init__(self, env: Environment, bkr: Broker, name: str='', **kwargs):
         self.env = env
         self.bkr = bkr
-        acc = acc or 'ACC-' + self.add_account_num()  # may have same oid if running multiple bots; must less than 36 chars for binance
-        self.name = self.acc = acc.upper()
+        name = name or 'ACC-' + self.add_account_num()  # may have same oid if running multiple bots; must less than 36 chars for binance
+        self.name = self.acc = name.upper()
         for k, v in kwargs.items():
             setattr(self, k, v)
         if not hasattr(self, 'strat'):

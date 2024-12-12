@@ -19,7 +19,7 @@ class CryptoPosition(BasePosition):
 
     def __init__(self, account, product):
         super().__init__(account, product)
-        self.multi = product.multi
+        self.multiplier = product.multiplier
         self._long_position = self.Position()
         self._short_position = self.Position()
 
@@ -85,7 +85,7 @@ class CryptoPosition(BasePosition):
         if self.is_empty():
             return Decimal(0)
         else:
-            return self.size * self.multi / (self.avg_px if self.is_inverse() else 1)
+            return self.size * self.multiplier / (self.avg_px if self.is_inverse() else 1)
 
     @property
     def linear_qty(self):

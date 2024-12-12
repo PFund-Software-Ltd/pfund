@@ -1,79 +1,101 @@
+from __future__ import annotations
+from typing import Any, Literal
+
+import os
 from decimal import Decimal
 
+from pfund.const.enums import CeFiProductType, CryptoExchange
+from pfund.utils.utils import load_yaml_file
+from pfund.products.product_base import get_product_class
+from pfund.const.paths import CACHE_PATH
 from pfund.products.product_base import BaseProduct
-from pfund.const.enums import CeFiProductType, CryptoMonthCode
 
 
-class CryptoProduct(BaseProduct):
-    _MATURITY_PRODUCT_TYPES = ['FUT', 'IFUT', 'OPT']
-
-    def __init__(
-        self, 
-        exch: str, 
-        base_currency: str, 
-        quote_currency: str, 
-        product_type: str,
-        *args,
-        **kwargs
-    ):
-        super().__init__('CRYPTO', exch, base_currency, quote_currency, product_type, *args, **kwargs)
-        assert self.product_type in CeFiProductType.__members__
-        # `args` will be joined by '_' to form a complete `name`, e.g. BTC_USDT_FUT_CM
-        self.name = self.pdt = '_'.join(self.name.split('_') + list(args))
-        # used by exchanges like bybit, okx, e.g., bybit has 4 categories ['linear', 'inverse', 'spot', 'option']
-        self.category = ''  
-        self.month_code = self._extract_month_code(args)
-        
-        # EXTEND: thsese are data/info/specs about this product, maybe add more useful data to it for convenience?
-        self.taker_fee = self.tfee = None
-        self.maker_fee = self.mfee = None
-        self.tick_size = self.tsize = None
-        self.lot_size = self.lsize = None
-        self.multiplier = self.multi = None
-
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-
-    def _extract_month_code(self, args):
-        if self.product_type in self._MATURITY_PRODUCT_TYPES and args:
-            month_code = args[0]
-            assert month_code in CryptoMonthCode.__members__, \
-            f'{self.exch} {self.pdt} month code is invalid, valid options are: {list(CryptoMonthCode.__members__)}'
-            return month_code
-        else:
-            return None
-
-    def is_crypto(self) -> bool:
-        return True
-
-    def is_spot(self) -> bool:
-        return (self.ptype == 'SPOT')
+def get_CryptoProduct(product_basis: str) -> type[BaseProduct]:
+    Product = get_product_class(product_basis)
     
-    def is_option(self) -> bool:
-        return (self.ptype == 'OPT')
+    class CryptoProduct(Product):
+        exch: CryptoExchange | str
+        type: CeFiProductType | str
+        category: str
+        tick_size: Decimal | None = None
+        lot_size: Decimal | None = None
+        
+        # EXTEND: may add taker_fee, maker_fee, multiplier
+        # but the current problem is these values can't be obtained from apis consistently across exchanges,
+        # and for fees, they can be different for different accounts,
+        # so for now let users set them manually in e.g. strategy's config
+        
+        # NOTE: take in exchange-specific arguments, not used for now
+        # kwargs: dict = Field(default_factory=dict)
 
-    def is_inverse(self) -> bool:
-        """Returns True if the product is an e.g. inverse perpetual contract (IPERP)"""
-        return (self.ptype in ['IPERP', 'IFUT'])
+        @classmethod
+        def get_required_specs(cls) -> set[str]:
+            '''
+            Get specifications such as 'expiration', 'strike_price'
+            '''
+            non_specs_required_fields = {
+                field_name for field_name, field in BaseProduct.model_fields.items()
+                if field.is_required()
+            }
+            return {
+                field_name for field_name, field in Product.model_fields.items()
+                if field.is_required() and field_name not in non_specs_required_fields
+            }
+            
+        def model_post_init(self, __context: Any):
+            super().model_post_init(__context)
+            if isinstance(self.exch, str):
+                self.exch = CryptoExchange[self.exch.upper()]
+            if isinstance(self.type, str):
+                self.type = CeFiProductType[self.type.upper()]
+            self.category = self.category.upper()
+            self._load_config()
+        
+        def __getattr__(self, name: str) -> Any:
+            if name in self.kwargs:
+                return self.kwargs[name]
+            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+            
+        def _load_config(self):
+            file_path = f'{CACHE_PATH}/{self.exch.value.lower()}/market_configs.yml'
+            if not os.path.exists(file_path):
+                return
+            config = load_yaml_file(file_path)[self.category]
+            if self.name not in config:
+                raise ValueError(
+                    f'Product {self.name} not found in {self.exch} market configs:\n'
+                    f'This could mean either:\n'
+                    f'  - The product {self.name} does not exist on {self.exch}\n'
+                    f'  - Your market configs are outdated\n'
+                    f'Solutions:\n'
+                    f'  - Check if the product exists on {self.exch}\n'
+                    f'  - Check if there is a typo in USD, USDC or USDT\n'
+                    f'  - To update configs, reinitialize the exchange with:\n'
+                    f'    exchange(refetch_market_configs=True) \n'
+                )
+            self.tick_size = Decimal(config[self.name]['tick_size'])
+            self.lot_size = Decimal(config[self.name]['lot_size'])
 
-    def load_configs(self, configs):
-        # load product specs, including fees, multiplier etc.
-        specs = configs.load_config_section('specs')
-        ptype_specs = specs[self.ptype] if not self.month_code else specs[self.ptype][self.month_code]
-        self.tfee = Decimal(str(configs.load_all_and_except_config(ptype_specs['tfee'], self.ptype, self.pdt)))
-        self.mfee = Decimal(str(configs.load_all_and_except_config(ptype_specs['mfee'], self.ptype, self.pdt)))
-        self.multi = Decimal(str(configs.load_all_and_except_config(ptype_specs['multi'], self.ptype, self.pdt)) if 'multi' in ptype_specs else 1)
-        # load tick_sizes and lot_sizes
-        tick_sizes = configs.read_config('_'.join(['tick_sizes', self.category]))
-        lot_sizes = configs.read_config('_'.join(['lot_sizes', self.category]))
-        self.tsize = Decimal(str(tick_sizes[0][self.pdt.upper()]))
-        self.lsize = Decimal(str(lot_sizes[0][self.pdt.upper()]))
-
-    def get_fee(self, fee_type, in_bps=False):
-        if fee_type == 'taker':
-            fee = self.tfee
-        elif fee_type == 'maker':
-            fee = self.mfee
-        if not in_bps:
-            fee /= 10000
-        return fee
+        def get_fee(self, fee_type: Literal['taker', 'maker'], in_bps=False):
+            if fee_type == 'taker':
+                fee = self.taker_fee
+            elif fee_type == 'maker':
+                fee = self.maker_fee
+            if not in_bps:
+                fee /= 10000
+            return fee
+        
+        def is_linear(self) -> bool:
+            return (self.type in [CeFiProductType.PERP, CeFiProductType.FUT])
+        
+        def is_inverse(self) -> bool:
+            return (self.type in [CeFiProductType.IPERP, CeFiProductType.IFUT])
+        
+        def is_perpetual(self) -> bool:
+            return (self.type in [CeFiProductType.PERP, CeFiProductType.IPERP])
+        
+        def is_spot(self) -> bool:
+            return (self.type == CeFiProductType.SPOT)
+        
+    return CryptoProduct

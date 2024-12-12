@@ -2,8 +2,6 @@
 Conceptually, this is a combination of broker_crypto.py + exchange_base.py in crypto version
 """
 from pfund.adapter import Adapter
-from pfund.config.configuration import Configuration
-from pfund.const.paths import PROJ_CONFIG_PATH
 from pfund.products import IBProduct
 from pfund.accounts import IBAccount
 from pfund.orders import IBOrder
@@ -34,7 +32,7 @@ class IBBroker(LiveBroker):
     @staticmethod
     def derive_exch(pdt: str):
         bccy, qccy, ptype, *args = IBProduct.parse_product_name(pdt)
-        if ptype == 'CASH':
+        if ptype == 'FX':
             exch = 'IDEALPRO'
         elif ptype == 'CRYPTO':
             raise Exception(f'when product type is {ptype}, `exch` must be provided in add_data(exch=...)')
@@ -46,7 +44,7 @@ class IBBroker(LiveBroker):
     @staticmethod
     def _standardize_ptype(ptype: str):
         if ptype in ['CASH', 'CURRENCY', 'FX', 'FOREX', 'SPOT']:
-            ptype = 'CASH'
+            ptype = 'FX'
         elif ptype in ['CRYPTO', 'CRYPTOCURRENCY']:
             ptype = 'CRYPTO'
         elif ptype in ['FUT', 'FUTURE']:
@@ -68,10 +66,14 @@ class IBBroker(LiveBroker):
     def add_custom_data(self):
         pass
     
-    def add_data(self, pdt: str, resolutions: list[str] | str, exch: str='', **kwargs):
-        exch = exch or self.derive_exch(pdt)
-        exch, pdt = exch.upper(), pdt.upper()
-        product: IBProduct = self.add_product(exch, pdt, **kwargs)
+    def add_data(self, product_basis: str, resolutions: list[str] | str, exch: str='', **kwargs):
+        '''
+        Args:
+            product_basis: defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
+        '''
+        exch = exch or self.derive_exch(product_basis)
+        exch, product_basis = exch.upper(), product_basis.upper()
+        product: IBProduct = self.add_product(exch, product_basis, **kwargs)
         datas = self.data_manager.add_data(product, resolutions, **kwargs)
         for data in datas:
             self.add_data_channel(data, **kwargs)
@@ -103,8 +105,6 @@ class IBBroker(LiveBroker):
 
     def add_product(self, exch: str, pdt: str, **kwargs) -> IBProduct:
         exch, pdt = exch.upper(), pdt.upper()
-        bccy, qccy, ptype, *args = IBProduct.parse_product_name(pdt)
-        pdt = IBProduct.create_product_name(bccy, qccy, ptype, *args, **kwargs)
         if not (product := self.get_product(exch=exch, pdt=pdt)):
             product = self.create_product(exch, pdt, **kwargs)
             self._products[exch][product.name] = product
@@ -115,16 +115,16 @@ class IBBroker(LiveBroker):
     def get_account(self, acc: str) -> IBAccount | None:
         return self._accounts[self.bkr].get(acc.upper(), None)
 
-    def add_account(self, host: str='', port: int=None, client_id: int=None, acc: str='', **kwargs) -> IBAccount:
-        if not (account := self.get_account(acc)):
-            account = IBAccount(self.env, host=host, port=port, client_id=client_id, acc=acc, **kwargs)
+    def add_account(self, host: str='', port: int=None, client_id: int=None, name: str='', **kwargs) -> IBAccount:
+        if not (account := self.get_account(name)):
+            account = IBAccount(self.env, host=host, port=port, client_id=client_id, name=name, **kwargs)
             self._accounts[self.bkr][account.name] = account
             self.account = account
             self._api.add_account(account)
             self.logger.debug(f'added {account=}')
         else:
             # TODO
-            if account.name != acc.upper():
+            if account.name != name.upper():
                 raise Exception(f'Only one primary account is supported and account {self.account} is already set up')
         return account
 

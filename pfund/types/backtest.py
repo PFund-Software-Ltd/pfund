@@ -8,4 +8,4 @@ class BacktestKwargs(TypedDict, total=False):
     start_date: str
     end_date: str
     rollback_period: str
-    from_storage: tSTORAGE | None
+    from_storage: tSTORAGE | None=None

@@ -1,6 +1,5 @@
 from __future__ import annotations
-
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
     from pfund.products.product_base import BaseProduct
@@ -8,7 +7,7 @@ if TYPE_CHECKING:
 
 from pfund.brokers.broker_base import BaseBroker
 from pfund.managers import ConnectionManager, DataManager, OrderManager, PortfolioManager, RiskManager
-from pfund.const.enums import Broker
+from pfund.const.enums import Broker, PublicDataChannel, PrivateDataChannel, DataChannelType
 
 
 class LiveBroker(BaseBroker):
@@ -78,7 +77,33 @@ class LiveBroker(BaseBroker):
             # remove listener for private events, e.g. order, trade, balance, position
             for manager in [self.rm, self.cm, self.om, self.pm]:
                 manager._remove_listener(listener, listener_key)
-
+    
+    def _create_public_data_channel(self, data: BaseData) -> PublicDataChannel | None:
+        if not data.is_time_based():
+            raise NotImplementedError('Only time-based data is supported for now')
+        if data.is_resamplee():
+            return None
+        timeframe = data.timeframe
+        if timeframe.is_quote():
+            channel = PublicDataChannel.ORDERBOOK
+        elif timeframe.is_tick():
+            channel = PublicDataChannel.TRADEBOOK
+        else:
+            channel = PublicDataChannel.KLINE
+        return channel
+    
+    def _create_data_channel_type(
+        self, 
+        channel: PublicDataChannel | PrivateDataChannel | str,
+        channel_type: Literal['public', 'private']=''
+    ) -> DataChannelType:
+        if channel in [PublicDataChannel, PrivateDataChannel]:
+            channel_type = DataChannelType.PUBLIC if channel in PublicDataChannel else DataChannelType.PRIVATE
+        else:
+            assert channel_type, 'channel_type "public" or "private" must be provided'
+            channel_type = DataChannelType[channel_type.upper()]
+        return channel_type
+    
     def distribute_msgs(self, channel, topic, info):
         if channel == 1:
             self.dm.handle_msgs(topic, info)

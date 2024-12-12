@@ -1,3 +1,9 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.datas.resolution import Resolution
+    from pfund.products.product_base import BaseProduct
+
 import time
 from collections import deque
 
@@ -6,8 +12,10 @@ from pfund.utils.utils import convert_ts_to_dt
 
 
 class QuoteData(TimeBasedData):
-    def __init__(self, product, resolution, **kwargs):
+    def __init__(self, product: BaseProduct, resolution: Resolution, orderbook_depth: int=1):
         super().__init__(product, resolution)
+        self._orderbook_depth = orderbook_depth
+        self._orderbook_level = resolution.orderbook_level
         self.bids = ()
         self.asks = ()
         self.ts = 0.0
@@ -42,5 +50,14 @@ class QuoteData(TimeBasedData):
     @property
     def dt(self):
         return convert_ts_to_dt(self.ts) if self.ts else None
+    
+    @property
+    def orderbook_level(self):
+        return self._orderbook_level
+    
+    @property
+    def orderbook_depth(self):
+        return self._orderbook_depth
+    
     
 OrderBook = QuoteData

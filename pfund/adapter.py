@@ -1,64 +1,64 @@
-import yaml
-import os
+from typing import Literal
+
+from collections import defaultdict
+
+from pfund.utils.utils import load_yaml_file
+
+
+# NOTE: strings could be product categories, 
+# e.g. 'spot', 'linear', 'inverse', 'option', depends on exchange
+tADAPTER_GROUP = str | Literal[
+    # defined in adapter.yml
+    'asset',
+    'product_type',
+    'option_type',
+    'order_type',
+    'side',
+    'tif',
+    'order_status',
+    'offset',
+    'price_direction',
+    'channel',
+    'resolution',
+] 
 
 
 class Adapter:
-    def __init__(self, config_path, adapter_dict):
-        self.config_path = config_path
-        self._adapter_dict = adapter_dict
-        self._adapter = {}
-        self._ref_keys = []
-        for adapt_type in adapter_dict:
-            is_one_way = True if '>' in adapt_type else False
-            # need to handle tifs individually because it may collide with ccy names, e.g. GTC can be a coin
-            ref_key = adapt_type if adapt_type in ['tifs', 'sides', 'ptypes'] else ''
-            if ref_key:
-                self._ref_keys.append(ref_key)
-            for k,v in adapter_dict[adapt_type].items():
-                self.update(k, v, ref_key=ref_key, is_one_way=is_one_way)
-        self.load_pdt_matchings()
+    def __init__(self, file_path: str):
+        self._adapter = defaultdict(dict)
+        self._load_config(file_path)
+    
+    @property
+    def groups(self) -> list[str]:
+        return list(self._adapter.keys())
+    
+    def _load_config(self, file_path: str):
+        config: dict = load_yaml_file(file_path)
+        for group in config:
+            group = group.lower()
+            for k, v in config[group].items():
+                self.add_mapping(group, k, v)
 
-    def build_internal_pdt_format(self, bccy, qccy, ptype):
-        pdt = '_'.join([bccy, qccy, ptype])
-        return pdt
+    def add_mapping(self, group: tADAPTER_GROUP, k: str, v: str):
+        group = group.lower()
+        self._adapter[group][k] = v
+        self._adapter[group][v] = k
 
-    def load_pdt_matchings(self):
-        config_name = 'pdt_matchings'
-        for file_name in os.listdir(self.config_path):
-            if not file_name.startswith(config_name):
+    def __call__(self, key: str, group: tADAPTER_GROUP='', strict: bool=False) -> str | tuple:
+        '''
+        Args:
+            strict: if False, it will search for the same key in other groups if group is not specified
+        '''
+        group = group.lower()
+        if strict:
+            assert group, '"group" cannot be empty when strict=True'
+            groups = [group]
+        else:
+            groups = [group] if group else list(self._adapter.keys())
+
+        for group in groups:
+            if group not in self._adapter:
                 continue
-            file_splits = file_name.split('_')
-            if len(file_splits) > 2:
-                category = file_splits[-1].split('.')[0]
-            else:
-                category = ''
-            with open(self.config_path + '/' + file_name, 'r') as f:
-                if pdt_macthings := yaml.safe_load(f):
-                    for pdt, epdt in pdt_macthings.items():
-                        self.update(pdt, epdt, ref_key=category)
-                        if category:
-                            self._ref_keys.append(category)
-
-    def update(self, k, v, ref_key='', is_one_way=False):
-        if not ref_key:
-            self._adapter[k] = v
-            if not is_one_way:
-                self._adapter[v] = k
-        else:
-            if ref_key not in self._adapter:
-                self._adapter[ref_key] = {}
-            self._adapter[ref_key][k] = v
-            if not is_one_way:
-                self._adapter[ref_key][v] = k
-
-    def __call__(self, *keys, ref_key='') -> str | tuple:
-        if not ref_key:
-            adapted_keys = tuple(self._adapter.get(key, key) for key in keys)
-        else:
-            adapted_keys = tuple(self._adapter[ref_key].get(key, key) if ref_key in self._adapter else key for key in keys)
-        if len(keys) == 1:
-            adapted_keys = adapted_keys[0]
-        return adapted_keys
-
-    def __str__(self):
-        return str(self._adapter)
+            if key in self._adapter[group]:
+                return self._adapter[group][key]
+        return key

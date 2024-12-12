@@ -1,16 +1,13 @@
-from enum import StrEnum
+from enum import IntEnum
 
 
-class Timeframe(StrEnum):
-    QUOTE_L1 = l1 = 'QUOTE_L1'
-    QUOTE_L2 = l2 = 'QUOTE_L2'
-    QUOTE_L3 = l3 = 'QUOTE_L3'
-    QUOTE = q = 'QUOTE'
-    TICK = t = 'TICK'
-    SECOND = s = 'SECOND'
-    MINUTE = m = 'MINUTE'
-    HOUR = h = 'HOUR'
-    DAY = d = 'DAY'
-    WEEK = w = 'WEEK'
-    MONTH = M = 'MONTH'
-    YEAR = y = 'YEAR'
+class TimeframeUnits(IntEnum):
+    QUOTE = q = -2
+    TICK = t = -1
+    SECOND = s = 1
+    MINUTE = m = 60
+    HOUR = h = 60 * 60
+    DAY = d = 60 * 60 * 24
+    WEEK = w = 60 * 60 * 24 * 7  # REVIEW: 7 is not accurate
+    MONTH = M = 60 * 60 * 24 * 30  # REVIEW: 30 is not accurate
+    YEAR = y = 60 * 60 * 24 * 365  # REVIEW: 365 is not accurate

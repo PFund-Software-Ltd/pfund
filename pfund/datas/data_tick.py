@@ -1,3 +1,9 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.datas.resolution import Resolution
+    from pfund.products.product_base import BaseProduct
+
 import time
 from collections import deque
 
@@ -6,7 +12,7 @@ from pfund.utils.utils import convert_ts_to_dt
 
 
 class TickData(TimeBasedData):
-    def __init__(self, product, resolution, **kwargs):
+    def __init__(self, product: BaseProduct, resolution: Resolution, **kwargs):
         super().__init__(product, resolution)
         self.px = self.price = 0.0
         self.qty = self.quantity = self.volume = 0.0

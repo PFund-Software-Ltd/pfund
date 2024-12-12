@@ -1,13 +1,18 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pfund.products.product_base import BaseProduct
+    from pfund.accounts import CryptoAccount
+
 from pfund.orders.order_base import BaseOrder
-from pfund.products import CryptoProduct
-from pfund.accounts import CryptoAccount
 
 
 class CryptoOrder(BaseOrder):
     def __init__(
             self, 
             account: CryptoAccount,
-            product: CryptoProduct,
+            product: BaseProduct,
             side: int | str,
             qty: float | str,
             px=None,

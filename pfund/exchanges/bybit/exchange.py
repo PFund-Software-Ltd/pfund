@@ -1,111 +1,117 @@
 from __future__ import annotations
-
-import datetime
-from decimal import Decimal
-from pathlib import Path
-
 from typing import Callable, Any, TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from websocket import WebSocket
+    from pfund.types.literals import tENVIRONMENT
+    from pfund.products import BaseProduct
 
-from pfund.const.enums import Environment
+import datetime
+from enum import StrEnum
+from decimal import Decimal
+from pathlib import Path
+
+from pfund.const.enums import CeFiProductType
 from pfund.exchanges.exchange_base import BaseExchange
 from pfund.accounts import CryptoAccount
-from pfund.products import CryptoProduct
 from pfund.orders import CryptoOrder
 
 
-Category = Literal['linear', 'inverse', 'spot', 'option']
+tBYBIT_PRODUCT_CATEGORY = Literal['LINEAR', 'INVERSE', 'SPOT', 'OPTION']
+class BybitProductCategory(StrEnum):
+    LINEAR = 'LINEAR'
+    INVERSE = 'INVERSE'
+    SPOT = 'SPOT'
+    OPTION = 'OPTION'
 
 
 class Exchange(BaseExchange):
-    SUPPORTED_CATEGORIES = ['linear', 'inverse', 'spot', 'option']
-    SUPPORTED_ACCOUNT_TYPES = ['UNIFIED']
-    
     # NOTE, bybit only supports place_batch_orders for category `options`
     # TODO, come back to this if bybit supports more
     # SUPPORT_PLACE_BATCH_ORDERS = True
     # SUPPORT_CANCEL_BATCH_ORDERS = True
-    
-    PTYPE_TO_CATEGORY = {
-        'PERP': 'linear',
-        'FUT': 'linear',
-        'IPERP': 'inverse',
-        'IFUT': 'inverse',
-        'SPOT': 'spot',
-        'OPT': 'option',
-    }
 
+    USE_WS_PLACE_ORDER = True
+    USE_WS_CANCEL_ORDER = True
+     
     _MAX_NUM_OF_PLACE_BATCH_ORDERS = 20
     _MAX_NUM_OF_CANEL_BATCH_ORDERS = 20
 
-    def __init__(self, env: Environment):
+    def __init__(self, env: tENVIRONMENT, refetch_market_configs=False):
         exch = Path(__file__).parent.name
-        super().__init__(env, exch)
+        super().__init__(env, exch, refetch_market_configs=refetch_market_configs)
     
-    def _create_pdt_matchings_config(
-            # general to exchanges
-            self, 
-            markets,
-            # specific to bybit
-            category: Category
-        ):
-        schema = {
-            'pdt': 'symbol',
-            'bccy': 'baseCoin',
-            'qccy': 'quoteCoin',
-            'ptype': None,
-        }
-        category = category.lower()
-
-        if category in ['linear', 'inverse']:
-            schema['ptype'] = 'contractType'
-        elif category == 'spot':
-            # assign internal ptype directly since ptype is not provided in bybit's msg
-            schema['ptype'] = 'SPOT'
-        elif category == 'option':
-            # assign internal ptype directly since ptype is not provided in bybit's msg
-            schema['ptype'] = 'OPT'
-        return super()._create_pdt_matchings_config(schema, markets, category=category)
-
-    def _create_tick_sizes_and_lot_sizes_config(
-            # general to exchanges
-            self, 
-            markets, 
-            # specific to bybit
-            category: Category
-        ):
-        schema = {
-            'pdt': 'symbol',
-            'tick_size': ['priceFilter', 'tickSize'], 
-            'lot_size': None,
-        }
-        if category.lower() != 'spot':
-            schema['lot_size'] = ['lotSizeFilter', 'qtyStep']
-        else:
-            schema['lot_size'] = ['lotSizeFilter', 'basePrecision']
-        super()._create_tick_sizes_and_lot_sizes_config(schema, markets, tag=category)
+    @staticmethod
+    def _derive_product_category(product_basis: str) -> str:
+        _, _, ptype = product_basis.split('_')
+        ptype = CeFiProductType[ptype.upper()]
+        if ptype == CeFiProductType.SPOT:
+            return BybitProductCategory.SPOT.value
+        elif ptype in [CeFiProductType.PERP, CeFiProductType.FUT]:
+            return BybitProductCategory.LINEAR.value
+        elif ptype in [CeFiProductType.IPERP, CeFiProductType.IFUT]:
+            return BybitProductCategory.INVERSE.value
+        elif ptype == CeFiProductType.OPT:
+            return BybitProductCategory.OPTION.value
+        
+    # NOTE: logically it is a function of "BybitProduct", which doesn't exist, but for simplicity it is defined here
+    def _map_internal_to_external_product_name(
+        self, 
+        base_asset: str, 
+        quote_asset: str, 
+        ptype: CeFiProductType | str,
+        specs: dict | None=None
+    ) -> str:
+        from pfund.products.product_future import FutureProduct
+        ebase_asset = self.adapter(base_asset, group='asset')
+        equote_asset = self.adapter(quote_asset, group='asset')
+        if isinstance(ptype, str):
+            ptype = CeFiProductType[ptype.upper()]
+        specs = specs or {}
+        if ptype == CeFiProductType.PERP:
+            if equote_asset == 'USDC':
+                epdt = ebase_asset + ptype
+            else:
+                epdt = ebase_asset + equote_asset
+        elif ptype == CeFiProductType.IPERP:
+            assert equote_asset == 'USD', 'only USD-denominated inverse perpetual contracts are supported'
+            epdt = ebase_asset + equote_asset
+        elif ptype == CeFiProductType.SPOT:
+            epdt = ebase_asset + equote_asset
+        elif ptype == CeFiProductType.FUT:
+            # epdt = e.g. BTC-13DEC24
+            expiration = specs['expiration'].strftime("%d%b%y")
+            epdt = '-'.join([ebase_asset, expiration])
+        elif ptype == CeFiProductType.IFUT:
+            # epdt = e.g. BTCUSDH25
+            assert equote_asset == 'USD', 'only USD-denominated inverse perpetual contracts are supported'
+            contract_code = FutureProduct._derive_contract_code(specs['expiration'])
+            epdt = ebase_asset + equote_asset + contract_code
+        elif ptype == CeFiProductType.OPT:
+            expiration = specs['expiration'].strftime("%d%b%y")
+            option_type = specs['option_type'][0]
+            strike_price = str(int(specs['strike_price']))
+            epdt = '-'.join([ebase_asset, expiration, strike_price, option_type])
+        return epdt
+    
 
     '''
     Functions using REST API
     TODO EXTEND
     '''
-    def get_markets(
-            # general to exchanges
-            self, 
-            # specific to bybit
-            category: Category
-        ):
-        schema = {'result': ['result', 'list']}
-        params = {'category': category}
-        return super().get_markets(schema, params=params, is_write_samples=False)
+    def get_markets(self, category: tBYBIT_PRODUCT_CATEGORY='') -> dict | None:
+        categories = [category] if category else [category.value for category in BybitProductCategory]
+        markets_per_category = {}
+        for category in categories:
+            if (markets := super().get_markets(category)) is None:
+                return None
+            markets_per_category[category] = markets
+        return markets_per_category
 
     def get_balances(self, account: CryptoAccount, ccy: str='', **kwargs) -> dict[str, dict]:
         schema = {
             # result->list will return a useless list type containing a dict, 
             # need index '0' to get the real result
-            # TODO, need to make sure it has really only one result 
-            # so that using index 0 is safe
+            # TODO, need to make sure it has really only one result so that using index 0 is safe
             'result': ['result', 'list', 0, 'coin'],
             'ts': 'time',
             'ts_adj': 1/10**3,  # since timestamp in bybit is in mts
@@ -127,7 +133,7 @@ class Exchange(BaseExchange):
             params=params,
         )
 
-    def get_positions(self, account: CryptoAccount, pdt: str='', category: Category='', **kwargs) -> dict | None:
+    def get_positions(self, account: CryptoAccount, pdt: str='', category: tBYBIT_PRODUCT_CATEGORY='', **kwargs) -> dict | None:
         schema = {
             'result': ['result', 'list'],
             'ts': 'time',
@@ -144,17 +150,17 @@ class Exchange(BaseExchange):
         }
         products = [self.get_product(pdt)] if pdt else list(self.products.values())
         positions = {'ts': 0.0, 'data': {}}
-        categories = [category] if category else self.categories
+        categories = [category] if category else self._categories
         products_per_category = {category: [product for product in products if product.category == category] for category in categories}
         for category, products in products_per_category.items():
             if pdt:
-                iterator = pdts = set(product.pdt for product in products)
+                iterator = pdts = set(product.name for product in products)
             else:
                 iterator = qccys = set(product.qccy for product in products)
             for element in iterator:
                 params = {'category': category}
                 if pdt:
-                    epdt = self.adapter(element, ref_key=category)
+                    epdt = self.adapter(element, group=category)
                     params['symbol'] = epdt
                 else:
                     eqccy = self.adapter(element)
@@ -175,7 +181,7 @@ class Exchange(BaseExchange):
                     positions = categorized_positions
         return positions
 
-    def get_orders(self, account: CryptoAccount, pdt: str='', category: Category='', **kwargs):
+    def get_orders(self, account: CryptoAccount, pdt: str='', category: tBYBIT_PRODUCT_CATEGORY='', **kwargs):
         schema = {
             'result': ['result', 'list'],
             'ts': 'time',
@@ -199,17 +205,17 @@ class Exchange(BaseExchange):
         }
         products = [self.get_product(pdt)] if pdt else list(self.products.values())
         orders = {'ts': 0.0, 'data': {}, 'source': None}
-        categories = [category] if category else self.categories
+        categories = [category] if category else self._categories
         products_per_category = {category: [product for product in products if product.category == category] for category in categories}
         for category, products in products_per_category.items():
             if pdt:
-                iterator = pdts = set(product.pdt for product in products)
+                iterator = pdts = set(product.name for product in products)
             else:
                 iterator = qccys = set(product.qccy for product in products)
             for element in iterator:
                 params = {'category': category}
                 if pdt:
-                    epdt = self.adapter(element, ref_key=category)
+                    epdt = self.adapter(element, group=category)
                     params['symbol'] = epdt
                 else:
                     eqccy = self.adapter(element)
@@ -231,7 +237,7 @@ class Exchange(BaseExchange):
                     orders = categorized_orders
         return orders
 
-    def get_trades(self, account: CryptoAccount, pdt: str='', category: Category='',
+    def get_trades(self, account: CryptoAccount, pdt: str='', category: tBYBIT_PRODUCT_CATEGORY='',
                    start_time: str|float=None, end_time: str|float=None,
                    is_funding_considered_as_trades=False, **kwargs):
         """
@@ -280,11 +286,11 @@ class Exchange(BaseExchange):
         start_time = int(start_date.timestamp() * 1000)  # bybit requires mts
 
         trades = {'ts': 0.0, 'data': {}, 'source': None}
-        categories = [category] if category else self.categories
+        categories = [category] if category else self._categories
         for category in categories:
             params = {'category': category, 'startTime': start_time, 'endTime': end_time}
             if pdt:
-                epdt = self.adapter(pdt, ref_key=category)
+                epdt = self.adapter(pdt, group=category)
                 params['symbol'] = epdt
             if kwargs:
                 params.update(kwargs)
@@ -315,7 +321,7 @@ class Exchange(BaseExchange):
                 trades = categorized_trades
         return trades
 
-    def place_order(self, account: CryptoAccount, product: CryptoProduct, order: CryptoOrder):
+    def place_order(self, account: CryptoAccount, product: BaseProduct, order: CryptoOrder):
         schema = {
             'result': 'result',
             'ts': 'time',
@@ -327,8 +333,8 @@ class Exchange(BaseExchange):
         }
         params = {
             'category': product.category, 
-            'symbol': self.adapter(order.pdt, ref_key=product.category),
-            'side': self.adapter(order.side, ref_key='sides'),
+            'symbol': self.adapter(order.pdt, group=product.category),
+            'side': self.adapter(order.side, group='sides'),
             'orderType': self.adapter(order.type),
             'qty': str(order.qty),
             'timeInForce': order.tif,
@@ -357,7 +363,7 @@ class Exchange(BaseExchange):
         update['status'] = 'O---'
         return update
 
-    def cancel_order(self, account: CryptoAccount, product: CryptoProduct, order: CryptoOrder):
+    def cancel_order(self, account: CryptoAccount, product: BaseProduct, order: CryptoOrder):
         schema = {
             'result': 'result',
             'ts': 'time',
@@ -369,7 +375,7 @@ class Exchange(BaseExchange):
         }
         params = {
             'category': product.category, 
-            'symbol': self.adapter(order.pdt, ref_key=product.category),
+            'symbol': self.adapter(order.pdt, group=product.category),
             'orderLinkId': order.oid,
             'orderId': order.eoid,
         }
@@ -383,12 +389,12 @@ class Exchange(BaseExchange):
 
     # NOTE, bybit only supports place_batch_orders for category `options`
     # TODO, come back to this if bybit supports more
-    def place_batch_orders(self, account: CryptoAccount, product: CryptoProduct, orders: list[CryptoOrder]):
+    def place_batch_orders(self, account: CryptoAccount, product: BaseProduct, orders: list[CryptoOrder]):
         assert len(orders) <= self._MAX_NUM_OF_PLACE_BATCH_ORDERS
 
     # NOTE, bybit only supports cancel_batch_orders for category `options`
     # TODO, come back to this if bybit supports more
-    def cancel_batch_orders(self, account: CryptoAccount, product: CryptoProduct, orders: list[CryptoOrder]):
+    def cancel_batch_orders(self, account: CryptoAccount, product: BaseProduct, orders: list[CryptoOrder]):
         assert len(orders) <= self._MAX_NUM_OF_CANCEL_BATCH_ORDERS
 
 

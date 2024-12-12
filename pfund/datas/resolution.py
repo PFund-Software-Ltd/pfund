@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import re
 
-from pfund.datas.timeframe import Timeframe, TimeframeUnits
-from pfund.const.enums import Timeframe as TimeframeEnum
+from pfund.datas.timeframe import Timeframe
+from pfund.const.enums import TimeframeUnits
 
 
 class Resolution:
@@ -27,11 +27,11 @@ class Resolution:
         assert self.period > 0
         self.timeframe = Timeframe(timeframe)
         if self.is_quote():
-            default_orderbook_level = 'L1'
-            self.orderbook_level = orderbook_level[0].upper() if orderbook_level else default_orderbook_level
-            print("\033[1m" + f"Warning: {resolution=} is missing orderbook level, defaulting to {default_orderbook_level}" + "\033[0m")
+            default_orderbook_level = 1
+            self.orderbook_level = int(orderbook_level[0][-1]) if orderbook_level else default_orderbook_level
+            print("\033[1m" + f"Warning: {resolution=} is missing orderbook level, defaulting to L{default_orderbook_level}" + "\033[0m")
         else:
-            self.orderbook_level = ''
+            self.orderbook_level = None
 
     def _standardize(self, resolution: str) -> str:
         '''Standardize resolution
@@ -42,7 +42,7 @@ class Resolution:
             timeframe = 'M'
         else:
             timeframe = timeframe[0].lower()
-        assert timeframe in TimeframeEnum.__members__, f'{timeframe=} ({resolution=}) is not supported'
+        assert timeframe in TimeframeUnits.__members__, f'{timeframe=} ({resolution=}) is not supported'
         standardized_resolution = period + timeframe
         return standardized_resolution
 
@@ -53,6 +53,15 @@ class Resolution:
         else:
             level = 1
         return self.period * unit.value * level
+
+    def is_quote_l1(self):
+        return self.orderbook_level == 1
+
+    def is_quote_l2(self):
+        return self.orderbook_level == 2
+
+    def is_quote_l3(self):
+        return self.orderbook_level == 3
 
     def is_quote(self):
         return self.timeframe.is_quote()

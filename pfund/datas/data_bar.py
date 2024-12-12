@@ -1,3 +1,9 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.datas.resolution import Resolution
+    from pfund.products.product_base import BaseProduct
+
 import sys
 import logging
 
@@ -10,10 +16,10 @@ logger = logging.getLogger('data_manager')
 
 
 class Bar:
-    def __init__(self, product, resolution, shift: int=0):
+    def __init__(self, product: BaseProduct, resolution: Resolution, shift: int=0):
         self.bkr = product.bkr
         self.exch = product.exch
-        self.pdt = product.pdt
+        self.pdt = product.name
         self.product = product
         self.resolution = resolution
         self.period = resolution.period
@@ -133,15 +139,15 @@ class Bar:
 
 
 class BarData(TimeBasedData):
-    def __init__(self, product, resolution: Resolution, **kwargs):
+    def __init__(self, product, resolution: Resolution, shifts: dict[str, int] | None=None, skip_first_bar: bool=True):
         super().__init__(product, resolution)
-        if 'shifts' in kwargs and repr(resolution) in kwargs['shifts']:
-            shift = kwargs['shifts'][repr(resolution)]
+        if shifts and repr(resolution) in shifts:
+            shift = shifts[repr(resolution)]
         else:
             shift = 0
         self._bar = Bar(product, resolution, shift=shift)
         self._timeframe = self._bar.timeframe
-        self._is_skip_first_bar = kwargs.get('is_skip_first_bar', True)
+        self._skip_first_bar = skip_first_bar
 
     def __getattr__(self, attr):
         if '_bar' in self.__dict__:
@@ -151,10 +157,10 @@ class BarData(TimeBasedData):
     
     # for resampled data, the first bar is very likely incomplete
     # so users can choose to skip it
-    def is_skip_first_bar(self):
-        is_skip_first_bar = self._is_skip_first_bar
-        self._is_skip_first_bar = False
-        return is_skip_first_bar
+    def skip_first_bar(self) -> bool:
+        skip_first_bar = self._skip_first_bar
+        self._skip_first_bar = False
+        return skip_first_bar
 
     def on_bar(self, o, h, l, c, v, ts, is_volume_aggregated=False, is_backfill=False, **kwargs):
         self._bar.update(o, h, l, c, v, ts, is_volume_aggregated)

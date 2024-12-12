@@ -21,8 +21,8 @@ class IBPosition(BasePosition):
 
     def __init__(self, account, product):
         super().__init__(account, product)
-        # if true, it is a virtual position, e.g. USD_CAD_CASH = +1 (bought 1 USD and sold `x` CAD)
-        self._is_virtual = True if product.ptype in ['CRYPTO', 'CASH'] else False
+        # if true, it is a virtual position, e.g. USD_CAD_FX = +1 (bought 1 USD and sold `x` CAD)
+        self._is_virtual = True if product.ptype in ['CRYPTO', 'FX'] else False
         if product.is_asset() and not self._is_virtual:
             self._is_security = True
         else:

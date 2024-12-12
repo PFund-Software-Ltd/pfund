@@ -1,3 +1,8 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.brokers.broker_live import LiveBroker
+
 from collections import defaultdict
 
 from pfund.datas.data_base import BaseData
@@ -6,8 +11,8 @@ from pfund.plogging import create_dynamic_logger
 
 
 class BaseManager:
-    def __init__(self, name, broker):
-        self.name = name
+    def __init__(self, name: str, broker: LiveBroker):
+        self.name = name.lower()
         self._broker = broker
         self._zmq = self._broker.get_zmq()
         self.logger = create_dynamic_logger(name, 'manager')

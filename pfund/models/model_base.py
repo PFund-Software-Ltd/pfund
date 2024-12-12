@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     import torch.nn as nn
     from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
     from sklearn.pipeline import Pipeline
+    from pfund.types.data import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
     from pfund.models import PytorchModel, SklearnModel
     from pfund.indicators.indicator_base import TaFunction, TalibFunction
     from pfund.types.literals import tTRADING_VENUE
@@ -190,14 +191,29 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
     def add_data(
         self, 
         trading_venue: tTRADING_VENUE, 
-        product: str, 
+        product: str,  # product_basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
         resolutions: list[str] | str, 
-        **kwargs
+        resamples: dict[str, str] | None=None,
+        auto_resample=None,  # FIXME
+        quote_data: QuoteDataKwargs | None=None,
+        tick_data: TickDataKwargs | None=None,
+        bar_data: BarDataKwargs | None=None,
+        **product_specs
     ) -> list[BaseData]:
         datas = []
         # consumers must also have model's data
         for consumer in self._consumers:
-            for data in consumer.add_data(trading_venue, product, resolutions, **kwargs):
+            for data in consumer.add_data(
+                trading_venue, 
+                product, 
+                resolutions,
+                resamples=resamples,
+                auto_resample=auto_resample,
+                quote_data=quote_data,
+                tick_data=tick_data,
+                bar_data=bar_data,
+                **product_specs
+            ):
                 self.set_data(data.product, data.resolution, data)
                 consumer._add_listener(listener=self, listener_key=data)
                 if data not in datas:

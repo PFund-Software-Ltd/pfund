@@ -1,0 +1,74 @@
+# this is used for mapping internal names and external names
+asset: {
+  # cryptocurrencies internal-to-external mappings if any
+  # e.g. 'BTC': 'XBT', as an example
+}
+product_type: {
+  # from '/v5/market/instruments-info'
+  'PERP': 'LinearPerpetual',
+  'IPERP': 'InversePerpetual',
+  'FUT': 'LinearFutures',
+  'IFUT': 'InverseFutures',
+}
+option_type: {
+  'CALL': 'Call',
+  'PUT': 'Put',
+}
+order_type: {
+  'LIMIT': 'Limit',
+  'MARKET': 'Market',
+}
+side: {1: 'Buy', -1: 'Sell', 0: 'None'}
+tif:  # time in force
+  GTC: 'GoodTillCancel'
+  IOC: 'ImmediateOrCancel'
+  FOK: 'FillOrKill'
+  PO: 'PostOnly'
+# main status = S(Submitted), O(Opened), C(Closed), R(Rejected), M(Missed)
+# filled status = P(Partial), F(Filled)
+# cancel status = S(Submitted), C(Cancelled), R(Rejected), M(Missed)
+# amend status = S(Submitted), A(Amended), R(Rejected), M(Missed)
+order_status:
+  S---: 'Submitted'
+  R---: 'Rejected'
+  O---: 'New'
+  OP--: 'PartiallyFilled'
+  CPC-: 'PartiallyFilledCanceled'
+  CF--: 'Filled'
+  C-C-: 'Cancelled'
+offset: {}
+price_direction: {
+  # internal definitions:
+  # PlusTick: ...,
+  # ZeroPlusTick: ...,
+  # MinusTick: ...,
+  # ZeroMinusTick: ...
+}
+# websocket channels
+channel: {
+  # public channels:
+  # 'orderbook': 'orderbook',
+  'tradebook': 'publicTrade',
+  # 'kline': 'kline',
+  'candlestick': 'kline',
+  # private channels:
+  'trade': 'execution',
+  'balance': 'wallet',
+  # 'position': 'position',
+  # 'order': 'order',
+}
+resolution: {
+  '1m': '1',
+  '3m': '3',
+  '5m': '5',
+  '15m': '15',
+  '30m': '30',
+  '60m': '60',
+  '120m': '120',
+  '240m': '240',
+  '360m': '360',
+  '720m': '720',
+  '1d': 'D',
+  '1w': 'W',
+  '1M': 'M'
+}

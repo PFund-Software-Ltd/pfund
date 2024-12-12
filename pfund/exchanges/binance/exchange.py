@@ -1,37 +1,30 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.types.literals import tENVIRONMENT
+    from pfund.products import BaseProduct
+
 from pathlib import Path
 
 from pfund.exchanges.exchange_base import BaseExchange
         
         
 class Exchange(BaseExchange):
-    SUPPORTED_CATEGORIES = ['linear', 'inverse', 'spot', 'option']
-    PTYPE_TO_CATEGORY = {
-        'PERP': 'linear',
-        'FUT': 'linear',
-        'IPERP': 'inverse',
-        'IFUT': 'inverse',
-        'SPOT': 'spot',
-        'OPT': 'option',
-    }
-    def __new__(cls, env: str, ptype: str):
-        from pfund.exchanges.binance.linear.exchange import ExchangeLinear
-        
-        ptype = ptype.upper()
-        category = cls.PTYPE_TO_CATEGORY[ptype]
-        
-        if category == 'linear':
-            instance = super().__new__(ExchangeLinear)
-            instance.category = category
-            return instance
-        # EXTEND: Add other categories
-        else:
-            raise ValueError(f"Invalid {category=}")
+    SUPPORT_PLACE_BATCH_ORDERS = True
+    SUPPORT_CANCEL_BATCH_ORDERS = True
+
+    USE_WS_PLACE_ORDER = True
+    USE_WS_CANCEL_ORDER = True
+
+    # TODO
+    # _MAX_NUM_OF_PLACE_BATCH_ORDERS = ...
+    # _MAX_NUM_OF_CANEL_BATCH_ORDERS = ...
     
-    def __init__(self, env: str, ptype: str):
+    def __init__(self, env: tENVIRONMENT, refetch_market_configs=False):
         exch = Path(__file__).parent.name
-        super().__init__(env, exch)
-        
-    # FIXME: temporarily override the method, remove it later
-    def _setup_configs(self):
-        pass
+        super().__init__(env, exch, refetch_market_configs=refetch_market_configs)
     
+    def create_external_product_name(self, product: BaseProduct) -> str:
+        pass
+
+        
