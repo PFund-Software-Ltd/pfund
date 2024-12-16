@@ -106,11 +106,20 @@ class BaseExchange(ABC):
         '''
         Load market configs from cache.
         The file can contain thousands of markets, so it's not loaded into memory by default,
-        but users can load it into memory if needed.
         '''
         filename = 'market_configs.yml'
         file_path = f'{CACHE_PATH}/{self.exch.lower()}/{filename}'
         return load_yaml_file(file_path)
+    
+    def load_all_product_mappings(self):
+        '''
+        Load all product mappings from market configs.
+        '''
+        market_configs: dict[str, dict] = self.load_market_configs()
+        for category in market_configs:
+            for pdt, product_configs in market_configs[category].items():
+                epdt = product_configs['symbol']
+                self.adapter.add_mapping(category, pdt, epdt)
     
     @abstractmethod
     def _derive_product_category(self, product_type: str) -> str:
