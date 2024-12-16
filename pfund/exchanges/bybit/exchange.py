@@ -41,8 +41,7 @@ class Exchange(BaseExchange):
         super().__init__(env, exch, refetch_market_configs=refetch_market_configs)
     
     @staticmethod
-    def _derive_product_category(product_basis: str) -> str:
-        _, _, ptype = product_basis.split('_')
+    def _derive_product_category(ptype: str) -> str:
         ptype = CeFiProductType[ptype.upper()]
         if ptype == CeFiProductType.SPOT:
             return BybitProductCategory.SPOT.value

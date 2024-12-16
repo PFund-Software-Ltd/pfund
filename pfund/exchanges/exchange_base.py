@@ -113,7 +113,7 @@ class BaseExchange(ABC):
         return load_yaml_file(file_path)
     
     @abstractmethod
-    def _derive_product_category(product_basis: str) -> str:
+    def _derive_product_category(self, product_type: str) -> str:
         pass
     
     @property
@@ -127,7 +127,7 @@ class BaseExchange(ABC):
     def create_product(self, product_basis: str, **product_specs) -> BaseProduct:
         base_asset, quote_asset, ptype = product_basis.split('_')
         CryptoProduct = get_CryptoProduct(product_basis)
-        category = self._derive_product_category(product_basis)
+        category = self._derive_product_category(ptype)
         product = CryptoProduct(
             bkr='CRYPTO',
             exch=self.exch,
