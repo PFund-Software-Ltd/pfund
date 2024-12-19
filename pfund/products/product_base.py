@@ -33,7 +33,7 @@ class BaseProduct(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     bkr: Broker | str
-    exch: str
+    exch: str=''
     base_asset: str
     quote_asset: str
     type: ProductType
@@ -73,6 +73,7 @@ class BaseProduct(BaseModel):
         self.quote_asset = self.quote_asset.upper()
         self.asset_pair = '_'.join([self.base_asset, self.quote_asset])
         self.basis = '_'.join([self.base_asset, self.quote_asset, self.type.value])
+        self.symbol = self._create_symbol()
         self.specs = self._create_specs()
         self.name = self._create_product_name()
 
@@ -98,6 +99,9 @@ class BaseProduct(BaseModel):
     @validate_call
     def set_symbol(self, symbol: str):
         self.symbol = symbol
+    
+    def _create_symbol(self) -> str:
+        return self.symbol
     
     def _create_specs(self) -> dict:
         return self.specs
@@ -136,10 +140,16 @@ class BaseProduct(BaseModel):
         return (self.type == ProductType.CMDTY)
     
     def __str__(self):
-        return f'Broker={self.bkr}|Exchange={self.exch}|Product={self.name}'
+        if self.exch:
+            return f'Broker={self.bkr}|Exchange={self.exch}|Product={self.name}'
+        else:
+            return f'Broker={self.bkr}|Product={self.name}'
 
     def __repr__(self):
-        return f'{self.bkr}:{self.exch}:{self.name}'
+        if self.exch:
+            return f'{self.bkr}:{self.exch}:{self.name}'
+        else:
+            return f'{self.bkr}:{self.name}'
     
     def __eq__(self, other):
         if not isinstance(other, BaseProduct):

@@ -301,8 +301,8 @@ class BacktestMixin:
         # override supported timeframes and periods using feed's
         # e.g. user might use IB as a broker for backtesting, but use Yahoo Finance as a data source
         # so IB's supported timeframes and periods should be overridden by Yahoo Finance's
-        if hasattr(feed, 'SUPPORTED_TIMEFRAMES_AND_PERIODS'):
-            kwargs['supported_timeframes_and_periods'] = feed.SUPPORTED_TIMEFRAMES_AND_PERIODS
+        if hasattr(feed, 'SUPPORTED_RESOLUTIONS'):
+            kwargs['supported_resolutions'] = feed.SUPPORTED_RESOLUTIONS
         
         return kwargs
     

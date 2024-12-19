@@ -18,7 +18,7 @@ class IBApi(IBClient, IBWrapper):
     DEFAULT_ORDERBOOK_LEVEL = 2
     DEFAULT_ORDERBOOK_DEPTH = 5
     SUPPORTED_ORDERBOOK_LEVELS = [1, 2]
-    SUPPORTED_TIMEFRAMES_AND_PERIODS = {
+    SUPPORTED_RESOLUTIONS = {
         't': [1],  # tick
         's': [5],  # second
     }
@@ -132,8 +132,8 @@ class IBApi(IBClient, IBWrapper):
                 full_channel = '.'.join([echannel, epdt])
             elif channel == PublicDataChannel.KLINE:
                 period, timeframe = kwargs['period'], kwargs['timeframe']
-                if timeframe not in self.SUPPORTED_TIMEFRAMES_AND_PERIODS.keys():
-                    raise NotImplementedError(f'({channel}.{pdt}) {timeframe=} for kline is not supported, only timeframes in {list(self.SUPPORTED_TIMEFRAMES_AND_PERIODS)} are supported')
+                if timeframe not in self.SUPPORTED_RESOLUTIONS.keys():
+                    raise NotImplementedError(f'({channel}.{pdt}) {timeframe=} for kline is not supported, only timeframes in {list(self.SUPPORTED_RESOLUTIONS)} are supported')
                 resolution = str(period) + timeframe
                 full_channel = '.'.join([echannel, epdt, resolution])
             else:

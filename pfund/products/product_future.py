@@ -30,3 +30,9 @@ class FutureProduct(DerivativeProduct):
     def _create_product_name(self) -> str:
         return '_'.join([self.basis, str(self.expiration)])
     
+    def _create_symbol(self) -> str:
+        '''
+        Creates default symbol e.g. ESZ23
+        '''
+        symbol = self.base_asset + self.contract_code
+        return symbol

@@ -30,7 +30,7 @@ class WebsocketApi(BaseWebsocketApi):
         }
     }
     SUPPORTED_ORDERBOOK_LEVELS = [2]
-    SUPPORTED_TIMEFRAMES_AND_PERIODS = {
+    SUPPORTED_RESOLUTIONS = {
         # normal definition of 'q' if not per category:
         # 'q': [1, 50, 200, 500],  # quote
 
@@ -99,11 +99,11 @@ class WebsocketApi(BaseWebsocketApi):
                     raise NotImplementedError(f'{pdt} orderbook_level={self._orderbook_levels[pdt]} is not supported')
                 self._orderbook_depths[pdt] = data.orderbook_depth
                 if product.category:
-                    supported_periods = self.SUPPORTED_TIMEFRAMES_AND_PERIODS['q'][product.category]
+                    supported_periods = self.SUPPORTED_RESOLUTIONS['q'][product.category]
                 else:
-                    supported_periods = self.SUPPORTED_TIMEFRAMES_AND_PERIODS['q']
+                    supported_periods = self.SUPPORTED_RESOLUTIONS['q']
                 if self._orderbook_depths[pdt] not in supported_periods:
-                    # Find an integer in self.SUPPORTED_TIMEFRAMES_AND_PERIODS['q'] that is the nearest to the intended orderbook_depth
+                    # Find an integer in self.SUPPORTED_RESOLUTIONS['q'] that is the nearest to the intended orderbook_depth
                     nearest_depth = min(supported_periods, key=lambda supported_period: abs(supported_period - self._orderbook_depths[pdt]))
                     self.logger.warning(f'orderbook_depth={self._orderbook_depths[pdt]} is not supported, using the nearest supported depth "{nearest_depth}". {supported_periods=}')
                     subscribed_orderbook_depth = nearest_depth
@@ -115,8 +115,8 @@ class WebsocketApi(BaseWebsocketApi):
                 full_channel = '.'.join([echannel, epdt])
             elif channel == PublicDataChannel.KLINE:
                 period, timeframe = data.period, repr(data.timeframe)
-                if timeframe not in self.SUPPORTED_TIMEFRAMES_AND_PERIODS.keys():
-                    raise NotImplementedError(f'({channel}.{pdt}) {timeframe=} for kline is not supported, only timeframes in {list(self.SUPPORTED_TIMEFRAMES_AND_PERIODS)} are supported')
+                if timeframe not in self.SUPPORTED_RESOLUTIONS.keys():
+                    raise NotImplementedError(f'({channel}.{pdt}) {timeframe=} for kline is not supported, only timeframes in {list(self.SUPPORTED_RESOLUTIONS)} are supported')
                 resolution = str(period) + timeframe
                 eresolution = self._adapter(resolution, group='resolution')
                 full_channel = '.'.join([echannel, eresolution, epdt])

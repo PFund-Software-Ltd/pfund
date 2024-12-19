@@ -33,7 +33,7 @@ from pfund.const.enums import PublicDataChannel, PrivateDataChannel, DataChannel
 class BaseWebsocketApi(ABC):
     _URLS = {}
     SUPPORTED_ORDERBOOK_LEVELS = []
-    SUPPORTED_TIMEFRAMES_AND_PERIODS = {}
+    SUPPORTED_RESOLUTIONS = {}
 
     def __init__(self, env: Environment, name: tCRYPTO_EXCHANGE, adapter: Adapter):
         self.env = env

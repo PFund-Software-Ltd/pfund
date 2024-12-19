@@ -23,3 +23,12 @@ class OptionProduct(DerivativeProduct):
     def _create_product_name(self) -> str:
         return '_'.join([self.basis, str(self.expiration), self.option_type.value, str(self.strike_price)])
  
+    def _create_symbol(self) -> str:
+        '''
+        Creates default symbol e.g. TSLA241213C00075000 following OSI format (Option Symbology Initiative)
+        '''
+        expiration = self.expiration.strftime('%y%m%d')  # convert expiration to yymmdd
+        num_of_digits = 8
+        strike_price = str(int(self.strike_price * 1000)).zfill(num_of_digits)
+        symbol = self.base_asset + expiration + self.option_type.value[0] + strike_price
+        return symbol

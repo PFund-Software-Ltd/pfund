@@ -20,7 +20,7 @@ class DataManager(BaseManager):
         # datas = {repr(product): {repr(resolution): data}}
         self._datas = defaultdict(dict)
 
-    def _resample_to_official_resolution(self, product, resolution: Resolution, supported_timeframes_and_periods: dict | None=None) -> Resolution:
+    def _resample_to_official_resolution(self, product, resolution: Resolution, supported_resolutions: dict | None=None) -> Resolution:
         """Resamples the resolution into an officially supported one
         e.g. 
             if '4m' is the resolution but only '1m' is supported officially,
@@ -28,16 +28,16 @@ class DataManager(BaseManager):
         """
         if product.is_crypto():
             WebsocketApi = getattr(importlib.import_module(f'pfund.exchanges.{product.exch.lower()}.ws_api'), 'WebsocketApi')
-            supported_timeframes_and_periods = supported_timeframes_and_periods or WebsocketApi.SUPPORTED_TIMEFRAMES_AND_PERIODS
+            supported_resolutions = supported_resolutions or WebsocketApi.SUPPORTED_RESOLUTIONS
         elif product.bkr == 'IB':
             IBApi = getattr(importlib.import_module('pfund.brokers.ib.ib_api'), 'IBApi')
-            supported_timeframes_and_periods = supported_timeframes_and_periods or IBApi.SUPPORTED_TIMEFRAMES_AND_PERIODS
+            supported_resolutions = supported_resolutions or IBApi.SUPPORTED_RESOLUTIONS
         # EXTEND
         else:
             pass
         period, timeframe = resolution.period, repr(resolution.timeframe)
-        if (timeframe not in supported_timeframes_and_periods) or \
-            (period == 1 and period not in supported_timeframes_and_periods[timeframe]):
+        if (timeframe not in supported_resolutions) or \
+            (period == 1 and period not in supported_resolutions[timeframe]):
             # change timeframe unit but retain the time value
             if resolution.is_second():  # REVIEW
                 resolution_resampled = '1t'
@@ -54,11 +54,11 @@ class DataManager(BaseManager):
             else:
                 raise Exception(f'{resolution=} is not supported')
             resolution_resampled = Resolution(resolution_resampled)
-            return self._resample_to_official_resolution(product, resolution_resampled, supported_timeframes_and_periods=supported_timeframes_and_periods)
-        elif period not in supported_timeframes_and_periods[timeframe]:
+            return self._resample_to_official_resolution(product, resolution_resampled, supported_resolutions=supported_resolutions)
+        elif period not in supported_resolutions[timeframe]:
             # resample by unit, e.g. '4m' is resampled by '1m'
             resolution_resampled = Resolution('1' + timeframe)
-            return self._resample_to_official_resolution(product, resolution_resampled, supported_timeframes_and_periods=supported_timeframes_and_periods)
+            return self._resample_to_official_resolution(product, resolution_resampled, supported_resolutions=supported_resolutions)
         else:
             return resolution
         
@@ -98,7 +98,7 @@ class DataManager(BaseManager):
             data = BarData(product, resolution, **bar_data)
         return data
     
-    def _auto_resample(self, product: BaseProduct, resamples: dict[Resolution, Resolution], resolutions: list[Resolution], auto_resample: dict[str, bool], supported_timeframes_and_periods):
+    def _auto_resample(self, product: BaseProduct, resamples: dict[Resolution, Resolution], resolutions: list[Resolution], auto_resample: dict[str, bool], supported_resolutions):
         def _auto_resample_by_highest_resolution():
             '''Resamples the resolutions automatically by using the highest resolution
             '''
@@ -123,7 +123,7 @@ class DataManager(BaseManager):
                 # no resampling when timeframe is quote/tick
                 if resolution.is_quote() or resolution.is_tick():
                     continue
-                official_resolution = self._resample_to_official_resolution(product, resolution, supported_timeframes_and_periods=supported_timeframes_and_periods)
+                official_resolution = self._resample_to_official_resolution(product, resolution, supported_resolutions=supported_resolutions)
                 # resolution has no change after resampling
                 if resolution == official_resolution:
                     continue
@@ -199,8 +199,8 @@ class DataManager(BaseManager):
         default_auto_resample = {'by_official_resolution': True, 'by_highest_resolution': True}
         auto_resample = auto_resample or default_auto_resample
         # FIXME
-        supported_timeframes_and_periods = kwargs.get('supported_timeframes_and_periods', None)
-        resamples = self._auto_resample(product, resamples, resolutions, auto_resample, supported_timeframes_and_periods)
+        supported_resolutions = kwargs.get('supported_resolutions', None)
+        resamples = self._auto_resample(product, resamples, resolutions, auto_resample, supported_resolutions)
             
         # mutually bind data_resampler and data_resamplee
         for resamplee_resolution, resampler_resolution in resamples.items():

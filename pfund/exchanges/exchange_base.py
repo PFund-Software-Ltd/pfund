@@ -121,8 +121,9 @@ class BaseExchange(ABC):
                 epdt = product_configs['symbol']
                 self.adapter.add_mapping(category, pdt, epdt)
     
+    @staticmethod
     @abstractmethod
-    def _derive_product_category(self, product_type: str) -> str:
+    def _derive_product_category(product_type: str) -> str:
         pass
     
     @property
