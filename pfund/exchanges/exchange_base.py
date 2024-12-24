@@ -86,13 +86,14 @@ class BaseExchange(ABC):
             If outdated or do not exist, return True.
             '''
             if not os.path.exists(file_path):
-                self.logger.debug(f'{self.exch} {filename} does not exist, refetching...')
+                self.logger.debug(f'{self.exch} {filename} does not exist, fetching data...')
                 return True
             last_modified_time = get_last_modified_time(file_path)
             renew_every_x_days = 7
             is_outdated = last_modified_time + datetime.timedelta(days=renew_every_x_days) < datetime.datetime.now(tz=datetime.timezone.utc)
             if is_outdated:
-                self.logger.info(f'{self.exch} {filename} is outdated, refetching...')
+                os.remove(file_path)
+                self.logger.info(f'{self.exch} {filename} is outdated, refetching data...')
             return is_outdated
         if not (refetch_market_configs or _check_if_market_configs_outdated()):
             return
