@@ -20,7 +20,7 @@ class DerivativeProduct(BaseProduct):
     def model_post_init(self, __context: Any):
         super().model_post_init(__context)
         self.underlying = self.base_asset
-        self.contract_size = self.multiplier = self.contract_size or self.multiplier
+        self.contract_size = self.contract_size or self.multiplier
     
     @property
     def multiplier(self) -> Decimal:

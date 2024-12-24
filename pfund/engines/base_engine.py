@@ -9,14 +9,14 @@ if TYPE_CHECKING:
     from pfeed.types.literals import tDATA_TOOL
     from pfund.types.core import tStrategy
     from pfund.types.literals import tENVIRONMENT, tBROKER
-    from pfund.brokers import BaseBroker, CryptoBroker, IBBroker
+    from pfund.brokers import BaseBroker, CryptoBroker, IB_Broker
     from pfund.strategies.strategy_base import BaseStrategy
 
 from rich.console import Console
 
 from pfund.utils.utils import Singleton
 from pfund.const.enums import Environment, Broker
-from pfund.config_handler import ConfigHandler, get_config
+from pfund.config_handler import get_config
 
 
 ENV_COLORS = {
@@ -37,7 +37,6 @@ class BaseEngine(Singleton):
         cls, 
         env: tENVIRONMENT,
         data_tool: tDATA_TOOL='pandas', 
-        config: ConfigHandler | None=None,
         **settings
     ):
         from pfund.plogging.config import LoggingDictConfigurator
@@ -56,7 +55,7 @@ class BaseEngine(Singleton):
             cls.data_tool = DataTool[data_tool.upper()]
             cls.DataTool = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool.lower()}'), f'{data_tool.capitalize()}DataTool')
         if not hasattr(cls, 'config'):
-            cls.config: ConfigHandler = config if config else get_config()
+            cls.config = get_config()
             log_path = f'{cls.config.log_path}/{cls.env.value.lower()}'
             logging_config_file_path = cls.config.logging_config_file_path
             cls.logging_configurator: LoggingDictConfigurator  = set_up_loggers(log_path, logging_config_file_path, user_logging_config=cls.config.logging_config)
@@ -71,7 +70,6 @@ class BaseEngine(Singleton):
         self,
         env: tENVIRONMENT,
         data_tool: tDATA_TOOL='pandas',
-        config: ConfigHandler | None=None, 
         **settings
     ):
         from pfund.managers.strategy_manager import StrategyManager
@@ -114,7 +112,7 @@ class BaseEngine(Singleton):
         
     # conditional typing, returns the exact type of broker
     @overload
-    def get_broker(self, bkr: Literal['IB']) -> IBBroker: ...
+    def get_broker(self, bkr: Literal['IB']) -> IB_Broker: ...
 
     def get_broker(self, bkr: tBROKER) -> BaseBroker:
         return self.brokers[bkr.upper()]
@@ -130,5 +128,5 @@ class BaseEngine(Singleton):
         if bkr == 'CRYPTO':
             BrokerClass = getattr(importlib.import_module(f'pfund.brokers.broker_{bkr.lower()}'), 'CryptoBroker')
         elif bkr == 'IB':
-            BrokerClass = getattr(importlib.import_module(f'pfund.brokers.ib.broker_{bkr.lower()}'), 'IBBroker')
+            BrokerClass = getattr(importlib.import_module(f'pfund.brokers.ib.broker_{bkr.lower()}'), 'IB_Broker')
         return BrokerClass

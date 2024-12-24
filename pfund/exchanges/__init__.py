@@ -1,3 +1,3 @@
-from pfund.exchanges.bybit.exchange import Exchange as Bybit
-from pfund.exchanges.binance.exchange import Exchange as Binance
-from pfund.exchanges.okx.exchange import Exchange as Okx
+from pfund.exchanges.bybit.exchange import Exchange as BybitExchange
+from pfund.exchanges.binance.exchange import Exchange as BinanceExchange
+from pfund.exchanges.okx.exchange import Exchange as OkxExchange

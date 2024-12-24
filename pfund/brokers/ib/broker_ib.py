@@ -13,7 +13,7 @@ from pfund.brokers.ib.ib_api import IBApi
 from pfund.const.enums import PublicDataChannel, PrivateDataChannel
 
 
-class IBBroker(LiveBroker):
+class IB_Broker(LiveBroker):
     def __init__(self, env: str, **configs):
         super().__init__(env, 'IB', **configs)
         config_path = f'{PROJ_CONFIG_PATH}/{self.bkr.value.lower()}'

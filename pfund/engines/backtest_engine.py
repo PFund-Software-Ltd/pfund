@@ -27,7 +27,6 @@ from pfund.backtest_history import BacktestHistory
 from pfund.engines.base_engine import BaseEngine
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.brokers.broker_backtest import BacktestBroker
-from pfund.config_handler import ConfigHandler
 from pfund.const.enums import BacktestMode
 
 
@@ -46,7 +45,6 @@ class BacktestEngine(BaseEngine):
         num_chunks: int=1,
         use_ray: bool=False,
         num_cpus: int=8,
-        config: ConfigHandler | None=None,
         **settings
     ):
         '''
@@ -93,7 +91,6 @@ class BacktestEngine(BaseEngine):
             cls,
             env,
             data_tool=data_tool,
-            config=config,
             **settings
         )
 
@@ -111,7 +108,6 @@ class BacktestEngine(BaseEngine):
         num_chunks: int=1,
         use_ray: bool=False,
         num_cpus: int=8,
-        config: ConfigHandler | None=None,
         **settings
     ):
         # avoid re-initialization to implement singleton class correctly
@@ -119,7 +115,6 @@ class BacktestEngine(BaseEngine):
             super().__init__(
                 env,
                 data_tool=data_tool,
-                config=config,
                 **settings
             )
             self.history = BacktestHistory(self)

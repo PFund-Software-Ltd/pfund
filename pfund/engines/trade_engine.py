@@ -23,7 +23,6 @@ import schedule
 from pfund.engines.base_engine import BaseEngine
 from pfund.brokers.broker_base import BaseBroker
 from pfund.utils.utils import flatten_dict, is_port_in_use
-from pfund.config_handler import ConfigHandler
 
 
 class TradeEngine(BaseEngine):
@@ -37,7 +36,6 @@ class TradeEngine(BaseEngine):
         df_min_rows: int=1_000,
         df_max_rows: int=3_000,
         zmq_port=5557, 
-        config: ConfigHandler | None=None, 
         **settings
     ):
         if not hasattr(cls, 'zmq_port'):
@@ -47,7 +45,6 @@ class TradeEngine(BaseEngine):
             cls,
             env,
             data_tool=data_tool,
-            config=config,
             **settings
         )
         if not hasattr(cls, 'df_min_rows'):
@@ -64,7 +61,6 @@ class TradeEngine(BaseEngine):
         df_min_rows: int=1_000,
         df_max_rows: int=3_000,
         zmq_port=5557,
-        config: ConfigHandler | None=None,
         **settings
     ):
         from pfund.zeromq import ZeroMQ
@@ -77,7 +73,6 @@ class TradeEngine(BaseEngine):
             super().__init__(
                 env,
                 data_tool=data_tool,
-                config=config, 
                 **settings
             )
 

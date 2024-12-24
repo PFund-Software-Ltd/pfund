@@ -33,12 +33,13 @@ click = "^8.1.7"
 pyyaml = "^6.0.1"
 trogon = "^0.6.0"
 orjson = "^3.10.1"
+duckdb = "^1.0.0"
 ipython = "^8.23.0"
 requests = "^2.31.0"
 platformdirs = "^4.3.6"
 python-dotenv = "^1.0.1"
 websocket-client = "^1.8.0"
-pfeed = {extras = ["core", "duckdb"], version = "^0.0.2"}
+pfeed = {extras = ["core"], version = "^0.0.2", optional = true}
 pfolio = {extras = ["all"], version = "^0.0.2", optional = true}
 pfund-plot = {version = "^0.0.1.dev2", optional = true}
 gitpython = {version = "^3.1.43", optional = true}
@@ -55,24 +56,23 @@ optuna = {version = "^4.0.0", optional = true}
 feast = {version = "^0.40.1", optional = true}
 
 [tool.poetry.extras]
-trade = ["schedule", "pyzmq", "redis", "python-telegram-bot"]
-backtest = ["pfolio", "pfund-plot", "gitpython", "ta"]
+backtest = ["pfeed", "pfolio", "pfund-plot", "gitpython", "ta"]
 train = ["joblib", "scikit-learn", "torch", "mlflow", "optuna", "feast"]
+trade = ["schedule", "pyzmq", "redis", "python-telegram-bot"]
 all = [
-    "schedule", "pyzmq", "redis", "python-telegram-bot",  # core
-    "pfolio", "pfund-plot", "gitpython", "ta",  # backtesting
-    "joblib", "scikit-learn", "torch", "mlflow", "optuna", "feast",  # ml training
+    "pfeed", "pfolio", "pfund-plot", "gitpython", "ta",  # backtest
+    "joblib", "scikit-learn", "torch", "mlflow", "optuna", "feast",  # ML training
+    "schedule", "pyzmq", "redis", "python-telegram-bot",  # trade
 ]
 
 [tool.poetry.scripts]
 pfund = "pfund.main:run_cli"
-pf = "pfund.main:run_cli"
 
 [tool.poetry.group.dev]
 optional = true
 
 [tool.poetry.group.dev.dependencies]
-pfeed = {extras = ["core", "duckdb"], path = "../pfeed", develop = true}
+pfeed = {extras = ["core"], path = "../pfeed", develop = true}
 pfolio = {extras = ["all"], path = "../pfolio", develop = true}
 pfund-plot = {path = "../pfund-plot", develop = true}
 pybit = "^5.8.0"

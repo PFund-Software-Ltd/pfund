@@ -29,7 +29,10 @@ import inspect
 from abc import ABC, abstractmethod
 from collections import defaultdict
 
-import joblib
+try:
+    import joblib
+except ImportError:
+    pass
 import numpy as np
 from rich.console import Console
 

@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from pfund.types.core import tModel, tIndicator, tFeature
     from pfund.types.literals import tTRADING_VENUE, tBROKER, tCRYPTO_EXCHANGE
     from pfund.datas.data_base import BaseData
-    from pfund.brokers import BaseBroker, CryptoBroker, IBBroker
+    from pfund.brokers import BaseBroker, CryptoBroker, IB_Broker
     from pfund.products import BaseProduct, CryptoProduct, IBProduct
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.models.model_base import BaseModel
@@ -181,7 +181,7 @@ class TradeMixin:
     def get_broker(self, bkr: Literal['CRYPTO']) -> CryptoBroker: ...
         
     @overload
-    def get_broker(self, bkr: Literal['IB']) -> IBBroker: ...
+    def get_broker(self, bkr: Literal['IB']) -> IB_Broker: ...
     
     def get_broker(self, bkr: tBROKER) -> BaseBroker:
         return self.engine.get_broker(bkr)

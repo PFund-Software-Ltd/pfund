@@ -7,16 +7,16 @@ from decimal import Decimal
 from pfund.const.enums import CeFiProductType, CryptoExchange
 from pfund.utils.utils import load_yaml_file
 from pfund.products.product_base import get_product_class
-from pfund.const.paths import CACHE_PATH
 from pfund.products.product_base import BaseProduct
+import pfund as pf
 
 
 def get_CryptoProduct(product_basis: str) -> type[BaseProduct]:
     Product = get_product_class(product_basis)
     
     class CryptoProduct(Product):
-        exch: CryptoExchange | str
-        type: CeFiProductType | str
+        exch: CryptoExchange
+        type: CeFiProductType
         category: str
         tick_size: Decimal | None = None
         lot_size: Decimal | None = None
@@ -58,24 +58,20 @@ def get_CryptoProduct(product_basis: str) -> type[BaseProduct]:
             raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
             
         def _load_config(self):
-            file_path = f'{CACHE_PATH}/{self.exch.value.lower()}/market_configs.yml'
+            file_path = f'{pf.config.cache_path}/{self.exch.value.lower()}/market_configs.yml'
             if not os.path.exists(file_path):
                 return
             config = load_yaml_file(file_path)[self.category]
             if self.name not in config:
-                raise ValueError(
-                    f'Product {self.name} not found in {self.exch} market configs:\n'
-                    f'This could mean either:\n'
-                    f'  - The product {self.name} does not exist on {self.exch}\n'
-                    f'  - Your market configs are outdated\n'
-                    f'Solutions:\n'
-                    f'  - Check if the product exists on {self.exch}\n'
-                    f'  - Check if there is a typo in USD, USDC or USDT\n'
-                    f'  - To update configs, reinitialize the exchange with:\n'
-                    f'    exchange(refetch_market_configs=True) \n'
+                pf.print_warning(
+                    f'Product {self.name} not found in {self.exch} market configs,\n'
+                    f'configs such as tick_size and lot_size are not loaded.\n'
+                    f'Try to clear your market configs by running command:\n'
+                    f'    pfund clear cache --exch {self.exch.value.lower()}\n'
                 )
-            self.tick_size = Decimal(config[self.name]['tick_size'])
-            self.lot_size = Decimal(config[self.name]['lot_size'])
+            else:
+                self.tick_size = Decimal(config[self.name]['tick_size'])
+                self.lot_size = Decimal(config[self.name]['lot_size'])
 
         def get_fee(self, fee_type: Literal['taker', 'maker'], in_bps=False):
             if fee_type == 'taker':
