@@ -1,7 +1,7 @@
 import click
 from trogon import tui
 
-from pfund.config_handler import get_config
+from pfund.config import get_config
 from pfund.cli.commands.docker_compose import docker_compose
 from pfund.cli.commands.config import config
 from pfund.cli.commands.doc import doc

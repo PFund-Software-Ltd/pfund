@@ -2,8 +2,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     # need these imports to support IDE hints:
-    config = ...
-    configure = ...
     aliases = ...
     from pfund.engines import (
         BacktestEngine, 
@@ -36,6 +34,7 @@ if TYPE_CHECKING:
 import sys
 from importlib.metadata import version
 
+from pfund.config import get_config, configure
 # FIXME: install by pfund-ibapi
 from pfund.const.paths import PROJ_PATH
 # add python path so that for files like "ibapi" (official python code from IB) can find their modules
@@ -49,13 +48,7 @@ def what_is(alias: str) -> str | None:
 
 
 def __getattr__(name: str):
-    if name == 'config':
-        from pfund.config_handler import get_config
-        return get_config()
-    elif name == 'configure':
-        from pfund.config_handler import configure
-        return configure
-    elif name == 'aliases':
+    if name == 'aliases':
         from pfund.const.aliases import ALIASES
         return ALIASES
     elif name == 'BacktestEngine':
@@ -118,8 +111,8 @@ print_warning = lambda msg: print(f'\033[93m{msg}\033[0m')
 __version__ = version('pfund')
 __all__ = (
     '__version__',
-    'config',
     'configure',
+    'get_config',
     'aliases',
     "what_is",
     # TODO:

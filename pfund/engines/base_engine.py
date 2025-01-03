@@ -16,7 +16,7 @@ from rich.console import Console
 
 from pfund.utils.utils import Singleton
 from pfund.const.enums import Environment, Broker
-from pfund.config_handler import get_config
+from pfund.config import get_config
 
 
 ENV_COLORS = {

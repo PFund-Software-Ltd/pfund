@@ -39,7 +39,7 @@ def reset(ctx):
 @click.option('--debug', '-D', type=bool, help='If True, enable debug mode where logs at DEBUG level will be printed')
 def set(**kwargs):
     """Configures pfund settings."""
-    from pfund.config_handler import configure
+    from pfund.config import configure
     provided_options = {k: v for k, v in kwargs.items() if v is not None}
     if not provided_options:
         raise click.UsageError(f"No options provided. Please run '{PROJ_NAME} config set --help' to see all available options.")

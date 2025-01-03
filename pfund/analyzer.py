@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from pfund.utils import utils
-from pfund.config_handler import get_config
+from pfund.config import get_config
 from pfund.const.paths import PROJ_PATH
 
 
