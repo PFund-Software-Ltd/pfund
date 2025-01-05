@@ -29,7 +29,7 @@ class Resolution:
         if self.is_quote():
             default_orderbook_level = 1
             self.orderbook_level = int(orderbook_level[0][-1]) if orderbook_level else default_orderbook_level
-            print("\033[1m" + f"Warning: {resolution=} is missing orderbook level, defaulting to L{default_orderbook_level}" + "\033[0m")
+            print("\033[1m" + f"Warning: {self._resolution=} is missing orderbook level, defaulting to L{default_orderbook_level}" + "\033[0m")
         else:
             self.orderbook_level = None
 

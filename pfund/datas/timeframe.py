@@ -1,9 +1,13 @@
+from typing import Literal
+
 from pfund.const.enums.timeframe import TimeframeUnits
 
 
 class Timeframe:
-    def __init__(self, timeframe):
+    SUPPORTED_TIMEFRAMES = ['q', 't', 's', 'm', 'h', 'd', 'w', 'M', 'y']
+    def __init__(self, timeframe: Literal['q', 't', 's', 'm', 'h', 'd', 'w', 'M', 'y']):
         self._timeframe = timeframe
+        assert timeframe in self.SUPPORTED_TIMEFRAMES, f"Invalid timeframe: {timeframe}"
         self.unit = TimeframeUnits[timeframe]
     
     def higher(self):
@@ -12,7 +16,9 @@ class Timeframe:
         current_index = sorted_units.index(self.unit)
         next_index = current_index + 1
         if next_index < len(sorted_units):
-            return Timeframe(sorted_units[next_index].name)
+            name = sorted_units[next_index].name
+            name = name.lower()[0] if name != 'MONTH' else 'M'
+            return Timeframe(name)
         return self  # Already at the highest unit
 
     def lower(self):
@@ -21,7 +27,9 @@ class Timeframe:
         current_index = sorted_units.index(self.unit)
         prev_index = current_index - 1
         if prev_index >= 0:
-            return Timeframe(sorted_units[prev_index].name)
+            name = sorted_units[prev_index].name
+            name = name.lower()[0] if name != 'MONTH' else 'M'
+            return Timeframe(name)
         return self  # Already at the lowest unit
     
     def is_quote(self):
