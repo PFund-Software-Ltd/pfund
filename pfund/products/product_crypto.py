@@ -8,7 +8,6 @@ from pfund.const.enums import CeFiProductType, CryptoExchange
 from pfund.utils.utils import load_yaml_file
 from pfund.products.product_base import get_product_class
 from pfund.products.product_base import BaseProduct
-import pfund as pf
 
 
 def get_CryptoProduct(product_basis: str) -> type[BaseProduct]:
@@ -58,12 +57,15 @@ def get_CryptoProduct(product_basis: str) -> type[BaseProduct]:
             raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
             
         def _load_config(self):
-            file_path = f'{pf.config.cache_path}/{self.exch.value.lower()}/market_configs.yml'
+            from pfund.config import get_config
+            from pfund import print_warning
+            config = get_config()
+            file_path = f'{config.cache_path}/{self.exch.value.lower()}/market_configs.yml'
             if not os.path.exists(file_path):
                 return
             config = load_yaml_file(file_path)[self.category]
             if self.name not in config:
-                pf.print_warning(
+                print_warning(
                     f'Product {self.name} not found in {self.exch} market configs,\n'
                     f'configs such as tick_size and lot_size are not loaded.\n'
                     f'Try to clear your market configs by running command:\n'

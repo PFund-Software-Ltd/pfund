@@ -23,12 +23,12 @@ if TYPE_CHECKING:
     )
     from pfund.brokers import (
         CryptoBroker, 
-        IB_Broker
+        IB_Broker, IB
     )
     from pfund.exchanges import (
-        BybitExchange,
-        BinanceExchange,
-        OkxExchange,
+        BybitExchange, Bybit,
+        BinanceExchange, Binance,
+        OkxExchange, OKX
     )
 
 import sys
@@ -90,16 +90,16 @@ def __getattr__(name: str):
     elif name == "CryptoBroker":
         from pfund.brokers import CryptoBroker
         return CryptoBroker
-    elif name == "IB_Broker":
+    elif name in ("IB_Broker", 'IB'):
         from pfund.brokers import IB_Broker
         return IB_Broker
-    elif name == "BybitExchange":
+    elif name in ("BybitExchange", "Bybit"):
         from pfund.exchanges import BybitExchange
         return BybitExchange
-    elif name == "BinanceExchange":
+    elif name in ("BinanceExchange", "Binance"):
         from pfund.exchanges import BinanceExchange
         return BinanceExchange
-    elif name == "OkxExchange":
+    elif name in ("OkxExchange", "OKX"):
         from pfund.exchanges import OkxExchange
         return OkxExchange
 

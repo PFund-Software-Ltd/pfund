@@ -48,11 +48,7 @@ class Resolution:
 
     def _value(self) -> int:
         unit: TimeframeUnits = self.timeframe.unit
-        if self.orderbook_level:
-            level: int = int(self.orderbook_level[-1])
-        else:
-            level = 1
-        return self.period * unit.value * level
+        return self.period * unit.value * (self.orderbook_level or 1)
 
     def is_quote_l1(self):
         return self.orderbook_level == 1
@@ -128,13 +124,13 @@ class Resolution:
     def __str__(self):
         strings = [str(self.period), str(self.timeframe)]
         if self.orderbook_level:
-            strings.append(self.orderbook_level.replace('L', 'LEVEL'))
+            strings.append(f'LEVEL{self.orderbook_level}')
         return '_'.join(strings)
 
     def __repr__(self):
         strings = [self._resolution]
         if self.orderbook_level:
-            strings.append(self.orderbook_level)
+            strings.append(f'L{self.orderbook_level}')
         return '_'.join(strings)
 
     def __hash__(self):

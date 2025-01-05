@@ -30,7 +30,7 @@ from pfund.const.enums import (
 from pfund.zeromq import ZeroMQ
 from pfund.const.paths import PROJ_PATH
 from pfund.utils.utils import get_last_modified_time, load_yaml_file
-import pfund as pf
+from pfund.config import get_config
 
 
 class BaseExchange(ABC):
@@ -79,7 +79,8 @@ class BaseExchange(ABC):
         and then save them to the cache.
         '''
         filename = 'market_configs.yml'
-        file_path = f'{pf.config.cache_path}/{self.exch.lower()}/{filename}'
+        config = get_config()
+        file_path = f'{config.cache_path}/{self.exch.lower()}/{filename}'
         def _check_if_market_configs_outdated() -> bool:
             '''
             Check if the market configs are outdated or do not exist.
@@ -110,7 +111,8 @@ class BaseExchange(ABC):
         The file can contain thousands of markets, so it's not loaded into memory by default,
         '''
         filename = 'market_configs.yml'
-        file_path = f'{pf.config.cache_path}/{self.exch.lower()}/{filename}'
+        config = get_config()
+        file_path = f'{config.cache_path}/{self.exch.lower()}/{filename}'
         return load_yaml_file(file_path)
     
     def load_all_product_mappings(self):
