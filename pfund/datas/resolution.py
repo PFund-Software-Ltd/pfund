@@ -54,13 +54,13 @@ class Resolution:
         return self.period * unit.value * (self.orderbook_level or 1)
 
     def is_quote_l1(self):
-        return self.orderbook_level == 1
+        return self.is_quote() and self.orderbook_level == 1
 
     def is_quote_l2(self):
-        return self.orderbook_level == 2
+        return self.is_quote() and self.orderbook_level == 2
 
     def is_quote_l3(self):
-        return self.orderbook_level == 3
+        return self.is_quote() and self.orderbook_level == 3
 
     def is_quote(self):
         return self.timeframe.is_quote()
@@ -68,6 +68,17 @@ class Resolution:
     def is_tick(self):
         return self.timeframe.is_tick()
 
+    def is_bar(self):
+        return (
+            self.is_second() or
+            self.is_minute() or
+            self.is_hour() or
+            self.is_day() or
+            self.is_week() or
+            self.is_month() or
+            self.is_year()
+        )
+    
     def is_second(self):
         return self.timeframe.is_second()
 
