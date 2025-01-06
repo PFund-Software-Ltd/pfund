@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     import polars as pl
     import torch
     from pfund.models.model_base import MachineLearningModel
-    from pfund.types.core import tModel
+    from pfund.typing.core import tModel
     from pfund.models.model_base import BaseModel
 
 from pfund.models.model_base import BaseFeature

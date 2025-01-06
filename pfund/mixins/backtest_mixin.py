@@ -5,18 +5,18 @@ if TYPE_CHECKING:
     import pandas as pd
     import polars as pl
     from pfeed.feeds.base_feed import BaseFeed
-    from pfeed.types.literals import tDATA_SOURCE
-    from pfund.types.core import tModel
+    from pfeed.typing.literals import tDATA_SOURCE
+    from pfund.typing.core import tModel
     from pfund.datas.data_base import BaseData
     from pfund.strategies.strategy_base import BaseStrategy
-    from pfund.types.literals import tTRADING_VENUE
-    from pfund.types.data import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
+    from pfund.typing.literals import tTRADING_VENUE
+    from pfund.typing.data import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
 
 import time
 
 import numpy as np
 
-from pfund.types.backtest import BacktestKwargs
+from pfund.typing.backtest import BacktestKwargs
 from pfund.validations.backtest import validate_backtest_kwargs
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.models.model_base import BaseModel

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.types.literals import tTRADFI_PRODUCT_TYPE, tCEFI_PRODUCT_TYPE
+    from pfund.typing.literals import tTRADFI_PRODUCT_TYPE, tCEFI_PRODUCT_TYPE
 
 
 # TODO

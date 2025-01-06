@@ -5,7 +5,7 @@ from pfeed.const.enums import DataSource
 from pfund.const.enums import Environment
 from pfeed import aliases as PFEED_ALIASES
 
-from pfund.types.backtest import BacktestKwargs
+from pfund.typing.backtest import BacktestKwargs
 from pfund.utils.utils import get_engine_class
 
 

@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfund.accounts import CryptoAccount
     from pfund.const.enums import Environment
-    from pfund.types.literals import tCRYPTO_EXCHANGE
+    from pfund.typing.literals import tCRYPTO_EXCHANGE
     from pfund.adapter import Adapter
 
 import time

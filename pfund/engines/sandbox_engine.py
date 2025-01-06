@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.types.literals import tDATA_TOOL
+    from pfeed.typing.literals import tDATA_TOOL
 
 from pfund.engines.trade_engine import TradeEngine
 

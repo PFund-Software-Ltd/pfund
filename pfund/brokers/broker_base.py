@@ -1,7 +1,7 @@
 import logging
 from collections import defaultdict
 
-from pfund.types.literals import tENVIRONMENT, tBROKER
+from pfund.typing.literals import tENVIRONMENT, tBROKER
 from pfund.const.enums import Environment, Broker
 from pfund.utils.utils import get_engine_class
 

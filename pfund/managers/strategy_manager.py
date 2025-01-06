@@ -6,7 +6,7 @@ from multiprocessing import Process, Value
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.types.core import tStrategy
+    from pfund.typing.core import tStrategy
 
 try:
     import psutil

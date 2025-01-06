@@ -7,10 +7,10 @@ if TYPE_CHECKING:
     import torch.nn as nn
     from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
     from sklearn.pipeline import Pipeline
-    from pfund.types.data import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
+    from pfund.typing.data import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
     from pfund.models import PytorchModel, SklearnModel
     from pfund.indicators.indicator_base import TaFunction, TalibFunction
-    from pfund.types.literals import tTRADING_VENUE
+    from pfund.typing.literals import tTRADING_VENUE
     from pfund.datas.data_base import BaseData
     MachineLearningModel = Union[
         nn.Module,

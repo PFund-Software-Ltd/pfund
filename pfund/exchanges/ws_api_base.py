@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.types.literals import tCRYPTO_EXCHANGE
+    from pfund.typing.literals import tCRYPTO_EXCHANGE
     from pfund.const.enums import Environment
     from pfund.products.product_base import BaseProduct
     from pfund.datas.data_base import BaseData

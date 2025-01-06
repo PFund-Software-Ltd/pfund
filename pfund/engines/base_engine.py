@@ -6,9 +6,9 @@ import importlib
 
 from typing import TYPE_CHECKING, Literal, overload
 if TYPE_CHECKING:
-    from pfeed.types.literals import tDATA_TOOL
-    from pfund.types.core import tStrategy
-    from pfund.types.literals import tENVIRONMENT, tBROKER
+    from pfeed.typing.literals import tDATA_TOOL
+    from pfund.typing.core import tStrategy
+    from pfund.typing.literals import tENVIRONMENT, tBROKER
     from pfund.brokers import BaseBroker, CryptoBroker, IB_Broker
     from pfund.strategies.strategy_base import BaseStrategy
 

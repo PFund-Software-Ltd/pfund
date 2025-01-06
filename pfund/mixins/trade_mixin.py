@@ -5,8 +5,8 @@ if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
     import polars as pl
-    from pfund.types.core import tModel, tIndicator, tFeature
-    from pfund.types.literals import tTRADING_VENUE, tBROKER, tCRYPTO_EXCHANGE
+    from pfund.typing.core import tModel, tIndicator, tFeature
+    from pfund.typing.literals import tTRADING_VENUE, tBROKER, tCRYPTO_EXCHANGE
     from pfund.datas.data_base import BaseData
     from pfund.brokers import BaseBroker, CryptoBroker, IB_Broker
     from pfund.products import BaseProduct, CryptoProduct, IBProduct

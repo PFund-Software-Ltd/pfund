@@ -11,4 +11,3 @@ tModel = TypeVar('tModel', bound=BaseModel)
 tFeature = TypeVar('tFeature', bound=BaseFeature)
 tIndicator = TypeVar('tIndicator', bound=BaseIndicator)
 tProduct = TypeVar('tProduct', bound=BaseProduct)
-

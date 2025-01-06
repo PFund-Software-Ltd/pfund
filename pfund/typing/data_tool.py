@@ -6,7 +6,7 @@ It is referring to the actual functions defined in data_tool_xxx.py
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.types.core import tSeries
+    from pfeed.typing.core import tSeries
 
 
 class _BacktestDataFrame:
@@ -39,7 +39,7 @@ class _BacktestDataFrame:
 def __getattr__(name):
     if name == 'BacktestDataFrame':
         from pfund.utils.utils import get_engine_class
-        from pfund.types.data_tool import _BacktestDataFrame
+        from pfund.typing.data_tool import _BacktestDataFrame
         from pfeed.const.enums import DataTool
         Engine = get_engine_class()
         if Engine.data_tool == DataTool.PANDAS:

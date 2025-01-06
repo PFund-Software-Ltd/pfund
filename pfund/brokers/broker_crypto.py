@@ -5,8 +5,8 @@ if TYPE_CHECKING:
     from pfund.orders.order_base import BaseOrder
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.datas.data_base import BaseData
-    from pfund.types.literals import tCRYPTO_EXCHANGE, tENVIRONMENT
-    from pfund.types.data import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
+    from pfund.typing.literals import tCRYPTO_EXCHANGE, tENVIRONMENT
+    from pfund.typing.data import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
 
 import inspect
 import importlib

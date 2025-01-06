@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
     from pfund.products.product_base import BaseProduct
-    from pfund.types.literals import tENVIRONMENT
+    from pfund.typing.literals import tENVIRONMENT
 
 from pfund.brokers.broker_base import BaseBroker
 from pfund.managers import ConnectionManager, DataManager, OrderManager, PortfolioManager, RiskManager

@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.types.core import tStrategy
+    from pfund.typing.core import tStrategy
     
 from pfund.mixins.backtest_mixin import BacktestMixin
 

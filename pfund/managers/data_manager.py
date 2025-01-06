@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
     from pfund.products.product_base import BaseProduct
-    from pfund.types.data import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
+    from pfund.typing.data import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
     from pfund.brokers.broker_live import LiveBroker
 
 import time

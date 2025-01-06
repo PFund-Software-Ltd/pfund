@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfund.strategies.strategy_base import BaseStrategy
-    from pfund.types.core import tDataFrame
+    from pfund.typing.core import tDataFrame
     from pfund.engines.backtest_engine import BacktestEngine
     from pfund.engines.train_engine import TrainEngine
     
