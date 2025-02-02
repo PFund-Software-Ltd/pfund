@@ -304,6 +304,7 @@ class BacktestEngine(BaseEngine):
                     if not logger.handlers:
                         logger.addHandler(QueueHandler(log_queue))
                         logger.setLevel(logging.DEBUG)
+                        logger.propagate = False
                     if self.mode == BacktestMode.VECTORIZED:
                         _df_chunk = dtl.preprocess_vectorized_df(_df_chunk, backtestee)
                         backtestee.backtest(_df_chunk)
@@ -369,9 +370,15 @@ class BacktestEngine(BaseEngine):
             desc=f'Backtest-Chunk{chunk_num}-Batch{batch_num} (per row)', 
             colour='yellow'
         ):
+            # TODO: don't use product objects, use product name instead
+            # users should use self.product to get the product object
+            # i.e. self.product will create the product object when needed?
+            
             ts, product, resolution = row.ts, row.product, row.resolution
+            # FIXME: broker is not in row anymore, find a way to get broker, product, resolution from the data path instead
             broker = self.brokers[row.broker]
             data_manager = broker.dm
+            # TODO: move quote and tick to separate functions
             if row.is_quote:
                 # TODO
                 raise NotImplementedError('Quote data is not supported in event-driven backtesting yet')

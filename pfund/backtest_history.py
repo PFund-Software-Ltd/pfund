@@ -13,6 +13,7 @@ from pathlib import Path
 import json
 import datetime
 
+import pandas as pd
 from rich.console import Console
 
 from pfund.utils import utils
@@ -190,7 +191,7 @@ class BacktestHistory:
         Console().print('Cleared backtest history!', style='bold red')
     
     def _clean_up(self, backtest_name: str) -> None:
-        from pfeed.utils.utils import rollback_date_range, get_dates_in_between
+        from pfeed.utils.utils import rollback_date_range
         _, local_now, _ = self._parse_backtest_name(backtest_name)
         today = datetime.datetime.strptime(local_now, '%Y-%m-%d_%H:%M:%S_UTC%z').date()
         if self.retention_period[-1] == 'm':
@@ -200,7 +201,7 @@ class BacktestHistory:
             retention_period = self.retention_period
         start_date, end_date = rollback_date_range(retention_period)
         end_date += datetime.timedelta(days=1)
-        retained_dates = get_dates_in_between(start_date, end_date)
+        retained_dates = pd.date_range(start_date, end_date).date
         if today not in retained_dates:
             retained_dates.append(today)
         retained_dates = [date.strftime('%Y-%m-%d') for date in retained_dates]

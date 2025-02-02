@@ -25,6 +25,8 @@
 [FirstRate Data]: https://firstratedata.com
 [Mantine UI]: https://ui.mantine.dev/
 
+> **This library is NOT ready for use, please wait for 0.1.0 release.**
+
 ## Problem
 Machine learning (**AI**) and data engineering (**Big Data**) fields are advancing every year, but everyday traders are **not able to enjoy the benefits** of these improvements, leading to a **widening gap** between retail traders and professional traders.
 
@@ -210,7 +212,7 @@ Strategy and model development could be so much faster since you can build on to
 
 
 ## Related Projects
-- [PFeed] — Data pipeline for algo-trading, helping traders in getting real-time and historical data, and storing them in a local data lake for quantitative research.
+- [PFeed] — Data engine for algo-trading, helping traders in getting real-time and historical data, and storing them in a local data lake for quantitative research.
 - [PyTrade.org] - A curated list of Python libraries and resources for algorithmic trading.
 
 
