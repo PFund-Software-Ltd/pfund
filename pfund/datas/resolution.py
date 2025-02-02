@@ -18,7 +18,7 @@ class Resolution:
         # Add "1" if the resolution doesn't start with a number
         if not re.match(r"^\d", resolution):
             resolution = "1" + resolution
-        assert re.match(r"^\d+[a-zA-Z]+(?:_[lL][1-3])?$", resolution), f"Invalid {resolution=}, pattern should be e.g. '1d', '2m', '3h', '1quote_L1' etc."
+        assert re.match(r"^\d+[a-zA-Z]+(?:_L[1-3])?$", resolution), f"Invalid {resolution=}, pattern should be e.g. '1d', '2m', '3h', '1quote_L1' etc."
         resolution, *orderbook_level = resolution.strip().split('_')
         self._resolution = self._standardize(resolution)
         # split resolution (e.g. '1m') into period (e.g. '1') and timeframe (e.g. 'm')
@@ -41,7 +41,7 @@ class Resolution:
         e.g. convert '1minute' to '1m'
         '''
         period, timeframe = re.split('(\d+)', resolution.strip())[1:]
-        if timeframe.lower() in ['month', 'months'] or timeframe == 'M':
+        if timeframe.lower() in ['mon', 'mons', 'month', 'months'] or timeframe == 'M':
             timeframe = 'M'
         else:
             timeframe = timeframe[0].lower()

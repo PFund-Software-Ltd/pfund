@@ -1,8 +1,9 @@
+from __future__ import annotations
+
 import os
 import sys
 from pathlib import Path
 import importlib
-import multiprocessing
 import logging
 import shutil
 import importlib.resources
@@ -65,7 +66,6 @@ class Configuration:
     cache_path: str = str(CACHE_PATH)
     logging_config_file_path: str = f'{CONFIG_PATH}/logging.yml'
     docker_compose_file_path: str = f'{CONFIG_PATH}/docker-compose.yml'
-    fork_process: bool = True
     custom_excepthook: bool = True
     env_file_path: str = f'{CONFIG_PATH}/.env'
     debug: bool = False
@@ -85,7 +85,7 @@ class Configuration:
         cls._verbose = verbose
     
     @classmethod
-    def load(cls):
+    def load(cls) -> Configuration:
         '''Loads user's config file and returns a Configuration object'''
         CONFIG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
         # Create default config from dataclass fields
@@ -121,14 +121,6 @@ class Configuration:
         if needs_update:
             config.dump()
         return config
-    
-    @classmethod
-    def reset(cls):
-        '''Resets the config by deleting the user config directory and reloading the config'''
-        shutil.rmtree(CONFIG_PATH)
-        if cls._verbose:
-            print(f"{PROJ_NAME} config successfully reset.")
-        return cls.load()
     
     def dump(self):
         with open(CONFIG_FILE_PATH, 'w') as f:
@@ -213,9 +205,6 @@ class Configuration:
             if path not in [self.backtest_path, self.cache_path, self.log_path]:
                 _dynamic_import(path)
         
-        if self.fork_process and sys.platform != 'win32':
-            multiprocessing.set_start_method('fork', force=True)
-        
         if self.custom_excepthook and sys.excepthook is sys.__excepthook__:
             sys.excepthook = _custom_excepthook
         
@@ -260,7 +249,6 @@ def configure(
     logging_config: dict | None = None,
     docker_compose_file_path: str | None = None,
     env_file_path: str | None = None,
-    fork_process: bool | None = None,
     custom_excepthook: bool | None = None,
     debug: bool | None = None,
     verbose: bool = False,

@@ -1,6 +1,10 @@
+import shutil
+from pathlib import Path
+import importlib.resources
+
 import click
 
-from pfund.const.paths import PROJ_NAME
+from pfund.const.paths import PROJ_NAME, CONFIG_PATH
 
 
 @click.group()
@@ -21,10 +25,39 @@ def list(ctx):
 
 
 @config.command()
-@click.pass_context
-def reset(ctx):
-    """Reset the configuration to defaults."""
-    ctx.obj['config'].reset()
+@click.option('--name', '-n', type=click.Choice(['logging', 'docker', 'env', 'config'], case_sensitive=True), required=False, help='The name of the config to reset. If not specified, all configs will be reset.')
+def reset(name: str | None):
+    """Reset the configuration to defaults.
+    Args:
+        name: The name of the config file to reset. If not specified, all configs will be reset.
+            Choices:
+                - logging: Reset the logging.yml file
+                - docker: Reset the docker-compose.yml file
+                - env: Reset the .env file
+                - config: Reset the pfeed_config.yml file
+    """
+    if name is None:
+        shutil.rmtree(CONFIG_PATH)
+    else:
+        if name == 'config':
+            filename = PROJ_NAME + '_' + name + '.yml'
+        elif name == 'env':
+            filename = '.env'
+        elif name == 'docker':
+            filename = 'docker-compose.yml'
+        elif name == 'logging':
+            filename = 'logging.yml'
+        else:
+            raise NotImplementedError(f"Config reset for {name} not implemented")
+            
+        package_dir = Path(importlib.resources.files(PROJ_NAME)).resolve().parents[0]
+        user_file = CONFIG_PATH / filename
+        default_file = package_dir / filename
+        backup_file = CONFIG_PATH / f'{filename}.bak'
+        if user_file.exists():
+            shutil.copy(user_file, backup_file)
+        if name not in ['env', 'config']:
+            shutil.copy(default_file, user_file)
     click.echo(f"{PROJ_NAME} config reset successfully.")
 
 
