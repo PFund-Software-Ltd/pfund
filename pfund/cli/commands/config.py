@@ -14,6 +14,12 @@ def config():
 
 
 @config.command()
+def where():
+    """Print the config path."""
+    click.echo(CONFIG_PATH)
+    
+
+@config.command()
 @click.pass_context
 def list(ctx):
     """List all available options."""

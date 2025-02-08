@@ -11,16 +11,17 @@ import requests
 
 
 class Singleton:
+    _instances = {}
+    
     def __new__(cls, *args, **kwargs):
-        if not hasattr(cls, '_instance'):
-            cls._instance = super().__new__(cls)
-            # print(f'Singleton class "{cls.__name__}" is created')
-        return cls._instance
+        if cls not in cls._instances:
+            cls._instances[cls] = super().__new__(cls)
+        return cls._instances[cls]
     
     @classmethod
     def _remove_singleton(cls):
-        if hasattr(cls, '_instance'):
-            delattr(cls, '_instance')
+        if cls in cls._instances:
+            del cls._instances[cls]
 
 
 # used to explicitly mark a function that includes an api call
