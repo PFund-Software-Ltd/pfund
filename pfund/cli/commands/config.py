@@ -73,7 +73,6 @@ def reset(name: str | None):
 @click.option('--logging-file', '-l', 'logging_config_file_path', type=click.Path(resolve_path=True, exists=True), help='Set the logging config file path')
 @click.option('--docker-file', '-d', 'docker_compose_file_path', type=click.Path(exists=True), help='Set the docker-compose.yml file path')
 @click.option('--env-file', '-e', 'env_file_path', type=click.Path(resolve_path=True, exists=True), help='Path to the .env file')
-@click.option('--fork-process', '-f', type=bool, help='If True, multiprocessing.set_start_method("fork")')
 @click.option('--custom-excepthook', '-c', type=bool, help='If True, log uncaught exceptions to file')
 @click.option('--debug', '-D', type=bool, help='If True, enable debug mode where logs at DEBUG level will be printed')
 def set(**kwargs):
@@ -116,17 +115,21 @@ def open(config_file, env_file, log_file, docker_file, default_editor):
     if default_editor:
         click.edit(filename=file_path)
     else:
-        open_with_vscode(file_path)
+        open_with_code_editor(file_path)
         
         
-def open_with_vscode(file_path):
+def open_with_code_editor(file_path):
+    """Try to open file with VS Code or Cursor, falling back to default editor if neither is available."""
     import subprocess
     try:
         subprocess.run(["code", str(file_path)], check=True)
         click.echo(f"Opened {file_path} with VS Code")
-    except subprocess.CalledProcessError:
-        click.echo("Failed to open with VS Code. Falling back to default editor.")
-        click.edit(filename=file_path)
-    except FileNotFoundError:
-        click.echo("VS Code command 'code' not found. Falling back to default editor.")
-        click.edit(filename=file_path)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        # Try Cursor next
+        try:
+            subprocess.run(["cursor", str(file_path)], check=True)
+            click.echo(f"Opened {file_path} with Cursor")
+            return
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            click.echo("Neither VS Code nor Cursor available. Falling back to default editor.")
+            click.edit(filename=file_path)
