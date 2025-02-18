@@ -15,7 +15,7 @@ from requests import Session, Request, Response
 
 from pfund.const.enums import CeFiProductType
 from pfund.utils.utils import parse_api_response_with_schema, convert_to_uppercases
-from pfund.products.product_crypto import get_CryptoProduct
+from pfund.products.product_crypto_cefi import get_CeFiCryptoProduct
 
 
 tENDPOINT_TYPE = Literal['public', 'private']
@@ -141,8 +141,8 @@ class BaseRestApi:
             
             # create a product to get product.name, which is the full product name
             product_basis = '_'.join([basset, qasset, ptype.value])
-            CryptoProduct = get_CryptoProduct(product_basis)
-            product = CryptoProduct(
+            CeFiCryptoProduct = get_CeFiCryptoProduct(product_basis)
+            product = CeFiCryptoProduct(
                 bkr='CRYPTO',
                 exch=self.exch,
                 base_asset=basset,

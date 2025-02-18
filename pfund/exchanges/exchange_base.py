@@ -18,7 +18,7 @@ import yaml
 
 from pfund.managers.order_manager import OrderUpdateSource
 from pfund.adapter import Adapter
-from pfund.products.product_crypto import get_CryptoProduct
+from pfund.products.product_crypto_cefi import get_CeFiCryptoProduct
 from pfund.products.product_base import BaseProduct
 from pfund.accounts import CryptoAccount
 from pfund.const.enums import (
@@ -140,9 +140,9 @@ class BaseExchange(ABC):
     
     def create_product(self, product_basis: str, **product_specs) -> BaseProduct:
         base_asset, quote_asset, ptype = product_basis.split('_')
-        CryptoProduct = get_CryptoProduct(product_basis)
+        CeFiCryptoProduct = get_CeFiCryptoProduct(product_basis)
         category = self._derive_product_category(ptype)
-        product = CryptoProduct(
+        product = CeFiCryptoProduct(
             bkr='CRYPTO',
             exch=self.exch,
             base_asset=base_asset,

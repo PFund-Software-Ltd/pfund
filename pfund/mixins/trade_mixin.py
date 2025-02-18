@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from pfund.typing.literals import tTRADING_VENUE, tBROKER, tCRYPTO_EXCHANGE
     from pfund.datas.data_base import BaseData
     from pfund.brokers import BaseBroker, CryptoBroker, IB_Broker
-    from pfund.products import BaseProduct, CryptoProduct, IBProduct
+    from pfund.products import BaseProduct, CeFiCryptoProduct, IBProduct
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.models.model_base import BaseModel
     from pfund.datas.data_quote import QuoteData
@@ -194,7 +194,7 @@ class TradeMixin:
         return list(self.engine.brokers.values())
     
     @overload
-    def get_product(self, trading_venue: tCRYPTO_EXCHANGE, pdt: str, exch: str='') -> CryptoProduct | None: ...
+    def get_product(self, trading_venue: tCRYPTO_EXCHANGE, pdt: str, exch: str='') -> CeFiCryptoProduct | None: ...
         
     @overload
     def get_product(self, trading_venue: Literal['IB'], pdt: str, exch: str='') -> IBProduct | None: ...
