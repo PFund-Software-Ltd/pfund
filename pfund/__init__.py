@@ -3,30 +3,32 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     # need these imports to support IDE hints:
     aliases = ...
-    from pfund.engines import (
-        BacktestEngine, 
-        TradeEngine, 
+    from pfund.engines.backtest_engine import BacktestEngine
+    from pfund.engines.trade_engine import TradeEngine
+    from pfund.strategies.strategy_base import BaseStrategy as Strategy
+    from pfund.models.model_base import BaseModel as Model
+    from pfund.models.model_base import BaseFeature as Feature
+    from pfund.models.pytorch_model import PytorchModel
+    from pfund.models.sklearn_model import SklearnModel
+    from pfund.indicators.indicator_base import BaseIndicator as Indicator
+    from pfund.indicators.talib_indicator import TalibIndicator
+    from pfund.indicators.ta_indicator import TaIndicator
+    from pfund.brokers.broker_crypto import CryptoBroker
+    from pfund.brokers.ib.broker_ib import (
+        IBBroker,
+        IBBroker as IB,
     )
-    from pfund.strategies import Strategy
-    from pfund.models import (
-        Model, 
-        Feature, 
-        PytorchModel, 
-        SklearnModel
+    from pfund.exchanges.bybit.exchange import (
+        Exchange as Bybit,
+        Exchange as BybitExchange, 
     )
-    from pfund.indicators import (
-        Indicator, 
-        TalibIndicator, 
-        TaIndicator
+    from pfund.exchanges.binance.exchange import (
+        Exchange as Binance,
+        Exchange as BinanceExchange, 
     )
-    from pfund.brokers import (
-        CryptoBroker, 
-        IB_Broker, IB
-    )
-    from pfund.exchanges import (
-        BybitExchange, Bybit,
-        BinanceExchange, Binance,
-        OkxExchange, OKX
+    from pfund.exchanges.okx.exchange import (
+        Exchange as OKX,
+        Exchange as OKXExchange, 
     )
 
 import sys
@@ -50,50 +52,50 @@ def __getattr__(name: str):
         from pfund.const.aliases import ALIASES
         return ALIASES
     elif name == 'BacktestEngine':
-        from pfund.engines import BacktestEngine
+        from pfund.engines.backtest_engine import BacktestEngine
         return BacktestEngine
     elif name == 'TradeEngine':
-        from pfund.engines import TradeEngine
+        from pfund.engines.trade_engine import TradeEngine
         return TradeEngine
     elif name == "Strategy":
-        from pfund.strategies import Strategy
+        from pfund.strategies.strategy_base import BaseStrategy as Strategy
         return Strategy
     elif name == "Model":
-        from pfund.models import Model
+        from pfund.models.model_base import BaseModel as Model
         return Model
     elif name == "Feature":
-        from pfund.models import Feature
+        from pfund.models.model_base import BaseFeature as Feature
         return Feature
     elif name == "PytorchModel":
-        from pfund.models import PytorchModel
+        from pfund.models.pytorch_model import PytorchModel
         return PytorchModel
     elif name == "SklearnModel":
-        from pfund.models import SklearnModel
+        from pfund.models.sklearn_model import SklearnModel
         return SklearnModel
     elif name == "Indicator":
-        from pfund.indicators import Indicator
+        from pfund.indicators.indicator_base import BaseIndicator as Indicator
         return Indicator
     elif name == "TalibIndicator":
-        from pfund.indicators import TalibIndicator
+        from pfund.indicators.talib_indicator import TalibIndicator
         return TalibIndicator
     elif name == "TaIndicator":
-        from pfund.indicators import TaIndicator
+        from pfund.indicators.ta_indicator import TaIndicator
         return TaIndicator
     elif name == "CryptoBroker":
-        from pfund.brokers import CryptoBroker
+        from pfund.brokers.broker_crypto import CryptoBroker
         return CryptoBroker
-    elif name in ("IB_Broker", 'IB'):
-        from pfund.brokers import IB_Broker
-        return IB_Broker
+    elif name in ("IBBroker", 'IB'):
+        from pfund.brokers.ib.broker_ib import IBBroker
+        return IBBroker
     elif name in ("BybitExchange", "Bybit"):
-        from pfund.exchanges import BybitExchange
-        return BybitExchange
+        from pfund.exchanges.bybit.exchange import Exchange
+        return Exchange
     elif name in ("BinanceExchange", "Binance"):
-        from pfund.exchanges import BinanceExchange
-        return BinanceExchange
-    elif name in ("OkxExchange", "OKX"):
-        from pfund.exchanges import OkxExchange
-        return OkxExchange
+        from pfund.exchanges.binance.exchange import Exchange
+        return Exchange
+    elif name in ("OKXExchange", "OKX"):
+        from pfund.exchanges.okx.exchange import Exchange
+        return Exchange
 
 
 print_error = lambda msg: print(f'\033[91m{msg}\033[0m')

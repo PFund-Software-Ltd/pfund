@@ -5,16 +5,15 @@ from decimal import Decimal
 from pydantic import model_validator, validate_call
 from pydantic import BaseModel, ConfigDict, Field
 
-from pfund.const.enums import ProductType, Broker
+from pfund.enums import ProductType, Broker
 
 
 def get_product_class(product_basis: str):
-    from pfund.products import (
-        StockProduct, 
-        FutureProduct, 
-        OptionProduct,
-        DerivativeProduct,
-    )
+    from pfund.products.product_stock import StockProduct
+    from pfund.products.product_future import FutureProduct
+    from pfund.products.product_option import OptionProduct
+    from pfund.products.product_derivative import DerivativeProduct
+    
     ptype = product_basis.split('_')[2]
     ptype = ProductType[ptype]
     if ptype in [ProductType.FUT, ProductType.IFUT]:

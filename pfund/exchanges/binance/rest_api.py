@@ -5,12 +5,12 @@ to handle different endpoints for spot and derivative trading
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.products import BaseProduct
+    from pfund.products.product_base import BaseProduct
 
 from pathlib import Path
 
 from pfund.exchanges.rest_api_base import BaseRestApi
-from pfund.const.enums import Environment, CeFiProductType
+from pfund.enums import Environment, CeFiProductType
 from pfund.exchanges.binance.rest_api_spot import RestApiSpot
 from pfund.exchanges.binance.rest_api_linear import RestApiLinear
 from pfund.exchanges.binance.rest_api_inverse import RestApiInverse

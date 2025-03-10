@@ -3,17 +3,17 @@ from typing import Callable, Any, TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from websocket import WebSocket
     from pfund.typing.literals import tENVIRONMENT
-    from pfund.products import BaseProduct
+    from pfund.products.product_base import BaseProduct
 
 import datetime
 from enum import StrEnum
 from decimal import Decimal
 from pathlib import Path
 
-from pfund.const.enums import CeFiProductType
+from pfund.enums import CeFiProductType
 from pfund.exchanges.exchange_base import BaseExchange
-from pfund.accounts import CryptoAccount
-from pfund.orders import CryptoOrder
+from pfund.accounts.account_crypto import CryptoAccount
+from pfund.orders.order_crypto import CryptoOrder
 
 
 tBYBIT_PRODUCT_CATEGORY = Literal['LINEAR', 'INVERSE', 'SPOT', 'OPTION']

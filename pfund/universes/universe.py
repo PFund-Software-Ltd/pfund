@@ -7,8 +7,11 @@ from collections import defaultdict
 
 from rich.console import Console
 
-from pfund.universes import BaseUniverse, CeFiUniverse, TradFiUniverse, DeFiUniverse
-from pfund.mixins.assets import AllAssetsMixin
+from pfund.universes.universe_base import BaseUniverse
+from pfund.universes.universe_cefi import CeFiUniverse
+from pfund.universes.universe_tradfi import TradFiUniverse
+from pfund.universes.universe_defi import DeFiUniverse
+from pfund.mixins.assets.all_assets_mixin import AllAssetsMixin
 
 
 class Universe(AllAssetsMixin, BaseUniverse):

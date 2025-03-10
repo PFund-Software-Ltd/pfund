@@ -1,8 +1,8 @@
 from pathlib import Path
 
 from pfund.exchanges.ws_api_base import BaseWebsocketApi
-from pfund.const.enums import PublicDataChannel, PrivateDataChannel
-from pfund.const.enums import Environment
+from pfund.enums import PublicDataChannel, PrivateDataChannel
+from pfund.enums import Environment
 from pfund.exchanges.binance.ws_api_spot import WebsocketApiSpot
 from pfund.exchanges.binance.ws_api_linear import WebsocketApiLinear
 from pfund.exchanges.binance.ws_api_inverse import WebsocketApiInverse

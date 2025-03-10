@@ -4,7 +4,7 @@ from typing import Any, Literal
 import os
 from decimal import Decimal
 
-from pfund.const.enums import CeFiProductType, CryptoExchange
+from pfund.enums import CeFiProductType, CryptoExchange
 from pfund.utils.utils import load_yaml_file
 from pfund.products.product_base import get_product_class
 from pfund.products.product_base import BaseProduct

@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pfund.const.enums.timeframe import TimeframeUnits
+from pfund.enums.timeframe import TimeframeUnits
 
 
 class Timeframe:

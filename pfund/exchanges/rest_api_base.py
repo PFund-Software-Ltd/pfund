@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfund.accounts import CryptoAccount
-    from pfund.const.enums import Environment
+    from pfund.accounts.account_crypto import CryptoAccount
+    from pfund.enums import Environment
     from pfund.typing.literals import tCRYPTO_EXCHANGE
     from pfund.adapter import Adapter
 
@@ -13,7 +13,7 @@ from pprint import pprint, pformat
 
 from requests import Session, Request, Response
 
-from pfund.const.enums import CeFiProductType
+from pfund.enums import CeFiProductType
 from pfund.utils.utils import parse_api_response_with_schema, convert_to_uppercases
 from pfund.products.product_crypto_cefi import get_CeFiCryptoProduct
 

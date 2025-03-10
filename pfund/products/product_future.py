@@ -3,7 +3,7 @@ from typing import Any
 from datetime import date
 
 from pfund.products.product_derivative import DerivativeProduct
-from pfund.const.enums import FutureMonthCode
+from pfund.enums import FutureMonthCode
 
 
 class FutureProduct(DerivativeProduct):

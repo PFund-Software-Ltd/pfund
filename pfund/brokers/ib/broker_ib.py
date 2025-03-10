@@ -7,18 +7,18 @@ if TYPE_CHECKING:
     from pfund.typing.data_kwargs import QuoteDataKwargs, TickDataKwargs, BarDataKwargs
 
 from pfund.adapter import Adapter
-from pfund.products import IBProduct
-from pfund.accounts import IBAccount
-from pfund.orders import IBOrder
-from pfund.positions import IBPosition
-from pfund.balances import IBBalance
+from pfund.products.product_ib import IBProduct
+from pfund.accounts.account_ib import IBAccount
+from pfund.orders.order_ib import IBOrder
+from pfund.positions.position_ib import IBPosition
+from pfund.balances.balance_ib import IBBalance
 from pfund.utils.utils import convert_to_uppercases
 from pfund.brokers.broker_live import LiveBroker
 from pfund.brokers.ib.ib_api import IBApi
-from pfund.const.enums import PublicDataChannel, PrivateDataChannel
+from pfund.enums import PublicDataChannel, PrivateDataChannel
 
 
-class IB_Broker(LiveBroker):
+class IBBroker(LiveBroker):
     def __init__(self, env: str, **configs):
         super().__init__(env, 'IB', **configs)
         config_path = f'{PROJ_CONFIG_PATH}/{self.bkr.value.lower()}'

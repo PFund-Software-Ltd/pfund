@@ -20,7 +20,7 @@ from pfund.typing.backtest_kwargs import BacktestKwargs
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.models.model_base import BaseModel
 from pfund.indicators.talib_indicator import TalibIndicator
-from pfund.const.enums import BacktestMode
+from pfund.enums import BacktestMode
 
 
 def vectorized(func):

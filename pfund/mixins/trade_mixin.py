@@ -8,8 +8,11 @@ if TYPE_CHECKING:
     from pfund.typing.core import tModel, tIndicator, tFeature
     from pfund.typing.literals import tTRADING_VENUE, tBROKER, tCRYPTO_EXCHANGE
     from pfund.datas.data_base import BaseData
-    from pfund.brokers import BaseBroker, CryptoBroker, IB_Broker
-    from pfund.products import BaseProduct, CeFiCryptoProduct, IBProduct
+    from pfund.brokers.broker_base import BaseBroker
+    from pfund.brokers.broker_crypto import CryptoBroker
+    from pfund.brokers.ib.broker_ib import IBBroker
+    from pfund.products.product_base import BaseProduct
+    from pfund.products.product_ib import IBProduct
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.models.model_base import BaseModel
     from pfund.datas.data_quote import QuoteData
@@ -21,7 +24,7 @@ import time
 import datetime
 from pathlib import Path
 
-from pfund.const.enums import CryptoExchange
+from pfund.enums import CryptoExchange
 from pfund.datas.resolution import Resolution
 from pfund.utils.utils import load_yaml_file, convert_ts_to_dt
 from pfund.plogging import create_dynamic_logger
@@ -181,7 +184,7 @@ class TradeMixin:
     def get_broker(self, bkr: Literal['CRYPTO']) -> CryptoBroker: ...
         
     @overload
-    def get_broker(self, bkr: Literal['IB']) -> IB_Broker: ...
+    def get_broker(self, bkr: Literal['IB']) -> IBBroker: ...
     
     def get_broker(self, bkr: tBROKER) -> BaseBroker:
         return self.engine.get_broker(bkr)
@@ -194,7 +197,7 @@ class TradeMixin:
         return list(self.engine.brokers.values())
     
     @overload
-    def get_product(self, trading_venue: tCRYPTO_EXCHANGE, pdt: str, exch: str='') -> CeFiCryptoProduct | None: ...
+    def get_product(self, trading_venue: tCRYPTO_EXCHANGE, pdt: str, exch: str='') -> BaseProduct | None: ...
         
     @overload
     def get_product(self, trading_venue: Literal['IB'], pdt: str, exch: str='') -> IBProduct | None: ...

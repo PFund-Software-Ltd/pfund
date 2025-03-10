@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.portfolios import Portfolio
-    from pfund.universes import Universe
+    from pfund.portfolios.portfolio import Portfolio
+    from pfund.universes.universe import Universe
     from pfund.investment_profile import InvestmentProfile
 
 from abc import ABC, abstractmethod

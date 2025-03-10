@@ -9,13 +9,15 @@ if TYPE_CHECKING:
     from pfeed.typing.literals import tDATA_TOOL
     from pfund.typing.core import tStrategy
     from pfund.typing.literals import tENVIRONMENT, tBROKER
-    from pfund.brokers import BaseBroker, CryptoBroker, IB_Broker
+    from pfund.brokers.broker_base import BaseBroker
+    from pfund.brokers.broker_crypto import CryptoBroker
+    from pfund.brokers.ib.broker_ib import IBBroker
     from pfund.strategies.strategy_base import BaseStrategy
 
 from rich.console import Console
 
 from pfund.utils.utils import Singleton
-from pfund.const.enums import Environment, Broker
+from pfund.enums import Environment, Broker
 from pfund.config import get_config
 
 
@@ -113,7 +115,7 @@ class BaseEngine(Singleton):
         
     # conditional typing, returns the exact type of broker
     @overload
-    def get_broker(self, bkr: Literal['IB']) -> IB_Broker: ...
+    def get_broker(self, bkr: Literal['IB']) -> IBBroker: ...
 
     def get_broker(self, bkr: tBROKER) -> BaseBroker:
         return self.brokers[bkr.upper()]
@@ -129,5 +131,5 @@ class BaseEngine(Singleton):
         if bkr == 'CRYPTO':
             BrokerClass = getattr(importlib.import_module(f'pfund.brokers.broker_{bkr.lower()}'), 'CryptoBroker')
         elif bkr == 'IB':
-            BrokerClass = getattr(importlib.import_module(f'pfund.brokers.ib.broker_{bkr.lower()}'), 'IB_Broker')
+            BrokerClass = getattr(importlib.import_module(f'pfund.brokers.ib.broker_{bkr.lower()}'), 'IBBroker')
         return BrokerClass

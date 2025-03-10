@@ -38,7 +38,7 @@ Therefore, a virtual broker named `CRYPTO` has been created as an intermediary t
 ```{code-cell}
 :tags: [hide-output]
 
-from pfund.const.enums import SUPPORTED_BROKERS
+from pfund.enums import SUPPORTED_BROKERS
 from pprint import pprint
 
 pprint(SUPPORTED_BROKERS)
@@ -70,7 +70,7 @@ Unlike the virtual broker `CRYPTO`, which is an actual broker object in `pfund` 
 ```{code-cell}
 :tags: [hide-output]
 
-from pfund.const.enums import CryptoExchange
+from pfund.enums import CryptoExchange
 from pprint import pprint
 
 pprint(CryptoExchange)
@@ -114,7 +114,7 @@ Financial products/instruments are in the format of `XXX_YYY_PTYPE` where
 ```{code-cell}
 :tags: [hide-output]
 
-from pfund.const.enums import SUPPORTED_TRADFI_PRODUCT_TYPES
+from pfund.enums import SUPPORTED_TRADFI_PRODUCT_TYPES
 from pprint import pprint
 
 pprint(SUPPORTED_TRADFI_PRODUCT_TYPES)
@@ -132,7 +132,7 @@ Crypto product types supported by `pfund` include:
 ```{code-cell}
 :tags: [hide-output]
 
-from pfund.const.enums import SUPPORTED_CRYPTO_PRODUCT_TYPES
+from pfund.enums import SUPPORTED_CRYPTO_PRODUCT_TYPES
 from pprint import pprint
 
 pprint(SUPPORTED_CRYPTO_PRODUCT_TYPES)

@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from pfund.const.enums import CeFiProductType
+from pfund.enums import CeFiProductType
 
 
 class CeFiAssetsMixin:

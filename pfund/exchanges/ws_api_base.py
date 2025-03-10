@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.typing.literals import tCRYPTO_EXCHANGE
-    from pfund.const.enums import Environment
+    from pfund.enums import Environment
     from pfund.products.product_base import BaseProduct
     from pfund.datas.data_base import BaseData
 
@@ -27,7 +27,7 @@ from websocket import WebSocketApp, WebSocketConnectionClosedException
 from pfund.managers.order_manager import OrderUpdateSource
 from pfund.zeromq import ZeroMQ
 from pfund.adapter import Adapter
-from pfund.const.enums import PublicDataChannel, PrivateDataChannel, DataChannelType
+from pfund.enums import PublicDataChannel, PrivateDataChannel, DataChannelType
 
 
 class BaseWebsocketApi(ABC):

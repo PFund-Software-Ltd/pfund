@@ -6,8 +6,12 @@ if TYPE_CHECKING:
     from pfund.typing.literals import tENVIRONMENT
 
 from pfund.brokers.broker_base import BaseBroker
-from pfund.managers import ConnectionManager, DataManager, OrderManager, PortfolioManager, RiskManager
-from pfund.const.enums import Broker, PublicDataChannel, PrivateDataChannel, DataChannelType
+from pfund.managers.connection_manager import ConnectionManager
+from pfund.managers.data_manager import DataManager
+from pfund.managers.order_manager import OrderManager
+from pfund.managers.portfolio_manager import PortfolioManager
+from pfund.managers.risk_manager import RiskManager
+from pfund.enums import Broker, PublicDataChannel, PrivateDataChannel, DataChannelType
 
 
 class LiveBroker(BaseBroker):

@@ -1,7 +1,9 @@
 from collections import defaultdict
 
-from pfund.mixins.assets import TradFiAssetsMixin, CeFiAssetsMixin, DeFiAssetsMixin
-from pfund.const.enums import TradFiProductType, CeFiProductType
+from pfund.mixins.assets.tradfi_assets_mixin import TradFiAssetsMixin
+from pfund.mixins.assets.cefi_assets_mixin import CeFiAssetsMixin
+from pfund.mixins.assets.defi_assets_mixin import DeFiAssetsMixin
+from pfund.enums import TradFiProductType, CeFiProductType
 
 
 class AllAssetsMixin(TradFiAssetsMixin, CeFiAssetsMixin, DeFiAssetsMixin):

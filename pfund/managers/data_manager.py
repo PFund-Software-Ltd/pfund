@@ -89,7 +89,10 @@ class DataManager(BaseManager):
         tick_data: dict | TickDataKwargs | None=None, 
         bar_data: BarDataKwargs | None=None
     ):
-        from pfund.datas import QuoteData, TickData, BarData
+        from pfund.datas.data_quote import QuoteData
+        from pfund.datas.data_tick import TickData
+        from pfund.datas.data_bar import BarData
+
         if resolution.is_quote():
             data = QuoteData(product, resolution, **quote_data)
         elif resolution.is_tick():

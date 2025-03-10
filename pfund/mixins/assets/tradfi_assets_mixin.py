@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from pfund.const.enums import TradFiProductType
+from pfund.enums import TradFiProductType
 
 
 class TradFiAssetsMixin:

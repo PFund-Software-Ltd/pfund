@@ -13,9 +13,9 @@ except ImportError:
 import hmac
 from decimal import Decimal
 
-from pfund.const.enums import PublicDataChannel, PrivateDataChannel
+from pfund.enums import PublicDataChannel, PrivateDataChannel
 from pfund.exchanges.ws_api_base import BaseWebsocketApi
-from pfund.const.enums import Environment
+from pfund.enums import Environment
 
 
 class WebsocketApi(BaseWebsocketApi):

@@ -3,7 +3,7 @@ import shutil
 
 import click
 
-from pfund.const.enums import CryptoExchange
+from pfund.enums import CryptoExchange
 
 
 @click.group()

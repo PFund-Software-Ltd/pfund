@@ -1,5 +1,5 @@
 from pfund.accounts.account_base import BaseAccount
-from pfund.const.enums import Environment, Broker
+from pfund.enums import Environment, Broker
 
 
 class IBAccount(BaseAccount):

@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 from collections import defaultdict
 
 from pfund.portfolios import BasePortfolio, CeFiPortfolio, DeFiPortfolio, TradFiPortfolio
-from pfund.mixins.assets import AllAssetsMixin
+from pfund.mixins.assets.all_assets_mixin import AllAssetsMixin
 
 
 class Portfolio(AllAssetsMixin, BasePortfolio):

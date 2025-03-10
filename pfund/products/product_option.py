@@ -4,7 +4,7 @@ from datetime import date
 from pydantic import Field
 
 from pfund.products.product_derivative import DerivativeProduct
-from pfund.const.enums.option_type import OptionType
+from pfund.enums.option_type import OptionType
 
 
 class OptionProduct(DerivativeProduct):

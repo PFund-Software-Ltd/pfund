@@ -17,7 +17,7 @@ import pandas as pd
 from rich.console import Console
 
 from pfund.utils import utils
-from pfund.const.enums import BacktestMode
+from pfund.enums import BacktestMode
 
 
 class BacktestHistory:

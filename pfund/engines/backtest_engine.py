@@ -21,7 +21,7 @@ from pfund.backtest_history import BacktestHistory
 from pfund.engines.base_engine import BaseEngine
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.brokers.broker_backtest import BacktestBroker
-from pfund.const.enums import BacktestMode
+from pfund.enums import BacktestMode
 
 
 class BacktestEngine(BaseEngine):

@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.typing.literals import tENVIRONMENT, tCRYPTO_EXCHANGE
     from pfund.datas.data_base import BaseData
-    from pfund.const.enums import PublicDataChannel
+    from pfund.enums import PublicDataChannel
 
 import os
 import datetime
@@ -20,8 +20,8 @@ from pfund.managers.order_manager import OrderUpdateSource
 from pfund.adapter import Adapter
 from pfund.products.product_crypto_cefi import get_CeFiCryptoProduct
 from pfund.products.product_base import BaseProduct
-from pfund.accounts import CryptoAccount
-from pfund.const.enums import (
+from pfund.accounts.account_crypto import CryptoAccount
+from pfund.enums import (
     Environment, 
     CeFiProductType, 
     PrivateDataChannel, 

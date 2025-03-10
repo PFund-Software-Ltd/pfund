@@ -179,7 +179,7 @@ def find_strategy_class(strat: str):
 
 
 def get_engine_class():
-    from pfund.const.enums import Environment
+    from pfund.enums import Environment
     env = os.getenv('env')
     assert env in Environment.__members__, f'Unsupported {env=}'
     if env == 'BACKTEST':

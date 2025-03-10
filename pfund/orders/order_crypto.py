@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
-    from pfund.accounts import CryptoAccount
+    from pfund.accounts.account_crypto import CryptoAccount
 
 from pfund.orders.order_base import BaseOrder
 

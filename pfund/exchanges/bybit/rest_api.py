@@ -19,7 +19,7 @@ except ImportError:
 from requests import Response
 
 from pfund.exchanges.rest_api_base import BaseRestApi
-from pfund.const.enums import Environment, OptionType
+from pfund.enums import Environment, OptionType
 from pfund.exchanges.bybit.exchange import BybitProductCategory
 
 

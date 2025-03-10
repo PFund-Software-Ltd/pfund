@@ -1,6 +1,6 @@
 from pfund.externals.ibapi.contract import Contract
 from pfund.utils.utils import convert_to_uppercases
-from pfund.const.enums import TradFiProductType
+from pfund.enums import TradFiProductType
 
 
 class IBProduct(Contract):

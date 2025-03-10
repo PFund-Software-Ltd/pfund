@@ -3,7 +3,7 @@ import pytest
 
 import pfund as pf
 from pfund import BacktestEngine
-from pfund.const.enums import Environment
+from pfund.enums import Environment
 
 
 @pytest.mark.smoke

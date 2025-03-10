@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfund.typing.literals import tENVIRONMENT
-    from pfund.products import BaseProduct
+    from pfund.products.product_base import BaseProduct
 
 from enum import StrEnum
 from pathlib import Path

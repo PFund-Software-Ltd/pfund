@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 
 from pfund.datas.timeframe import Timeframe
-from pfund.const.enums import TimeframeUnits
+from pfund.enums import TimeframeUnits
 
 
 class Resolution:

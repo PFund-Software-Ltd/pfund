@@ -2,8 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from pfund.products import BaseProduct
-    from pfund.accounts import BaseAccount
+    from pfund.products.product_base import BaseProduct
+    from pfund.accounts.account_base import BaseAccount
 
 import time
 import logging
