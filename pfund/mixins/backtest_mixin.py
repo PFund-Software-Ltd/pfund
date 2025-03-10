@@ -4,33 +4,28 @@ if TYPE_CHECKING:
     import torch
     import pandas as pd
     import polars as pl
-    from pfeed.feeds.base_feed import BaseFeed
-    from pfeed.typing.literals import tDATA_SOURCE
+    from pfeed.const.enums import DataSource
     from pfund.typing.core import tModel
     from pfund.datas.data_base import BaseData
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.typing.literals import tTRADING_VENUE
-    from pfund.typing.data import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
+    from pfund.typing.data_kwargs import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
 
 import time
 
 import numpy as np
 
-from pfund.typing.backtest import BacktestKwargs
-from pfund.validations.backtest import validate_backtest_kwargs
+from pfeed.feeds.market_feed import MarketFeed
+from pfund.typing.backtest_kwargs import BacktestKwargs
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.models.model_base import BaseModel
 from pfund.indicators.talib_indicator import TalibIndicator
 from pfund.const.enums import BacktestMode
 
 
-# FIXME: clean up, should add to types?
-_EVENT_DRIVEN_BACKTEST_KWARGS = ['resamples', 'shifts', 'auto_resample']
-
-
 def vectorized(func):
     def wrapper(*args, **kwargs):
-        if args[0].engine.mode == 'vectorized':
+        if args[0].engine.mode == BacktestMode.vectorized:
             return func(*args, **kwargs)
         else:
             raise Exception(f"{func.__name__}() is only available in vectorized backtesting.")
@@ -39,7 +34,7 @@ def vectorized(func):
 
 def event_driven(func):
     def wrapper(*args, **kwargs):
-        if args[0].engine.mode == 'event_driven':
+        if args[0].engine.mode == BacktestMode.event_driven:
             return func(*args, **kwargs)
         else:
             raise Exception(f"{func.__name__}() is only available in event driven backtesting.")
@@ -76,7 +71,7 @@ class BacktestMixin:
     
     def on_stop(self):
         super().on_stop()
-        if self.engine.mode == BacktestMode.EVENT_DRIVEN and self.engine.assert_signals and self._has_signal_df():
+        if self.engine.mode == BacktestMode.event_driven and self.engine.assert_signals and self._has_signal_df():
             self._assert_consistent_signals()
             
     def _next(self, data: BaseData) -> torch.Tensor | np.ndarray:
@@ -101,9 +96,9 @@ class BacktestMixin:
     def _check_if_signal_df_required(self) -> bool:
         if self._is_dummy_strategy:
             return False
-        elif self.engine.mode == BacktestMode.VECTORIZED:
+        elif self.engine.mode == BacktestMode.vectorized:
             return True
-        elif self.engine.mode == BacktestMode.EVENT_DRIVEN:
+        elif self.engine.mode == BacktestMode.event_driven:
             return self.engine.use_signal_df
     
     def _check_if_append_to_df(self):
@@ -172,7 +167,7 @@ class BacktestMixin:
     def _prepare_df(self):
         if self._is_dummy_strategy and isinstance(self, BaseStrategy):
             return
-        ts_col_type = 'timestamp' if self.engine.mode == BacktestMode.EVENT_DRIVEN else 'datetime'
+        ts_col_type = 'timestamp' if self.engine.mode == BacktestMode.event_driven else 'datetime'
         self.dtl.prepare_df(ts_col_type=ts_col_type)
         if self._is_signal_df_required:
             self._merge_signal_dfs_with_df()
@@ -186,7 +181,7 @@ class BacktestMixin:
             self.dtl.merge_signal_dfs_with_df(signal_dfs)
     
     def clear_dfs(self):
-        assert self.engine.mode == BacktestMode.EVENT_DRIVEN
+        assert self.engine.mode == BacktestMode.event_driven
         if not self._is_signal_df_required:
             self._data_tool.clear_df()
         if isinstance(self, BaseStrategy):
@@ -195,14 +190,20 @@ class BacktestMixin:
         for model in self.models.values():
             model.clear_dfs()
     
-    # TODO
-    def _set_data_periods(self, datas, **kwargs):
-        return self.dtl.set_data_periods(datas, **kwargs)
+    def get_feed(self, data_source: DataSource) -> MarketFeed:
+        DataFeed = data_source.feed_class
+        assert DataFeed is not None, f"Failed to import data feed for {data_source}, make sure it has been installed using `pip install pfeed[{data_source.value.lower()}]`"
+        feed = DataFeed(
+            data_tool=str(self.data_tool),
+            use_ray=self.engine.use_ray,
+        )
+        if not isinstance(feed, MarketFeed):
+            if hasattr(feed, 'market'):
+                feed = feed.market
+            else:
+                raise ValueError(f"Data feed {feed} is not a MarketFeed")
+        return feed
     
-    def _add_data_signature(self, *args, **kwargs):
-        self._data_signatures.append((args, kwargs))
-    
-    @validate_backtest_kwargs
     def add_data(
         self, 
         trading_venue: tTRADING_VENUE, 
@@ -210,18 +211,18 @@ class BacktestMixin:
         resolutions: list[str] | str,
         resamples: dict[str, str] | None=None,
         auto_resample=None,  # FIXME
-        quote_data: QuoteDataKwargs | None=None,
-        tick_data: TickDataKwargs | None=None,
-        bar_data: BarDataKwargs | None=None,
-        backtest: BacktestKwargs | dict | None=None,
-        train: dict | None=None,
-        **kwargs
+        quote_data: dict | QuoteDataKwargs | None=None,
+        tick_data: dict | TickDataKwargs | None=None,
+        bar_data: dict | BarDataKwargs | None=None,
+        backtest: dict | BacktestKwargs | None=None,
+        **product_specs
     ) -> list[BaseData]:
-        self._add_data_signature(trading_venue, product, resolutions, backtest=backtest, train=train, **kwargs)
-        feed: BaseFeed = self.get_feed(backtest['data_source'])
+        backtest = BacktestKwargs(**(backtest or {})).model_dump()
+        self._data_signatures.append({k: v for k, v in locals().items() if k not in ['self', '__class__']})
+        feed: MarketFeed = self.get_feed(backtest['data_source'])
         kwargs = self._prepare_kwargs(feed, resolutions, kwargs)
         datas = super().add_data(
-            trading_venue, 
+            trading_venue,
             product, 
             resolutions, 
             resamples=resamples,
@@ -229,13 +230,12 @@ class BacktestMixin:
             quote_data=quote_data,
             tick_data=tick_data,
             bar_data=bar_data,
-            **kwargs
+            **product_specs
         )
         dfs = self.get_historical_data(feed, datas, backtest)
         for data, df in zip(datas, dfs):
             self._add_raw_df(data, df)
-        if train:
-            self._set_data_periods(datas, **train)
+        self.dtl.set_data_periods(datas, **kwargs)
         return datas
     
     def _add_consumers_datas_if_no_data(self) -> list[BaseData]:
@@ -274,8 +274,10 @@ class BacktestMixin:
             signal_cols=signal_cols,
         )
     
-    def _prepare_kwargs(self, feed: BaseFeed, resolutions, kwargs: dict):
-        if self.engine.mode == BacktestMode.VECTORIZED:
+    def _prepare_kwargs(self, feed: MarketFeed, resolutions, kwargs: dict):
+        # FIXME: clean up, should add to types?
+        _EVENT_DRIVEN_BACKTEST_KWARGS = ['resamples', 'shifts', 'auto_resample']
+        if self.engine.mode == BacktestMode.vectorized:
             # clear kwargs that are only for event driven backtesting
             for k in _EVENT_DRIVEN_BACKTEST_KWARGS:
                 if k == 'auto_resample':
@@ -283,7 +285,7 @@ class BacktestMixin:
                 else:
                     kwargs[k] = {}
         # FIXME
-        elif self.engine.mode == BacktestMode.EVENT_DRIVEN:
+        elif self.engine.mode == BacktestMode.event_driven:
             if 'skip_first_bar' not in kwargs:
                 kwargs['skip_first_bar'] = False
         
@@ -306,21 +308,9 @@ class BacktestMixin:
         
         return kwargs
     
-    def get_feed(self, data_source: tDATA_SOURCE) -> BaseFeed:
-        from pfeed.feeds import YahooFinanceFeed, BybitFeed
-        data_source = data_source.upper()
-        if data_source == 'YAHOO_FINANCE':
-            feed = YahooFinanceFeed(data_tool=str(self.data_tool))
-        elif data_source == 'BYBIT':
-            feed = BybitFeed(data_tool=str(self.data_tool))
-        # TODO: other feeds
-        else:
-            raise NotImplementedError
-        return feed
-
     def get_historical_data(
         self, 
-        feed: BaseFeed, 
+        feed: MarketFeed, 
         datas: list[BaseData], 
         backtest: BacktestKwargs
     ) -> list[pd.DataFrame | pl.LazyFrame]:

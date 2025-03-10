@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.datas.data_base import BaseData
     from pfund.typing.literals import tCRYPTO_EXCHANGE, tENVIRONMENT
-    from pfund.typing.data import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
+    from pfund.typing.data_kwargs import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
 
 import inspect
 import importlib
@@ -57,9 +57,9 @@ class CryptoBroker(LiveBroker):
         resolutions: list[str] | str, 
         resamples: dict[str, str] | None=None,
         auto_resample=None,  # FIXME
-        quote_data: QuoteDataKwargs | None=None,
-        tick_data: TickDataKwargs | None=None,
-        bar_data: BarDataKwargs | None=None,
+        quote_data: dict | QuoteDataKwargs | None=None,
+        tick_data: dict | TickDataKwargs | None=None,
+        bar_data: dict | BarDataKwargs | None=None,
         **product_specs
     ):
         '''

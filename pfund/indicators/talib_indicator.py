@@ -1,13 +1,19 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Type, Any
 if TYPE_CHECKING:
     import numpy as np
     try:
-        import pandas as pd
-        import polars as pl
+        from talib import abstract as talib
+        TalibFunction = Type[talib.Function]  # If talib is available, use its Function type
     except ImportError:
-        pass
-    from pfund.indicators.indicator_base import TalibFunction
+        TalibFunction = Any  # Fallback type if talib is not installed
+
+import pandas as pd
+import polars as pl
+try:
+    from talib import abstract as talib
+except ImportError:
+    raise ImportError('talib is not installed, please install it referring to https://github.com/TA-Lib/ta-lib-python')
 
 from pfund.indicators.indicator_base import BaseIndicator
 
@@ -43,8 +49,6 @@ class TalibIndicator(BaseIndicator):
         return self.get_indicator_info()['parameters']
     
     def _predict_pandas(self, X: pd.DataFrame) -> np.ndarray:
-        import pandas as pd
-
         def _indicate(_X: pd.DataFrame) -> pd.DataFrame:
             _df = self.indicator(_X, *self._args, **self._kwargs)
             if type(_df) is pd.Series:
@@ -66,7 +70,6 @@ class TalibIndicator(BaseIndicator):
 
     # TODO
     def _predict_polars(self):
-        import polars as pl
         pass
     
     def on_start(self):

@@ -85,11 +85,11 @@ class LiveBroker(BaseBroker):
             return None
         timeframe = data.timeframe
         if timeframe.is_quote():
-            channel = PublicDataChannel.ORDERBOOK
+            channel = PublicDataChannel.orderbook
         elif timeframe.is_tick():
-            channel = PublicDataChannel.TRADEBOOK
+            channel = PublicDataChannel.tradebook
         else:
-            channel = PublicDataChannel.KLINE
+            channel = PublicDataChannel.kline
         return channel
     
     def _create_data_channel_type(
@@ -98,7 +98,7 @@ class LiveBroker(BaseBroker):
         channel_type: Literal['public', 'private']=''
     ) -> DataChannelType:
         if channel in [PublicDataChannel, PrivateDataChannel]:
-            channel_type = DataChannelType.PUBLIC if channel in PublicDataChannel else DataChannelType.PRIVATE
+            channel_type = DataChannelType.public if channel in PublicDataChannel else DataChannelType.private
         else:
             assert channel_type, 'channel_type "public" or "private" must be provided'
             channel_type = DataChannelType[channel_type.upper()]

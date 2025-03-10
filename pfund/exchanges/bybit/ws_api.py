@@ -93,7 +93,7 @@ class WebsocketApi(BaseWebsocketApi):
             pdt = product.name
             epdt = self._adapter(pdt, group=product.category)
             echannel = self._adapter(channel, group='channel')
-            if channel == PublicDataChannel.ORDERBOOK:
+            if channel == PublicDataChannel.orderbook:
                 self._orderbook_levels[pdt] = data.orderbook_level
                 if self._orderbook_levels[pdt] not in self.SUPPORTED_ORDERBOOK_LEVELS:
                     raise NotImplementedError(f'{pdt} orderbook_level={self._orderbook_levels[pdt]} is not supported')
@@ -111,9 +111,9 @@ class WebsocketApi(BaseWebsocketApi):
                     subscribed_orderbook_depth = self._orderbook_depths[pdt]
                 self._orderbook_depths[pdt] = min(self._orderbook_depths[pdt], subscribed_orderbook_depth)
                 full_channel = '.'.join([echannel, str(subscribed_orderbook_depth), epdt])
-            elif channel == PublicDataChannel.TRADEBOOK:
+            elif channel == PublicDataChannel.tradebook:
                 full_channel = '.'.join([echannel, epdt])
-            elif channel == PublicDataChannel.KLINE:
+            elif channel == PublicDataChannel.kline:
                 period, timeframe = data.period, repr(data.timeframe)
                 if timeframe not in self.SUPPORTED_RESOLUTIONS.keys():
                     raise NotImplementedError(f'({channel}.{pdt}) {timeframe=} for kline is not supported, only timeframes in {list(self.SUPPORTED_RESOLUTIONS)} are supported')

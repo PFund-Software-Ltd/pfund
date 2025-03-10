@@ -221,9 +221,9 @@ class BaseWebsocketApi(ABC):
         channel_type: DataChannelType, 
         data: BaseData | None=None
     ) -> str:
-        if channel_type == DataChannelType.PUBLIC:
+        if channel_type == DataChannelType.public:
             return self._create_public_channel(channel, data=data)
-        elif channel_type == DataChannelType.PRIVATE:
+        elif channel_type == DataChannelType.private:
             return self._create_private_channel(channel)
     
     def remove_channel(

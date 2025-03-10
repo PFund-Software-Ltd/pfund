@@ -219,7 +219,7 @@ def get_function_signature(function: object, without_self=True) -> inspect.Signa
 
 
 
-def get_args_and_kwargs_from_function(function: object) -> tuple[str]:
+def get_args_and_kwargs_from_function(function: object) -> tuple[list[str], list[tuple[str, Any]], str | None, str | None]:
     signature = get_function_signature(function)
     args = []
     kwargs: list[tuple[str, Any]] = []  # [(name, default_value)]

@@ -1,13 +1,12 @@
-[tool.poetry]
+[project]
 name = "pfund"
 version = "0.0.2"
 description = "A Complete Algo-Trading Framework for Machine Learning, enabling trading across TradFi, CeFi and DeFi. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading"
 license = "Apache-2.0"
-authors = ["Stephen Yau <softwareentrepreneer+pfund@gmail.com>"]
+authors = [
+    {name = "Stephen Yau", email = "softwareentrepreneer+pfund@gmail.com"}
+]
 readme = "README.md"
-homepage = "https://pfund.ai"
-repository = "https://github.com/PFund-Software-Ltd/pfund"
-documentation = "https://pfund-docs.pfund.ai"
 keywords = ["trading", "algo-trading", "stocks", "cryptos", "cryptocurrencies", "TradFi", "CeFi", "DeFi", "portfolio management", "investment", "backtesting", "machine learning"]
 classifiers = [
     "Operating System :: OS Independent",
@@ -23,61 +22,66 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
-include = ['logging.yml', 'docker-compose.yml']
-
-[tool.poetry.dependencies]
-python = "^3.10"
-rich = "^13.7.1"
-tqdm = "^4.66.2"
-click = "^8.1.7"
-pfeed = "^0.0.2"
-pyyaml = "^6.0.1"
-trogon = "^0.6.0"
-orjson = "^3.10.1"
-ipython = "^8.23.0"
-requests = "^2.31.0"
-platformdirs = "^4.3.6"
-python-dotenv = "^1.0.1"
-websocket-client = "^1.8.0"
-pfolio = {extras = ["all"], version = "^0.0.2", optional = true}
-pfund-plot = {version = "^0.0.1.dev2", optional = true}
-ray = {version = "^2.40.0", optional = true}
-psutil = {version = "^6.1.1", optional = true}
-gitpython = {version = "^3.1.43", optional = true}
-ta = { version = "^0.11.0", optional = true }
-ta-lib = {version = "^0.6.0", optional = true}
-schedule = {version = "^1.2.2", optional = true}
-pyzmq = {version = "^26.2.0", optional = true}
-redis = {extras = ["hiredis"], version = "^5.1.1", optional = true}
-python-telegram-bot = {version = "^21.5", optional = true}
-joblib = {version = "^1.4.2", optional = true}
-scikit-learn = {version = "^1.5.2", optional = true}
-torch = {version = "^2.4.1", optional = true}
-mlflow = {version = "^2.16.1", optional = true}
-optuna = {version = "^4.0.0", optional = true}
-feast = {version = "^0.40.1", optional = true}
-
-[tool.poetry.extras]
-backtest = ["ray", "psutil", "pfolio", "pfund-plot", "gitpython", "ta"]
-train = ["joblib", "scikit-learn", "torch", "mlflow", "optuna", "feast"]
-trade = ["psutil", "schedule", "pyzmq", "redis", "python-telegram-bot"]
-talib = ["ta-lib"]
-all = [
-    "ray", "psutil", "pfolio", "pfund-plot", "gitpython", "ta",  # backtest
-    "joblib", "scikit-learn", "torch", "mlflow", "optuna", "feast",  # ML training
-    "schedule", "pyzmq", "redis", "python-telegram-bot",  # trade
+requires-python = ">=3.10"
+dependencies = [
+    "pfeed (>=0.0.2,<0.1.0)",
+    "rich (>=13.7.1,<14.0.0)",
+    "tqdm (>=4.67.1,<5.0.0)",
+    "click (>=8.1.7,<9.0.0)",
+    "trogon (>=0.6.0,<0.7.0) ; python_version < '4.0.0'",
+    "platformdirs (>=4.3.6,<5.0.0)",
+    "python-dotenv (>=1.0.1,<2.0.0)",
+    "pyyaml (>=6.0.1,<7.0.0)",
+    "orjson (>=3.10.1,<4.0.0)",
+    "schedule (>=1.2.2,<2.0.0)",
+    "ipython (>=8.23.0,<9.0.0)",
+    "gitpython (>=3.1.44,<4.0.0)",
+    "requests (>=2.31.0,<3.0.0)",  # TODO: to be removed
+    "httpx (>=0.28.1,<0.29.0)",
+    "websocket-client (>=1.8.0,<2.0.0)",  # TODO: to be removed
+    "websockets (>=15.0.1,<16.0.0)",
+    "ta (>=0.11.0,<0.12.0)",
 ]
 
-[tool.poetry.scripts]
+[project.optional-dependencies]
+core = [
+    "pfolio (>=0.0.2,<0.1.0)",
+    "pfund-plot[notebook] (>=0.0.1.dev2,<0.1.0)", 
+    "ray (>=2.43.0,<3.0.0)", 
+    "psutil (>=6.1.1,<7.0.0)", 
+    "pyzmq (>=26.2.1,<27.0.0)",
+    "redis[hiredis] (>=5.2.1,<6.0.0)",
+]
+ml = [
+    "joblib (>=1.4.2,<2.0.0)",
+    "scikit-learn (>=1.6.1,<2.0.0)",
+    "torch (>=2.6.0,<3.0.0)",
+    "feast (>=0.46.0,<0.47.0)",
+    "mlflow (>=2.20.3,<3.0.0)",
+    "optuna (>=4.2.1,<5.0.0)",
+    "wandb (>=0.19.8,<0.20.0)",
+]
+ta = ["ta-lib (>=0.6.3,<0.7.0)"]
+telegram = ["python-telegram-bot (>=21.11.1,<22.0.0)"]
+
+[project.scripts]
 pfund = "pfund.main:run_cli"
+
+[project.urls]
+homepage = "https://pfund.ai"
+repository = "https://github.com/PFund-Software-Ltd/pfund"
+documentation = "https://pfund-docs.pfund.ai"
+
+[tool.poetry]
+include = ['logging.yml', 'docker-compose.yml']
 
 [tool.poetry.group.dev]
 optional = true
 
 [tool.poetry.group.dev.dependencies]
 pfeed = {path = "../pfeed", develop = true}
-pfolio = {extras = ["all"], path = "../pfolio", develop = true}
-pfund-plot = {path = "../pfund-plot", develop = true}
+pfolio = {path = "../pfolio", develop = true}
+pfund-plot = {path = "../pfund-plot", extras = ["notebook"], develop = true}
 pybit = "^5.8.0"
 mypy = "^1.11.2"
 ruff = "^0.6.9"
@@ -96,5 +100,5 @@ bandit = "^1.7.10"
 pre-commit = "^4.0.1"
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"

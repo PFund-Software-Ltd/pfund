@@ -2,18 +2,18 @@ from enum import StrEnum
 
 
 class PublicDataChannel(StrEnum):
-    ORDERBOOK = 'ORDERBOOK'
-    TRADEBOOK = 'TRADEBOOK'
-    CANDLESTICK = KLINE = 'KLINE'
+    orderbook = 'orderbook'
+    tradebook = 'tradebook'
+    kline = 'kline'
 
 
 class PrivateDataChannel(StrEnum):
-    BALANCE = 'BALANCE'
-    POSITION = 'POSITION'
-    ORDER = 'ORDER'
-    TRADE = 'TRADE'
+    balance = 'balance'
+    position = 'position'
+    order = 'order'
+    trade = 'trade'
 
 
 class DataChannelType(StrEnum):
-    PUBLIC = 'PUBLIC'
-    PRIVATE = 'PRIVATE'
+    public = 'public'
+    private = 'private'

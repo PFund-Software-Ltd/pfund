@@ -1,31 +1,16 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Type, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 if TYPE_CHECKING:
     import pandas as pd
     import polars as pl
-    try:
-        from talib import abstract as talib
-        TalibFunction = Type[talib.Function]  # If talib is available, use its Function type
-    except ImportError:
-        TalibFunction = Any  # Fallback type if talib is not installed
+    from pfund.indicators.talib_indicator import TalibFunction
     TaFunction = Callable[..., Any]  # Type for functions from the 'ta' library
 
 from pfund.models.model_base import BaseModel
 
 
 class BaseIndicator(BaseModel):
-    def __init__(self, indicator: TaFunction | TalibFunction, *args, **kwargs):
-        '''
-        TalibFunction:
-            from talib import abstract as talib
-            e.g. indicator = talib.SMA
-        TaFunction:
-            import ta
-            - type 1 (ta class):
-                e.g. indicator = lambda df: ta.volatility.BollingerBands(close=df['close'], ...)
-            - type 2 (ta function):
-                e.g. indicator = lambda df: ta.volatility.bollinger_mavg(close=df['close'], ...)
-        '''
+    def __init__(self, indicator: TalibFunction, *args, **kwargs):
         from pfeed.const.enums import DataTool
         
         super().__init__(indicator, *args, **kwargs)

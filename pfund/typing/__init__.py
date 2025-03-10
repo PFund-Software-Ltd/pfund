@@ -5,10 +5,10 @@ from pfund.typing.core import (
     tIndicator,
     tProduct,
 )
-from pfund.typing.backtest import (
+from pfund.typing.backtest_kwargs import (
     BacktestKwargs,
 )
-from pfund.typing.data import (
+from pfund.typing.data_kwargs import (
     BarDataKwargs,
     QuoteDataKwargs,
     TickDataKwargs,

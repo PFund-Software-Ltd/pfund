@@ -12,9 +12,11 @@ from pfund.utils.utils import convert_ts_to_dt
 
 
 class QuoteData(TimeBasedData):
-    def __init__(self, product: BaseProduct, resolution: Resolution, orderbook_depth: int=1):
+    def __init__(self, product: BaseProduct, resolution: Resolution, **kwargs):
+        from pfund.typing.data_kwargs import QuoteDataKwargs
+        kwargs = QuoteDataKwargs(**kwargs).model_dump()
         super().__init__(product, resolution)
-        self._orderbook_depth = orderbook_depth
+        self._orderbook_depth = kwargs['orderbook_depth']
         self._orderbook_level = resolution.orderbook_level
         self.bids = ()
         self.asks = ()

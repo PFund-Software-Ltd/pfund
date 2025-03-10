@@ -1,6 +1,11 @@
 """This is a broker class for Interactive Brokers.
 Conceptually, this is a combination of broker_crypto.py + exchange_base.py in crypto version
 """
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.typing.data_kwargs import QuoteDataKwargs, TickDataKwargs, BarDataKwargs
+
 from pfund.adapter import Adapter
 from pfund.products import IBProduct
 from pfund.accounts import IBAccount
@@ -56,7 +61,7 @@ class IB_Broker(LiveBroker):
     def add_channel(self, channel: PublicDataChannel | PrivateDataChannel, type_, **kwargs):
         if type_.lower() == 'public':
             assert 'product' in kwargs, 'Keyword argument "product" is missing'
-            if channel == PublicDataChannel.KLINE:
+            if channel == PublicDataChannel.kline:
                 assert 'period' in kwargs and 'timeframe' in kwargs, 'Keyword arguments "period" or/and "timeframe" is missing'
         elif type_.lower() == 'private':
             assert 'account' in kwargs, 'Keyword argument "account" is missing'
@@ -66,15 +71,34 @@ class IB_Broker(LiveBroker):
     def add_custom_data(self):
         pass
     
-    def add_data(self, product_basis: str, resolutions: list[str] | str, exch: str='', **kwargs):
+    def add_data(
+        self, 
+        product: str, 
+        resolutions: list[str] | str, 
+        resamples: dict[str, str] | None=None,
+        auto_resample=None,  # FIXME
+        quote_data: dict | QuoteDataKwargs | None=None,
+        tick_data: dict | TickDataKwargs | None=None,
+        bar_data: dict | BarDataKwargs | None=None,
+        exch: str='', 
+        **product_specs
+    ):
         '''
         Args:
-            product_basis: defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
+            product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
         '''
-        exch = exch or self.derive_exch(product_basis)
-        exch, product_basis = exch.upper(), product_basis.upper()
-        product: IBProduct = self.add_product(exch, product_basis, **kwargs)
-        datas = self.data_manager.add_data(product, resolutions, **kwargs)
+        exch = exch or self.derive_exch(product)
+        exch, product_basis = exch.upper(), product.upper()
+        product: IBProduct = self.add_product(exch, product_basis, **product_specs)
+        datas = self.data_manager.add_data(
+            product, 
+            resolutions, 
+            resamples=resamples,
+            auto_resample=auto_resample,
+            quote_data=quote_data,
+            tick_data=tick_data,
+            bar_data=bar_data,
+        )
         for data in datas:
             self.add_data_channel(data, **kwargs)
         return datas
@@ -85,11 +109,11 @@ class IB_Broker(LiveBroker):
                 return
             timeframe = data.timeframe
             if timeframe.is_quote():
-                channel = PublicDataChannel.ORDERBOOK
+                channel = PublicDataChannel.orderbook
             elif timeframe.is_tick():
-                channel = PublicDataChannel.TRADEBOOK
+                channel = PublicDataChannel.tradebook
             else:
-                channel = PublicDataChannel.KLINE
+                channel = PublicDataChannel.kline
             self.add_channel(channel, 'public', product=data.product, period=data.period, timeframe=str(timeframe), **kwargs)
         else:
             raise NotImplementedError

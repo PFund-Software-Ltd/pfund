@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     import torch.nn as nn
     from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
     from sklearn.pipeline import Pipeline
-    from pfund.typing.data import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
+    from pfund.typing.data_kwargs import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
     from pfund.models import PytorchModel, SklearnModel
     from pfund.indicators.indicator_base import TaFunction, TalibFunction
     from pfund.typing.literals import tTRADING_VENUE
@@ -198,9 +198,9 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         resolutions: list[str] | str, 
         resamples: dict[str, str] | None=None,
         auto_resample=None,  # FIXME
-        quote_data: QuoteDataKwargs | None=None,
-        tick_data: TickDataKwargs | None=None,
-        bar_data: BarDataKwargs | None=None,
+        quote_data: dict | QuoteDataKwargs | None=None,
+        tick_data: dict | TickDataKwargs | None=None,
+        bar_data: dict | BarDataKwargs | None=None,
         **product_specs
     ) -> list[BaseData]:
         datas = []

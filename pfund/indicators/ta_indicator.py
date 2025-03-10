@@ -2,11 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import numpy as np
-    try:
-        import pandas as pd
-        import polars as pl
-    except ImportError:
-        pass
+    import pandas as pd
+    import polars as pl
     from pfund.indicators.indicator_base import TaFunction
 
 import inspect
@@ -114,5 +111,4 @@ class TaIndicator(BaseIndicator):
 
     # TODO
     def _predict_polars(self, X):
-        import polars as pl
         pass

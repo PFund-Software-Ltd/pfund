@@ -1,15 +1,8 @@
-from __future__ import annotations
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    import pandas as pd
-    import torch
-
 import os
 
-try:
-    import polars as pl
-except ImportError:
-    pl = None
+import torch
+import pandas as pd
+import polars as pl
 
 from pfund.models.model_base import BaseModel
 from pfund.utils.utils import short_path
@@ -17,8 +10,6 @@ from pfund.utils.utils import short_path
 
 class PytorchModel(BaseModel):
     def load(self) -> dict:
-        import torch
-        
         file_path = self._get_file_path(extension='.pt')
         if os.path.exists(file_path):
             obj = torch.load(file_path)
@@ -29,8 +20,6 @@ class PytorchModel(BaseModel):
         return {}
     
     def dump(self, obj: dict[str, any] | None=None):
-        import torch
-        
         if obj is None:
             obj = {}
         obj.update({
@@ -58,15 +47,9 @@ class PytorchModel(BaseModel):
         *args, 
         **kwargs
     ) -> torch.Tensor:
-        try:
-            import pandas as pd
-        except ImportError:
-            pd = None
-        import torch
-            
-        if pd is not None and isinstance(X, pd.DataFrame):
+        if isinstance(X, pd.DataFrame):
             X = torch.tensor( X.to_numpy(), dtype=torch.float32 )
-        elif pl is not None and isinstance(X, pl.LazyFrame):
+        elif isinstance(X, pl.LazyFrame):
             X = torch.tensor( X.collect().to_numpy(), dtype=torch.float32 )
         else:
             raise ValueError(f"Unsupported data type: {type(X)}")

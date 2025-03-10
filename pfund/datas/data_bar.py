@@ -139,15 +139,18 @@ class Bar:
 
 
 class BarData(TimeBasedData):
-    def __init__(self, product, resolution: Resolution, shifts: dict[str, int] | None=None, skip_first_bar: bool=True):
+    def __init__(self, product, resolution: Resolution, **kwargs):
+        from pfund.typing.data_kwargs import BarDataKwargs
+        kwargs = BarDataKwargs(**kwargs).model_dump()
         super().__init__(product, resolution)
+        shifts = kwargs['shifts']
         if shifts and repr(resolution) in shifts:
             shift = shifts[repr(resolution)]
         else:
             shift = 0
         self._bar = Bar(product, resolution, shift=shift)
         self._timeframe = self._bar.timeframe
-        self._skip_first_bar = skip_first_bar
+        self._skip_first_bar = kwargs['skip_first_bar']
 
     def __getattr__(self, attr):
         if '_bar' in self.__dict__:

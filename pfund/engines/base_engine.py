@@ -36,9 +36,9 @@ class BaseEngine(Singleton):
     def __new__(
         cls, 
         env: tENVIRONMENT,
-        data_tool: tDATA_TOOL='pandas', 
+        data_tool: tDATA_TOOL='polars', 
         **settings
-    ):
+    ) -> BaseEngine:
         from pfund.plogging.config import LoggingDictConfigurator
         from pfund.plogging import set_up_loggers
         from pfeed.const.enums import DataTool
@@ -52,8 +52,9 @@ class BaseEngine(Singleton):
             os.environ['env'] = cls.env.value
             Console().print(f"{cls.env.value} Engine is running", style=ENV_COLORS[cls.env.value])
         if not hasattr(cls, 'data_tool'):
-            cls.data_tool = DataTool[data_tool.upper()]
-            cls.DataTool = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool.lower()}'), f'{data_tool.capitalize()}DataTool')
+            data_tool = data_tool.lower()
+            cls.data_tool = DataTool[data_tool]
+            cls.DataTool = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool}'), f'{data_tool.capitalize()}DataTool')
         if not hasattr(cls, 'config'):
             cls.config = get_config()
             log_path = f'{cls.config.log_path}/{cls.env.value.lower()}'
@@ -69,7 +70,7 @@ class BaseEngine(Singleton):
     def __init__(
         self,
         env: tENVIRONMENT,
-        data_tool: tDATA_TOOL='pandas',
+        data_tool: tDATA_TOOL='polars',
         **settings
     ):
         from pfund.managers.strategy_manager import StrategyManager

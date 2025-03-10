@@ -32,12 +32,12 @@ class TradeEngine(BaseEngine):
         cls, 
         *, 
         env: Literal['SANDBOX', 'PAPER', 'LIVE']='PAPER', 
-        data_tool: tDATA_TOOL='pandas', 
+        data_tool: tDATA_TOOL='polars', 
         df_min_rows: int=1_000,
         df_max_rows: int=3_000,
         zmq_port=5557, 
         **settings
-    ):
+    ) -> TradeEngine:
         if not hasattr(cls, 'zmq_port'):
             assert isinstance(zmq_port, int), f'{zmq_port=} must be an integer'
             cls._zmq_port = zmq_port
@@ -57,7 +57,7 @@ class TradeEngine(BaseEngine):
         self,
         *,
         env: Literal['SANDBOX', 'PAPER', 'LIVE']='PAPER',
-        data_tool: tDATA_TOOL='pandas',
+        data_tool: tDATA_TOOL='polars',
         df_min_rows: int=1_000,
         df_max_rows: int=3_000,
         zmq_port=5557,

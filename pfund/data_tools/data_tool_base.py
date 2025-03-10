@@ -16,9 +16,9 @@ class BaseDataTool:
 
     def __init__(self, name: tDATA_TOOL):
         from pfeed.const.enums import DataTool
-        self.name = DataTool[name.upper()]
+        self.name = DataTool[name.lower()]
         # inherit functions from pfeed's data tool as class methods
-        data_tool = importlib.import_module(f'pfeed.data_tools.data_tool_{self.name.value.lower()}')
+        data_tool = importlib.import_module(f'pfeed.data_tools.data_tool_{self.name.value}')
         functions = {name: func for name, func in vars(data_tool).items() if callable(func)}
         for name, func in functions.items():
             setattr(__class__, name, func)

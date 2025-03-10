@@ -183,7 +183,7 @@ class BaseExchange(ABC):
     def _add_default_private_channels(self):
         for channel in self.SUPPORTED_PRIVATE_CHANNELS:
             channel = PrivateDataChannel[channel.upper()]
-            self.add_channel(channel, channel_type=DataChannelType.PRIVATE)
+            self.add_channel(channel, channel_type=DataChannelType.private)
             
     def add_channel(
         self,

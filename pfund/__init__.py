@@ -6,8 +6,6 @@ if TYPE_CHECKING:
     from pfund.engines import (
         BacktestEngine, 
         TradeEngine, 
-        TrainEngine, 
-        SandboxEngine
     )
     from pfund.strategies import Strategy
     from pfund.models import (
@@ -57,12 +55,6 @@ def __getattr__(name: str):
     elif name == 'TradeEngine':
         from pfund.engines import TradeEngine
         return TradeEngine
-    elif name == 'TrainEngine':
-        from pfund.engines import TrainEngine
-        return TrainEngine
-    elif name == 'SandboxEngine':
-        from pfund.engines import SandboxEngine
-        return SandboxEngine
     elif name == "Strategy":
         from pfund.strategies import Strategy
         return Strategy

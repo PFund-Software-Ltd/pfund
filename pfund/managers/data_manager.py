@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
     from pfund.products.product_base import BaseProduct
-    from pfund.typing.data import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
+    from pfund.typing.data_kwargs import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
     from pfund.brokers.broker_live import LiveBroker
 
 import time
@@ -85,8 +85,8 @@ class DataManager(BaseManager):
         self, 
         product: BaseProduct, 
         resolution: Resolution, 
-        quote_data: QuoteDataKwargs | None=None, 
-        tick_data: TickDataKwargs | None=None, 
+        quote_data: dict | QuoteDataKwargs | None=None, 
+        tick_data: dict | TickDataKwargs | None=None, 
         bar_data: BarDataKwargs | None=None
     ):
         from pfund.datas import QuoteData, TickData, BarData
@@ -176,9 +176,9 @@ class DataManager(BaseManager):
         resolutions: list[str], 
         resamples: dict[str, str] | None=None,
         auto_resample=None,  # FIXME
-        quote_data: QuoteDataKwargs | None=None,
-        tick_data: TickDataKwargs | None=None,
-        bar_data: BarDataKwargs | None=None,
+        quote_data: dict | QuoteDataKwargs | None=None,
+        tick_data: dict | TickDataKwargs | None=None,
+        bar_data: dict | BarDataKwargs | None=None,
     ) -> list[BaseData]:
         datas = []
         resolutions = [Resolution(resolution) for resolution in set(resolutions)]  # use set() to remove duplicates

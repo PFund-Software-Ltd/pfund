@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from pfund.orders.order_base import BaseOrder
     from pfund.datas import BaseData
     from pfund.typing import data_tool
-    from pfund.typing.data import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
+    from pfund.typing.data_kwargs import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
 
 from pfund.strategies.strategy_meta import MetaStrategy
 from pfund.utils.utils import get_engine_class
@@ -194,9 +194,9 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         resolutions: list[str] | str,
         resamples: dict[str, str] | None=None,
         auto_resample=None,  # FIXME
-        quote_data: QuoteDataKwargs | None=None,
-        tick_data: TickDataKwargs | None=None,
-        bar_data: BarDataKwargs | None=None,
+        quote_data: dict | QuoteDataKwargs | None=None,
+        tick_data: dict | TickDataKwargs | None=None,
+        bar_data: dict | BarDataKwargs | None=None,
         **product_specs
     ) -> list[BaseData]:
         '''

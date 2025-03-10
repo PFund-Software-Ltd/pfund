@@ -117,7 +117,7 @@ class IBApi(IBClient, IBWrapper):
         epdt = self._adapter(pdt)
         echannel = self._adapter(channel)
         if channel in PublicDataChannel:
-            if channel == PublicDataChannel.ORDERBOOK:
+            if channel == PublicDataChannel.orderbook:
                 full_channel = '.'.join([channel, pdt])
                 self._orderbook_level[pdt] = int(kwargs.get('orderbook_level', self.DEFAULT_ORDERBOOK_LEVEL))
                 if self._orderbook_level[pdt] not in self.SUPPORTED_ORDERBOOK_LEVELS:
@@ -128,9 +128,9 @@ class IBApi(IBClient, IBWrapper):
                     self._orderbook_depth[pdt] = int(kwargs['num_rows'])
                 else:
                     self._orderbook_depth[pdt] = self.DEFAULT_ORDERBOOK_DEPTH
-            elif channel == PublicDataChannel.TRADEBOOK:
+            elif channel == PublicDataChannel.tradebook:
                 full_channel = '.'.join([echannel, epdt])
-            elif channel == PublicDataChannel.KLINE:
+            elif channel == PublicDataChannel.kline:
                 period, timeframe = kwargs['period'], kwargs['timeframe']
                 if timeframe not in self.SUPPORTED_RESOLUTIONS.keys():
                     raise NotImplementedError(f'({channel}.{pdt}) {timeframe=} for kline is not supported, only timeframes in {list(self.SUPPORTED_RESOLUTIONS)} are supported')

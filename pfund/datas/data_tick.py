@@ -13,6 +13,8 @@ from pfund.utils.utils import convert_ts_to_dt
 
 class TickData(TimeBasedData):
     def __init__(self, product: BaseProduct, resolution: Resolution, **kwargs):
+        from pfund.typing.data_kwargs import TickDataKwargs
+        kwargs = TickDataKwargs(**kwargs).model_dump()
         super().__init__(product, resolution)
         self.px = self.price = 0.0
         self.qty = self.quantity = self.volume = 0.0
