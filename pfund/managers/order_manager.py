@@ -1,13 +1,20 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from apscheduler.schedulers.background import BackgroundScheduler
+    
 import time
 from collections import OrderedDict, defaultdict
 
 from typing import Union
 from enum import Enum
 
+
 from pfund.orders.order_statuses import *
 from pfund.orders.order_crypto import CryptoOrder
 from pfund.orders.order_ib import IBOrder
 from pfund.managers.base_manager import BaseManager
+from pfund.enums import Event
 
 
 class OrderUpdateSource(Enum):
@@ -41,18 +48,18 @@ class OrderManager(BaseManager):
         self._recon_nums = defaultdict(int)
         self._cxl_rej_nums = defaultdict(int)
 
-    def push(self, order, event, type_):
-        for listener in self._listeners[order.strat]:
-            strategy = listener
+    def push(self, order, event: Event, type_):
+        for strategy in self._listeners[order.strat]:
             if not strategy.is_parallel():
                 if strategy.is_running():
-                    if event == 'order':
+                    if event == Event.order:
                         strategy.update_orders(order, type_)
-                    elif event == 'trade':
+                    elif event == Event.trade:
                         strategy.update_trades(order, type_)
-            # TODO
-            # else:
-            #     self._zmq
+            else:
+                raise NotImplementedError('parallel strategy is not implemented')
+                # TODO
+                # self._zmq
 
     def get_order(self, trading_venue, acc, oid='', eoid=''):
         assert oid or eoid, 'At least one of oid or eoid should be provided'
@@ -82,9 +89,9 @@ class OrderManager(BaseManager):
                 orders += list(self.submitted_orders[trading_venue][acc].values())
             return orders if not pdt else [order for order in orders if order.pdt == pdt]
 
-    def run_regular_tasks(self):
-        self.clear_cached_closed_orders()
-        self.check_missed_opened_orders()
+    def schedule_jobs(self, scheduler: BackgroundScheduler):
+        scheduler.add_job(self.clear_cached_closed_orders, 'interval', seconds=10)
+        scheduler.add_job(self.check_missed_opened_orders, 'interval', seconds=10)
 
     def reconcile(self, trading_venue, acc, data: dict):
         '''
@@ -195,7 +202,7 @@ class OrderManager(BaseManager):
     def on_submitted(self, order, ts=None, reason=''):
         if is_updated := order.on_status_update(status=MainOrderStatus.SUBMITTED, ts=ts, reason=reason):
             self.submitted_orders[order.tv][order.acc][order.oid] = order
-            self.push(order, event='order', type_='submitted')
+            self.push(order, event=Event.order, type_='submitted')
 
     def _on_opened(self, order, ts=None, reason=''):
         if order.oid in self.closed_orders[order.tv][order.acc]:
@@ -203,7 +210,7 @@ class OrderManager(BaseManager):
             return
         if is_updated := order.on_status_update(status=MainOrderStatus.OPENED, ts=ts, reason=reason):
             self.opened_orders[order.tv][order.acc][order.oid] = order
-            self.push(order, event='order', type_='opened')
+            self.push(order, event=Event.order, type_='opened')
         if order.oid in self.submitted_orders[order.tv][order.acc]:
             del self.submitted_orders[order.tv][order.acc][order.oid]
 
@@ -213,7 +220,7 @@ class OrderManager(BaseManager):
             self._on_opened(order, ts=ts, reason='open to be closed')
         if is_updated := order.on_status_update(status=MainOrderStatus.CLOSED, ts=ts, reason=reason):
             self.closed_orders[order.tv][order.acc][order.oid] = order
-            self.push(order, event='order', type_='closed')
+            self.push(order, event=Event.order, type_='closed')
         if order.oid in self.submitted_orders[order.tv][order.acc]:
             del self.submitted_orders[order.tv][order.acc][order.oid]
         if order.oid in self.opened_orders[order.tv][order.acc]:
@@ -227,10 +234,10 @@ class OrderManager(BaseManager):
         if is_updated := order.on_trade_update(avg_px, filled_qty, last_traded_px, last_traded_qty):
             if fill_status == 'P' or not order.is_filled():
                 self._on_partial(order, ts=ts, reason=reason)
-                self.push(order, event='trade', type_='partial')
+                self.push(order, event=Event.trade, type_='partial')
             elif fill_status == 'F' or order.is_filled():
                 self._on_filled(order, ts=ts, reason=reason)
-                self.push(order, event='trade', type_='filled')
+                self.push(order, event=Event.trade, type_='filled')
                     
     def _on_partial(self, order, ts=None, reason=''):
         order.on_status_update(status=FillOrderStatus.PARTIAL, ts=ts, reason=reason)
@@ -256,7 +263,7 @@ class OrderManager(BaseManager):
 
     def _on_amended(self, order, ts=None, reason=''):
         if is_updated := order.on_status_update(status=AmendOrderStatus.AMENDED, ts=ts, reason=reason):
-            self.push(order, event='order', type_='amended')
+            self.push(order, event=Event.order, type_='amended')
 
     def _on_amend_rejected(self, order, ts=None, reason=''):
         order.on_status_update(status=AmendOrderStatus.REJECTED, ts=ts, reason=reason)

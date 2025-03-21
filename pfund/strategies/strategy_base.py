@@ -6,7 +6,8 @@ from abc import ABC
 
 from typing import Literal, TYPE_CHECKING, overload
 if TYPE_CHECKING:
-    from pfund.typing.literals import tTRADING_VENUE, tBROKER, tCRYPTO_EXCHANGE
+    from pfeed.typing import tDATA_SOURCE
+    from pfund.typing import tTRADING_VENUE, tBROKER, tCRYPTO_EXCHANGE
     from pfund.brokers.broker_base import BaseBroker
     from pfund.products.product_base import BaseProduct
     from pfund.positions.position_base import BasePosition
@@ -15,31 +16,33 @@ if TYPE_CHECKING:
     from pfund.balances.balance_base import BaseBalance
     from pfund.balances.balance_crypto import CryptoBalance
     from pfund.balances.balance_ib import IBBalance
-    from pfund.typing.core import tStrategy
+    from pfund.typing import StrategyT, DataConfigDict, StorageConfigDict
+    from pfund.datas.data_time_based import TimeBasedData
     from pfund.accounts.account_base import BaseAccount
     from pfund.accounts.account_crypto import CryptoAccount
     from pfund.accounts.account_ib import IBAccount
     from pfund.orders.order_base import BaseOrder
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_bar import Bar
-    from pfund.typing import data_tool
-    from pfund.typing.data_kwargs import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
+    from pfund.data_tools import data_tool_backtest
+    from pfund.data_tools.data_tool_base import BaseDataTool
+    from pfund.datas.data_config import DataConfig
+    from pfund.datas.storage_config import StorageConfig
 
 from pfund.strategies.strategy_meta import MetaStrategy
-from pfund.utils.utils import get_engine_class
+from pfund.engines import get_engine
 from pfund.utils.envs import backtest
 from pfund.mixins.trade_mixin import TradeMixin
+from pfund.enums import Component, Broker
 
 
-class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
-    REQUIRED_FUNCTIONS = ['on_quote', 'on_tick', 'on_bar']
-    
+class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):    
     def __init__(self, *args, **kwargs):
         self._args = args
         self._kwargs = kwargs
         self.name = self.strat = self.get_default_name()
-        self.engine = get_engine_class()()
-        self._data_tool = self.engine.DataTool()
+        self._engine = get_engine()
+        self._data_tool: BaseDataTool = self._engine.DataTool()
         self.logger = None
         self._zmq = None
         self._is_parallel = False
@@ -47,7 +50,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self.datas = defaultdict(dict)  # {product: {'1m': data}}
         self._listeners = defaultdict(list)  # {data: model}
         self._consumers = []  # strategies that consume this strategy (sub-strategy)
-        self.type = 'strategy'
+        self.type = Component.strategy
 
         self.orderbooks = {}  # {product: data}
         self.tradebooks = {}  # {product: data}
@@ -66,13 +69,17 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self._last_signal_ts = {}  # {data: ts}
         self._signal_cols = []
         self._num_signal_cols = 0
+
+        # TODO: move to mtflow
+        self._data_signatures = []
+        self._strategy_signature = (args, kwargs)
         
         self.params = {}
         self.load_params()
     
     # HACK: ideally no backtesting methods should be here, but it is required to improve IDE Intellisense
     @backtest
-    def backtest(self, df: data_tool.BacktestDataFrame):
+    def backtest(self, df: data_tool_backtest.BacktestDataFrame):
         raise Exception(f'Strategy "{self.name}" does not have a backtest() method, cannot run vectorized backtesting')
     
     def is_parallel(self):
@@ -99,6 +106,8 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             'datas': [repr(data) for product in self.datas for data in self.datas[product].values()],
             'strategies': [strategy.to_dict() for strategy in self.strategies.values()],
             'models': [model.to_dict() for model in self.models.values()],
+            'strategy_signature': self._strategy_signature,
+            'data_signatures': self._data_signatures,
         }
     
     def get_trading_venues(self) -> list[tTRADING_VENUE]:
@@ -120,7 +129,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
 
     def start_zmq(self):
         from pfund.zeromq import ZeroMQ
-        zmq_ports = self.engine.zmq_ports
+        zmq_ports = self._engine.zmq_ports
         self._zmq = ZeroMQ(self.name)
         self._zmq.start(
             logger=self.logger,
@@ -135,7 +144,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self._zmq = None
     
     def add_broker(self, bkr: tBROKER) -> BaseBroker:
-        return self.engine.add_broker(bkr)
+        return self._engine.add_broker(bkr)
     
     @overload
     def get_position(self, account: CryptoAccount, pdt: str) -> CryptoPosition | None: ...
@@ -197,58 +206,33 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self, 
         trading_venue: tTRADING_VENUE,
         product: str,
-        resolutions: list[str] | str,
-        resamples: dict[str, str] | None=None,
-        auto_resample=None,  # FIXME
-        quote_data: dict | QuoteDataKwargs | None=None,
-        tick_data: dict | TickDataKwargs | None=None,
-        bar_data: dict | BarDataKwargs | None=None,
+        resolution: str,
+        data_source: tDATA_SOURCE | None=None,
+        data_origin: str='',
+        data_config: DataConfigDict | DataConfig | None=None,
+        storage_config: StorageConfigDict | StorageConfig | None=None,
         **product_specs
-    ) -> list[BaseData]:
+    ) -> list[TimeBasedData]:
         '''
         Args:
             product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
             product_specs: product specifications, e.g. expiration, strike_price etc.
-            skip_first_bar: for bar/kline/candlestick data, the first bar is very likely incomplete
-                so users can choose to skip it
-            orderbook_depth: for orderbook data, the depth of the orderbook to subscribe to
-                if not provided, use the default depth set in the exchange
         '''
-        tv, product_basis = trading_venue.upper(), product.upper()
-        if isinstance(resolutions, str):
-            resolutions = [resolutions]
-        bkr = self._derive_bkr_from_trading_venue(tv)
+        if not isinstance(data_config, DataConfig) or not isinstance(storage_config, StorageConfig):
+            data_config, storage_config = self._parse_data_and_storage_config(trading_venue, resolution, data_source, data_config, storage_config)
+
+        trading_venue, product = trading_venue.upper(), product.upper()
+        bkr = self._derive_bkr_from_trading_venue(trading_venue)
         broker = self.add_broker(bkr)
-        if bkr == 'CRYPTO':
-            exch = tv
-            datas = broker.add_data(
-                exch, 
-                product_basis, 
-                resolutions, 
-                resamples=resamples,
-                auto_resample=auto_resample,
-                quote_data=quote_data,
-                tick_data=tick_data,
-                bar_data=bar_data,
-                **product_specs
-            )
+        if bkr == Broker.CRYPTO:
+            exch = trading_venue
+            datas: list[TimeBasedData] = broker.add_data(exch, product, resolution, data_config=data_config, **product_specs)
         else:
-            datas = broker.add_data(
-                product_basis, 
-                resolutions, 
-                resamples=resamples,
-                auto_resample=auto_resample,
-                quote_data=quote_data,
-                tick_data=tick_data,
-                bar_data=bar_data,
-                **product_specs
-            )
+            datas: list[TimeBasedData] = broker.add_data(product, resolution, data_config=data_config, **product_specs)
 
         for data in datas:
-            if data.is_time_based():
-                # do not listen to data thats only used for resampling
-                if data.resol not in resolutions:
-                    continue
+            if not data.is_resampler():
+                continue
             resolution, product = data.resolution, data.product
             if resolution.is_quote():
                 self.orderbooks[product] = data
@@ -256,19 +240,19 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
                 self.tradebooks[product] = data
             
             self.set_data(product, resolution, data)
+            self._add_historical_data(data, data_source, data_origin, storage_config)
             if not self.is_sub_strategy():
                 broker._add_listener(listener=self, listener_key=data, event_type='public')
             else:
                 for consumer in self._consumers:
                     consumer.add_data(
-                        tv, 
-                        product_basis, 
-                        resolutions, 
-                        resamples=resamples,
-                        auto_resample=auto_resample,
-                        quote_data=quote_data,
-                        tick_data=tick_data,
-                        bar_data=bar_data,
+                        trading_venue, 
+                        product, 
+                        resolution, 
+                        data_source=data_source, 
+                        data_origin=data_origin, 
+                        data_config=data_config, 
+                        storage_config=storage_config, 
                         **product_specs
                     )
                     consumer._add_listener(listener=self, listener_key=data)
@@ -294,7 +278,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             if not self.datas[product]:
                 del self.datas[product]
     
-    def add_strategy(self, strategy: tStrategy, name: str='', is_parallel=False) -> tStrategy:
+    def add_strategy(self, strategy: StrategyT, name: str='', is_parallel=False) -> StrategyT:
         # TODO
         assert not is_parallel, 'Running strategy in parallel is not supported yet'
         assert isinstance(strategy, BaseStrategy), \

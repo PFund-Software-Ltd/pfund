@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Callable, Any, TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from websocket import WebSocket
-    from pfund.typing.literals import tENVIRONMENT
+    from pfund.typing import tENVIRONMENT
     from pfund.products.product_base import BaseProduct
 
 import datetime

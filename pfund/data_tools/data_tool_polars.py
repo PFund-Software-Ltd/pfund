@@ -6,15 +6,14 @@ if TYPE_CHECKING:
 import numpy as np    
 import polars as pl
 
+from pfeed.enums import DataTool
 from pfund.data_tools.data_tool_base import BaseDataTool
-from pfund.utils.envs import backtest, train
+from pfund.utils.envs import backtest
 
 
 # NOTE: convention: all function names that endswith "_df" will directly modify self.df, e.g. "xxx_df"
 class PolarsDataTool(BaseDataTool):
-    def __init__(self):
-        super().__init__('polars')
-    
+    name = DataTool.polars
     # TODO:
     def get_df(self, copy=True) -> pl.LazyFrame:
         return self.df.clone() if copy else self.df
@@ -29,9 +28,9 @@ class PolarsDataTool(BaseDataTool):
             # ts column already is datetime by default
             pass
         elif ts_col_type == 'timestamp':
-            # converts 'ts' from datetime to unix timestamp
+            # converts 'date' from datetime to unix timestamp
             self.df = self.df.with_columns(
-                pl.col("ts").cast(pl.Int64) // 10**6 / 10**3,
+                pl.col("date").cast(pl.Int64) // 10**6 / 10**3,
             )
         self._raw_dfs.clear()
     
@@ -39,7 +38,7 @@ class PolarsDataTool(BaseDataTool):
         self.df.clear()
     
     # TODO:
-    def append_to_df(self, data: BaseData, predictions: dict, **kwargs):
+    def append_to_df(self, data: BaseData, predictions: dict, **extra_data):
         pass
     
     # TODO:
@@ -81,7 +80,7 @@ class PolarsDataTool(BaseDataTool):
     @staticmethod
     @backtest
     def iterate_df_by_chunks(lf: pl.LazyFrame, num_chunks=1) -> Generator[pl.LazyFrame, None, None]:
-        total_rows = lf.count().collect()['ts'][0]
+        total_rows = lf.count().collect()['date'][0]
         chunk_size = total_rows // num_chunks
         for i in range(0, total_rows, chunk_size):
             df_chunk = lf.slice(i, chunk_size)
@@ -135,7 +134,6 @@ class PolarsDataTool(BaseDataTool):
         pass
     
     # TODO: for train engine
-    @train
     def prepare_datasets(self, datas):
         pass
     

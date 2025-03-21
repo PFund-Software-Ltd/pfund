@@ -113,7 +113,7 @@ class WebsocketApi(BaseWebsocketApi):
                 full_channel = '.'.join([echannel, str(subscribed_orderbook_depth), epdt])
             elif channel == PublicDataChannel.tradebook:
                 full_channel = '.'.join([echannel, epdt])
-            elif channel == PublicDataChannel.kline:
+            elif channel == PublicDataChannel.candlestick:
                 period, timeframe = data.period, repr(data.timeframe)
                 if timeframe not in self.SUPPORTED_RESOLUTIONS.keys():
                     raise NotImplementedError(f'({channel}.{pdt}) {timeframe=} for kline is not supported, only timeframes in {list(self.SUPPORTED_RESOLUTIONS)} are supported')
@@ -227,7 +227,7 @@ class WebsocketApi(BaseWebsocketApi):
             self.logger.exception(f'_on_message ws={ws_name} exception {msg}:')
 
     def _process_orderbook_l2_msg(self, ws_name, full_channel, msg):
-        quote = {'ts': None, 'data': {'bids': None, 'asks': None}, 'other_info': {}}
+        quote = {'ts': None, 'data': {'bids': None, 'asks': None}, 'extra_data': {}}
         echannel, orderbook_depth, epdt = full_channel.split('.')
         pdt = self._adapter(epdt, group=ws_name)
         data = msg['data']
@@ -306,8 +306,8 @@ class WebsocketApi(BaseWebsocketApi):
                 'qty': ('v', float, abs),
                 'ts': ('T', float),
             },
-            # NOTE: other_info only exists in public data, e.g. orderbook, tradebook, kline etc.
-            'other_info': {
+            # NOTE: extra_data only exists in public data, e.g. orderbook, tradebook, kline etc.
+            'extra_data': {
                 # 'trade_id': ('i',),
                 'taker_side': ('S',),
                 'px_direction': ('L',),  # e.g. PlusTick

@@ -1,10 +1,9 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
+    from pfeed.typing import GenericFrame
     from pfund.strategies.strategy_base import BaseStrategy
-    from pfund.typing.core import tDataFrame
     from pfund.engines.backtest_engine import BacktestEngine
-    from pfund.engines.train_engine import TrainEngine
     
 import os
 import shutil
@@ -12,21 +11,27 @@ import inspect
 from pathlib import Path
 import json
 import datetime
+import importlib
 
 import pandas as pd
 from rich.console import Console
 
 from pfund.utils import utils
+from pfund import get_config
 from pfund.enums import BacktestMode
 
 
+config = get_config()
+
+
 class BacktestHistory:
-    def __init__(self, engine: BacktestEngine | TrainEngine):
+    # FIXME: remove engine access
+    def __init__(self, engine: BacktestEngine):
         self._engine = engine
         self.logger = engine.logger
         self.mode = engine.mode
         self.retention_period = engine.retention_period
-        self.backtest_path = Path(engine.config.backtest_path)
+        self.backtest_path = Path(config.backtest_path)
         self.commit_to_git = engine.commit_to_git
         self.save_backtests = engine.save_backtests
         self.file_name = 'backtest.json'
@@ -129,12 +134,14 @@ class BacktestHistory:
             backtest_history = self._read_json(file_path)
             return backtest_history
         elif file == 'parquet':
-            df = self._engine.DataTool.read_parquet(file_path)
+            data_tool = self._engine.DataTool.name
+            data_tool = importlib.import_module(f'pfeed.data_tools.data_tool_{data_tool}')
+            df = data_tool.read_parquet(file_path)
             return df
         else:
             raise ValueError(f'file must be one of [json, parquet], got {file}')
             
-    def create(self, strategy: BaseStrategy, df: tDataFrame, start_time: float, end_time: float):
+    def create(self, strategy: BaseStrategy, df: GenericFrame, start_time: float, end_time: float):
         import pfund as pf
         initial_balances = {bkr: broker.get_initial_balances() for bkr, broker in self._engine.brokers.items()}
         backtest_id = self._generate_backtest_id()
@@ -166,7 +173,7 @@ class BacktestHistory:
         self._clean_up(backtest_name)
         return backtest_history
     
-    def _write(self, strategy: BaseStrategy, df: tDataFrame, backtest_history: dict) -> dict:
+    def _write(self, strategy: BaseStrategy, df: GenericFrame, backtest_history: dict) -> dict:
         '''Writes backtest history to a parquet file and adds the file path to backtest.json'''
         backtest_name = backtest_history['backtest_name']
         backtest_path: Path = self._create_backtest_path(backtest_name)

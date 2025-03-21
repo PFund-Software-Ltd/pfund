@@ -1,7 +1,7 @@
 from __future__ import annotations  
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.typing.literals import tENVIRONMENT, tCRYPTO_EXCHANGE
+    from pfund.typing import tENVIRONMENT, tCRYPTO_EXCHANGE
     from pfund.datas.data_base import BaseData
     from pfund.enums import PublicDataChannel
 
@@ -182,7 +182,7 @@ class BaseExchange(ABC):
     
     def _add_default_private_channels(self):
         for channel in self.SUPPORTED_PRIVATE_CHANNELS:
-            channel = PrivateDataChannel[channel.upper()]
+            channel = PrivateDataChannel[channel.lower()]
             self.add_channel(channel, channel_type=DataChannelType.private)
             
     def add_channel(
@@ -241,11 +241,12 @@ class BaseExchange(ABC):
         return trades_combined
     
     def start(self):
-        from pfund import TradeEngine
+        from pfund.engines import TradeEngine
+        zmq_ports = TradeEngine.settings['zmq_ports']
         self._zmq = ZeroMQ(self.exch+'_'+'rest_api')
         self._zmq.start(
             logger=self.logger,
-            send_port=TradeEngine.zmq_ports[self.exch]['rest_api'],
+            send_port=zmq_ports[self.exch]['rest_api'],
             # only used to send out returns from REST API
             # shouldn't receive any msgs, so recv_ports is empty
             recv_ports=[],

@@ -130,7 +130,7 @@ class IBApi(IBClient, IBWrapper):
                     self._orderbook_depth[pdt] = self.DEFAULT_ORDERBOOK_DEPTH
             elif channel == PublicDataChannel.tradebook:
                 full_channel = '.'.join([echannel, epdt])
-            elif channel == PublicDataChannel.kline:
+            elif channel == PublicDataChannel.candlestick:
                 period, timeframe = kwargs['period'], kwargs['timeframe']
                 if timeframe not in self.SUPPORTED_RESOLUTIONS.keys():
                     raise NotImplementedError(f'({channel}.{pdt}) {timeframe=} for kline is not supported, only timeframes in {list(self.SUPPORTED_RESOLUTIONS)} are supported')
@@ -262,8 +262,8 @@ class IBApi(IBClient, IBWrapper):
         return [self._zmq]
 
     def start_zmqs(self):
-        from pfund import TradeEngine
-        zmq_ports = TradeEngine.zmq_ports
+        from pfund.engines import TradeEngine
+        zmq_ports = TradeEngine.settings['zmq_ports']
         self._zmq = ZeroMQ(self.name)
         self._zmq.start(
             logger=self.logger,

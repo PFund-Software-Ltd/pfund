@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Generator, Literal
 if TYPE_CHECKING:
-    from pfund.datas.data_base import BaseData
+    from pfund.datas.data_time_based import TimeBasedData
 
 from pathlib import Path
 from collections import defaultdict
@@ -9,14 +9,14 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 
+from pfeed.enums import DataTool
 from pfund.data_tools.data_tool_base import BaseDataTool
-from pfund.utils.envs import backtest, train
+from pfund.utils.envs import backtest
 
 
 # NOTE: convention: all function names that endswith "_df" will directly modify self.df, e.g. "xxx_df"
 class PandasDataTool(BaseDataTool):
-    def __init__(self):
-        super().__init__('pandas')
+    name = DataTool.pandas
     
     def get_df(
         self, 
@@ -50,22 +50,19 @@ class PandasDataTool(BaseDataTool):
             # ts column already is datetime by default
             pass
         elif ts_col_type == 'timestamp':
-            # converts 'ts' from datetime to unix timestamp
+            # converts 'date' from datetime to unix timestamp
             # in milliseconds int -> in seconds with milliseconds precision
-            self.df['ts'] = self.df['ts'].astype(int) // 10**6 / 10**3
+            self.df['date'] = self.df['date'].astype(int) // 10**6 / 10**3
         self._raw_dfs.clear()
 
     def clear_df(self):
         self.df = pd.DataFrame(columns=self.df.columns).astype(self.df.dtypes)
         
-    def append_to_df(self, data: BaseData, predictions: dict, **kwargs):
-        '''Appends new data to the df
-        Args:
-            kwargs: other_info about the data
-        '''
+    def append_to_df(self, data: TimeBasedData, predictions: dict, **extra_data):
+        '''Appends new data to the df'''
         row_data = {
-            'ts': data.ts, 
-            'product': repr(data.product), 
+            'date': data.ts, 
+            'product': repr(data.pdt), 
             'resolution': data.resol
         }
         
@@ -75,8 +72,8 @@ class PandasDataTool(BaseDataTool):
             # e.g. open, high, low, close, volume
             if hasattr(data, col):
                 row_data[col] = getattr(data, col)
-            elif col in kwargs:
-                row_data[col] = kwargs[col]
+            elif col in extra_data:
+                row_data[col] = extra_data[col]
                 
         for mdl, pred_y in predictions.items():
             row_data[mdl] = pred_y
@@ -669,31 +666,6 @@ class PandasDataTool(BaseDataTool):
         # convert ts column back to datetime type
         pass
     
-    # TODO: for train engine
-    @train
-    def prepare_datasets(self, datas):
-        # create datasets based on train/val/test periods
-        datasets = defaultdict(list)  # {'train': [df_of_product_1, df_of_product_2]}
-        for product in datas:
-            for type_, periods in [('train', self.train_periods), ('val', self.val_periods), ('test', self.test_periods)]:
-                period = periods[product]
-                if period is None:
-                    raise Exception(f'{type_}_period for {product} is not specified')
-                df = self.filter_df(self.df, start_date=period[0], end_date=period[1], symbol=product.symbol).reset_index()
-                datasets[type_].append(df)
-                
-        # combine datasets from different products to create the final train/val/test set
-        for type_ in ['train', 'val', 'test']:
-            df = pd.concat(datasets[type_])
-            df.set_index(self.INDEX, inplace=True)
-            df.sort_index(level='ts', inplace=True)
-            if type_ == 'train':
-                self.train_set = df
-            elif type_ == 'val':
-                self.val_set = self.validation_set = df
-            elif type_ == 'test':
-                self.test_set = df
-
        
     '''
     ************************************************

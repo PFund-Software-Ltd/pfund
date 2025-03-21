@@ -1,10 +1,11 @@
 """This is a broker class for Interactive Brokers.
-Conceptually, this is a combination of broker_crypto.py + exchange_base.py in crypto version
+Conceptually, this is the equivalent of broker_crypto.py + exchange_base.py in crypto
 """
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import Literal, TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.typing.data_kwargs import QuoteDataKwargs, TickDataKwargs, BarDataKwargs
+    from pfund.typing import tENVIRONMENT
+    from pfund.datas.data_config import DataConfig
 
 from pfund.adapter import Adapter
 from pfund.products.product_ib import IBProduct
@@ -13,13 +14,13 @@ from pfund.orders.order_ib import IBOrder
 from pfund.positions.position_ib import IBPosition
 from pfund.balances.balance_ib import IBBalance
 from pfund.utils.utils import convert_to_uppercases
-from pfund.brokers.broker_live import LiveBroker
+from pfund.brokers.broker_base import BaseBroker
 from pfund.brokers.ib.ib_api import IBApi
 from pfund.enums import PublicDataChannel, PrivateDataChannel
 
 
-class IBBroker(LiveBroker):
-    def __init__(self, env: str, **configs):
+class IBBroker(BaseBroker):
+    def __init__(self, env: tENVIRONMENT='SANDBOX', **configs):
         super().__init__(env, 'IB', **configs)
         config_path = f'{PROJ_CONFIG_PATH}/{self.bkr.value.lower()}'
         self.configs = Configuration(config_path, 'config')
@@ -61,7 +62,7 @@ class IBBroker(LiveBroker):
     def add_channel(self, channel: PublicDataChannel | PrivateDataChannel, type_, **kwargs):
         if type_.lower() == 'public':
             assert 'product' in kwargs, 'Keyword argument "product" is missing'
-            if channel == PublicDataChannel.kline:
+            if channel == PublicDataChannel.candlestick:
                 assert 'period' in kwargs and 'timeframe' in kwargs, 'Keyword arguments "period" or/and "timeframe" is missing'
         elif type_.lower() == 'private':
             assert 'account' in kwargs, 'Keyword argument "account" is missing'
@@ -71,18 +72,7 @@ class IBBroker(LiveBroker):
     def add_custom_data(self):
         pass
     
-    def add_data(
-        self, 
-        product: str, 
-        resolutions: list[str] | str, 
-        resamples: dict[str, str] | None=None,
-        auto_resample=None,  # FIXME
-        quote_data: dict | QuoteDataKwargs | None=None,
-        tick_data: dict | TickDataKwargs | None=None,
-        bar_data: dict | BarDataKwargs | None=None,
-        exch: str='', 
-        **product_specs
-    ):
+    def add_data(self, product: str, resolution: str, data_config: DataConfig, exch: str='', **product_specs):
         '''
         Args:
             product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
@@ -90,15 +80,7 @@ class IBBroker(LiveBroker):
         exch = exch or self.derive_exch(product)
         exch, product_basis = exch.upper(), product.upper()
         product: IBProduct = self.add_product(exch, product_basis, **product_specs)
-        datas = self.data_manager.add_data(
-            product, 
-            resolutions, 
-            resamples=resamples,
-            auto_resample=auto_resample,
-            quote_data=quote_data,
-            tick_data=tick_data,
-            bar_data=bar_data,
-        )
+        datas = self.data_manager.add_data(product, resolution, data_config=data_config)
         for data in datas:
             self.add_data_channel(data, **kwargs)
         return datas
@@ -113,7 +95,7 @@ class IBBroker(LiveBroker):
             elif timeframe.is_tick():
                 channel = PublicDataChannel.tradebook
             else:
-                channel = PublicDataChannel.kline
+                channel = PublicDataChannel.candlestick
             self.add_channel(channel, 'public', product=data.product, period=data.period, timeframe=str(timeframe), **kwargs)
         else:
             raise NotImplementedError
@@ -259,5 +241,5 @@ class IBBroker(LiveBroker):
         return IBOrder(account, product, *args, **kwargs)
     
     def place_order(self, o):
-        self.om.on_submitted(o)
+        self.order_manager.on_submitted(o)
         self._api.placeOrder(o.orderId, o.contract, o)

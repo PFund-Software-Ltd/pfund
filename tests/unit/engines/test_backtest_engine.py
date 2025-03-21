@@ -14,7 +14,7 @@ def test_init(mocker):
     assert BacktestEngine.__new__.call_count == 1
     assert BacktestEngine.__init__.call_count == 1
     assert BacktestEngine.env == Environment.BACKTEST
-    assert os.getenv('env') == 'BACKTEST'
+    assert os.getenv('trading_env') == 'BACKTEST'
     assert engine._initialized is True
 
 @pytest.mark.smoke

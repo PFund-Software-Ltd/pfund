@@ -1,14 +1,14 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.typing.core import tStrategy
+    from pfund.typing import StrategyT
     
 from pfund.mixins.backtest_mixin import BacktestMixin
 
 
-# HACK: since python doesn't support dynamic typing, true return type should be subclass of BacktestMixin and tStrategy
-# write -> BacktestMixin | tStrategy for better intellisense in IDEs 
-def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixin | tStrategy:
+# HACK: since python doesn't support dynamic typing, true return type should be subclass of BacktestMixin and StrategyT
+# write -> BacktestMixin | StrategyT for better intellisense in IDEs 
+def BacktestStrategy(Strategy: type[StrategyT], *args, **kwargs) -> BacktestMixin | StrategyT:
     class _BacktestStrategy(BacktestMixin, Strategy):
         def __getattr__(self, name):
             if hasattr(super(), name):
@@ -16,18 +16,11 @@ def BacktestStrategy(Strategy: type[tStrategy], *args, **kwargs) -> BacktestMixi
             else:
                 class_name = Strategy.__name__
                 raise AttributeError(f"'{class_name}' object has no attribute '{name}'")
-            
-        def to_dict(self):
-            strategy_dict = super().to_dict()
-            strategy_dict['class'] = Strategy.__name__
-            strategy_dict['strategy_signature'] = self._strategy_signature
-            strategy_dict['data_signatures'] = self._data_signatures
-            return strategy_dict
         
         def add_account(self, trading_venue: str, acc: str='', initial_balances: dict[str, int|float]|None=None, **kwargs):
             return super().add_account(trading_venue, acc=acc, initial_balances=initial_balances, **kwargs)
             
-        def add_strategy(self, strategy: tStrategy, name: str='', is_parallel=False) -> BacktestMixin | tStrategy:
+        def add_strategy(self, strategy: StrategyT, name: str='', is_parallel=False) -> BacktestMixin | StrategyT:
             strategy = BacktestStrategy(type(strategy), *strategy._args, **strategy._kwargs)
             return super().add_strategy(strategy, name=name, is_parallel=is_parallel)
         

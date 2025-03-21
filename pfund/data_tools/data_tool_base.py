@@ -1,33 +1,28 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
-    from pfeed.typing.literals import tDATA_TOOL
+    from sklearn.model_selection._split import BaseCrossValidator
+    from pfeed.enums import DataTool
+    from pfund.typing import DataRangeDict, DatasetSplitsDict
     from pfund.datas.data_base import BaseData
-
-import importlib
+    from pfund.data_tools.dataset import Dataset
 
 
 class BaseDataTool:
-    INDEX = ['ts', 'product', 'resolution']
+    name: ClassVar[DataTool]
+    
+    INDEX = ['date', 'product', 'resolution']
     GROUP = ['product', 'resolution']
     _MAX_NEW_ROWS = 1000
     _MIN_ROWS = 1_000
     _MAX_ROWS = None
+    
+    dataset: Dataset | None = None
 
-    def __init__(self, name: tDATA_TOOL):
-        from pfeed.const.enums import DataTool
-        self.name = DataTool[name.lower()]
-        # inherit functions from pfeed's data tool as class methods
-        data_tool = importlib.import_module(f'pfeed.data_tools.data_tool_{self.name.value}')
-        functions = {name: func for name, func in vars(data_tool).items() if callable(func)}
-        for name, func in functions.items():
-            setattr(__class__, name, func)
-        self.train_periods = {}  # {product: ('start_date', 'end_date')}
-        self.val_periods = self.validation_periods = {}  # {product: ('start_date', 'end_date')}
-        self.test_periods = {}  # {product: ('start_date', 'end_date')}
-        self.train_set = None
-        self.val_set = self.validation_set = None
-        self.test_set = None
+    def __init__(self):
+        # Ensure the child class has defined `name`
+        if not hasattr(type(self), 'name'):
+            raise AttributeError(f"{self.__class__.__name__} must define a class variable `name`")
         self.df = None
         # used in event-driven looping to avoid appending data to df one by one
         # instead, append data to _new_rows and whenever df is needed,
@@ -35,6 +30,34 @@ class BaseDataTool:
         self._new_rows = []  # [{col: value, ...}]
         self._raw_dfs = {}  # {data: df}
     
+    @classmethod
+    def _initialize_dataset(cls, data_range: str | DataRangeDict, dataset_splits: int | DatasetSplitsDict | BaseCrossValidator):
+        cls.dataset = Dataset(data_range, dataset_splits)
+    
+    # FIXME: use narwhals
+    def prepare_datasets(self, datas):
+        # create datasets based on train/val/test periods
+        datasets = defaultdict(list)  # {'train': [df_of_product_1, df_of_product_2]}
+        for product in datas:
+            for type_, periods in [('train', self.train_periods), ('val', self.val_periods), ('test', self.test_periods)]:
+                period = periods[product]
+                if period is None:
+                    raise Exception(f'{type_}_period for {product} is not specified')
+                df = self.filter_df(self.df, start_date=period[0], end_date=period[1], symbol=product.symbol).reset_index()
+                datasets[type_].append(df)
+                
+        # combine datasets from different products to create the final train/val/test set
+        for type_ in ['train', 'val', 'test']:
+            df = pd.concat(datasets[type_])
+            df.set_index(self.INDEX, inplace=True)
+            df.sort_index(level='date', inplace=True)
+            if type_ == 'train':
+                self.train_set = df
+            elif type_ == 'val':
+                self.val_set = self.validation_set = df
+            elif type_ == 'test':
+                self.test_set = df
+
     def __str__(self):
         return self.name.value
 
@@ -54,13 +77,3 @@ class BaseDataTool:
     
     def add_raw_df(self, data: BaseData, df):
         self._raw_dfs[data] = df
-        
-    def set_data_periods(self, datas, **kwargs):
-        train_period = kwargs.get('train_period', None)
-        val_period = kwargs.get('validation_period', None) or kwargs.get('val_period', None)
-        test_period = kwargs.get('test_period', None)
-        for data in datas:
-            product = data.product
-            self.train_periods[product] = train_period
-            self.val_periods[product] = self.validation_periods[product] = val_period
-            self.test_periods[product] = test_period

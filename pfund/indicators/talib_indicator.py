@@ -26,6 +26,9 @@ class TalibIndicator(BaseIndicator):
             e.g. indicator = talib.SMA
         '''
         super().__init__(indicator, *args, **kwargs)
+        talib_func = args[0]
+        self._model_signature = (talib_func.info, *args[1:], kwargs)
+
         if min_data := self._derive_min_data():
             self.set_min_data(min_data)
     

@@ -85,8 +85,8 @@ class IBWrapper(EWrapper):
         product = self._req_id_to_product[reqId]
         bids = ((Decimal(bidPrice), bidSize),)
         asks = ((Decimal(askPrice), askSize),)
-        other_info = {'tickAttribBidAsk': tickAttribBidAsk}
-        zmq_msg = (1, 1, (self.bkr, product.exch, product.name, bids, asks, time, other_info))
+        extra_data = {'tickAttribBidAsk': tickAttribBidAsk}
+        zmq_msg = (1, 1, (self.bkr, product.exch, product.name, bids, asks, time, extra_data))
         self._zmq.send(*zmq_msg)
         super().tickByTickBidAsk(reqId, time, bidPrice, askPrice, bidSize, askSize, tickAttribBidAsk)
 
@@ -101,12 +101,12 @@ class IBWrapper(EWrapper):
         # TODO, HALTED
         # if price == 0 and size == 0 and tickAttribLast.pastLimit:
         
-        other_info = {
+        extra_data = {
             'tickAttribLast': tickAttribLast, 
             'exchange': exchange,
             'specialConditions': specialConditions
         }
-        zmq_msg = (1, 2, (self.bkr, product.exch, product.name, price, size, time, other_info))
+        zmq_msg = (1, 2, (self.bkr, product.exch, product.name, price, size, time, extra_data))
         self._zmq.send(*zmq_msg)
         super().tickByTickAllLast(reqId, tickType, time, price, size, tickAttribLast, exchange, specialConditions)
 
@@ -125,11 +125,11 @@ class IBWrapper(EWrapper):
         resolution = '5s'  # NOTE: currently only 5 second bars are supported by IB
         product = self._req_id_to_product[reqId]
         o, h, l, c, v, ts = Decimal(open_), Decimal(high), Decimal(low), Decimal(close), Decimal(volume), int(time)
-        other_info = {
+        extra_data = {
             'wap': wap,
             'count': count
         }
-        zmq_msg = (1, 3, (self.bkr, product.exch, product.name, resolution, o, h, l, c, v, ts, other_info))
+        zmq_msg = (1, 3, (self.bkr, product.exch, product.name, resolution, o, h, l, c, v, ts, extra_data))
         self._zmq.send(*zmq_msg)
         super().realtimeBar(reqId, time, open_, high, low, close, volume, wap, count)
 

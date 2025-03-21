@@ -5,8 +5,8 @@ if TYPE_CHECKING:
     from pfund.orders.order_base import BaseOrder
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.datas.data_base import BaseData
-    from pfund.typing.literals import tCRYPTO_EXCHANGE, tENVIRONMENT
-    from pfund.typing.data_kwargs import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
+    from pfund.typing import tCRYPTO_EXCHANGE, tENVIRONMENT
+    from pfund.datas.data_config import DataConfig
 
 import inspect
 import importlib
@@ -17,12 +17,12 @@ from pfund.positions.position_crypto import CryptoPosition
 from pfund.balances.balance_crypto import CryptoBalance
 from pfund.accounts.account_crypto import CryptoAccount
 from pfund.utils.utils import convert_to_uppercases
-from pfund.brokers.broker_live import LiveBroker
+from pfund.brokers.broker_base import BaseBroker
 from pfund.enums import CryptoExchange, PublicDataChannel, PrivateDataChannel, DataChannelType
 
 
-class CryptoBroker(LiveBroker):
-    def __init__(self, env: tENVIRONMENT):
+class CryptoBroker(BaseBroker):
+    def __init__(self, env: tENVIRONMENT='SANDBOX'):
         super().__init__(env, 'CRYPTO')
         self.exchanges = {}
     
@@ -50,18 +50,7 @@ class CryptoBroker(LiveBroker):
     def add_custom_data(self):
         pass
 
-    def add_data(
-        self, 
-        exch: tCRYPTO_EXCHANGE, 
-        product: str,
-        resolutions: list[str] | str, 
-        resamples: dict[str, str] | None=None,
-        auto_resample=None,  # FIXME
-        quote_data: dict | QuoteDataKwargs | None=None,
-        tick_data: dict | TickDataKwargs | None=None,
-        bar_data: dict | BarDataKwargs | None=None,
-        **product_specs
-    ):
+    def add_data(self, exch: tCRYPTO_EXCHANGE, product: str, resolution: str, data_config: DataConfig, **product_specs):
         '''
         Args:
             product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
@@ -69,15 +58,7 @@ class CryptoBroker(LiveBroker):
         '''
         exch, product_basis = exch.upper(), product.upper()
         product = self.add_product(exch, product_basis, **product_specs)
-        datas = self.data_manager.add_data(
-            product, 
-            resolutions, 
-            resamples=resamples,
-            auto_resample=auto_resample,
-            quote_data=quote_data,
-            tick_data=tick_data,
-            bar_data=bar_data,
-        )
+        datas = self.data_manager.add_data(product, resolution, data_config=data_config)
         for data in datas:
             if channel := self._create_public_data_channel(data):
                 self.add_channel(exch, channel, data)
@@ -105,7 +86,7 @@ class CryptoBroker(LiveBroker):
         '''
         exchange = self.exchanges[exch]
         if channel in PublicDataChannel:
-            assert data, f'data must be provided for {channel}'
+            assert data, f'data must be provided for {channel=}'
         channel_type: DataChannelType = self._create_data_channel_type(channel, channel_type=channel_type)
         exchange.add_channel(channel, channel_type, data=data)
     
@@ -143,14 +124,15 @@ class CryptoBroker(LiveBroker):
             self.logger.warning(f'{account=} has already been added, please make sure the account names are not duplicated')
         return account
     
-    def get_product(self, exch: tCRYPTO_EXCHANGE, pdt: str) -> BaseProduct | None:
-        return self._products[exch.upper()].get(pdt.upper(), None)
+    def get_product(self, exch: tCRYPTO_EXCHANGE, product_name: str) -> BaseProduct | None:
+        return self._products[exch.upper()].get(product_name.upper(), None)
 
     def add_product(self, exch: tCRYPTO_EXCHANGE, product_basis: str, **product_specs) -> BaseProduct:
         exch, product_basis = exch.upper(), product_basis.upper()
         exchange = self.add_exchange(exch)
-        product = exchange.create_product(product_basis, **product_specs)
-        if not (product := self.get_product(exch, product.name)):
+        # create another product object to format a correct product name
+        _product = exchange.create_product(product_basis, **product_specs)  
+        if not (product := self.get_product(exch, _product.name)):
             exchange.add_product(product)
             self._products[exch][product.name] = product
             self.logger.debug(f'added {product=}')
@@ -284,7 +266,7 @@ class CryptoBroker(LiveBroker):
 
         num_orders = 0
         for o in orders:
-            self.om.on_submitted(o)
+            self.order_manager.on_submitted(o)
             num_orders += 1
         
         if exchange.SUPPORT_PLACE_BATCH_ORDERS and num_orders > 1:
@@ -311,7 +293,7 @@ class CryptoBroker(LiveBroker):
 
         num_orders = 0
         for o in orders:
-            self.om.on_cancel(o)
+            self.order_manager.on_cancel(o)
             num_orders += 1
 
         if exchange.SUPPORT_CANCEL_BATCH_ORDERS and num_orders > 1:
@@ -343,7 +325,4 @@ class CryptoBroker(LiveBroker):
         # if failed risk check, reset amend_px and amend_qty
 
         for o in orders:
-            self.om.on_amend(o)
-
-
-CeFiBroker = CryptoBroker
+            self.order_manager.on_amend(o)

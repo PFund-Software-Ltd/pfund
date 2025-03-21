@@ -1,14 +1,21 @@
 from typing import Literal
 
-from pfund.enums.timeframe import TimeframeUnits
+from enum import IntEnum
+
+
+class TimeframeUnits(IntEnum):
+    QUOTE = q = -2
+    TICK = t = -1
+    SECOND = s = 1
+    MINUTE = m = 60
+    HOUR = h = 60 * 60
+    DAY = d = 60 * 60 * 24  # NOTE: This is not accurate because trading hours per day vary.
 
 
 class Timeframe:
-    SUPPORTED_TIMEFRAMES = ['q', 't', 's', 'm', 'h', 'd', 'w', 'M', 'y']
-    def __init__(self, timeframe: Literal['q', 't', 's', 'm', 'h', 'd', 'w', 'M', 'y']):
-        self._timeframe = timeframe
-        assert timeframe in self.SUPPORTED_TIMEFRAMES, f"Invalid timeframe: {timeframe}"
+    def __init__(self, timeframe: Literal['q', 't', 's', 'm', 'h', 'd']):
         self.unit = TimeframeUnits[timeframe]
+        self._timeframe: str = timeframe
     
     def higher(self):
         """Rotate to the next higher timeframe. e.g. HOUR is higher than MINUTE."""
@@ -33,32 +40,23 @@ class Timeframe:
         return self  # Already at the lowest unit
     
     def is_quote(self):
-        return self.unit == -2
+        return self._timeframe == 'q'
 
     def is_tick(self):
-        return self.unit == -1
+        return self._timeframe == 't'
 
     def is_second(self):
-        return self.unit == 1
+        return self._timeframe == 's'
 
     def is_minute(self):
-        return self.unit == 60
+        return self._timeframe == 'm'
 
     def is_hour(self):
-        return self.unit == 3600
+        return self._timeframe == 'h'
 
     def is_day(self):
-        return self.unit == 86400
-
-    def is_week(self):
-        return self._timeframe == 'w'
-
-    def is_month(self):
-        return self._timeframe == 'M'
+        return self._timeframe == 'd'
     
-    def is_year(self):
-        return self._timeframe == 'y'
-
     def __str__(self):
         return str(self.unit.name)
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.typing.core import tStrategy
+    from pfund.typing import StrategyT
 
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.strategies.rebalancing_strategy import RebalancingStrategy
@@ -46,7 +46,7 @@ class PortfolioStrategy(BaseStrategy):
         self._portfolio.initialize(positions, balances)
         return super().on_start()
     
-    def add_strategy(self, strategy: tStrategy, name: str='', is_parallel=False) -> tStrategy:
+    def add_strategy(self, strategy: StrategyT, name: str='', is_parallel=False) -> StrategyT:
         # NOTE: if there are multiple strategies of the same type, only the first one will be used as the default strategy
         if isinstance(strategy, RebalancingStrategy):
             if not self.rebalancing_strategy:

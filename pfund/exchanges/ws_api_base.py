@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.typing.literals import tCRYPTO_EXCHANGE
+    from pfund.typing import tCRYPTO_EXCHANGE
     from pfund.enums import Environment
     from pfund.products.product_base import BaseProduct
     from pfund.datas.data_base import BaseData
@@ -141,8 +141,8 @@ class BaseWebsocketApi(ABC):
         return list(self._zmqs.values())
 
     def start_zmqs(self):
-        from pfund import TradeEngine
-        zmq_ports = TradeEngine.zmq_ports
+        from pfund.engines import TradeEngine
+        zmq_ports = TradeEngine.settings['zmq_ports']
         for ws_name in self.get_all_ws_names():
             if ws_name in self._servers:
                 if self._use_separate_private_ws_url:
@@ -476,17 +476,17 @@ class BaseWebsocketApi(ABC):
         msg_ts = float(step_into(msg, schema['ts'])) * ts_adj if 'ts' in schema else None
         if res_type is list:
             for trade in res:
-                tick = {'ts': msg_ts, 'data': {}, 'other_info': {}}
+                tick = {'ts': msg_ts, 'data': {}, 'extra_data': {}}
                 for k, (ek, *sequence) in schema['data'].items():
                     initial_value = self._adapter(step_into(trade, ek))
                     v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
                     tick['data'][k] = v
                     if k == 'ts':
                         tick['data'][k] *= ts_adj
-                for k, (ek, *sequence) in schema.get('other_info', {}).items():
+                for k, (ek, *sequence) in schema.get('extra_data', {}).items():
                     initial_value = step_into(trade, ek)
                     v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
-                    tick['other_info'][k] = v
+                    tick['extra_data'][k] = v
                 ticks.append(tick)
         else:
             raise NotImplementedError(f'{self.exch} ws trade msg {res_type=} is not supported')
@@ -507,17 +507,17 @@ class BaseWebsocketApi(ABC):
         msg_ts = float(step_into(msg, schema['ts'])) * ts_adj if 'ts' in schema else None
         if res_type is list:
             for kline in res:
-                bar = {'ts': msg_ts, 'resolution': resolution, 'data': {}, 'other_info': {}}
+                bar = {'ts': msg_ts, 'resolution': resolution, 'data': {}, 'extra_data': {}}
                 for k, (ek, *sequence) in schema['data'].items():
                     initial_value = self._adapter(step_into(kline, ek))
                     v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
                     bar['data'][k] = v
                     if k == 'ts':
                         bar['data'][k] *= ts_adj
-                for k, (ek, *sequence) in schema.get('other_info', {}).items():
+                for k, (ek, *sequence) in schema.get('extra_data', {}).items():
                     initial_value = step_into(kline, ek)
                     v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
-                    bar['other_info'][k] = v
+                    bar['extra_data'][k] = v
                 bars.append(bar)
         else:
             raise NotImplementedError(f'{self.exch} ws kline msg {res_type=} is not supported')

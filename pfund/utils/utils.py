@@ -9,6 +9,8 @@ from pathlib import Path
 import yaml
 import requests
 
+from pfund.enums import Environment
+
 
 class Singleton:
     _instances = {}
@@ -167,7 +169,7 @@ def parse_api_response_with_schema(response: dict, schema: dict) -> list[dict]:
     
     # Parse all items and always return a list
     return [parse_single_item(item) for item in data]
-        
+
 
 def find_strategy_class(strat: str):
     from pfund.strategies.strategy_base import BaseStrategy
@@ -176,21 +178,6 @@ def find_strategy_class(strat: str):
         if inspect.isclass(obj) and issubclass(obj, BaseStrategy) and obj is not BaseStrategy:
             return obj
     return None
-
-
-def get_engine_class():
-    from pfund.enums import Environment
-    env = os.getenv('env')
-    assert env in Environment.__members__, f'Unsupported {env=}'
-    if env == 'BACKTEST':
-        from pfund import BacktestEngine as Engine
-    elif env == 'TRAIN':
-        from pfund import TrainEngine as Engine
-    elif env == 'SANDBOX':
-        from pfund import SandboxEngine as Engine
-    else:
-        from pfund import TradeEngine as Engine
-    return Engine
 
 
 def short_path(path: str, last_n_parts: int=3) -> Path:

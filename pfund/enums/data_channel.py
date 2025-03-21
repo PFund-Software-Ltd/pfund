@@ -2,9 +2,9 @@ from enum import StrEnum
 
 
 class PublicDataChannel(StrEnum):
-    orderbook = 'orderbook'
-    tradebook = 'tradebook'
-    kline = 'kline'
+    orderbook = quote = 'orderbook'
+    tradebook = tick = 'tradebook'
+    candlestick = kline = 'candlestick'
 
 
 class PrivateDataChannel(StrEnum):

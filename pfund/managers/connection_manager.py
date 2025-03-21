@@ -12,7 +12,7 @@ from pfund.managers.base_manager import BaseManager
 
 def _start_process(api, stop_flag: Value):
     try:
-        from pfund import TradeEngine
+        from pfund.engines import TradeEngine
 
         assigned_cpus = TradeEngine.assign_cpus(api.name)
         current_process = psutil.Process()

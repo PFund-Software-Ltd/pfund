@@ -1,31 +1,34 @@
 from __future__ import annotations
-
-import os
-import logging
-import importlib
-
-from typing import TYPE_CHECKING, Literal, overload
+from typing import TYPE_CHECKING, Literal, overload, ClassVar
 if TYPE_CHECKING:
-    from pfeed.typing.literals import tDATA_TOOL
-    from pfund.typing.core import tStrategy
-    from pfund.typing.literals import tENVIRONMENT, tBROKER
+    from sklearn.model_selection._split import BaseCrossValidator
+    from pfeed.typing import tDATA_TOOL, tDATA_SOURCE, tDATA_LAYER, tSTORAGE
+    from pfeed.feeds.market_feed import MarketFeed
+    from pfund.typing import DataRangeDict, DatasetSplitsDict
+    from pfund.typing import TradeEngineSettingsDict, BacktestEngineSettingsDict
+    from pfund.typing import StrategyT, tENVIRONMENT, tBROKER
+    from pfund.data_tools.data_tool_base import BaseDataTool
     from pfund.brokers.broker_base import BaseBroker
     from pfund.brokers.broker_crypto import CryptoBroker
     from pfund.brokers.ib.broker_ib import IBBroker
     from pfund.strategies.strategy_base import BaseStrategy
 
-from rich.console import Console
+import os
+import logging
+import importlib
 
+from pfeed.enums import DataSource
+from pfund import cprint
 from pfund.utils.utils import Singleton
 from pfund.enums import Environment, Broker
-from pfund.config import get_config
+from pfund.datas.storage_config import StorageConfig
 
 
 ENV_COLORS = {
     # 'yellow': 'bold yellow on #ffffe0',
     # 'magenta': 'bold magenta on #fff0ff',
+    # 'TRAIN': 'bold cyan on #d0ffff',
     'BACKTEST': 'bold blue on #e0e0ff',
-    'TRAIN': 'bold cyan on #d0ffff',
     'SANDBOX': 'bold black on #f0f0f0',
     'PAPER': 'bold red on #ffe0e0',
     'LIVE': 'bold green on #e0ffe0',
@@ -33,77 +36,94 @@ ENV_COLORS = {
 
 
 class BaseEngine(Singleton):
+    settings: ClassVar[TradeEngineSettingsDict | BacktestEngineSettingsDict]
+        
+    DataTool: type[BaseDataTool] | None = None
     _PROCESS_NO_PONG_TOLERANCE_IN_SECONDS = 30
 
-    def __new__(
-        cls, 
-        env: tENVIRONMENT,
-        data_tool: tDATA_TOOL='polars', 
-        **settings
-    ) -> BaseEngine:
-        from pfund.plogging.config import LoggingDictConfigurator
-        from pfund.plogging import set_up_loggers
-        from pfeed.const.enums import DataTool
-
-        if not hasattr(cls, 'env'):
-            cls.env = Environment[env.upper()]
-
-            # TODO, do NOT allow LIVE env for now
-            assert cls.env != Environment.LIVE, f"{cls.env.value} is not allowed for now, please use env='PAPER' instead"
-            
-            os.environ['env'] = cls.env.value
-            Console().print(f"{cls.env.value} Engine is running", style=ENV_COLORS[cls.env.value])
-        if not hasattr(cls, 'data_tool'):
-            data_tool = data_tool.lower()
-            cls.data_tool = DataTool[data_tool]
-            cls.DataTool = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool}'), f'{data_tool.capitalize()}DataTool')
-        if not hasattr(cls, 'config'):
-            cls.config = get_config()
-            log_path = f'{cls.config.log_path}/{cls.env.value.lower()}'
-            logging_config_file_path = cls.config.logging_config_file_path
-            cls.logging_configurator: LoggingDictConfigurator  = set_up_loggers(log_path, logging_config_file_path, user_logging_config=cls.config.logging_config)
-        if not hasattr(cls, 'settings'):
-            from IPython import get_ipython
-            cls.settings = settings
-            if 'ipython' not in settings:
-                settings['ipython'] = bool(get_ipython() is not None)
-        return super().__new__(cls)
-    
     def __init__(
-        self,
-        env: tENVIRONMENT,
-        data_tool: tDATA_TOOL='polars',
-        **settings
+        self, 
+        env: tENVIRONMENT, 
+        data_tool: tDATA_TOOL='polars', 
+        data_range: str | DataRangeDict='ytd', 
+        dataset_splits: int | DatasetSplitsDict | BaseCrossValidator=721, 
+        use_ray: bool=True,
+        settings: TradeEngineSettingsDict | BacktestEngineSettingsDict | None=None,
     ):
         from pfund.managers.strategy_manager import StrategyManager
-        # avoid re-initialization to implement singleton class correctly
-        if not hasattr(self, '_initialized'):
-            self._validate_env()
-            self.logger = logging.getLogger('pfund')
-            self.brokers = {}
-            self.strategy_manager = self.sm = StrategyManager()
-            self._initialized = True
-    
-    def _validate_env(self):
-        env_to_engine = {
-            'BACKTEST': 'BacktestEngine',
-            'SANDBOX': 'SandboxEngine',
-            'PAPER': 'TradeEngine',
-            'LIVE': 'TradeEngine',
-            'TRAIN': 'TrainEngine',
-        }
-        env_name = self.env.value
-        engine_name = env_to_engine[env_name]
-        if self.__class__.__name__ != engine_name:
-            raise ValueError(
-                f"Invalid environment '{env_name}' for {self.__class__.__name__}. "
-                f"Use the '{engine_name}' for the '{env_name}' environment."
-            )
 
+        self._initialized = True
+        self.env: Environment = self._set_trading_env(env)
+        if self.env == Environment.BACKTEST:
+            assert self.__class__.__name__ == 'BacktestEngine', f'env={self.env} is only allowed to be created using BacktestEngine'
+        
+        # TODO, do NOT allow PAPER, LIVE env for now
+        assert self.env not in [Environment.PAPER, Environment.LIVE], f"{self.env.value} is not allowed for now"
+        
+        self._setup_logging()
+        self.logger = logging.getLogger('pfund')
+        self.brokers = {}
+        self.strategy_manager = StrategyManager()
+        self._use_ray = use_ray
+        self._storage_config: StorageConfig | None = None
+        cls = self.__class__
+        cls._initialize_data_tool(data_tool, data_range, dataset_splits)
+        cls.settings.update(settings or {})
+        
+    @classmethod
+    def _initialize_data_tool(cls, data_tool: tDATA_TOOL, data_range: str | DataRangeDict, dataset_splits: int | DatasetSplitsDict | BaseCrossValidator):
+        from pfeed.enums import DataTool
+        data_tool = DataTool[data_tool.lower()]
+        cls.DataTool: type[BaseDataTool] = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool}'), f'{data_tool.capitalize()}DataTool')
+        cls.DataTool._initialize_dataset(data_range, dataset_splits)
+        
+    def _setup_logging(self):
+        from pfund.config import get_config
+        from pfund.plogging import setup_loggers
+        config = get_config()
+        log_path = f'{config.log_path}/{self.env.value.lower()}'
+        logging_config_file_path = config.logging_config_file_path
+        logging_configurator  = setup_loggers(log_path, logging_config_file_path, user_logging_config=config.logging_config)
+        config.set_logging_configurator(logging_configurator)
+        
+    @staticmethod
+    def _set_trading_env(env: tENVIRONMENT) -> Environment:
+        env = Environment[env.upper()]
+        os.environ['trading_env'] = env.value
+        cprint(f"{env.value} Engine is running", style=ENV_COLORS[env.value])
+        return env
+    
+    def _init_ray(self, **kwargs):
+        import ray
+        if not ray.is_initialized():
+            ray.init(**kwargs)
+
+    def _shutdown_ray(self):
+        import ray
+        if ray.is_initialized():
+            ray.shutdown()
+    
+    def configure_storage(self, data_layer: tDATA_LAYER, data_domain: str, from_storage: tSTORAGE, storage_options: dict | None=None):
+        '''Configure global storage so that no need to pass repeated data configs into strategy/model.add_data()'''
+        self._storage_config = StorageConfig(data_layer=data_layer, data_domain=data_domain, from_storage=from_storage, storage_options=storage_options)
+    
+    def get_feed(self, data_source: tDATA_SOURCE | DataSource, **pfeed_kwargs) -> MarketFeed:
+        if isinstance(data_source, str):
+            data_source = DataSource[data_source.upper()]
+        DataFeed = data_source.feed_class
+        assert DataFeed is not None, f"Failed to import data feed for {data_source}, make sure it has been installed using `pip install pfeed[{data_source.value.lower()}]`"
+        feed = DataFeed(data_tool=self.DataTool.name.value, use_ray=self._use_ray, **pfeed_kwargs)
+        if not isinstance(feed, MarketFeed):
+            if hasattr(feed, 'market'):
+                feed = feed.market
+            else:
+                raise ValueError(f"Data feed {feed} is not a MarketFeed")
+        return feed
+    
     def get_strategy(self, strat: str) -> BaseStrategy | None:
         return self.strategy_manager.get_strategy(strat)
 
-    def add_strategy(self, strategy: tStrategy, name: str='', is_parallel=False) -> tStrategy:
+    def add_strategy(self, strategy: StrategyT, name: str='', is_parallel=False) -> StrategyT:
         return self.strategy_manager.add_strategy(strategy, name=name, is_parallel=is_parallel)
 
     def remove_strategy(self, strat: str):

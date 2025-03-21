@@ -1,5 +1,8 @@
 from __future__ import annotations
-
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.plogging.config import LoggingDictConfigurator
+    
 import os
 import sys
 from pathlib import Path
@@ -71,6 +74,7 @@ class Configuration:
     debug: bool = False
 
     _logging_config = {}
+    _logging_configurator: LoggingDictConfigurator | None = None
     _instance = None
     _verbose = False
 
@@ -240,6 +244,9 @@ class Configuration:
             if handler not in self.logging_config['handlers']:
                 self.logging_config['handlers'][handler] = {}
             self.logging_config['handlers'][handler]['level'] = 'DEBUG'
+    
+    def set_logging_configurator(self, logging_configurator: LoggingDictConfigurator):
+        self._logging_configurator = logging_configurator
     
 
 def configure(

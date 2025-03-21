@@ -7,18 +7,19 @@ if TYPE_CHECKING:
     TaFunction = Callable[..., Any]  # Type for functions from the 'ta' library
 
 from pfund.models.model_base import BaseModel
+from pfund.enums import Component
 
 
 class BaseIndicator(BaseModel):
     def __init__(self, indicator: TalibFunction, *args, **kwargs):
-        from pfeed.const.enums import DataTool
+        from pfeed.enums import DataTool
         
         super().__init__(indicator, *args, **kwargs)
-        self.type = 'indicator'
+        self.type = Component.indicator
         
-        if self.data_tool.name == DataTool.PANDAS:
+        if self.data_tool.name == DataTool.pandas:
             self.predict = self._predict_pandas
-        elif self.data_tool.name == DataTool.POLARS:
+        elif self.data_tool.name == DataTool.polars:
             self.predict = self._predict_polars
         else:
             raise ValueError(f'Unsupported data tool: {self.data_tool.name.value}')

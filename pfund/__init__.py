@@ -3,11 +3,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     # need these imports to support IDE hints:
     aliases = ...
-    from pfund.engines.backtest_engine import BacktestEngine
-    from pfund.engines.trade_engine import TradeEngine
+    from pfund.engines import BacktestEngine, TradeEngine
     from pfund.strategies.strategy_base import BaseStrategy as Strategy
-    from pfund.models.model_base import BaseModel as Model
-    from pfund.models.model_base import BaseFeature as Feature
+    from pfund.models.model_base import BaseModel as Model, BaseFeature as Feature
     from pfund.models.pytorch_model import PytorchModel
     from pfund.models.sklearn_model import SklearnModel
     from pfund.indicators.indicator_base import BaseIndicator as Indicator
@@ -33,6 +31,8 @@ if TYPE_CHECKING:
 
 import sys
 from importlib.metadata import version
+
+from rich.console import Console
 
 from pfund.config import get_config, configure
 # FIXME: install by pfund-ibapi
@@ -100,6 +100,7 @@ def __getattr__(name: str):
 
 print_error = lambda msg: print(f'\033[91m{msg}\033[0m')
 print_warning = lambda msg: print(f'\033[93m{msg}\033[0m')
+cprint = Console().print
 
 
 __version__ = version('pfund')

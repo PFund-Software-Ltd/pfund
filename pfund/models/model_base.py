@@ -7,10 +7,16 @@ if TYPE_CHECKING:
     import torch.nn as nn
     from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
     from sklearn.pipeline import Pipeline
-    from pfund.typing.data_kwargs import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
-    from pfund.models import PytorchModel, SklearnModel
+    from pfeed.typing import tDATA_SOURCE
+    from pfund.typing import DataConfigDict, StorageConfigDict
+    from pfund.data_tools.data_tool_base import BaseDataTool
+    from pfund.datas.data_time_based import TimeBasedData
+    from pfund.models.pytorch_model import PytorchModel
+    from pfund.models.sklearn_model import SklearnModel
     from pfund.indicators.indicator_base import TaFunction, TalibFunction
-    from pfund.typing.literals import tTRADING_VENUE
+    from pfund.typing import tTRADING_VENUE
+    from pfund.datas.data_config import DataConfig
+    from pfund.datas.storage_config import StorageConfig
     from pfund.datas.data_base import BaseData
     MachineLearningModel = Union[
         nn.Module,
@@ -37,8 +43,10 @@ import numpy as np
 from rich.console import Console
 
 from pfund.models.model_meta import MetaModel
-from pfund.utils.utils import short_path, get_engine_class
+from pfund.utils.utils import short_path
+from pfund.engines import get_engine
 from pfund.mixins.trade_mixin import TradeMixin
+from pfund.enums import Component
 
 
 class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
@@ -47,19 +55,19 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         self._kwargs = kwargs
         self.ml_model = ml_model  # user-defined machine learning model
         self.name = self.mdl = self.get_default_name()
-        self.engine = get_engine_class()()
-        self._data_tool = self.engine.DataTool()
+        self._engine = get_engine()
+        self._data_tool: BaseDataTool = self._engine.DataTool()
         self.logger = None
         self._is_running = False
         self._is_ready = defaultdict(bool)  # {data: bool}
-        self.datas = defaultdict(dict)  # {product: {repr(resolution): data}}
+        self.datas = defaultdict(dict)  # {product: {resolution: data}}
         self._listeners = defaultdict(list)  # {data: model}
         self._consumers = []  # strategies/models that consume this model
         self._min_data = {}  # {data: int}
         self._max_data = {}  # {data: int}}
         self._num_data = defaultdict(int)  # {data: int}
         self._group_data = True
-        self.type = 'model'
+        self.type = Component.model
         
         self.models = {}
         # NOTE: current model's signal is consumer's prediction
@@ -69,6 +77,10 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         self._signal_cols = []
         self._num_signal_cols = 0
         
+        # TODO: move to mtflow        
+        self._data_signatures = []
+        self._model_signature = (args, kwargs)
+
         self.params = {}
         self.load_params()
         self._assert_predict_function()
@@ -76,7 +88,7 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
     @abstractmethod
     def predict(self, X: pd.DataFrame | pl.LazyFrame, *args, **kwargs) -> torch.Tensor | np.ndarray:
         pass
-
+    
     def _assert_predict_function(self):
         sig = inspect.signature(self.predict)
         params = list(sig.parameters.values())
@@ -118,6 +130,8 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
             'ml_model': self.ml_model,
             'datas': [repr(data) for product in self.datas for data in self.datas[product].values()],
             'models': [model.to_dict() for model in self.models.values()],
+            'model_signature': self._model_signature,
+            'data_signatures': self._data_signatures,
         }
     
     def get_model_type_of_ml_model(self) -> PytorchModel | SklearnModel | BaseModel:
@@ -156,7 +170,9 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         self._group_data = group_data
     
     def _get_file_path(self, extension='.joblib'):
-        path = f'{self.engine.config.artifact_path}/{self.name}'
+        from pfund import get_config
+        config = get_config()
+        path = f'{config.artifact_path}/{self.name}'
         file_name = f'{self.name}{extension}'
         if not os.path.exists(path):
             os.makedirs(path)
@@ -194,29 +210,28 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
     def add_data(
         self, 
         trading_venue: tTRADING_VENUE, 
-        product: str,  # product_basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
-        resolutions: list[str] | str, 
-        resamples: dict[str, str] | None=None,
-        auto_resample=None,  # FIXME
-        quote_data: dict | QuoteDataKwargs | None=None,
-        tick_data: dict | TickDataKwargs | None=None,
-        bar_data: dict | BarDataKwargs | None=None,
+        product: str,
+        resolution: str, 
+        data_source: tDATA_SOURCE | None=None,
+        data_origin: str='',
+        data_config: DataConfigDict | DataConfig | None=None,
+        storage_config: StorageConfigDict | StorageConfig | None=None,
         **product_specs
-    ) -> list[BaseData]:
-        datas = []
+    ) -> list[TimeBasedData]:
+        datas: list[TimeBasedData] = []
         # consumers must also have model's data
         for consumer in self._consumers:
-            for data in consumer.add_data(
+            consumer_datas: list[TimeBasedData] = consumer.add_data(
                 trading_venue, 
                 product, 
-                resolutions,
-                resamples=resamples,
-                auto_resample=auto_resample,
-                quote_data=quote_data,
-                tick_data=tick_data,
-                bar_data=bar_data,
+                resolution, 
+                data_source=data_source, 
+                data_origin=data_origin, 
+                data_config=data_config, 
+                storage_config=storage_config, 
                 **product_specs
-            ):
+            )
+            for data in consumer_datas:
                 self.set_data(data.product, data.resolution, data)
                 consumer._add_listener(listener=self, listener_key=data)
                 if data not in datas:
@@ -345,7 +360,7 @@ class BaseFeature(BaseModel):
     def __init__(self, *args, **kwargs):
         ml_model = None
         super().__init__(ml_model, *args, **kwargs)
-        self.type = 'feature'
+        self.type = Component.feature
         self.set_signal_cols([self.name])
     
     def predict(self, X: pd.DataFrame | pl.LazyFrame, *args, **kwargs) -> np.ndarray:

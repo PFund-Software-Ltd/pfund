@@ -6,7 +6,7 @@ from multiprocessing import Process, Value
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.typing.core import tStrategy
+    from pfund.typing import StrategyT
 
 try:
     import psutil
@@ -14,14 +14,13 @@ except ImportError:
     pass
 
 from pfund.strategies.strategy_base import BaseStrategy
-from pfund.utils.utils import get_engine_class
 from pfund.plogging import create_dynamic_logger
 
 
 def _start_process(strategy: BaseStrategy, stop_flag: Value):
     try:
-        Engine = get_engine_class()
-        assigned_cpus = Engine.assign_cpus(strategy.name)
+        from pfund.engines import TradeEngine
+        assigned_cpus = TradeEngine.assign_cpus(strategy.name)
         current_process = psutil.Process()
         if hasattr(current_process, 'cpu_affinity') and assigned_cpus:
             current_process.cpu_affinity(assigned_cpus)
@@ -77,7 +76,7 @@ class StrategyManager:
     def get_strategy(self, strat: str) -> BaseStrategy | None:
         return self.strategies.get(strat, None)
 
-    def add_strategy(self, strategy: tStrategy, name: str='', is_parallel=False) -> tStrategy:
+    def add_strategy(self, strategy: StrategyT, name: str='', is_parallel=False) -> StrategyT:
         # TODO
         assert not is_parallel, 'Running strategy in parallel is not supported yet'
         assert isinstance(strategy, BaseStrategy), \

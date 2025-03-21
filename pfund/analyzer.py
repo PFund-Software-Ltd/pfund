@@ -10,15 +10,12 @@ from pfund.config import get_config
 from pfund.const.paths import PROJ_PATH
 
 
+# TODO: cursor, windsurf, trae, zed, neovim, helix, ...
 tCODE_EDITOR = Literal['vscode', 'pycharm']
 
 
 class Analyzer:    
-    try:
-        Engine = utils.get_engine_class()
-        config = Engine.config
-    except:
-        config = get_config()
+    config = get_config()
     
     notebook_path = Path(config.notebook_path)
     spreadsheet_path = Path(config.spreadsheet_path)

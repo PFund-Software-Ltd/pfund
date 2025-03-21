@@ -3,7 +3,7 @@ from collections import defaultdict
 from pfund.brokers.broker_base import BaseBroker
 
 
-def BacktestBroker(Broker) -> BaseBroker:
+def BacktestBroker(Broker: type[BaseBroker]) -> BaseBroker:
     class _BacktestBroker(Broker):
         _DEFAULT_INITIAL_BALANCES = {'BTC': 10, 'USD': 1_000_000}
         
@@ -66,18 +66,18 @@ def BacktestBroker(Broker) -> BaseBroker:
         # TODO
         def place_orders(self, account, product, orders):
             pass
-            # self.om.handle_msgs(...)
-            # self.pm.handle_msgs(...)
+            # self.order_manager.handle_msgs(...)
+            # self.portfolio_manager.handle_msgs(...)
 
         # TODO
         def cancel_orders(self, account, product, orders):
             pass
-            # self.om.handle_msgs(...)
+            # self.order_manager.handle_msgs(...)
         
         # TODO
         def cancel_all_order(self):
             pass
-            # self.om.handle_msgs(...)
+            # self.order_manager.handle_msgs(...)
 
         # TODO
         def amend_orders(self, account, product, orders):

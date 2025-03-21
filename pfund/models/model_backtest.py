@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     import polars as pl
     import torch
     from pfund.models.model_base import MachineLearningModel
-    from pfund.typing.core import tModel
+    from pfund.typing import ModelT
     from pfund.models.model_base import BaseModel
 
 from pfund.models.model_base import BaseFeature
@@ -14,7 +14,7 @@ from pfund.strategies.strategy_base import BaseStrategy
 from pfund.mixins.backtest_mixin import BacktestMixin
 
 
-def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **kwargs) -> BacktestMixin | tModel:
+def BacktestModel(Model: type[ModelT], ml_model: MachineLearningModel, *args, **kwargs) -> BacktestMixin | ModelT:
     class _BacktestModel(BacktestMixin, Model):
         def __getattr__(self, name):
             if hasattr(super(), name):
@@ -22,13 +22,6 @@ def BacktestModel(Model: type[tModel], ml_model: MachineLearningModel, *args, **
             else:
                 class_name = Model.__name__
                 raise AttributeError(f"'{class_name}' object has no attribute '{name}'")
-            
-        def to_dict(self):
-            model_dict = super().to_dict()
-            model_dict['class'] = Model.__name__
-            model_dict['model_signature'] = self._model_signature
-            model_dict['data_signatures'] = self._data_signatures
-            return model_dict
 
         def _add_consumer(self, consumer: BaseStrategy | BaseModel):
             is_dummy_strategy = isinstance(consumer, BaseStrategy) and consumer.name == '_dummy'

@@ -4,7 +4,7 @@ import logging
 from typing import Literal
 
 from pfund.plogging.config import LoggingDictConfigurator
-from pfund.utils.utils import load_yaml_file, get_engine_class
+from pfund.utils.utils import load_yaml_file
 
 
 def print_all_loggers():
@@ -13,7 +13,7 @@ def print_all_loggers():
             print(name, logger, logger.handlers)
             
 
-def set_up_loggers(log_path, logging_config_file_path, user_logging_config: dict | None=None) -> LoggingDictConfigurator:
+def setup_loggers(log_path, logging_config_file_path, user_logging_config: dict | None=None) -> LoggingDictConfigurator:
     def deep_update(default_dict, override_dict, raise_if_key_not_exist=False):
         '''Updates a default dictionary with an override dictionary, supports nested dictionaries.'''
         for key, value in override_dict.items():
@@ -56,16 +56,18 @@ def create_dynamic_logger(name: str, type_: Literal['strategy', 'model', 'indica
     """Set up logger for strategy/model/manager
     
     Since loggers for strategy/model/manager require dynamic names,
-    set_up_loggers() will not create loggers for strategy/model/manager.
+    setup_loggers() will not create loggers for strategy/model/manager.
     Instead, they will be created here and use the logger config of strategy/model/manager by default if not specified.
     """
     assert name, "logger name cannot be empty/None"
     assert type_ in ['strategy', 'model', 'indicator', 'feature', 'manager'], f"Unsupported {type_=}"
     
-    Engine = get_engine_class()
-    config = Engine.logging_configurator
+    from pfund import get_config
     
-    logging_config = config.config_orig
+    config = get_config()
+    configurator: LoggingDictConfigurator = config._logging_configurator
+    
+    logging_config = configurator.config_orig
     loggers_config = logging_config['loggers']
     logger_name = name.lower()
     if logger_name in loggers_config:
@@ -76,5 +78,5 @@ def create_dynamic_logger(name: str, type_: Literal['strategy', 'model', 'indica
     if type_ not in logger_name:
         logger_name += f'_{type_}'
     
-    config.configure_logger(logger_name, logger_config)
+    configurator.configure_logger(logger_name, logger_config)
     return logging.getLogger(logger_name.lower())

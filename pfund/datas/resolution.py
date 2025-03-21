@@ -2,9 +2,6 @@ from __future__ import annotations
 
 import re
 
-from pfund.datas.timeframe import Timeframe
-from pfund.enums import TimeframeUnits
-
 
 class Resolution:
     def __init__(self, resolution: str):
@@ -15,6 +12,8 @@ class Resolution:
             it will be converted to resolution by adding '1' to the beginning.
             e.g. 'minute' -> '1m', 'daily' -> '1d'
         '''
+        from pfund.datas.timeframe import Timeframe
+
         # Add "1" if the resolution doesn't start with a number
         if not re.match(r"^\d", resolution):
             resolution = "1" + resolution
@@ -45,13 +44,16 @@ class Resolution:
             timeframe = 'M'
         else:
             timeframe = timeframe[0].lower()
-        assert timeframe in TimeframeUnits.__members__, f'{timeframe=} ({resolution=}) is not supported'
         standardized_resolution = period + timeframe
         return standardized_resolution
 
+    def to_seconds(self) -> int:
+        assert self.is_bar(), f'{self._resolution=} is not a bar resolution'
+        return self._value()
+    
     def _value(self) -> int:
-        unit: TimeframeUnits = self.timeframe.unit
-        return self.period * unit.value * (self.orderbook_level or 1)
+        '''lower value = higher resolution'''
+        return self.period * self.timeframe.unit.value * (self.orderbook_level or 1)
 
     def is_quote_l1(self):
         return self.is_quote() and self.orderbook_level == 1
@@ -73,10 +75,7 @@ class Resolution:
             self.is_second() or
             self.is_minute() or
             self.is_hour() or
-            self.is_day() or
-            self.is_week() or
-            self.is_month() or
-            self.is_year()
+            self.is_day()
         )
     
     def is_second(self):
@@ -91,15 +90,6 @@ class Resolution:
     def is_day(self):
         return self.timeframe.is_day()
 
-    def is_week(self):
-        return self.timeframe.is_week()
-
-    def is_month(self):
-        return self.timeframe.is_month()
-    
-    def is_year(self):
-        return self.timeframe.is_year()
-    
     def higher(self, ignore_period: bool=True, orderbook_level: str='L1') -> Resolution:
         '''Rotate to the next higher resolution. e.g. 1m > 1h, higher resolution = lower timeframe'''
         period = str(self.period) if not ignore_period else '1'
@@ -149,6 +139,10 @@ class Resolution:
 
     def __hash__(self):
         return self._value()
+    
+    def is_strict_equal(self, other):
+        '''1h = 60m when using __eq__ to compare resolutions, but in strict_equal, 1h != 60m'''
+        return self._value() == other._value() and self.timeframe == other.timeframe
     
     def __eq__(self, other):
         if not isinstance(other, Resolution):

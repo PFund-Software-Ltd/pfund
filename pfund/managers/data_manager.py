@@ -1,273 +1,187 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeAlias
 if TYPE_CHECKING:
+    from apscheduler.schedulers.background import BackgroundScheduler
     from pfund.datas.data_base import BaseData
-    from pfund.products.product_base import BaseProduct
-    from pfund.typing.data_kwargs import BarDataKwargs, QuoteDataKwargs, TickDataKwargs
-    from pfund.brokers.broker_live import LiveBroker
+    from pfund.datas.data_time_based import TimeBasedData
+    from pfund.brokers.broker_base import BaseBroker
 
 import time
 from collections import defaultdict
+from pprint import pformat
 import importlib
 
+from pfund.products.product_base import BaseProduct
+from pfund.datas.data_config import DataConfig
 from pfund.datas.resolution import Resolution
+from pfund.enums import Event, Broker, CryptoExchange
 from pfund.managers.base_manager import BaseManager
+from pfund.datas import QuoteData, TickData, BarData
+
+
+ProductName: TypeAlias = str
+ResolutionRepr: TypeAlias = str
 
 
 class DataManager(BaseManager):
-    def __init__(self, broker: LiveBroker):
+    def __init__(self, broker: BaseBroker):
         super().__init__('data_manager', broker)
-        # datas = {repr(product): {repr(resolution): data}}
-        self._datas = defaultdict(dict)
-
-    def _resample_to_official_resolution(self, product, resolution: Resolution, supported_resolutions: dict | None=None) -> Resolution:
-        """Resamples the resolution into an officially supported one
-        e.g. 
-            if '4m' is the resolution but only '1m' is supported officially,
-            '4m' (input) will be resampled into '1m' (output)
-        """
-        if product.is_crypto():
-            WebsocketApi = getattr(importlib.import_module(f'pfund.exchanges.{product.exch.lower()}.ws_api'), 'WebsocketApi')
-            supported_resolutions = supported_resolutions or WebsocketApi.SUPPORTED_RESOLUTIONS
-        elif product.bkr == 'IB':
+        self._datas: dict[ProductName, dict[ResolutionRepr, BaseData]] = defaultdict(dict)
+        self._stale_bar_timeouts: dict[BaseData, int] = {}
+    
+    @staticmethod
+    def get_supported_resolutions(bkr: Broker | str, exch: CryptoExchange | str) -> dict:
+        if bkr == Broker.CRYPTO:
+            WebsocketApi = getattr(importlib.import_module(f'pfund.exchanges.{exch.lower()}.ws_api'), 'WebsocketApi')
+            supported_resolutions = WebsocketApi.SUPPORTED_RESOLUTIONS
+        elif bkr == Broker.IB:
             IBApi = getattr(importlib.import_module('pfund.brokers.ib.ib_api'), 'IBApi')
-            supported_resolutions = supported_resolutions or IBApi.SUPPORTED_RESOLUTIONS
-        # EXTEND
+            supported_resolutions = IBApi.SUPPORTED_RESOLUTIONS
         else:
-            pass
-        period, timeframe = resolution.period, repr(resolution.timeframe)
-        if (timeframe not in supported_resolutions) or \
-            (period == 1 and period not in supported_resolutions[timeframe]):
-            # change timeframe unit but retain the time value
-            if resolution.is_second():  # REVIEW
-                resolution_resampled = '1t'
-            elif resolution.is_minute():
-                resolution_resampled = '60s'
-            elif resolution.is_hour():
-                resolution_resampled = '60m'
-            elif resolution.is_day():
-                resolution_resampled = '24h'
-            elif resolution.is_week():
-                resolution_resampled = '7d'
-            elif resolution.is_month():
-                resolution_resampled = '4w'
-            else:
-                raise Exception(f'{resolution=} is not supported')
-            resolution_resampled = Resolution(resolution_resampled)
-            return self._resample_to_official_resolution(product, resolution_resampled, supported_resolutions=supported_resolutions)
-        elif period not in supported_resolutions[timeframe]:
-            # resample by unit, e.g. '4m' is resampled by '1m'
-            resolution_resampled = Resolution('1' + timeframe)
-            return self._resample_to_official_resolution(product, resolution_resampled, supported_resolutions=supported_resolutions)
-        else:
-            return resolution
-        
-    def push(self, data, event, **kwargs):
-        for listener in self._listeners[data]:
-            strategy = listener
-            if not strategy.is_parallel():
-                if strategy.is_running():
-                    if event == 'quote':
-                        strategy.update_quote(data, **kwargs)
-                    elif event == 'tick':
-                        strategy.update_tick(data, **kwargs)
-                    elif event == 'bar':
-                        # for resampled data, the first bar is very likely incomplete
-                        # so users can choose to skip it
-                        if not data.skip_first_bar():
-                            strategy.update_bar(data, **kwargs)
-                        data.clear()
-            # TODO
-            # else:
-            #     self._zmq
-
-    def _create_time_based_data(
-        self, 
-        product: BaseProduct, 
-        resolution: Resolution, 
-        quote_data: dict | QuoteDataKwargs | None=None, 
-        tick_data: dict | TickDataKwargs | None=None, 
-        bar_data: BarDataKwargs | None=None
-    ):
-        from pfund.datas.data_quote import QuoteData
-        from pfund.datas.data_tick import TickData
-        from pfund.datas.data_bar import BarData
-
-        if resolution.is_quote():
-            data = QuoteData(product, resolution, **quote_data)
-        elif resolution.is_tick():
-            data = TickData(product, resolution, **tick_data)
-        else:
-            data = BarData(product, resolution, **bar_data)
-        return data
+            raise NotImplementedError(f'{bkr=} is not supported')
+        return supported_resolutions
     
-    def _auto_resample(self, product: BaseProduct, resamples: dict[Resolution, Resolution], resolutions: list[Resolution], auto_resample: dict[str, bool], supported_resolutions):
-        def _auto_resample_by_highest_resolution():
-            '''Resamples the resolutions automatically by using the highest resolution
-            '''
-            ascending_resolutions = sorted(resolutions, reverse=False)  # e.g. ['1d', '1h', '1m']
-            highest_resolution = ascending_resolutions[-1]
-            for resolution in ascending_resolutions[:-1]:
-                if resolution not in resamples:
-                    resamples[resolution] = highest_resolution
-                    self.logger.debug(f'{product} {resolution} data is auto-resampled by {highest_resolution=}')
-            return resamples
-        
-        def _auto_resample_by_official_resolution(resampler_resolutions: list[Resolution]) -> dict[Resolution, Resolution]:
-            """Resamples the resolutions automatically if not supported officially.
-            e.g. 
-                if resolution is '4m', but only '1m' is supported officially,
-                {'4m': '1m'} will be automatically added to resamples,
-                meaning the '4m' bar will be created by '1m' bar.
-            """
-            auto_resamples = {}
-            # check if all resolutions in datas are supported, if not, auto-resample
-            for resolution in resampler_resolutions:
-                # no resampling when timeframe is quote/tick
-                if resolution.is_quote() or resolution.is_tick():
-                    continue
-                official_resolution = self._resample_to_official_resolution(product, resolution, supported_resolutions=supported_resolutions)
-                # resolution has no change after resampling
-                if resolution == official_resolution:
-                    continue
-                auto_resamples[resolution] = official_resolution
-                self.logger.debug(f'{product} {resolution} data is auto-resampled by {official_resolution=}')
-            return auto_resamples
-        
-        if auto_resample.get('by_highest_resolution', True):
-            resamples = _auto_resample_by_highest_resolution()
-            
-        if auto_resample.get('by_official_resolution', True):
-            resampler_resolutions = [resolution for resolution in resolutions if resolution not in resamples.keys()]
-            auto_resamples = _auto_resample_by_official_resolution(resampler_resolutions)
-            for resamplee_resolution, resampler_resolution in resamples.items():
-                # resampler_resolution in auto_resamples = it is a resamplee_resolution resampeld by an official resolution
-                if resampler_resolution in auto_resamples:
-                    resampler_resolution_corrected_by_official_resolution = auto_resamples[resampler_resolution]
-                    resamples[resamplee_resolution] = resampler_resolution_corrected_by_official_resolution
-            resamples.update(auto_resamples)
-        
-        if resamples:
-            self.logger.warning(f'{resamples=}')
-        return resamples
-
-    # TODO
-    def add_custom_data(self):
-        pass
+    @property
+    def datas(self) -> dict[BaseProduct, dict[Resolution, BaseData]]:
+        return self._datas
     
-    def set_data(self, product: BaseProduct, resolution: Resolution, data: BaseData):
-        self._datas[repr(product)][repr(resolution)] = data
-
-    def get_data(self, product: str | BaseProduct, resolution: str | Resolution) -> BaseData | None:
+    @property
+    def products(self) -> list[BaseProduct]:
+        return list(self._datas.keys())
+    
+    @staticmethod
+    def _convert_product_and_resolution_to_str(product: BaseProduct | ProductName, resolution: Resolution | ResolutionRepr) -> tuple[ProductName, ResolutionRepr]:
         if isinstance(product, BaseProduct):
-            product = repr(product)
+            product = product.name
         if isinstance(resolution, Resolution):
             resolution = repr(resolution)
+        return product, resolution
+    
+    def push(self, data: BaseData, event: Event, **extra_data):
+        for strategy in self._listeners[data]:
+            if not strategy.is_parallel():
+                if strategy.is_running():
+                    if event == Event.quote:
+                        strategy.update_quote(data, **extra_data)
+                        for data_resamplee in data.get_resamplees():
+                            self.push(data_resamplee, event=event)
+                    elif event == Event.tick:
+                        strategy.update_tick(data, **extra_data)
+                        for data_resamplee in data.get_resamplees():
+                            self.push(data_resamplee, event=event)
+                    elif event == Event.bar:
+                        strategy.update_bar(data, **extra_data)
+                        for data_resamplee in data.get_resamplees():
+                            if data_resamplee.is_ready(now=data.end_ts) and not data_resamplee.skip_first_bar():
+                                self.push(data_resamplee, event=event)
+                        data.clear()
+            else:
+                raise NotImplementedError('parallel strategy is not implemented')
+                # TODO
+                # self._zmq
+
+    def _initialize_time_based_data(self, product: BaseProduct, resolution: Resolution, data_config: DataConfig) -> TimeBasedData:
+        if resolution.is_quote():
+            data = QuoteData(product, resolution, orderbook_depth=data_config.orderbook_depth)
+        elif resolution.is_tick():
+            data = TickData(product, resolution)
+        else:
+            data = BarData(product, resolution, shift=data_config.shift.get(resolution, 0), skip_first_bar=data_config.skip_first_bar.get(resolution, True))
+            self._stale_bar_timeouts[data] = data_config.stale_bar_timeout[resolution]
+        product, resolution = self._convert_product_and_resolution_to_str(product, resolution)
+        self._datas[product][resolution] = data
+        return data
+    
+    # TODO
+    def add_custom_data(self):
+        raise NotImplementedError('add_custom_data is not implemented')
+    
+    def get_data(self, product: ProductName | BaseProduct, resolution: ResolutionRepr | Resolution) -> BaseData | None:
+        product, resolution = self._convert_product_and_resolution_to_str(product, resolution)
         return self._datas[product].get(resolution, None)
     
-    def remove_data(self, product: BaseProduct, resolution: str) -> BaseData:
+    def remove_data(self, product: ProductName | BaseProduct, resolution: ResolutionRepr | Resolution) -> BaseData | None:
+        product, resolution = self._convert_product_and_resolution_to_str(product, resolution)
         if data := self.get_data(product, resolution):
-            del self._datas[repr(product)][resolution]
+            del self._datas[product][resolution]
             self.logger.debug(f'removed {product} {resolution} data')
             return data
-        else:
-            raise Exception(f'{product} {resolution} data not found')
 
-    def add_data(
-        self, 
-        product: BaseProduct, 
-        resolutions: list[str], 
-        resamples: dict[str, str] | None=None,
-        auto_resample=None,  # FIXME
-        quote_data: dict | QuoteDataKwargs | None=None,
-        tick_data: dict | TickDataKwargs | None=None,
-        bar_data: dict | BarDataKwargs | None=None,
-    ) -> list[BaseData]:
+    def add_data(self, product: BaseProduct, resolution: str, data_config: DataConfig) -> list[BaseData]:
+        supported_resolutions = self.get_supported_resolutions(product.bkr, product.exch)
+        is_auto_resampled = data_config.auto_resample(supported_resolutions)
+        if is_auto_resampled:
+            self.logger.warning(f'{product} {resolution} extra_resolutions={data_config.extra_resolutions} data is auto-resampled to:\n{pformat(data_config.resample)}')
+        
         datas = []
-        resolutions = [Resolution(resolution) for resolution in set(resolutions)]  # use set() to remove duplicates
-        for resolution in resolutions:
-            if not (data := self.get_data(product, resolution=resolution)):
-                data = self._create_time_based_data(
-                    product, 
-                    resolution, 
-                    quote_data=quote_data, 
-                    tick_data=tick_data, 
-                    bar_data=bar_data
-                )
-            self.set_data(product, resolution, data)
+        for resolution in data_config.resolutions:
+            if not (data := self.get_data(product, resolution)):
+                data = self._initialize_time_based_data(product, resolution, data_config)
             datas.append(data)
         
-        resamples = {Resolution(resamplee_resolution): Resolution(resampler_resolution) for resamplee_resolution, resampler_resolution in kwargs.get('resamples', {}).items()}
-        # FIXME
-        default_auto_resample = {'by_official_resolution': True, 'by_highest_resolution': True}
-        auto_resample = auto_resample or default_auto_resample
-        # FIXME
-        supported_resolutions = kwargs.get('supported_resolutions', None)
-        resamples = self._auto_resample(product, resamples, resolutions, auto_resample, supported_resolutions)
-            
         # mutually bind data_resampler and data_resamplee
-        for resamplee_resolution, resampler_resolution in resamples.items():
-            assert resamplee_resolution in resolutions, f'Your target resolution {resamplee_resolution=} must be included in kwarg {resolutions=}'
-            if resampler_resolution <= resamplee_resolution:
-                raise Exception(f'Cannot use lower/equal resolution "{resampler_resolution}" to resample "{resamplee_resolution}"')
-            if not (data_resampler := self.get_data(product, resolution=resampler_resolution)):
-                data_resampler = self._create_time_based_data(product, resampler_resolution)
-            self.set_data(product, resampler_resolution, data_resampler)
-            datas.append(data_resampler)
-            self.logger.debug(f'added {product} data')
-            data_resamplee = self.get_data(product, resolution=resamplee_resolution)
-            data_resamplee.add_resampler(data_resampler)
-            data_resampler.add_resamplee(data_resamplee)
-            self.logger.debug(f'{product} {resampler_resolution} data added listener {resamplee_resolution} data')
+        for resamplee_resolution, resampler_resolution in data_config.resample.items():
+            data_resamplee = self.get_data(product, resamplee_resolution)
+            data_resampler = self.get_data(product, resampler_resolution)
+            data_resamplee.bind_resampler(data_resampler)
+            self.logger.debug(f'{product} resolution={resampler_resolution} (resampler) added listener resolution={resamplee_resolution} (resamplee) data')
         return datas
 
-    def update_quote(self, product: BaseProduct | str, quote: dict):
+    def update_quote(self, product: ProductName, quote: dict):
         ts = quote['ts']
         update = quote['data']
-        other_info = quote['other_info']
+        extra_data = quote['extra_data']
         bids, asks = update['bids'], update['asks']
-        data = self.get_data(product, resolution='1q')
-        data.on_quote(bids, asks, ts, **other_info)
-        self.push(data, event='quote', **other_info)
-        for data_resamplee in data.get_resamplees():
-            data_resamplee.on_quote(bids, asks, ts, **other_info)
-            self.push(data_resamplee, event='quote', **other_info)
+        data = self.get_data(product, '1q')
+        data.on_quote(bids, asks, ts, **extra_data)
+        self.push(data, event=Event.quote, **extra_data)
 
-    def update_tick(self, product: BaseProduct | str, tick: dict):
+    def update_tick(self, product: ProductName, tick: dict):
         update = tick['data']
-        other_info = tick['other_info']
+        extra_data = tick['extra_data']
         px, qty, ts = update['px'], update['qty'], update['ts']
-        data = self.get_data(product, resolution='1t')
-        data.on_tick(px, qty, ts, **other_info)
-        self.push(data, event='tick', **other_info)
-        for data_resamplee in data.get_resamplees():
-            data_resamplee.on_tick(px, qty, ts, **other_info)
-            self.push(data_resamplee, event='tick', **other_info)
+        data = self.get_data(product, '1t')
+        data.on_tick(px, qty, ts, **extra_data)
+        self.push(data, event=Event.tick, **extra_data)
 
-    def update_bar(self, product: BaseProduct | str, bar: dict, now: int):
-        resolution: str = bar['resolution']
+    def update_bar(self, product: ProductName, bar: dict, is_incremental: bool=True):
+        '''
+        Args:
+            is_incremental: if True, the bar update is incremental, otherwise it is a full bar update
+                some exchanges may push incremental bar updates, some may only push when the bar is complete
+        '''
+        resolution: ResolutionRepr = bar['resolution']
         update = bar['data']
-        other_info = bar['other_info']
+        extra_data = bar['extra_data']
         o, h, l, c, v, ts = update['open'], update['high'], update['low'], update['close'], update['volume'], update['ts']
-        data = self.get_data(product, resolution=resolution)
-        if data.is_ready(now=now):
-            self.push(data, event='bar', **other_info)
-        data.on_bar(o, h, l, c, v, ts, **other_info)
-        for data_resamplee in data.get_resamplees():
-            if data_resamplee.is_ready(now=now):
-                self.push(data_resamplee, event='bar', **other_info)
-            data_resamplee.on_bar(o, h, l, c, v, ts, is_volume_aggregated=True, **other_info)
+        data = self.get_data(product, resolution)
+        if not is_incremental:  # means the bar is complete
+            data.on_bar(o, h, l, c, v, ts, is_incremental=is_incremental, **extra_data)
+            self.push(data, event=Event.bar, **extra_data)
+        else:
+            if data.is_ready(now=ts):
+                self.push(data, event=Event.bar, **extra_data)
+            data.on_bar(o, h, l, c, v, ts, is_incremental=is_incremental, **extra_data)
+    
+    def _flush_stale_bar(self, data: BaseData):
+        if data.is_ready():
+            self.push(data, event=Event.bar)
+    
+    def schedule_jobs(self, scheduler: BackgroundScheduler):
+        for data, timeout in self._stale_bar_timeouts.items():
+            scheduler.add_job(lambda: self._flush_stale_bar(data), 'interval', seconds=timeout)
             
-    def handle_msgs(self, topic, info):
+    # TODO: convert topic to enum
+    def handle_msgs(self, topic, msg: tuple):
         if topic == 1:  # quote data
-            bkr, exch, pdt, quote = info
+            bkr, exch, pdt, quote = msg
             product = self._broker.get_product(exch=exch, pdt=pdt)
             self.update_quote(product, quote)
         elif topic == 2:  # tick data
-            bkr, exch, pdt, tick = info
+            bkr, exch, pdt, tick = msg
             product = self._broker.get_product(exch=exch, pdt=pdt)
             self.update_tick(product, tick)
         elif topic == 3:  # bar data
-            bkr, exch, pdt, bar = info
+            bkr, exch, pdt, bar = msg
             product = self._broker.get_product(exch=exch, pdt=pdt)
             self.update_bar(product, bar, now=time.time())

@@ -1,8 +1,10 @@
-from pfund.brokers.broker_live import LiveBroker
+from typing import Literal
+
+from pfund.brokers.broker_base import BaseBroker
 
 
 # TODO
-class DeFiBroker(LiveBroker):
-    def __init__(self, env: str):
+class DeFiBroker(BaseBroker):
+    def __init__(self, env: Literal['SANDBOX', 'PAPER', 'LIVE']='SANDBOX'):
         super().__init__(env, 'DEFI')
         
