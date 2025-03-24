@@ -33,8 +33,6 @@ dependencies = [
     "python-dotenv (>=1.0.1,<2.0.0)",
     "pyyaml (>=6.0.1,<7.0.0)",
     "orjson (>=3.10.1,<4.0.0)",
-    "ipython (>=8.23.0,<9.0.0)",
-    "gitpython (>=3.1.44,<4.0.0)",
     "apscheduler (>=3.11.0,<4.0.0)",
     "requests (>=2.31.0,<3.0.0)",  # TODO: to be removed
     "httpx (>=0.28.1,<0.29.0)",
@@ -48,7 +46,7 @@ dependencies = [
 core = [
     "pfeed[core] (>=0.0.2,<0.1.0)",
     "pfolio (>=0.0.2,<0.1.0)",
-    "pfund-plot[notebook] (>=0.0.1.dev2,<0.1.0)", 
+    "mtflow (>=0.0.1.dev1,<0.1.0)",
     "psutil (>=7.0.0,<8.0.0)", 
     "pyzmq (>=26.2.1,<27.0.0)",
     "redis[hiredis] (>=5.2.1,<6.0.0)",
@@ -56,10 +54,7 @@ core = [
 ml = [
     "joblib (>=1.4.2,<2.0.0)",
     "torch (>=2.6.0,<3.0.0)",
-    "feast (>=0.47.0,<0.48.0)",
-    "mlflow (>=2.20.3,<3.0.0)",
     "optuna (>=4.2.1,<5.0.0)",
-    "wandb (>=0.19.8,<0.20.0)",
 ]
 ta = ["ta-lib (>=0.6.3,<0.7.0)"]
 telegram = ["python-telegram-bot (>=21.11.1,<22.0.0)"]
@@ -82,6 +77,7 @@ optional = true
 pfeed = {path = "../pfeed", extras = ["core"],  develop = true}
 pfolio = {path = "../pfolio", develop = true}
 pfund-plot = {path = "../pfund-plot", extras = ["notebook"], develop = true}
+mtflow = {path = "../mtflow", develop = true}
 pybit = "^5.8.0"
 mypy = "^1.11.2"
 ruff = "^0.6.9"

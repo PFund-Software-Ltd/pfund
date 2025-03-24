@@ -17,10 +17,8 @@ from logging.handlers import QueueHandler, QueueListener
 
 from tqdm import tqdm
 import polars as pl
-from IPython import get_ipython
 
 from pfund import cprint
-from pfund.backtest_history import BacktestHistory
 from pfund.engines.base_engine import BaseEngine
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.brokers.broker_backtest import BacktestBroker
@@ -28,10 +26,10 @@ from pfund.enums import BacktestMode
 
 
 class BacktestEngine(BaseEngine):
+    # FIXME: move to mtflow?
     settings: BacktestEngineSettingsDict = {
         'commit_to_git': False,
         'retention_period': '7d',
-        'ipython': bool(get_ipython() is not None),
     }
 
     def __init__(
@@ -41,6 +39,7 @@ class BacktestEngine(BaseEngine):
         data_range: str | DataRangeDict='ytd',
         dataset_splits: int | DatasetSplitsDict | BaseCrossValidator=721,
         settings: BacktestEngineSettingsDict | None = None,
+        use_ray: bool=True,
         save_backtests: bool=True,
         use_signal_df: bool=False,
         assert_signals: bool=True,
@@ -57,11 +56,12 @@ class BacktestEngine(BaseEngine):
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):
             super().__init__(
-                'BACKTEST', 
+                env='BACKTEST', 
                 data_tool=data_tool, 
                 data_range=data_range, 
                 dataset_splits=dataset_splits,
                 settings=settings,
+                use_ray=use_ray,
             )
             self.mode = BacktestMode[mode.lower()]
             self._save_backtests = save_backtests
@@ -74,11 +74,9 @@ class BacktestEngine(BaseEngine):
             self._assert_signals = assert_signals
             if self.mode == BacktestMode.event_driven and use_signal_df and assert_signals:
                 raise ValueError('use_signal_df must be False when assert_signals=True in event-driven backtesting')
-            # TODO: move to backtest history
-            retention_period = self.settings['retention_period']
-            retention_period = retention_period.lower()
-            assert retention_period[-1] in ['d', 'w', 'm', 'y'], 'retention_period must end with one of [d, w, m, y]'
-            self.history = BacktestHistory(self)
+            
+            # TODO: move to mtflow
+            # self.history = mt.BacktestHistory()
     
     @classmethod
     def _initialize_settings(cls, settings: BacktestEngineSettingsDict):

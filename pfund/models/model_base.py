@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from pfund.datas.data_config import DataConfig
     from pfund.datas.storage_config import StorageConfig
     from pfund.datas.data_base import BaseData
+    from pfund.datas.resolution import Resolution
     MachineLearningModel = Union[
         nn.Module,
         BaseEstimator,
@@ -60,9 +61,13 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         self.logger = None
         self._is_running = False
         self._is_ready = defaultdict(bool)  # {data: bool}
-        self.datas = defaultdict(dict)  # {product: {resolution: data}}
+        self._datas = defaultdict(dict)  # {product: {resolution: data}}
+        self._primary_resolution: Resolution | None = None
+        self._orderbooks = {}  # {product: data}
+        self._tradebooks = {}  # {product: data}
         self._listeners = defaultdict(list)  # {data: model}
         self._consumers = []  # strategies/models that consume this model
+
         self._min_data = {}  # {data: int}
         self._max_data = {}  # {data: int}}
         self._num_data = defaultdict(int)  # {data: int}
@@ -128,7 +133,7 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
             'config': self.config,
             'params': self.params,
             'ml_model': self.ml_model,
-            'datas': [repr(data) for product in self.datas for data in self.datas[product].values()],
+            'datas': [repr(data) for data in self.list_datas()],
             'models': [model.to_dict() for model in self.models.values()],
             'model_signature': self._model_signature,
             'data_signatures': self._data_signatures,
@@ -180,7 +185,7 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
     
     def _assert_no_missing_datas(self, obj):
         loaded_datas = {data for product in obj['datas'] for data in obj['datas'][product].values()}
-        added_datas = {data for product in self.datas for data in self.datas[product].values()}
+        added_datas = {data for product in self._datas for data in self._datas[product].values()}
         if loaded_datas != added_datas:
             missing_datas = loaded_datas - added_datas
             raise Exception(f"missing data {missing_datas} in model '{self.name}', please use add_data() to add them back")
@@ -200,7 +205,7 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
             obj = {}
         obj.update({
             'ml_model': self.ml_model,
-            'datas': self.datas,
+            'datas': self._datas,
             # TODO: dump dates as well
         })
         file_path = self._get_file_path()
@@ -218,43 +223,37 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         storage_config: StorageConfigDict | StorageConfig | None=None,
         **product_specs
     ) -> list[TimeBasedData]:
-        datas: list[TimeBasedData] = []
+        assert len(self._consumers) >= 1, f"model '{self.name}' must have at least one strategy consumer"
         # consumers must also have model's data
-        for consumer in self._consumers:
-            consumer_datas: list[TimeBasedData] = consumer.add_data(
-                trading_venue, 
-                product, 
-                resolution, 
-                data_source=data_source, 
-                data_origin=data_origin, 
-                data_config=data_config, 
-                storage_config=storage_config, 
-                **product_specs
-            )
-            for data in consumer_datas:
-                self.set_data(data.product, data.resolution, data)
-                consumer._add_listener(listener=self, listener_key=data)
-                if data not in datas:
-                    datas.append(data)
+        datas: list[TimeBasedData] = self._add_data_to_consumers(
+            trading_venue, 
+            product, 
+            resolution, 
+            data_source, 
+            data_origin, 
+            data_config, 
+            storage_config, 
+            **product_specs
+        )
         return datas
     
     def _convert_min_max_data_to_dict(self):
         '''Converts min_data and max_data from int to dict[product, dict[resolution, int]]'''
         DEFAULT_MIN_DATA = 1
         if not self._min_data:
-            self._min_data = {data: DEFAULT_MIN_DATA for data in self.get_datas()}
+            self._min_data = {data: DEFAULT_MIN_DATA for data in self.list_datas()}
         elif isinstance(self._min_data, int):
             min_data = self._min_data
-            self._min_data = {data: min_data for data in self.get_datas()}
+            self._min_data = {data: min_data for data in self.list_datas()}
             
         if not self._max_data:
-            self._max_data = {data: self._min_data[data] for data in self.get_datas()}
+            self._max_data = {data: self._min_data[data] for data in self.list_datas()}
         elif isinstance(self._max_data, int):
             max_data = self._max_data
-            self._max_data = {data: max_data for data in self.get_datas()}
+            self._max_data = {data: max_data for data in self.list_datas()}
         
         # check if set up correctly
-        for data in self.get_datas():
+        for data in self.list_datas():
             assert data in self._min_data, f"{data} not found in {self._min_data=}, make sure set_min_data() is called correctly"
             assert data in self._max_data, f"{data} not found in {self._max_data=}, make sure set_max_data() is called correctly"
     
@@ -311,7 +310,7 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
     def start(self):
         if not self.is_running():
             self.add_datas()
-            self._add_consumers_datas_if_no_data()
+            self._add_data_from_consumers_if_no_data()
             self._convert_min_max_data_to_dict()
             self.add_models()
             self.add_features()

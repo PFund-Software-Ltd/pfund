@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from pfund.orders.order_base import BaseOrder
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.datas.data_base import BaseData
+    from pfund.datas.data_time_based import TimeBasedData
     from pfund.typing import tCRYPTO_EXCHANGE, tENVIRONMENT
     from pfund.datas.data_config import DataConfig
 
@@ -50,7 +51,7 @@ class CryptoBroker(BaseBroker):
     def add_custom_data(self):
         pass
 
-    def add_data(self, exch: tCRYPTO_EXCHANGE, product: str, resolution: str, data_config: DataConfig, **product_specs):
+    def add_data(self, exch: tCRYPTO_EXCHANGE, product: str, resolution: str, data_config: DataConfig, **product_specs) -> list[TimeBasedData]:
         '''
         Args:
             product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
@@ -58,10 +59,11 @@ class CryptoBroker(BaseBroker):
         '''
         exch, product_basis = exch.upper(), product.upper()
         product = self.add_product(exch, product_basis, **product_specs)
-        datas = self.data_manager.add_data(product, resolution, data_config=data_config)
-        for data in datas:
-            if channel := self._create_public_data_channel(data):
-                self.add_channel(exch, channel, data)
+        datas: list[TimeBasedData] = self.data_manager.add_data(product, resolution, data_config=data_config)
+        datas_non_resamplee = [data for data in datas if not data.is_resamplee()]
+        for data in datas_non_resamplee:
+            channel: PublicDataChannel = self._create_public_data_channel(data)
+            self.add_channel(exch, channel, data)
         return datas
     
     def add_channel(
@@ -131,11 +133,14 @@ class CryptoBroker(BaseBroker):
         exch, product_basis = exch.upper(), product_basis.upper()
         exchange = self.add_exchange(exch)
         # create another product object to format a correct product name
-        _product = exchange.create_product(product_basis, **product_specs)  
-        if not (product := self.get_product(exch, _product.name)):
+        product = exchange.create_product(product_basis, **product_specs)
+        existing_product = self.get_product(exch, product.name)
+        if not existing_product:
             exchange.add_product(product)
             self._products[exch][product.name] = product
             self.logger.debug(f'added {product=}')
+        else:
+            product = existing_product
         return product
     
     def remove_product(self, product: BaseProduct):

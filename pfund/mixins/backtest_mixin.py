@@ -191,9 +191,10 @@ class BacktestMixin:
             cprint('WARNING: tick data and quote data will be ignored in backtesting', style='bold red')
         return datas
     
-    def _add_consumers_datas_if_no_data(self: BacktestMixin | BaseStrategy | BaseModel) -> list[BaseData]:
+    # FIXME
+    def _add_data_from_consumers_if_no_data(self: BacktestMixin | BaseStrategy | BaseModel) -> list[BaseData]:
         '''Add consumers' raw dfs if no datas'''
-        datas = super()._add_consumers_datas_if_no_data()
+        datas = super()._add_data_from_consumers_if_no_data()
         for data in datas:
             for consumer in self._consumers:
                 dtl = consumer.dtl

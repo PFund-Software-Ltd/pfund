@@ -67,6 +67,41 @@ class TimeBasedData(BaseData):
     
     def is_time_based(self):
         return True
+    
+    def is_quote_l1(self):
+        return self.is_quote() and self.resolution.orderbook_level == 1
+
+    def is_quote_l2(self):
+        return self.is_quote() and self.resolution.orderbook_level == 2
+
+    def is_quote_l3(self):
+        return self.is_quote() and self.resolution.orderbook_level == 3
+
+    def is_quote(self):
+        return self.timeframe.is_quote()
+
+    def is_tick(self):
+        return self.timeframe.is_tick()
+
+    def is_bar(self):
+        return (
+            self.is_second() or
+            self.is_minute() or
+            self.is_hour() or
+            self.is_day()
+        )
+    
+    def is_second(self):
+        return self.timeframe.is_second()
+
+    def is_minute(self):
+        return self.timeframe.is_minute()
+
+    def is_hour(self):
+        return self.timeframe.is_hour()
+
+    def is_day(self):
+        return self.timeframe.is_day()
 
     def is_resamplee(self):
         return bool(self._resamplers)

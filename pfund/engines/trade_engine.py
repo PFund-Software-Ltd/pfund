@@ -43,6 +43,7 @@ class TradeEngine(BaseEngine):
         data_range: str | DataRangeDict='ytd',
         dataset_splits: int | DatasetSplitsDict | BaseCrossValidator=721,
         settings: TradeEngineSettingsDict | None=None,
+        use_ray: bool=False,
         df_min_rows: int=1_000,
         df_max_rows: int=3_000,
         # TODO: handle "broker_data_source", e.g. {'IB': 'DATABENTO'}
@@ -53,10 +54,11 @@ class TradeEngine(BaseEngine):
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):
             super().__init__(
-                env, 
+                env=env,
                 data_tool=data_tool, 
                 data_range=data_range, 
                 dataset_splits=dataset_splits,
+                use_ray=use_ray,
                 settings=settings,
             )
             self._is_running = True
@@ -109,7 +111,7 @@ class TradeEngine(BaseEngine):
         for strategy in self.strategy_manager.strategies.values():
             if strategy.is_parallel():
                 self.settings['zmq_ports'][strategy.name] = _get_port()
-        self.logger.debug(f'{self.settings['zmq_ports']=}')
+        self.logger.debug(f"{self.settings['zmq_ports']=}")
 
     def _start_scheduler(self):
         '''start scheduler for background tasks'''

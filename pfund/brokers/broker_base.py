@@ -5,22 +5,25 @@ if TYPE_CHECKING:
     from pfeed.enums import DataSource
     from pfeed.typing import tDATA_SOURCE
     from pfeed.feeds.market_feed import MarketFeed
-    from pfund.datas.data_base import BaseData
+    from pfund.datas.data_time_based import TimeBasedData
     from pfund.products.product_base import BaseProduct
     from pfund.brokers.broker_crypto import CryptoBroker
     from pfund.brokers.ib.broker_ib import IBBroker
+    from pfund.strategies.strategy_base import BaseStrategy
     from pfund.typing import tENVIRONMENT, tBROKER
     from pfund.typing import TradeEngineSettingsDict
 
 import logging
 from collections import defaultdict
 
+from pfund.datas.data_base import BaseData
 from pfund.managers.connection_manager import ConnectionManager
 from pfund.managers.data_manager import DataManager
 from pfund.managers.order_manager import OrderManager
 from pfund.managers.portfolio_manager import PortfolioManager
 from pfund.managers.risk_manager import RiskManager
 from pfund.enums import Environment, Broker, PublicDataChannel, PrivateDataChannel, DataChannelType
+from pfund.engines import get_engine
 
 
 class BaseBroker:
@@ -31,6 +34,7 @@ class BaseBroker:
         self.name = self.bkr = Broker[name.upper()]
         self.logger = logging.getLogger('pfund')
         
+        self._engine = get_engine()
         self._zmq = None
         self._settings: TradeEngineSettingsDict = {}
         
@@ -100,36 +104,15 @@ class BaseBroker:
     def cancel_all_orders(self, reason=None):
         print(f'broker cancel_all_orders, reason={reason}')
 
-    def _add_listener(self, listener, listener_key, event_type):
-        if event_type == 'public':
-            # add listener for public events, e.g. quote, tick etc.
-            self.data_manager._add_listener(listener, listener_key)
-        else:
-            # add listener for private events, e.g. order, trade, balance, position
-            for manager in [self.risk_manager, self.connection_manager, self.order_manager, self.portfolio_manager]:
-                manager._add_listener(listener, listener_key)
-    
-    def _remove_listener(self, listener, listener_key, event_type):
-        if event_type == 'public':
-            # remove listener for public events, e.g. quote, tick etc.
-            self.data_manager._remove_listener(listener, listener_key)
-        else:
-            # remove listener for private events, e.g. order, trade, balance, position
-            for manager in [self.risk_manager, self.connection_manager, self.order_manager, self.portfolio_manager]:
-                manager._remove_listener(listener, listener_key)
-    
-    def _create_public_data_channel(self, data: BaseData) -> PublicDataChannel | None:
-        if not data.is_time_based():
-            raise NotImplementedError('Only time-based data is supported for now')
-        if data.is_resamplee():
-            return None
-        timeframe = data.timeframe
-        if timeframe.is_quote():
+    def _create_public_data_channel(self, data: TimeBasedData) -> PublicDataChannel:
+        if data.is_quote():
             channel = PublicDataChannel.orderbook
-        elif timeframe.is_tick():
+        elif data.is_tick():
             channel = PublicDataChannel.tradebook
-        else:
+        elif data.is_bar():
             channel = PublicDataChannel.candlestick
+        else:
+            raise ValueError(f'unknown data type: {data}')
         return channel
     
     def _create_data_channel_type(
@@ -143,6 +126,12 @@ class BaseBroker:
             assert channel_type, 'channel_type "public" or "private" must be provided'
             channel_type = DataChannelType[channel_type.upper()]
         return channel_type
+    
+    def _add_data_listener(self, listener: BaseStrategy, data: BaseData):
+        self.data_manager._add_listener(listener, data)
+
+    def _remove_data_listener(self, listener: BaseStrategy, data: BaseData):
+        self.data_manager._remove_listener(listener, data)
     
     def distribute_msgs(self, channel, topic, info):
         if channel == 1:

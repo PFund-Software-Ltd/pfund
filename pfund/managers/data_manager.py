@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.brokers.broker_base import BaseBroker
+    from pfund.strategies.strategy_base import BaseStrategy
 
 import time
 from collections import defaultdict
@@ -27,7 +28,16 @@ class DataManager(BaseManager):
     def __init__(self, broker: BaseBroker):
         super().__init__('data_manager', broker)
         self._datas: dict[ProductName, dict[ResolutionRepr, BaseData]] = defaultdict(dict)
+        self._listeners: dict[BaseData, list[BaseStrategy]] = defaultdict(list)
         self._stale_bar_timeouts: dict[BaseData, int] = {}
+    
+    def _add_listener(self, listener: BaseStrategy, data: BaseData):
+        if listener not in self._listeners[data]:
+            self._listeners[data].append(listener)
+
+    def _remove_listener(self, listener: BaseStrategy, data: BaseData):
+        if listener in self._listeners[data]:
+            self._listeners[data].remove(listener)
     
     @staticmethod
     def get_supported_resolutions(bkr: Broker | str, exch: CryptoExchange | str) -> dict:
@@ -107,13 +117,13 @@ class DataManager(BaseManager):
             self.logger.debug(f'removed {product} {resolution} data')
             return data
 
-    def add_data(self, product: BaseProduct, resolution: str, data_config: DataConfig) -> list[BaseData]:
+    def add_data(self, product: BaseProduct, resolution: str, data_config: DataConfig) -> list[TimeBasedData]:
         supported_resolutions = self.get_supported_resolutions(product.bkr, product.exch)
         is_auto_resampled = data_config.auto_resample(supported_resolutions)
         if is_auto_resampled:
             self.logger.warning(f'{product} {resolution} extra_resolutions={data_config.extra_resolutions} data is auto-resampled to:\n{pformat(data_config.resample)}')
         
-        datas = []
+        datas: list[TimeBasedData] = []
         for resolution in data_config.resolutions:
             if not (data := self.get_data(product, resolution)):
                 data = self._initialize_time_based_data(product, resolution, data_config)

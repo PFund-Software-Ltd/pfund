@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import os
-from collections import defaultdict, deque, OrderedDict
+from collections import defaultdict, deque
 from abc import ABC
 
 from typing import Literal, TYPE_CHECKING, overload
 if TYPE_CHECKING:
     from pfeed.typing import tDATA_SOURCE
-    from pfund.typing import tTRADING_VENUE, tBROKER, tCRYPTO_EXCHANGE
+    from pfund.typing import tTRADING_VENUE, tCRYPTO_EXCHANGE
     from pfund.brokers.broker_base import BaseBroker
     from pfund.products.product_base import BaseProduct
     from pfund.positions.position_base import BasePosition
@@ -23,17 +23,19 @@ if TYPE_CHECKING:
     from pfund.accounts.account_ib import IBAccount
     from pfund.orders.order_base import BaseOrder
     from pfund.datas.data_base import BaseData
+    from pfund.models.model_base import BaseModel
     from pfund.datas.data_bar import Bar
+    from pfund.datas.resolution import Resolution
     from pfund.data_tools import data_tool_backtest
     from pfund.data_tools.data_tool_base import BaseDataTool
-    from pfund.datas.data_config import DataConfig
-    from pfund.datas.storage_config import StorageConfig
 
 from pfund.strategies.strategy_meta import MetaStrategy
 from pfund.engines import get_engine
 from pfund.utils.envs import backtest
 from pfund.mixins.trade_mixin import TradeMixin
 from pfund.enums import Component, Broker
+from pfund.datas.data_config import DataConfig
+from pfund.datas.storage_config import StorageConfig
 
 
 class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):    
@@ -47,22 +49,23 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self._zmq = None
         self._is_parallel = False
         self._is_running = False
-        self.datas = defaultdict(dict)  # {product: {'1m': data}}
-        self._listeners = defaultdict(list)  # {data: model}
-        self._consumers = []  # strategies that consume this strategy (sub-strategy)
+        self._datas = defaultdict(dict)  # {product: {'1m': data}}
+        self._primary_resolution: Resolution | None = None
+        self._orderbooks = {}  # {product: data}
+        self._tradebooks = {}  # {product: data}
+        self._listeners: dict[BaseData, list[BaseStrategy | BaseModel]] = defaultdict(list)
+        self._consumers: list[BaseStrategy] = []  # strategies that consume this strategy (sub-strategy)
         self.type = Component.strategy
 
-        self.orderbooks = {}  # {product: data}
-        self.tradebooks = {}  # {product: data}
-        self.accounts = defaultdict(OrderedDict)  # {trading_venue: {acc1: account1, acc2: account2} }
+        self.accounts = defaultdict(dict)  # {trading_venue: {acc1: account1, acc2: account2} }
         self.positions = {}  # {account: {pdt: position} }
         self.balances = {}  # {account: {ccy: balance}}
         # NOTE: includes submitted orders and opened orders
         self.orders = {}  # {account: [order, ...]}
         self.trades = {}  # {account: [trade, ...]}
         
-        self.strategies = {}
-        self.models = {}
+        self.strategies: dict[str, BaseStrategy] = {}
+        self.models: dict[str, BaseModel] = {}
         # NOTE: current strategy's signal is consumer's prediction
         self.predictions = {}  # {strat/mdl: pred_y}
         self._signals = {}  # {data: signal}, for strategy, signal is buy/sell/null
@@ -102,8 +105,8 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             'name': self.name,
             'config': self.config,
             'params': self.params,
-            'accounts': [repr(account) for trading_venue in self.accounts for account in self.accounts[trading_venue].values()],
-            'datas': [repr(data) for product in self.datas for data in self.datas[product].values()],
+            'accounts': [repr(account) for account in self.list_accounts()],
+            'datas': [repr(data) for data in self.list_datas()],
             'strategies': [strategy.to_dict() for strategy in self.strategies.values()],
             'models': [model.to_dict() for model in self.models.values()],
             'strategy_signature': self._strategy_signature,
@@ -143,7 +146,8 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self._zmq.stop()
         self._zmq = None
     
-    def add_broker(self, bkr: tBROKER) -> BaseBroker:
+    def add_broker(self, trading_venue: tTRADING_VENUE) -> BaseBroker:
+        bkr = self._derive_bkr_from_trading_venue(trading_venue)
         return self._engine.add_broker(bkr)
     
     @overload
@@ -155,7 +159,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     def get_position(self, account: BaseAccount, pdt: str) -> BasePosition | None:
         return self.positions[account].get(pdt, None)
     
-    def get_positions(self) -> list[BasePosition]:
+    def list_positions(self) -> list[BasePosition]:
         return [position for pdt_to_positions in self.positions.values() for position in pdt_to_positions.values()]
     
     @overload
@@ -167,7 +171,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     def get_balance(self, account: BaseAccount, ccy: str) -> BaseBalance | None:
         return self.balances[account].get(ccy, None)
     
-    def get_balances(self) -> list[BaseBalance]:
+    def list_balances(self) -> list[BaseBalance]:
         return [balance for ccy_to_balance in self.balances.values() for balance in ccy_to_balance.values()]
     
     @overload
@@ -183,11 +187,13 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             self.logger.warning(f"{trading_venue} account not specified, using first account '{acc}'")
         return self.accounts[trading_venue][acc]
     
+    def list_accounts(self) -> list[BaseAccount]:
+        return [account for accounts_per_trading_venue in self.accounts.values() for account in accounts_per_trading_venue.values()]
+    
     def add_account(self, trading_venue: tTRADING_VENUE, acc: str='', **kwargs) -> BaseAccount:
         trading_venue, acc = trading_venue.upper(), acc.upper()
-        bkr = self._derive_bkr_from_trading_venue(trading_venue)
-        broker = self.add_broker(bkr)
-        if bkr == 'CRYPTO':
+        broker: BaseBroker = self.add_broker(trading_venue)
+        if broker.name == Broker.CRYPTO:
             exch = trading_venue
             account =  broker.add_account(exch=exch, acc=acc, strat=self.strat, **kwargs)
         else:
@@ -218,45 +224,32 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
             product_specs: product specifications, e.g. expiration, strike_price etc.
         '''
-        if not isinstance(data_config, DataConfig) or not isinstance(storage_config, StorageConfig):
-            data_config, storage_config = self._parse_data_and_storage_config(trading_venue, resolution, data_source, data_config, storage_config)
-
         trading_venue, product = trading_venue.upper(), product.upper()
-        bkr = self._derive_bkr_from_trading_venue(trading_venue)
-        broker = self.add_broker(bkr)
-        if bkr == Broker.CRYPTO:
-            exch = trading_venue
-            datas: list[TimeBasedData] = broker.add_data(exch, product, resolution, data_config=data_config, **product_specs)
-        else:
-            datas: list[TimeBasedData] = broker.add_data(product, resolution, data_config=data_config, **product_specs)
+        data_config, storage_config = self._parse_data_and_storage_config(trading_venue, resolution, data_source, data_origin, data_config, storage_config)
+        self._set_primary_resolution(data_config.primary_resolution)
 
-        for data in datas:
-            if not data.is_resampler():
-                continue
-            resolution, product = data.resolution, data.product
-            if resolution.is_quote():
-                self.orderbooks[product] = data
-            if resolution.is_tick():
-                self.tradebooks[product] = data
-            
-            self.set_data(product, resolution, data)
-            self._add_historical_data(data, data_source, data_origin, storage_config)
-            if not self.is_sub_strategy():
-                broker._add_listener(listener=self, listener_key=data, event_type='public')
+        if not self.is_sub_strategy():
+            broker: BaseBroker = self.add_broker(trading_venue)
+            if broker.name == Broker.CRYPTO:
+                exch = trading_venue
+                datas: list[TimeBasedData] = broker.add_data(exch, product, resolution, data_config=data_config, **product_specs)
             else:
-                for consumer in self._consumers:
-                    consumer.add_data(
-                        trading_venue, 
-                        product, 
-                        resolution, 
-                        data_source=data_source, 
-                        data_origin=data_origin, 
-                        data_config=data_config, 
-                        storage_config=storage_config, 
-                        **product_specs
-                    )
-                    consumer._add_listener(listener=self, listener_key=data)
-                
+                datas: list[TimeBasedData] = broker.add_data(product, resolution, data_config=data_config, **product_specs)
+            for data in datas:
+                self._add_data(data)
+                self._add_historical_data(data, data_config, storage_config)
+                broker._add_data_listener(self, data)
+        else:
+            datas: list[TimeBasedData] = self._add_data_to_consumers(
+                trading_venue, 
+                product, 
+                resolution, 
+                data_source=data_source, 
+                data_origin=data_origin, 
+                data_config=data_config, 
+                storage_config=storage_config, 
+                **product_specs
+            )
         return datas
     
     # TODO, for website to remove data from a strategy
@@ -268,15 +261,15 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             datas = list(datas.values()) if not resolution else list(datas)
             broker = self.get_broker(product.bkr)
             for data in datas:
-                del self.datas[data.product][repr(data.resolution)]
+                del self._datas[data.product][repr(data.resolution)]
                 timeframe = data.resolution.timeframe
                 if timeframe.is_quote():
-                    del self.orderbooks[data.product]
+                    del self._orderbooks[data.product]
                 if timeframe.is_tick():
-                    del self.tradebooks[data.product]
-                broker._remove_listener(listener=self, listener_key=data, event_type='public')
-            if not self.datas[product]:
-                del self.datas[product]
+                    del self._tradebooks[data.product]
+                broker._remove_data_listener(self, data)
+            if not self._datas[product]:
+                del self._datas[product]
     
     def add_strategy(self, strategy: StrategyT, name: str='', is_parallel=False) -> StrategyT:
         # TODO
@@ -327,10 +320,6 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     def _start_strategies(self):
         for strategy in self.strategies.values():
             strategy.start()
-
-    def _subscribe_to_private_channels(self):
-        for broker in self.get_brokers():
-            broker._add_listener(listener=self, listener_key=self.strat, event_type='private')
             
     # TODO
     def _next(self, data: BaseData):
@@ -341,7 +330,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     def start(self):
         if not self.is_running():
             self.add_datas()
-            self._add_consumers_datas_if_no_data()
+            self._add_data_from_consumers_if_no_data()
             self.add_strategies()
             self._start_strategies()
             self.add_models()
@@ -349,7 +338,6 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             self.add_indicators()
             self._start_models()
             self._prepare_df()
-            self._subscribe_to_private_channels()
             if self.is_parallel():
                 # TODO: notice strategy manager it has started running
                 pass
@@ -369,8 +357,6 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
                 # TODO: notice strategy manager it has stopped running
                 pass
                 # self._zmq ...
-            for broker in self.get_brokers():
-                broker._remove_listener(listener=self, listener_key=self.strat, event_type='private')
             for strategy in self.strategies.values():
                 strategy.stop(reason=reason)
             for model in self.models.values():

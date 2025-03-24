@@ -61,4 +61,3 @@ class TradeEngineSettingsDict(TypedDict, total=False):
 class BacktestEngineSettingsDict(TypedDict, total=False):
     retention_period: int
     commit_to_git: bool
-    ipython: bool

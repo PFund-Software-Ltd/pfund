@@ -6,6 +6,7 @@ from typing import Literal, TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.typing import tENVIRONMENT
     from pfund.datas.data_config import DataConfig
+    from pfund.datas.data_time_based import TimeBasedData
 
 from pfund.adapter import Adapter
 from pfund.products.product_ib import IBProduct
@@ -72,7 +73,7 @@ class IBBroker(BaseBroker):
     def add_custom_data(self):
         pass
     
-    def add_data(self, product: str, resolution: str, data_config: DataConfig, exch: str='', **product_specs):
+    def add_data(self, product: str, resolution: str, data_config: DataConfig, exch: str='', **product_specs) -> list[TimeBasedData]:
         '''
         Args:
             product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
@@ -81,11 +82,12 @@ class IBBroker(BaseBroker):
         exch, product_basis = exch.upper(), product.upper()
         product: IBProduct = self.add_product(exch, product_basis, **product_specs)
         datas = self.data_manager.add_data(product, resolution, data_config=data_config)
-        for data in datas:
+        datas_non_resamplee = [data for data in datas if not data.is_resamplee()]
+        for data in datas_non_resamplee:
             self.add_data_channel(data, **kwargs)
         return datas
     
-    def add_data_channel(self, data, **kwargs):
+    def add_data_channel(self, data: TimeBasedData, **kwargs):
         if data.is_time_based():
             if data.is_resamplee():
                 return

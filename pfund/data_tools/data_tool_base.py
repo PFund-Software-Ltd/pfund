@@ -5,7 +5,8 @@ if TYPE_CHECKING:
     from pfeed.enums import DataTool
     from pfund.typing import DataRangeDict, DatasetSplitsDict
     from pfund.datas.data_base import BaseData
-    from pfund.data_tools.dataset import Dataset
+
+from pfund.data_tools.dataset import Dataset
 
 
 class BaseDataTool:

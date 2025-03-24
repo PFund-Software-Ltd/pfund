@@ -5,15 +5,17 @@ from pydantic import BaseModel, Field, ConfigDict, model_validator, field_valida
 from pfeed.enums import DataSource
 from pfund.datas.resolution import Resolution
 from pfund.enums import Environment
-from pfund.engines import get_engine
 from pfund.utils.envs import backtest
+from pfund.engines import get_engine        
 
 
+# TODO: add private channels? remove _add_default_private_channels in exchange_base.py
 class DataConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     data_source: DataSource
-    resolution: Resolution = Field(description='primary resolution used for trading, must be a bar resolution (e.g. "1s", "1m", "1h", "1d")')
+    data_origin: str=''
+    primary_resolution: Resolution = Field(description='primary resolution used for trading, must be a bar resolution (e.g. "1s", "1m", "1h", "1d")')
     extra_resolutions: list[Resolution] = Field(default_factory=list, description='extra resolutions, e.g. "1t" for tick data, "1q" for quote data')
     orderbook_depth: int = Field(
         default=1, 
@@ -63,20 +65,26 @@ class DataConfig(BaseModel):
         so need to force 'resample' to be {'1h': '1m'}
         '''
         for resolution in self.extra_resolutions:
-            if resolution < self.resolution:
-                if resolution._value() % self.resolution._value() == 0:
-                    self.resample[resolution] = self.resolution
+            if resolution < self.primary_resolution:
+                if resolution._value() % self.primary_resolution._value() == 0:
+                    self.resample[resolution] = self.primary_resolution
                 else:
-                    raise Exception(f'extra_resolution={resolution} is not supported for auto_resampling, since it is not a multiple of resolution={self.resolution}')
+                    raise Exception(f'extra_resolution={resolution} is not supported for auto_resampling, since it is not a multiple of resolution={self.primary_resolution}')
     
     @property
     def resolutions(self) -> list[Resolution]:
-        return [self.resolution] + self.extra_resolutions
+        return [self.primary_resolution] + self.extra_resolutions
 
     @model_validator(mode='after')
     def validate_after(self):
-        assert self.resolution.is_bar(), f'resolution={repr(self.resolution)} must be a bar resolution (e.g. "1s", "1m", "1h", "1d")'
-        assert self.resolution not in self.extra_resolutions, f'resolution={repr(self.resolution)} should not be included in "extra_resolutions"'
+        assert self.primary_resolution.is_bar(), f'resolution={repr(self.primary_resolution)} must be a bar resolution (e.g. "1s", "1m", "1h", "1d")'
+        assert self.primary_resolution not in self.extra_resolutions, f'resolution={repr(self.primary_resolution)} should not be included in "extra_resolutions"'
+        quote_resolutions = [r for r in self.resolutions if r.is_quote()]
+        if quote_resolutions:
+            assert len(quote_resolutions) == 1, f'only one quote resolution is supported, got {len(quote_resolutions)}'
+        tick_resolutions = [r for r in self.resolutions if r.is_tick()]
+        if tick_resolutions:
+            assert len(tick_resolutions) == 1, f'only one tick resolution is supported, got {len(tick_resolutions)}'
         self._validate_resample()
         self._validate_shift()
         self._validate_stale_bar_timeout()
@@ -89,7 +97,7 @@ class DataConfig(BaseModel):
     @model_validator(mode='before')
     @classmethod
     def validate_before(cls, data: dict) -> dict:
-        data['resolution'] = Resolution(data['resolution'])
+        data['primary_resolution'] = Resolution(data['primary_resolution'])
         data['extra_resolutions'] = list(set(Resolution(resolution) for resolution in data.get('extra_resolutions', [])))
         data['resample']: dict[Annotated[Resolution, "ResampleeResolution"], Annotated[Resolution, "ResamplerResolution"]] = {
             Resolution(resamplee_resolution): Resolution(resampler_resolution) for resamplee_resolution, resampler_resolution in data.get('resample', {}).items()
@@ -155,7 +163,7 @@ class DataConfig(BaseModel):
                 else:
                     higher_resolution = _resolution.higher()
                 return _convert_to_supported_resolution(higher_resolution)
-
+        
         output_resample = {}
         input_resample = self.resample.copy()
 

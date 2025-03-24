@@ -1,6 +1,12 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.datas.data_time_based import TimeBasedData
+
 from collections import defaultdict
 
 from pfund.brokers.broker_base import BaseBroker
+from pfund.enums import Broker
 
 
 def BacktestBroker(Broker: type[BaseBroker]) -> BaseBroker:
@@ -19,7 +25,7 @@ def BacktestBroker(Broker: type[BaseBroker]) -> BaseBroker:
             
         def stop(self):
             self.logger.debug(f'broker {self.name} stopped')
-
+        
         def add_account(self, acc: str='', initial_balances: dict[str, int|float]|None=None, **kwargs):
             # NOTE: do NOT pass in kwargs to super().add_account(),
             # this can prevent any accidental credential leak during backtesting

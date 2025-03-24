@@ -29,7 +29,7 @@ import time
 import datetime
 from pathlib import Path
 
-from pfund.enums import CryptoExchange
+from pfund.enums import CryptoExchange, Broker
 from pfund.datas.resolution import Resolution
 from pfund.utils.utils import load_yaml_file, convert_ts_to_dt
 from pfund.plogging import create_dynamic_logger
@@ -83,6 +83,10 @@ class TradeMixin:
             resolution=resolution,
             copy=copy
         )
+    
+    @property
+    def datas(self: BaseStrategy | BaseModel):
+        return self._datas
     
     @property
     def dataset(self: BaseStrategy | BaseModel) -> Dataset:
@@ -209,13 +213,9 @@ class TradeMixin:
         if consumer not in self._consumers:
             self._consumers.append(consumer)
             
-    def _add_listener(self: BaseStrategy | BaseModel, listener: BaseStrategy | BaseModel, listener_key: BaseData):
-        if listener not in self._listeners[listener_key]:
-            self._listeners[listener_key].append(listener)
-    
-    def _remove_listener(self: BaseStrategy | BaseModel, listener: BaseStrategy | BaseModel, listener_key: BaseData):
-        if listener in self._listeners[listener_key]:
-            self._listeners[listener_key].remove(listener)
+    def _add_listener(self: BaseStrategy | BaseModel, listener: BaseStrategy | BaseModel, data: BaseData):
+        if listener not in self._listeners[data]:
+            self._listeners[data].append(listener)
     
     def _derive_bkr_from_trading_venue(self: BaseStrategy | BaseModel, trading_venue: tTRADING_VENUE) -> tBROKER:
         trading_venue = trading_venue.upper()
@@ -227,14 +227,14 @@ class TradeMixin:
     @overload
     def get_broker(self: BaseStrategy | BaseModel, bkr: Literal['IB']) -> IBBroker: ...
     
-    def get_broker(self: BaseStrategy | BaseModel, bkr: tBROKER) -> BaseBroker:
+    def get_broker(self: BaseStrategy | BaseModel, trading_venue_or_broker: tBROKER | tTRADING_VENUE) -> BaseBroker:
+        if trading_venue_or_broker in Broker.__members__:
+            bkr = trading_venue_or_broker
+        else:
+            bkr = self._derive_bkr_from_trading_venue(trading_venue_or_broker)
         return self._engine.get_broker(bkr)
     
-    def get_broker_from_trading_venue(self: BaseStrategy | BaseModel, trading_venue: tTRADING_VENUE) -> BaseBroker:
-        bkr = self._derive_bkr_from_trading_venue(trading_venue)
-        return self.get_broker(bkr)
-    
-    def get_brokers(self: BaseStrategy | BaseModel) -> list[BaseBroker]:
+    def list_brokers(self: BaseStrategy | BaseModel) -> list[BaseBroker]:
         return list(self._engine.brokers.values())
     
     @overload
@@ -244,54 +244,40 @@ class TradeMixin:
     def get_product(self: BaseStrategy | BaseModel, trading_venue: Literal['IB'], pdt: str, exch: str='') -> IBProduct | None: ...
     
     def get_product(self: BaseStrategy | BaseModel, trading_venue: tTRADING_VENUE, pdt: str, exch: str='') -> BaseProduct | None:
-        broker = self.get_broker_from_trading_venue(trading_venue)
+        broker = self.get_broker(trading_venue)
         if broker.name == 'CRYPTO':
             exch = trading_venue
             product: BaseProduct | None = broker.get_product(exch, pdt)
         else:
             product: BaseProduct | None = broker.get_product(pdt, exch=exch)
-        if product and product not in self.datas:
+        if product and product not in self._datas:
             self.logger.warning(f"{self.name} is getting '{product}' that is not in its datas")
         return product
     
-    def get_products(self: BaseStrategy | BaseModel) -> list[BaseProduct]:
-        return list(self.datas.keys())
-    
-    def _add_historical_data(self: BaseStrategy | BaseModel, data: TimeBasedData, data_source: DataSource, data_origin: str, storage_config: StorageConfig):
-        product = data.product
-        feed: MarketFeed = self._engine.get_feed(data_source)
-        df = feed.get_historical_data(
-            product=product.basis, 
-            symbol=product.symbol,
-            resolution=data.resolution,
-            start_date=self.dataset.start_date, 
-            end_date=self.dataset.end_date,
-            data_layer=storage_config.data_layer,
-            data_domain=storage_config.data_domain,
-            data_origin=data_origin,
-            from_storage=storage_config.from_storage,
-            storage_options=storage_config.storage_options,
-            **product.specs
-        )
-        self._add_raw_df(data, df)
+    def list_products(self: BaseStrategy | BaseModel) -> list[BaseProduct]:
+        return list(self._datas.keys())
 
     def _parse_data_and_storage_config(
         self: BaseStrategy | BaseModel, 
         trading_venue: tTRADING_VENUE, 
         resolution: str,
         data_source: tDATA_SOURCE | None,
-        data_config: DataConfigDict | None,
-        storage_config: StorageConfigDict | None,
+        data_origin: str,
+        data_config: DataConfigDict | DataConfig | None,
+        storage_config: StorageConfigDict | StorageConfig | None,
     ) -> tuple[DataConfig, StorageConfig]:
+        if isinstance(data_config, DataConfig) and isinstance(storage_config, StorageConfig):
+            return data_config, storage_config
         data_config = data_config or {}
         data_config['data_source'] = trading_venue if data_source is None else data_source
-        data_config['resolution'] = resolution
+        data_config['data_origin'] = data_origin
+        data_config['primary_resolution'] = resolution
         data_config = DataConfig(**data_config)
         if storage_config:
             storage_config = StorageConfig(**storage_config)
         else:
             global_storage_config = self._engine._storage_config
-            storage_config = global_storage_config if global_storage_config else StorageConfig()
+            storage_config = global_storage_config or StorageConfig()
         # TODO: save data signatures properly, data_signatures should be a set
         self._data_signatures.append({k: v for k, v in locals().items() if k not in ['self', '__class__']})
         return data_config, storage_config
@@ -300,30 +286,100 @@ class TradeMixin:
     def add_custom_data(self: BaseStrategy | BaseModel):
         raise NotImplementedError
 
-    def get_datas(self: BaseStrategy | BaseModel) -> list[BaseData]:
+    def list_datas(self: BaseStrategy | BaseModel) -> list[TimeBasedData]:
         datas = []
-        for product in self.datas:
-            datas.extend(list(self.datas[product].values()))
+        for product in self._datas:
+            datas.extend(list(self._datas[product].values()))
         return datas
     
-    def set_data(self: BaseStrategy | BaseModel, product: BaseProduct, resolution: Resolution, data: BaseData):
-        self.datas[product][resolution] = data
-
-    def get_data(self: BaseStrategy | BaseModel, product: BaseProduct, *, resolution: str) -> BaseData | None:
-        return self.datas[product].get(resolution, None)
+    def _add_historical_data(self: BaseStrategy | BaseModel, data: TimeBasedData, data_config: DataConfig, storage_config: StorageConfig):
+        if data.resolution != self._primary_resolution:
+            return
+        product = data.product
+        feed: MarketFeed = self._engine.get_feed(data_config.data_source)
+        df = feed.get_historical_data(
+            product=product.basis, 
+            symbol=product.symbol,
+            resolution=data.resolution,
+            start_date=self.dataset.start_date, 
+            end_date=self.dataset.end_date,
+            data_layer=storage_config.data_layer,
+            data_domain=storage_config.data_domain,
+            data_origin=data_config.data_origin,
+            from_storage=storage_config.from_storage,
+            storage_options=storage_config.storage_options,
+            **product.specs
+        )
+        self._add_raw_df(data, df)
+        
+    def _add_data(self: BaseStrategy | BaseModel, data: TimeBasedData):
+        if data.is_quote():
+            self._orderbooks[data.product] = data
+        elif data.is_tick():
+            self._tradebooks[data.product] = data
+        self._datas[data.product][data.resol] = data
     
-    def _add_consumers_datas_if_no_data(self: BaseStrategy | BaseModel) -> list[BaseData]:
-        if self.datas or not self._consumers:
+    def _add_data_to_consumers(
+        self: BaseStrategy | BaseModel, 
+        trading_venue: tTRADING_VENUE, 
+        product: str, 
+        resolution: str, 
+        data_source: tDATA_SOURCE | None=None,
+        data_origin: str='', 
+        data_config: DataConfigDict | DataConfig | None=None,
+        storage_config: StorageConfigDict | StorageConfig | None=None,
+        **product_specs
+    ) -> list[TimeBasedData]:
+        datas = []
+        for consumer in self._consumers:
+            datas: list[TimeBasedData] = consumer.add_data(
+                trading_venue, 
+                product, 
+                resolution, 
+                data_source=data_source, 
+                data_origin=data_origin, 
+                data_config=data_config, 
+                storage_config=storage_config, 
+                **product_specs
+            )
+            for data in datas:
+                self._add_data(data)
+                self._add_historical_data(data, data_config, storage_config)
+                consumer._add_listener(self, data)
+        return datas
+    
+    def _add_data_from_consumers_if_no_data(self: BaseStrategy | BaseModel) -> list[BaseData]:
+        has_no_data = not self._datas and self._consumers
+        if not has_no_data:
             return []
         self.logger.info(f"No data for {self.name}, adding datas from consumers {[consumer.name for consumer in self._consumers]}")
         datas = []
         for consumer in self._consumers:
-            for data in consumer.get_datas():
+            for data in consumer.list_datas():
                 self.set_data(data.product, data.resolution, data)
-                consumer._add_listener(listener=self, listener_key=data)
+                consumer._add_listener(listener=self, listen_to=data)
                 if data not in datas:
                     datas.append(data)
         return datas
+
+    def get_data(self: BaseStrategy | BaseModel, product: BaseProduct, *, resolution: str | Resolution) -> BaseData | None:
+        if isinstance(resolution, str):
+            resolution = Resolution(resolution)
+        resolution_repr = repr(resolution)
+        return self._datas[product].get(resolution_repr, None)
+    
+    def _set_primary_resolution(self: BaseStrategy | BaseModel, resolution: Resolution):
+        if not self._primary_resolution:
+            self._primary_resolution = resolution
+        else:
+            assert self._primary_resolution == resolution, \
+                f'{resolution=} but primary_resolution={self._primary_resolution}, only one primary resolution is supported'
+    
+    def get_orderbook(self: BaseStrategy | BaseModel, product: BaseProduct) -> BaseData:
+        return self._orderbooks[product]
+    
+    def get_tradebook(self: BaseStrategy | BaseModel, product: BaseProduct) -> BaseData:
+        return self._tradebooks[product]
     
     def get_model(self: BaseStrategy | BaseModel, name: str) -> BaseModel:
         return self.models[name]

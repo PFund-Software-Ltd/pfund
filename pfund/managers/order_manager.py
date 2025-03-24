@@ -49,7 +49,7 @@ class OrderManager(BaseManager):
         self._cxl_rej_nums = defaultdict(int)
 
     def push(self, order, event: Event, type_):
-        for strategy in self._listeners[order.strat]:
+        if strategy := self._engine.strategy_manager.get_strategy(order.strat):
             if not strategy.is_parallel():
                 if strategy.is_running():
                     if event == Event.order:

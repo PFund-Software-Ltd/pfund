@@ -43,12 +43,13 @@ class BaseEngine(Singleton):
 
     def __init__(
         self, 
+        *,
         env: tENVIRONMENT, 
         data_tool: tDATA_TOOL='polars', 
         data_range: str | DataRangeDict='ytd', 
         dataset_splits: int | DatasetSplitsDict | BaseCrossValidator=721, 
-        use_ray: bool=True,
         settings: TradeEngineSettingsDict | BacktestEngineSettingsDict | None=None,
+        use_ray: bool=False,
     ):
         from pfund.managers.strategy_manager import StrategyManager
 
@@ -62,13 +63,28 @@ class BaseEngine(Singleton):
         
         self._setup_logging()
         self.logger = logging.getLogger('pfund')
-        self.brokers = {}
-        self.strategy_manager = StrategyManager()
-        self._use_ray = use_ray
         self._storage_config: StorageConfig | None = None
+
+        self._use_ray = use_ray
         cls = self.__class__
         cls._initialize_data_tool(data_tool, data_range, dataset_splits)
         cls.settings.update(settings or {})
+
+        self.brokers = {}
+        self.strategy_manager = StrategyManager()
+        
+    def configure_storage(
+        self, 
+        data_layer: tDATA_LAYER='cleaned', 
+        data_domain: str='', 
+        from_storage: tSTORAGE | None=None, 
+        storage_options: dict | None=None
+    ):
+        '''Configure global storage config so that no need to pass repeated data configs into strategy/model.add_data()
+        Args:
+            storage_options: configs specific to "from_storage", for MinIO, it's access_key and secret_key etc.
+        '''
+        self._storage_config = StorageConfig(data_layer=data_layer, data_domain=data_domain, from_storage=from_storage, storage_options=storage_options)
         
     @classmethod
     def _initialize_data_tool(cls, data_tool: tDATA_TOOL, data_range: str | DataRangeDict, dataset_splits: int | DatasetSplitsDict | BaseCrossValidator):
@@ -102,10 +118,6 @@ class BaseEngine(Singleton):
         import ray
         if ray.is_initialized():
             ray.shutdown()
-    
-    def configure_storage(self, data_layer: tDATA_LAYER, data_domain: str, from_storage: tSTORAGE, storage_options: dict | None=None):
-        '''Configure global storage so that no need to pass repeated data configs into strategy/model.add_data()'''
-        self._storage_config = StorageConfig(data_layer=data_layer, data_domain=data_domain, from_storage=from_storage, storage_options=storage_options)
     
     def get_feed(self, data_source: tDATA_SOURCE | DataSource, **pfeed_kwargs) -> MarketFeed:
         if isinstance(data_source, str):
