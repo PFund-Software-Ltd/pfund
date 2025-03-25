@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING, Literal, overload, ClassVar
 if TYPE_CHECKING:
     from sklearn.model_selection._split import BaseCrossValidator
     from pfeed.typing import tDATA_TOOL, tDATA_SOURCE, tDATA_LAYER, tSTORAGE
-    from pfeed.feeds.market_feed import MarketFeed
     from pfund.typing import DataRangeDict, DatasetSplitsDict
     from pfund.typing import TradeEngineSettingsDict, BacktestEngineSettingsDict
     from pfund.typing import StrategyT, tENVIRONMENT, tBROKER
@@ -17,6 +16,7 @@ import os
 import logging
 import importlib
 
+from pfeed.feeds.market_feed import MarketFeed
 from pfeed.enums import DataSource
 from pfund import cprint
 from pfund.utils.utils import Singleton
@@ -48,8 +48,9 @@ class BaseEngine(Singleton):
         data_tool: tDATA_TOOL='polars', 
         data_range: str | DataRangeDict='ytd', 
         dataset_splits: int | DatasetSplitsDict | BaseCrossValidator=721, 
-        settings: TradeEngineSettingsDict | BacktestEngineSettingsDict | None=None,
         use_ray: bool=False,
+        use_duckdb: bool=False,
+        settings: TradeEngineSettingsDict | BacktestEngineSettingsDict | None=None,
     ):
         from pfund.managers.strategy_manager import StrategyManager
 
@@ -66,12 +67,13 @@ class BaseEngine(Singleton):
         self._storage_config: StorageConfig | None = None
 
         self._use_ray = use_ray
+        self._use_duckdb = use_duckdb
+        self._data_tool: BaseDataTool = self._create_data_tool(data_tool, use_duckdb, data_range, dataset_splits)
         cls = self.__class__
-        cls._initialize_data_tool(data_tool, data_range, dataset_splits)
         cls.settings.update(settings or {})
 
         self.brokers = {}
-        self.strategy_manager = StrategyManager()
+        self.strategy_manager = StrategyManager(use_ray=use_ray)
         
     def configure_storage(
         self, 
@@ -86,12 +88,17 @@ class BaseEngine(Singleton):
         '''
         self._storage_config = StorageConfig(data_layer=data_layer, data_domain=data_domain, from_storage=from_storage, storage_options=storage_options)
         
-    @classmethod
-    def _initialize_data_tool(cls, data_tool: tDATA_TOOL, data_range: str | DataRangeDict, dataset_splits: int | DatasetSplitsDict | BaseCrossValidator):
+    def _create_data_tool(
+        self, 
+        data_tool: tDATA_TOOL, 
+        use_duckdb: bool, 
+        data_range: str | DataRangeDict, 
+        dataset_splits: int | DatasetSplitsDict | BaseCrossValidator
+    ) -> BaseDataTool:
         from pfeed.enums import DataTool
         data_tool = DataTool[data_tool.lower()]
-        cls.DataTool: type[BaseDataTool] = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool}'), f'{data_tool.capitalize()}DataTool')
-        cls.DataTool._initialize_dataset(data_range, dataset_splits)
+        DataTool: type[BaseDataTool] = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool}'), f'{data_tool.capitalize()}DataTool')
+        return DataTool(use_duckdb=use_duckdb, data_range=data_range, dataset_splits=dataset_splits)
         
     def _setup_logging(self):
         from pfund.config import get_config
@@ -124,7 +131,7 @@ class BaseEngine(Singleton):
             data_source = DataSource[data_source.upper()]
         DataFeed = data_source.feed_class
         assert DataFeed is not None, f"Failed to import data feed for {data_source}, make sure it has been installed using `pip install pfeed[{data_source.value.lower()}]`"
-        feed = DataFeed(data_tool=self.DataTool.name.value, use_ray=self._use_ray, **pfeed_kwargs)
+        feed = DataFeed(data_tool=self._data_tool.name.value, use_ray=self._use_ray, **pfeed_kwargs)
         if not isinstance(feed, MarketFeed):
             if hasattr(feed, 'market'):
                 feed = feed.market
@@ -135,8 +142,8 @@ class BaseEngine(Singleton):
     def get_strategy(self, strat: str) -> BaseStrategy | None:
         return self.strategy_manager.get_strategy(strat)
 
-    def add_strategy(self, strategy: StrategyT, name: str='', is_parallel=False) -> StrategyT:
-        return self.strategy_manager.add_strategy(strategy, name=name, is_parallel=is_parallel)
+    def add_strategy(self, strategy: StrategyT, resolution: str, name: str='') -> StrategyT:
+        return self.strategy_manager.add_strategy(strategy, resolution, name=name)
 
     def remove_strategy(self, strat: str):
         return self.strategy_manager.remove_strategy(strat)

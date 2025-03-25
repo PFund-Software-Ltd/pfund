@@ -7,6 +7,7 @@ from abc import ABC
 from typing import Literal, TYPE_CHECKING, overload
 if TYPE_CHECKING:
     from pfeed.typing import tDATA_SOURCE
+    from pfeed.feeds.market_feed import MarketFeed
     from pfund.typing import tTRADING_VENUE, tCRYPTO_EXCHANGE
     from pfund.brokers.broker_base import BaseBroker
     from pfund.products.product_base import BaseProduct
@@ -25,10 +26,9 @@ if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
     from pfund.models.model_base import BaseModel
     from pfund.datas.data_bar import Bar
-    from pfund.datas.resolution import Resolution
     from pfund.data_tools import data_tool_backtest
-    from pfund.data_tools.data_tool_base import BaseDataTool
 
+from pfund.datas.resolution import Resolution
 from pfund.strategies.strategy_meta import MetaStrategy
 from pfund.engines import get_engine
 from pfund.utils.envs import backtest
@@ -42,19 +42,17 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     def __init__(self, *args, **kwargs):
         self._args = args
         self._kwargs = kwargs
-        self.name = self.strat = self.get_default_name()
-        self._engine = get_engine()
-        self._data_tool: BaseDataTool = self._engine.DataTool()
-        self.logger = None
         self._zmq = None
-        self._is_parallel = False
+        self.name = self.get_default_name()
+        self._engine = get_engine()
+        self.logger = None
         self._is_running = False
         self._datas = defaultdict(dict)  # {product: {'1m': data}}
-        self._primary_resolution: Resolution | None = None
+        self._resolution: Resolution | None = None
         self._orderbooks = {}  # {product: data}
         self._tradebooks = {}  # {product: data}
+        self._consumer: BaseStrategy | None = None
         self._listeners: dict[BaseData, list[BaseStrategy | BaseModel]] = defaultdict(list)
-        self._consumers: list[BaseStrategy] = []  # strategies that consume this strategy (sub-strategy)
         self.type = Component.strategy
 
         self.accounts = defaultdict(dict)  # {trading_venue: {acc1: account1, acc2: account2} }
@@ -79,14 +77,11 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         
         self.params = {}
         self.load_params()
-    
+
     # HACK: ideally no backtesting methods should be here, but it is required to improve IDE Intellisense
     @backtest
     def backtest(self, df: data_tool_backtest.BacktestDataFrame):
         raise Exception(f'Strategy "{self.name}" does not have a backtest() method, cannot run vectorized backtesting')
-    
-    def is_parallel(self):
-        return self._is_parallel
     
     # TODO
     def is_ready(self):
@@ -96,8 +91,8 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         """
         pass
     
-    def is_sub_strategy(self):
-        return bool(self._consumers)
+    def is_sub_strategy(self) -> bool:
+        return bool(self._consumer)
     
     def to_dict(self):
         return {
@@ -116,12 +111,6 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     def get_trading_venues(self) -> list[tTRADING_VENUE]:
         return list(self.accounts.keys())
     
-    def set_name(self, name: str):
-        self.name = self.strat = name
-
-    def set_parallel(self, is_parallel):
-        self._is_parallel = is_parallel
-  
     def pong(self):
         """Pongs back to Engine's ping to show that it is alive"""
         zmq_msg = (0, 0, (self.strat,))
@@ -195,9 +184,9 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         broker: BaseBroker = self.add_broker(trading_venue)
         if broker.name == Broker.CRYPTO:
             exch = trading_venue
-            account =  broker.add_account(exch=exch, acc=acc, strat=self.strat, **kwargs)
+            account =  broker.add_account(exch=exch, acc=acc, strat=self.name, **kwargs)
         else:
-            account = broker.add_account(acc=acc, strat=self.strat, **kwargs)
+            account = broker.add_account(acc=acc, strat=self.name, **kwargs)
         if account.name not in self.accounts[trading_venue]:
             self.accounts[trading_venue][account.name] = account
             self.positions[account] = {}
@@ -208,11 +197,28 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             self.logger.debug(f'added account {trading_venue=} {account.name=}')
         return account
     
+    def _add_historical_data(self, data: TimeBasedData, data_config: DataConfig, storage_config: StorageConfig):
+        product = data.product
+        feed: MarketFeed = self._engine.get_feed(data_config.data_source)
+        df = feed.get_historical_data(
+            product=product.basis, 
+            symbol=product.symbol,
+            resolution=data.resolution,
+            start_date=self.dataset.start_date, 
+            end_date=self.dataset.end_date,
+            data_layer=storage_config.data_layer,
+            data_domain=storage_config.data_domain,
+            data_origin=data_config.data_origin,
+            from_storage=storage_config.from_storage,
+            storage_options=storage_config.storage_options,
+            **product.specs
+        )
+        self.data_tool._add_raw_df(data, df)
+    
     def add_data(
         self, 
         trading_venue: tTRADING_VENUE,
         product: str,
-        resolution: str,
         data_source: tDATA_SOURCE | None=None,
         data_origin: str='',
         data_config: DataConfigDict | DataConfig | None=None,
@@ -225,25 +231,24 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             product_specs: product specifications, e.g. expiration, strike_price etc.
         '''
         trading_venue, product = trading_venue.upper(), product.upper()
-        data_config, storage_config = self._parse_data_and_storage_config(trading_venue, resolution, data_source, data_origin, data_config, storage_config)
-        self._set_primary_resolution(data_config.primary_resolution)
+        data_config, storage_config = self._parse_data_and_storage_config(trading_venue, data_source, data_origin, data_config, storage_config)
 
         if not self.is_sub_strategy():
             broker: BaseBroker = self.add_broker(trading_venue)
             if broker.name == Broker.CRYPTO:
                 exch = trading_venue
-                datas: list[TimeBasedData] = broker.add_data(exch, product, resolution, data_config=data_config, **product_specs)
+                datas: list[TimeBasedData] = broker.add_data(exch, product, data_config=data_config, **product_specs)
             else:
-                datas: list[TimeBasedData] = broker.add_data(product, resolution, data_config=data_config, **product_specs)
+                datas: list[TimeBasedData] = broker.add_data(product, data_config=data_config, **product_specs)
             for data in datas:
                 self._add_data(data)
-                self._add_historical_data(data, data_config, storage_config)
+                if data.resolution == self.resolution:
+                    self._add_historical_data(data, data_config, storage_config)
                 broker._add_data_listener(self, data)
         else:
-            datas: list[TimeBasedData] = self._add_data_to_consumers(
+            datas: list[TimeBasedData] = self._add_data_to_consumer(
                 trading_venue, 
                 product, 
-                resolution, 
                 data_source=data_source, 
                 data_origin=data_origin, 
                 data_config=data_config, 
@@ -271,19 +276,17 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             if not self._datas[product]:
                 del self._datas[product]
     
-    def add_strategy(self, strategy: StrategyT, name: str='', is_parallel=False) -> StrategyT:
-        # TODO
-        assert not is_parallel, 'Running strategy in parallel is not supported yet'
+    def add_strategy(self, strategy: StrategyT, name: str='') -> StrategyT:
         assert isinstance(strategy, BaseStrategy), \
             f"strategy '{strategy.__class__.__name__}' is not an instance of BaseStrategy. Please create your strategy using 'class {strategy.__class__.__name__}(pf.Strategy)'"
         if name:
-            strategy.set_name(name)
-        strategy.set_parallel(is_parallel)
-        strategy.create_logger()
+            strategy._set_name(name)
+        strategy._create_logger()
+        strategy._set_consumer(self)
+        strategy._set_resolution(self.resolution)
         strat = strategy.name
         if strat in self.strategies:
             return self.strategies[strat]
-        strategy._add_consumer(self)
         self.strategies[strat] = strategy
         self.logger.debug(f"added sub-strategy '{strat}'")
         return strategy
@@ -330,7 +333,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     def start(self):
         if not self.is_running():
             self.add_datas()
-            self._add_data_from_consumers_if_no_data()
+            self._add_datas_from_consumer_if_none()
             self.add_strategies()
             self._start_strategies()
             self.add_models()
@@ -338,7 +341,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             self.add_indicators()
             self._start_models()
             self._prepare_df()
-            if self.is_parallel():
+            if self._engine._use_ray:
                 # TODO: notice strategy manager it has started running
                 pass
                 # self._zmq ...
@@ -353,7 +356,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         if self.is_running():
             self._is_running = False
             self.on_stop()
-            if self.is_parallel():
+            if self._engine._use_ray:
                 # TODO: notice strategy manager it has stopped running
                 pass
                 # self._zmq ...

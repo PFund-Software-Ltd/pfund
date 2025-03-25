@@ -56,6 +56,7 @@ class StorageConfigDict(TypedDict, total=False):
 class TradeEngineSettingsDict(TypedDict, total=False):
     zmq_ports: dict
     cancel_all_at: dict[Literal['start', 'stop'], bool]
+    # TODO: when use_ray=True, parallelism down to model level? feature level?
 
 
 class BacktestEngineSettingsDict(TypedDict, total=False):

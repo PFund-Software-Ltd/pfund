@@ -38,14 +38,19 @@ class BacktestEngine(BaseEngine):
         data_tool: tDATA_TOOL='polars',
         data_range: str | DataRangeDict='ytd',
         dataset_splits: int | DatasetSplitsDict | BaseCrossValidator=721,
-        settings: BacktestEngineSettingsDict | None = None,
         use_ray: bool=True,
+        use_duckdb: bool=False,
+        settings: BacktestEngineSettingsDict | None = None,
         save_backtests: bool=True,
         use_signal_df: bool=False,
         assert_signals: bool=True,
     ):
         '''
         Args:
+            use_ray:
+                if True, uses ray to parallelize backtesting.
+            use_duckdb:
+                if True, uses duckdb to load dfs from .duckdb files instead of storing dfs in memory.
             use_signal_df:
                 if True, uses signals from dumped signal_df in _next() instead of recalculating the signals. 
                 This will make event-driven backtesting a LOT faster but inconsistent with live trading.
@@ -60,8 +65,9 @@ class BacktestEngine(BaseEngine):
                 data_tool=data_tool, 
                 data_range=data_range, 
                 dataset_splits=dataset_splits,
-                settings=settings,
                 use_ray=use_ray,
+                use_duckdb=use_duckdb,
+                settings=settings,
             )
             self.mode = BacktestMode[mode.lower()]
             self._save_backtests = save_backtests
@@ -87,24 +93,22 @@ class BacktestEngine(BaseEngine):
     def add_strategy(
         self, 
         strategy: StrategyT, 
+        resolution: str,
         name: str='', 
-        is_parallel=False
     ) -> BacktestMixin | StrategyT:
         from pfund.strategies.strategy_backtest import BacktestStrategy
         is_dummy_strategy_exist = '_dummy' in self.strategy_manager.strategies
         assert not is_dummy_strategy_exist, 'dummy strategy is being used for model backtesting, adding another strategy is not allowed'
-        if is_parallel:
-            is_parallel = False
-            self.logger.warning(f'Parallel strategy is not supported in backtesting, {strategy.__class__.__name__} will be run in sequential mode')
         if type(strategy) is not BaseStrategy:
             assert name != '_dummy', 'dummy strategy is reserved for model backtesting, please use another name'
         name = name or strategy.__class__.__name__
         strategy = BacktestStrategy(type(strategy), *strategy._args, **strategy._kwargs)
-        return super().add_strategy(strategy, name=name, is_parallel=is_parallel)
+        return super().add_strategy(strategy, resolution, name=name)
 
     def add_model(
         self, 
         model: ModelT, 
+        resolution: str,
         name: str='',
         min_data: None | int=None,
         max_data: None | int=None,
@@ -117,7 +121,7 @@ class BacktestEngine(BaseEngine):
         is_non_dummy_strategy_exist = bool([strat for strat in self.strategy_manager.strategies if strat != '_dummy'])
         assert not is_non_dummy_strategy_exist, 'Please use strategy.add_model(...) instead of engine.add_model(...) when a strategy is already created'
         if not (strategy := self.strategy_manager.get_strategy('_dummy')):
-            strategy = self.add_strategy(_DummyStrategy(), name='_dummy')
+            strategy = self.add_strategy(_DummyStrategy(), resolution, name='_dummy')
             strategy.set_flags(True)
         assert not strategy.models, 'Adding more than 1 model to dummy strategy in backtesting is not supported, you should train and dump your models one by one'
         model = strategy.add_model(
@@ -134,6 +138,7 @@ class BacktestEngine(BaseEngine):
     def add_feature(
         self, 
         feature: FeatureT, 
+        resolution: str,
         name: str='',
         min_data: None | int=None,
         max_data: None | int=None,
@@ -142,6 +147,7 @@ class BacktestEngine(BaseEngine):
     ) -> BacktestMixin | FeatureT:
         return self.add_model(
             feature, 
+            resolution,
             name=name, 
             min_data=min_data, 
             max_data=max_data, 
@@ -152,6 +158,7 @@ class BacktestEngine(BaseEngine):
     def add_indicator(
         self, 
         indicator: IndicatorT, 
+        resolution: str,
         name: str='',
         min_data: None | int=None,
         max_data: None | int=None,
@@ -160,6 +167,7 @@ class BacktestEngine(BaseEngine):
     ) -> BacktestMixin | IndicatorT:
         return self.add_model(
             indicator, 
+            resolution,
             name=name, 
             min_data=min_data, 
             max_data=max_data, 

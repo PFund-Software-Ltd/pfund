@@ -46,7 +46,7 @@ class PortfolioStrategy(BaseStrategy):
         self._portfolio.initialize(positions, balances)
         return super().on_start()
     
-    def add_strategy(self, strategy: StrategyT, name: str='', is_parallel=False) -> StrategyT:
+    def add_strategy(self, strategy: StrategyT, name: str='') -> StrategyT:
         # NOTE: if there are multiple strategies of the same type, only the first one will be used as the default strategy
         if isinstance(strategy, RebalancingStrategy):
             if not self.rebalancing_strategy:
@@ -60,7 +60,7 @@ class PortfolioStrategy(BaseStrategy):
         elif isinstance(strategy, AllocationStrategy):
             if not self.allocation_strategy:
                 self.allocation_strategy = strategy
-        return super().add_strategy(strategy, name=name, is_parallel=is_parallel)
+        return super().add_strategy(strategy, name=name)
     
     # TODO: portfolio strategy is mostly not driven by event but by time
     def on_time(self):

@@ -20,9 +20,9 @@ def BacktestStrategy(Strategy: type[StrategyT], *args, **kwargs) -> BacktestMixi
         def add_account(self, trading_venue: str, acc: str='', initial_balances: dict[str, int|float]|None=None, **kwargs):
             return super().add_account(trading_venue, acc=acc, initial_balances=initial_balances, **kwargs)
             
-        def add_strategy(self, strategy: StrategyT, name: str='', is_parallel=False) -> BacktestMixin | StrategyT:
+        def add_strategy(self, strategy: StrategyT, name: str='') -> BacktestMixin | StrategyT:
             strategy = BacktestStrategy(type(strategy), *strategy._args, **strategy._kwargs)
-            return super().add_strategy(strategy, name=name, is_parallel=is_parallel)
+            return super().add_strategy(strategy, name=name)
         
         def on_start(self):
             if not self.accounts:

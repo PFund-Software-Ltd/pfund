@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from pfund.models.pytorch_model import PytorchModel
     from pfund.models.sklearn_model import SklearnModel
     from pfund.indicators.indicator_base import TaFunction, TalibFunction
+    from pfund.strategies.strategy_base import BaseStrategy
     from pfund.typing import tTRADING_VENUE
     from pfund.datas.data_config import DataConfig
     from pfund.datas.storage_config import StorageConfig
@@ -55,18 +56,17 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         self._args = args
         self._kwargs = kwargs
         self.ml_model = ml_model  # user-defined machine learning model
-        self.name = self.mdl = self.get_default_name()
+        self.name = self.get_default_name()
         self._engine = get_engine()
-        self._data_tool: BaseDataTool = self._engine.DataTool()
         self.logger = None
         self._is_running = False
         self._is_ready = defaultdict(bool)  # {data: bool}
         self._datas = defaultdict(dict)  # {product: {resolution: data}}
-        self._primary_resolution: Resolution | None = None
+        self._resolution: Resolution | None = None
         self._orderbooks = {}  # {product: data}
         self._tradebooks = {}  # {product: data}
+        self._consumer: BaseStrategy | BaseModel | None = None
         self._listeners = defaultdict(list)  # {data: model}
-        self._consumers = []  # strategies/models that consume this model
 
         self._min_data = {}  # {data: int}
         self._max_data = {}  # {data: int}}
@@ -162,9 +162,6 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
             Model = BaseModel
         return Model
     
-    def set_name(self, name: str):
-        self.name = self.mdl = name
-    
     def set_min_data(self, min_data: int | dict[BaseData, int]):
         self._min_data = min_data
 
@@ -216,19 +213,15 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         self, 
         trading_venue: tTRADING_VENUE, 
         product: str,
-        resolution: str, 
         data_source: tDATA_SOURCE | None=None,
         data_origin: str='',
         data_config: DataConfigDict | DataConfig | None=None,
         storage_config: StorageConfigDict | StorageConfig | None=None,
         **product_specs
     ) -> list[TimeBasedData]:
-        assert len(self._consumers) >= 1, f"model '{self.name}' must have at least one strategy consumer"
-        # consumers must also have model's data
-        datas: list[TimeBasedData] = self._add_data_to_consumers(
+        datas: list[TimeBasedData] = self._add_data_to_consumer(
             trading_venue, 
             product, 
-            resolution, 
             data_source, 
             data_origin, 
             data_config, 
@@ -310,7 +303,7 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
     def start(self):
         if not self.is_running():
             self.add_datas()
-            self._add_data_from_consumers_if_no_data()
+            self._add_datas_from_consumer_if_none()
             self._convert_min_max_data_to_dict()
             self.add_models()
             self.add_features()

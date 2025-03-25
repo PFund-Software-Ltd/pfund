@@ -51,7 +51,7 @@ class CryptoBroker(BaseBroker):
     def add_custom_data(self):
         pass
 
-    def add_data(self, exch: tCRYPTO_EXCHANGE, product: str, resolution: str, data_config: DataConfig, **product_specs) -> list[TimeBasedData]:
+    def add_data(self, exch: tCRYPTO_EXCHANGE, product: str, data_config: DataConfig, **product_specs) -> list[TimeBasedData]:
         '''
         Args:
             product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
@@ -59,11 +59,11 @@ class CryptoBroker(BaseBroker):
         '''
         exch, product_basis = exch.upper(), product.upper()
         product = self.add_product(exch, product_basis, **product_specs)
-        datas: list[TimeBasedData] = self.data_manager.add_data(product, resolution, data_config=data_config)
+        datas: list[TimeBasedData] = self.data_manager.add_data(product, data_config=data_config)
         datas_non_resamplee = [data for data in datas if not data.is_resamplee()]
         for data in datas_non_resamplee:
             channel: PublicDataChannel = self._create_public_data_channel(data)
-            self.add_channel(exch, channel, data)
+            self.add_channel(exch, channel, data=data)
         return datas
     
     def add_channel(

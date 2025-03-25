@@ -120,7 +120,7 @@ class BaseBroker:
         channel: PublicDataChannel | PrivateDataChannel | str,
         channel_type: Literal['public', 'private']=''
     ) -> DataChannelType:
-        if channel in [PublicDataChannel, PrivateDataChannel]:
+        if channel in PublicDataChannel or channel in PrivateDataChannel:
             channel_type = DataChannelType.public if channel in PublicDataChannel else DataChannelType.private
         else:
             assert channel_type, 'channel_type "public" or "private" must be provided'

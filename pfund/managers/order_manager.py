@@ -50,7 +50,7 @@ class OrderManager(BaseManager):
 
     def push(self, order, event: Event, type_):
         if strategy := self._engine.strategy_manager.get_strategy(order.strat):
-            if not strategy.is_parallel():
+            if not self._engine._use_ray:
                 if strategy.is_running():
                     if event == Event.order:
                         strategy.update_orders(order, type_)

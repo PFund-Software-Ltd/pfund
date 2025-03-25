@@ -126,7 +126,7 @@ class BacktestMixin:
         
         # since current strategy/model's signal_df is its consumer's prediction column
         # get the signal_df from the consumer
-        consumer_df = self._consumers[0].df
+        consumer_df = self._consumer.df
 
         # load the signal_df dumped from vectorized backtesting
         self._is_signal_df_required = True
@@ -146,9 +146,6 @@ class BacktestMixin:
             raise NotImplementedError
         self.data_tool.assert_frame_equal(vectorized_signal_df, event_driven_signal_df)
 
-    def _add_raw_df(self: BacktestMixin | BaseStrategy | BaseModel, data, df):
-        return self.data_tool.add_raw_df(data, df)
-    
     def _prepare_df(self: BacktestMixin | BaseStrategy | BaseModel):
         if self._is_dummy_strategy and isinstance(self, BaseStrategy):
             return
@@ -168,7 +165,7 @@ class BacktestMixin:
     def clear_dfs(self: BacktestMixin | BaseStrategy | BaseModel):
         assert self._engine.mode == BacktestMode.event_driven
         if not self._is_signal_df_required:
-            self._data_tool.clear_df()
+            self.data_tool.clear_df()
         if isinstance(self, BaseStrategy):
             for strategy in self.strategies.values():
                 strategy.clear_dfs()
@@ -179,29 +176,15 @@ class BacktestMixin:
         self: BaseStrategy | BaseModel, 
         trading_venue: tTRADING_VENUE, 
         product: str,
-        resolution: str,
         data_source: tDATA_SOURCE | None=None,
         from_storage: tSTORAGE | None=None,
         data_config: DataConfigDict | None=None,
         **product_specs
     ) -> list[BaseData]:
-        datas: list[TimeBasedData] = super().add_data(trading_venue, product, resolution, data_source=data_source, from_storage=from_storage, data_config=data_config, **product_specs)
+        datas: list[TimeBasedData] = super().add_data(trading_venue, product, data_source=data_source, from_storage=from_storage, data_config=data_config, **product_specs)
         use_tick_or_quote = any(data.resolution.is_tick() or data.resolution.is_quote() for data in datas)
         if use_tick_or_quote:
             cprint('WARNING: tick data and quote data will be ignored in backtesting', style='bold red')
-        return datas
-    
-    # FIXME
-    def _add_data_from_consumers_if_no_data(self: BacktestMixin | BaseStrategy | BaseModel) -> list[BaseData]:
-        '''Add consumers' raw dfs if no datas'''
-        datas = super()._add_data_from_consumers_if_no_data()
-        for data in datas:
-            for consumer in self._consumers:
-                dtl = consumer.dtl
-                if dtl.has_raw_df(data):
-                    df = dtl.get_raw_df(data)
-                    self._add_raw_df(data, df)
-                    break
         return datas
     
     @overload

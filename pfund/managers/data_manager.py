@@ -69,7 +69,7 @@ class DataManager(BaseManager):
     
     def push(self, data: BaseData, event: Event, **extra_data):
         for strategy in self._listeners[data]:
-            if not strategy.is_parallel():
+            if not self._engine._use_ray:
                 if strategy.is_running():
                     if event == Event.quote:
                         strategy.update_quote(data, **extra_data)
@@ -90,7 +90,7 @@ class DataManager(BaseManager):
                 # TODO
                 # self._zmq
 
-    def _initialize_time_based_data(self, product: BaseProduct, resolution: Resolution, data_config: DataConfig) -> TimeBasedData:
+    def _add_data(self, product: BaseProduct, resolution: Resolution, data_config: DataConfig) -> TimeBasedData:
         if resolution.is_quote():
             data = QuoteData(product, resolution, orderbook_depth=data_config.orderbook_depth)
         elif resolution.is_tick():
@@ -117,16 +117,16 @@ class DataManager(BaseManager):
             self.logger.debug(f'removed {product} {resolution} data')
             return data
 
-    def add_data(self, product: BaseProduct, resolution: str, data_config: DataConfig) -> list[TimeBasedData]:
+    def add_data(self, product: BaseProduct, data_config: DataConfig) -> list[TimeBasedData]:
         supported_resolutions = self.get_supported_resolutions(product.bkr, product.exch)
         is_auto_resampled = data_config.auto_resample(supported_resolutions)
         if is_auto_resampled:
-            self.logger.warning(f'{product} {resolution} extra_resolutions={data_config.extra_resolutions} data is auto-resampled to:\n{pformat(data_config.resample)}')
+            self.logger.warning(f'{product} resolution={data_config.primary_resolution} extra_resolutions={data_config.extra_resolutions} data is auto-resampled to:\n{pformat(data_config.resample)}')
         
         datas: list[TimeBasedData] = []
         for resolution in data_config.resolutions:
             if not (data := self.get_data(product, resolution)):
-                data = self._initialize_time_based_data(product, resolution, data_config)
+                data = self._add_data(product, resolution, data_config)
             datas.append(data)
         
         # mutually bind data_resampler and data_resamplee

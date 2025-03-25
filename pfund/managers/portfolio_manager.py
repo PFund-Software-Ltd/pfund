@@ -14,7 +14,7 @@ class PortfolioManager(BaseManager):
 
     def push(self, pos_or_bal, event: Event):
         if strategy := self._engine.strategy_manager.get_strategy(pos_or_bal.strat):
-            if not strategy.is_parallel():
+            if not self._engine._use_ray:
                 if strategy.is_running():
                     if event == Event.position:
                         strategy.update_positions(pos_or_bal)

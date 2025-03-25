@@ -97,7 +97,8 @@ class DataConfig(BaseModel):
     @model_validator(mode='before')
     @classmethod
     def validate_before(cls, data: dict) -> dict:
-        data['primary_resolution'] = Resolution(data['primary_resolution'])
+        if isinstance(data['primary_resolution'], str):
+            data['primary_resolution'] = Resolution(data['primary_resolution'])
         data['extra_resolutions'] = list(set(Resolution(resolution) for resolution in data.get('extra_resolutions', [])))
         data['resample']: dict[Annotated[Resolution, "ResampleeResolution"], Annotated[Resolution, "ResamplerResolution"]] = {
             Resolution(resamplee_resolution): Resolution(resampler_resolution) for resamplee_resolution, resampler_resolution in data.get('resample', {}).items()

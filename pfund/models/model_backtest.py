@@ -7,10 +7,8 @@ if TYPE_CHECKING:
     import torch
     from pfund.models.model_base import MachineLearningModel
     from pfund.typing import ModelT
-    from pfund.models.model_base import BaseModel
 
 from pfund.models.model_base import BaseFeature
-from pfund.strategies.strategy_base import BaseStrategy
 from pfund.mixins.backtest_mixin import BacktestMixin
 
 
@@ -22,12 +20,6 @@ def BacktestModel(Model: type[ModelT], ml_model: MachineLearningModel, *args, **
             else:
                 class_name = Model.__name__
                 raise AttributeError(f"'{class_name}' object has no attribute '{name}'")
-
-        def _add_consumer(self, consumer: BaseStrategy | BaseModel):
-            is_dummy_strategy = isinstance(consumer, BaseStrategy) and consumer.name == '_dummy'
-            if is_dummy_strategy:
-                assert not self._consumers, f"{self.name} must have _dummy strategy as its only consumer"
-            return super()._add_consumer(consumer)
 
         def on_start(self):
             if self._is_signal_df_required:

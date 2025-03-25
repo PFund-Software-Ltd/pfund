@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
     from sklearn.model_selection._split import BaseCrossValidator
     from pfeed.enums import DataTool
+    from pfeed.typing import GenericDataFrame
     from pfund.typing import DataRangeDict, DatasetSplitsDict
     from pfund.datas.data_base import BaseData
 
@@ -18,22 +19,19 @@ class BaseDataTool:
     _MIN_ROWS = 1_000
     _MAX_ROWS = None
     
-    dataset: Dataset | None = None
 
-    def __init__(self):
+    def __init__(self, use_duckdb: bool, data_range: str | DataRangeDict, dataset_splits: int | DatasetSplitsDict | BaseCrossValidator):
         # Ensure the child class has defined `name`
         if not hasattr(type(self), 'name'):
             raise AttributeError(f"{self.__class__.__name__} must define a class variable `name`")
+        self._use_duckdb = use_duckdb
         self.df = None
+        self.dataset = Dataset(data_range, dataset_splits)
         # used in event-driven looping to avoid appending data to df one by one
         # instead, append data to _new_rows and whenever df is needed,
         # push the data in _new_rows to df
         self._new_rows = []  # [{col: value, ...}]
-        self._raw_dfs = {}  # {data: df}
-    
-    @classmethod
-    def _initialize_dataset(cls, data_range: str | DataRangeDict, dataset_splits: int | DatasetSplitsDict | BaseCrossValidator):
-        cls.dataset = Dataset(data_range, dataset_splits)
+        self._raw_dfs: dict[BaseData, GenericDataFrame] = {}
     
     # FIXME: use narwhals
     def prepare_datasets(self, datas):
@@ -76,5 +74,5 @@ class BaseDataTool:
     def has_raw_df(self, data: BaseData):
         return data in self._raw_dfs
     
-    def add_raw_df(self, data: BaseData, df):
+    def _add_raw_df(self, data: BaseData, df):
         self._raw_dfs[data] = df

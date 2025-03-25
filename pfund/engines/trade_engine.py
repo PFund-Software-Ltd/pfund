@@ -42,8 +42,9 @@ class TradeEngine(BaseEngine):
         data_tool: tDATA_TOOL='polars',
         data_range: str | DataRangeDict='ytd',
         dataset_splits: int | DatasetSplitsDict | BaseCrossValidator=721,
-        settings: TradeEngineSettingsDict | None=None,
         use_ray: bool=False,
+        use_duckdb: bool=False,
+        settings: TradeEngineSettingsDict | None=None,
         df_min_rows: int=1_000,
         df_max_rows: int=3_000,
         # TODO: handle "broker_data_source", e.g. {'IB': 'DATABENTO'}
@@ -59,6 +60,7 @@ class TradeEngine(BaseEngine):
                 data_range=data_range, 
                 dataset_splits=dataset_splits,
                 use_ray=use_ray,
+                use_duckdb=use_duckdb,
                 settings=settings,
             )
             self._is_running = True
@@ -109,7 +111,8 @@ class TradeEngine(BaseEngine):
             else:
                 self.settings['zmq_ports'][broker.name] = _get_port()
         for strategy in self.strategy_manager.strategies.values():
-            if strategy.is_parallel():
+            # FIXME:
+            if self._use_ray:
                 self.settings['zmq_ports'][strategy.name] = _get_port()
         self.logger.debug(f"{self.settings['zmq_ports']=}")
 
@@ -136,7 +139,7 @@ class TradeEngine(BaseEngine):
             trading_venues = connection_manager.get_trading_venues()
             if reconnect_trading_venues := [trading_venue for trading_venue in trading_venues if not connection_manager.is_process_healthy(trading_venue)]:
                 connection_manager.reconnect(reconnect_trading_venues, reason='process not responding')
-        if restart_strats := [strat for strat, strategy in self.strategy_manager.strategies.items() if strategy.is_parallel() and not self.strategy_manager.is_process_healthy(strat)]:
+        if restart_strats := [strat for strat, strategy in self.strategy_manager.strategies.items() if self._use_ray and not self.strategy_manager.is_process_healthy(strat)]:
             self.strategy_manager.restart(restart_strats, reason='process not responding')
 
     def add_broker(self, bkr: str) -> BaseBroker:

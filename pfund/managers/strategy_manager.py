@@ -56,8 +56,9 @@ def _start_process(strategy: BaseStrategy, stop_flag: Value):
 class StrategyManager:
     _PROCESS_NO_PONG_TOLERANCE_IN_SECONDS = 30
 
-    def __init__(self):
+    def __init__(self, use_ray: bool=False):
         self.logger = create_dynamic_logger('strategy_manager', 'manager')
+        self._use_ray = use_ray
         self._is_running = defaultdict(bool)
         self._is_restarting = defaultdict(bool)
         self._pids = defaultdict(lambda: None)
@@ -74,15 +75,13 @@ class StrategyManager:
     def get_strategy(self, strat: str) -> BaseStrategy | None:
         return self.strategies.get(strat, None)
 
-    def add_strategy(self, strategy: StrategyT, name: str='', is_parallel=False) -> StrategyT:        
-        # TODO
-        assert not is_parallel, 'Running strategy in parallel is not supported yet'
+    def add_strategy(self, strategy: StrategyT, resolution: str, name: str='') -> StrategyT:        
         assert isinstance(strategy, BaseStrategy), \
             f"strategy '{strategy.__class__.__name__}' is not an instance of BaseStrategy. Please create your strategy using 'class {strategy.__class__.__name__}(BaseStrategy)'"
         if name:
-            strategy.set_name(name)
-        strategy.set_parallel(is_parallel)
-        strategy.create_logger()
+            strategy._set_name(name)
+        strategy._create_logger()
+        strategy._set_resolution(resolution)
         strat = strategy.name
         if strat in self.strategies:
             return self.strategies[strat]
@@ -138,7 +137,7 @@ class StrategyManager:
         for strat in strats:
             self.logger.debug(f'{strat} is starting')
             strategy = self.strategies[strat]
-            if strategy.is_parallel():
+            if self._use_ray:
                 stop_flag = self._strategy_stop_flags[strat]
                 stop_flag.value = False
                 self._strategy_procs[strat] = Process(target=_start_process, args=(strategy, stop_flag), name=f'{strat}_process', daemon=True)
@@ -152,7 +151,7 @@ class StrategyManager:
         for strat in strats:
             self.logger.debug(f'{strat} is stopping')
             strategy = self.strategies[strat]
-            if strategy.is_parallel():
+            if self._use_ray:
                 stop_flag = self._strategy_stop_flags[strat]
                 stop_flag.value = True
                 # need to wait for the process to finish 

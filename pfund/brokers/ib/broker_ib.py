@@ -73,7 +73,7 @@ class IBBroker(BaseBroker):
     def add_custom_data(self):
         pass
     
-    def add_data(self, product: str, resolution: str, data_config: DataConfig, exch: str='', **product_specs) -> list[TimeBasedData]:
+    def add_data(self, product: str, data_config: DataConfig, exch: str='', **product_specs) -> list[TimeBasedData]:
         '''
         Args:
             product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
@@ -81,7 +81,7 @@ class IBBroker(BaseBroker):
         exch = exch or self.derive_exch(product)
         exch, product_basis = exch.upper(), product.upper()
         product: IBProduct = self.add_product(exch, product_basis, **product_specs)
-        datas = self.data_manager.add_data(product, resolution, data_config=data_config)
+        datas = self.data_manager.add_data(product, data_config=data_config)
         datas_non_resamplee = [data for data in datas if not data.is_resamplee()]
         for data in datas_non_resamplee:
             self.add_data_channel(data, **kwargs)
