@@ -24,15 +24,15 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "pfeed (>=0.0.2,<0.1.0)",
-    "rich (>=13.7.1,<14.0.0)",
+    "pfeed (>=0.0.4,<0.1.0)",
+    "rich (>=14.0.0,<15.0.0)",
     "tqdm (>=4.67.1,<5.0.0)",
-    "click (>=8.1.7,<9.0.0)",
+    "click (>=8.1.8,<9.0.0)",
     "trogon (>=0.6.0,<0.7.0) ; python_version < '4.0.0'",
-    "platformdirs (>=4.3.6,<5.0.0)",
-    "python-dotenv (>=1.0.1,<2.0.0)",
-    "pyyaml (>=6.0.1,<7.0.0)",
-    "orjson (>=3.10.1,<4.0.0)",
+    "platformdirs (>=4.3.7,<5.0.0)",
+    "python-dotenv (>=1.1.0,<2.0.0)",
+    "pyyaml (>=6.0.2,<7.0.0)",
+    "orjson (>=3.10.16,<4.0.0)",
     "apscheduler (>=3.11.0,<4.0.0)",
     "requests (>=2.31.0,<3.0.0)",  # TODO: to be removed
     "httpx (>=0.28.1,<0.29.0)",
@@ -44,7 +44,7 @@ dependencies = [
 
 [project.optional-dependencies]
 core = [
-    "pfeed[core] (>=0.0.2,<0.1.0)",
+    "pfeed[core] (>=0.0.3,<0.1.0)",
     "pfolio (>=0.0.2,<0.1.0)",
     "mtflow (>=0.0.1.dev1,<0.1.0)",
     "psutil (>=7.0.0,<8.0.0)", 

@@ -20,11 +20,10 @@ class BaseDataTool:
     _MAX_ROWS = None
     
 
-    def __init__(self, use_duckdb: bool, data_range: str | DataRangeDict, dataset_splits: int | DatasetSplitsDict | BaseCrossValidator):
+    def __init__(self, data_range: str | DataRangeDict, dataset_splits: int | DatasetSplitsDict | BaseCrossValidator):
         # Ensure the child class has defined `name`
         if not hasattr(type(self), 'name'):
             raise AttributeError(f"{self.__class__.__name__} must define a class variable `name`")
-        self._use_duckdb = use_duckdb
         self.df = None
         self.dataset = Dataset(data_range, dataset_splits)
         # used in event-driven looping to avoid appending data to df one by one

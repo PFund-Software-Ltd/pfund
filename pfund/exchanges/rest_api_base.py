@@ -2,7 +2,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfund.accounts.account_crypto import CryptoAccount
-    from pfund.enums import Environment
     from pfund.typing import tCRYPTO_EXCHANGE
     from pfund.adapter import Adapter
 
@@ -13,7 +12,7 @@ from pprint import pprint, pformat
 
 from requests import Session, Request, Response
 
-from pfund.enums import CeFiProductType
+from pfund.enums import CeFiProductType, Environment
 from pfund.utils.utils import parse_api_response_with_schema, convert_to_uppercases
 from pfund.products.product_crypto_cefi import get_CeFiCryptoProduct
 
@@ -49,8 +48,14 @@ class BaseRestApi:
     def _is_request_successful(self, response: Response):
         return response.status_code == 200
     
-    def _request(self, func: str, method: str, endpoint: str, account: CryptoAccount|None=None, params: dict|None=None, **kwargs):
-        full_url = self._url + endpoint
+    def _request(self, endpoint_type: tENDPOINT_TYPE, func_name: str, account: CryptoAccount|None=None, params: dict|None=None, **kwargs):
+        method, endpoint = self.get_endpoint(endpoint_type, func_name)
+        # NOTE: allows access to public endpoints in backtest environment
+        if self.env == Environment.BACKTEST and endpoint_type == 'public':
+            url = self._URLS['LIVE']
+            full_url = url + endpoint
+        else:
+            full_url = self._url + endpoint
         method = method.upper()
         if method == 'POST':
             request = Request(
@@ -83,10 +88,10 @@ class BaseRestApi:
                 msg['is_success'] = True
                 return msg
             else:
-                error = {'is_exception': False, 'error_from': f'{self.exch.lower()}/rest_api/{func}', 'message': msg,
+                error = {'is_exception': False, 'error_from': f'{self.exch.lower()}/rest_api/{func_name}', 'message': msg,
                          'data': {'account': account, 'endpoint': endpoint, 'params': params, 'kwargs': kwargs}}
         except:
-            error = {'is_exception': True, 'error_from': f'{self.exch.lower()}/rest_api/{func}', 'message': traceback.format_exc(),
+            error = {'is_exception': True, 'error_from': f'{self.exch.lower()}/rest_api/{func_name}', 'message': traceback.format_exc(),
                      'data': {'account': account, 'endpoint': endpoint, 'params': params, 'kwargs': kwargs}}
         error['is_success'] = False
         self.logger.error(pformat(error, sort_dicts=False))
@@ -96,22 +101,21 @@ class BaseRestApi:
 
     def _call_api(
         self, 
-        func: str, 
+        func_name: str, 
         endpoint_type: tENDPOINT_TYPE, 
         account: CryptoAccount | None=None, 
         params: dict | None=None, 
         **kwargs
     ) -> dict | None:
-        method, endpoint = self.get_endpoint(endpoint_type, func)
-        return self._request(func, method, endpoint, account=account, params=params, **kwargs)
+        return self._request(endpoint_type, func_name, account=account, params=params, **kwargs)
 
     def list_endpoints(self, type_: tENDPOINT_TYPE):
         endpoints = self.PUBLIC_ENDPOINTS if type_ == 'public' else self.PRIVATE_ENDPOINTS
         pprint(endpoints)
         return endpoints
 
-    def get_endpoint(self, type_: tENDPOINT_TYPE, func: str):
-        return self.PUBLIC_ENDPOINTS[func] if type_ == 'public' else self.PRIVATE_ENDPOINTS[func]
+    def get_endpoint(self, type_: tENDPOINT_TYPE, func_name: str):
+        return self.PUBLIC_ENDPOINTS[func_name] if type_ == 'public' else self.PRIVATE_ENDPOINTS[func_name]
     
     def get_markets(self, category: str, schema: dict, params: dict | None=None, **kwargs) -> dict | None:
         if (response := self._call_api('get_markets', 'public', params=params, **kwargs)) is None:

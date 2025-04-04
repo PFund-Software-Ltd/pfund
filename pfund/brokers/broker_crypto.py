@@ -51,14 +51,21 @@ class CryptoBroker(BaseBroker):
     def add_custom_data(self):
         pass
 
-    def add_data(self, exch: tCRYPTO_EXCHANGE, product: str, data_config: DataConfig, **product_specs) -> list[TimeBasedData]:
+    def add_data(
+        self, 
+        exch: tCRYPTO_EXCHANGE, 
+        product: str, 
+        data_config: DataConfig, 
+        symbol: str='', 
+        **product_specs
+    ) -> list[TimeBasedData]:
         '''
         Args:
             product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
             product_specs: product specifications, e.g. expiration, strike_price etc.
         '''
         exch, product_basis = exch.upper(), product.upper()
-        product = self.add_product(exch, product_basis, **product_specs)
+        product = self.add_product(exch, product_basis, symbol=symbol, **product_specs)
         datas: list[TimeBasedData] = self.data_manager.add_data(product, data_config=data_config)
         datas_non_resamplee = [data for data in datas if not data.is_resamplee()]
         for data in datas_non_resamplee:
@@ -129,11 +136,11 @@ class CryptoBroker(BaseBroker):
     def get_product(self, exch: tCRYPTO_EXCHANGE, product_name: str) -> BaseProduct | None:
         return self._products[exch.upper()].get(product_name.upper(), None)
 
-    def add_product(self, exch: tCRYPTO_EXCHANGE, product_basis: str, **product_specs) -> BaseProduct:
+    def add_product(self, exch: tCRYPTO_EXCHANGE, product_basis: str, symbol: str='', **product_specs) -> BaseProduct:
         exch, product_basis = exch.upper(), product_basis.upper()
         exchange = self.add_exchange(exch)
         # create another product object to format a correct product name
-        product = exchange.create_product(product_basis, **product_specs)
+        product = exchange.create_product(product_basis, symbol=symbol, **product_specs)
         existing_product = self.get_product(exch, product.name)
         if not existing_product:
             exchange.add_product(product)

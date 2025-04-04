@@ -43,8 +43,8 @@ class TradeEngine(BaseEngine):
         data_range: str | DataRangeDict='ytd',
         dataset_splits: int | DatasetSplitsDict | BaseCrossValidator=721,
         use_ray: bool=False,
-        use_duckdb: bool=False,
         settings: TradeEngineSettingsDict | None=None,
+        # TODO: move inside settings?
         df_min_rows: int=1_000,
         df_max_rows: int=3_000,
         # TODO: handle "broker_data_source", e.g. {'IB': 'DATABENTO'}
@@ -60,7 +60,6 @@ class TradeEngine(BaseEngine):
                 data_range=data_range, 
                 dataset_splits=dataset_splits,
                 use_ray=use_ray,
-                use_duckdb=use_duckdb,
                 settings=settings,
             )
             self._is_running = True
@@ -163,7 +162,7 @@ class TradeEngine(BaseEngine):
         for broker in self.brokers.values():
             broker.start(zmq=self._zmq)
 
-        self.strategy_manager.start()
+        self.strategy_manager.start(in_parallel=self._use_ray)
         
         self._start_scheduler()
 
@@ -205,7 +204,7 @@ class TradeEngine(BaseEngine):
     def end(self):
         """Stop and clear all state (hard stop)."""
         for strat in list(self.strategy_manager.strategies):
-            self.strategy_manager.stop(strat, reason='end')
+            self.strategy_manager.stop(strat, in_parallel=self._use_ray, reason='end')
             self.remove_strategy(strat)
         for broker in list(self.brokers.values()):
             broker.stop()

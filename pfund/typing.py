@@ -46,9 +46,11 @@ class DataConfigDict(TypedDict, total=False):  # total=False makes fields option
 
 
 class StorageConfigDict(TypedDict, total=False):
+    pfeed_use_ray: bool  # if use_ray in pfeed
+    retrieve_per_date: bool  # refer to `retrieve_per_date` in pfeed's get_historical_data()
     data_layer: tDATA_LAYER
-    data_domain: str
     from_storage: tSTORAGE
+    to_storage: tSTORAGE
     # configs specific to the storage type, for MinIO, it's access_key and secret_key etc.
     storage_options: dict
 

@@ -138,7 +138,7 @@ class BaseExchange(ABC):
     def accounts(self):
         return self._accounts
     
-    def create_product(self, product_basis: str, **product_specs) -> BaseProduct:
+    def create_product(self, product_basis: str, symbol: str='', **product_specs) -> BaseProduct:
         base_asset, quote_asset, ptype = product_basis.split('_')
         CeFiCryptoProduct = get_CeFiCryptoProduct(product_basis)
         category = self._derive_product_category(ptype)
@@ -149,6 +149,7 @@ class BaseExchange(ABC):
             quote_asset=quote_asset,
             type=CeFiProductType[ptype],
             category=category,
+            symbol=symbol,
             **product_specs,
         )
             

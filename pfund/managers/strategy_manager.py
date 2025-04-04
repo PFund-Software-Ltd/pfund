@@ -56,9 +56,8 @@ def _start_process(strategy: BaseStrategy, stop_flag: Value):
 class StrategyManager:
     _PROCESS_NO_PONG_TOLERANCE_IN_SECONDS = 30
 
-    def __init__(self, use_ray: bool=False):
+    def __init__(self):
         self.logger = create_dynamic_logger('strategy_manager', 'manager')
-        self._use_ray = use_ray
         self._is_running = defaultdict(bool)
         self._is_restarting = defaultdict(bool)
         self._pids = defaultdict(lambda: None)
@@ -132,12 +131,12 @@ class StrategyManager:
             self.logger.warning(f'force to terminate {strat} process ({pid=})')
             self._set_pid(strat, None)
 
-    def start(self, strats: str|list[str]|None=None):
+    def start(self, strats: str|list[str]|None=None, in_parallel: bool=False):
         strats = self._adjust_input_strats(strats)
         for strat in strats:
             self.logger.debug(f'{strat} is starting')
             strategy = self.strategies[strat]
-            if self._use_ray:
+            if in_parallel:
                 stop_flag = self._strategy_stop_flags[strat]
                 stop_flag.value = False
                 self._strategy_procs[strat] = Process(target=_start_process, args=(strategy, stop_flag), name=f'{strat}_process', daemon=True)
@@ -146,12 +145,12 @@ class StrategyManager:
                 strategy.start()
                 self.on_start(strat)
 
-    def stop(self, strats: str|list[str]|None=None, reason=''):
+    def stop(self, strats: str|list[str]|None=None, in_parallel: bool=False, reason=''):
         strats = self._adjust_input_strats(strats)
         for strat in strats:
             self.logger.debug(f'{strat} is stopping')
             strategy = self.strategies[strat]
-            if self._use_ray:
+            if in_parallel:
                 stop_flag = self._strategy_stop_flags[strat]
                 stop_flag.value = True
                 # need to wait for the process to finish 

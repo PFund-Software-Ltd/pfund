@@ -18,6 +18,7 @@ import importlib
 
 from pfeed.feeds.market_feed import MarketFeed
 from pfeed.enums import DataSource
+from pfund.config import get_config
 from pfund import cprint
 from pfund.utils.utils import Singleton
 from pfund.enums import Environment, Broker
@@ -34,6 +35,8 @@ ENV_COLORS = {
     'LIVE': 'bold green on #e0ffe0',
 }
 
+config = get_config()
+
 
 class BaseEngine(Singleton):
     settings: ClassVar[TradeEngineSettingsDict | BacktestEngineSettingsDict]
@@ -49,12 +52,12 @@ class BaseEngine(Singleton):
         data_range: str | DataRangeDict='ytd', 
         dataset_splits: int | DatasetSplitsDict | BaseCrossValidator=721, 
         use_ray: bool=False,
-        use_duckdb: bool=False,
         settings: TradeEngineSettingsDict | BacktestEngineSettingsDict | None=None,
     ):
         from pfund.managers.strategy_manager import StrategyManager
 
         self._initialized = True
+        
         self.env: Environment = self._set_trading_env(env)
         if self.env == Environment.BACKTEST:
             assert self.__class__.__name__ == 'BacktestEngine', f'env={self.env} is only allowed to be created using BacktestEngine'
@@ -65,45 +68,40 @@ class BaseEngine(Singleton):
         self._setup_logging()
         self.logger = logging.getLogger('pfund')
         self._storage_config: StorageConfig | None = None
-
         self._use_ray = use_ray
-        self._use_duckdb = use_duckdb
-        self._data_tool: BaseDataTool = self._create_data_tool(data_tool, use_duckdb, data_range, dataset_splits)
+
+        self._data_tool: BaseDataTool = self._create_data_tool(data_tool, data_range, dataset_splits)
+        self.brokers = {}
+        self.strategy_manager = StrategyManager()
+
         cls = self.__class__
         cls.settings.update(settings or {})
-
-        self.brokers = {}
-        self.strategy_manager = StrategyManager(use_ray=use_ray)
-        
+    
     def configure_storage(
         self, 
-        data_layer: tDATA_LAYER='cleaned', 
-        data_domain: str='', 
-        from_storage: tSTORAGE | None=None, 
+        data_layer: tDATA_LAYER, 
+        from_storage: tSTORAGE,
         storage_options: dict | None=None
     ):
         '''Configure global storage config so that no need to pass repeated data configs into strategy/model.add_data()
         Args:
             storage_options: configs specific to "from_storage", for MinIO, it's access_key and secret_key etc.
         '''
-        self._storage_config = StorageConfig(data_layer=data_layer, data_domain=data_domain, from_storage=from_storage, storage_options=storage_options)
+        self._storage_config = StorageConfig(data_layer=data_layer, from_storage=from_storage, storage_options=storage_options)
         
     def _create_data_tool(
         self, 
         data_tool: tDATA_TOOL, 
-        use_duckdb: bool, 
         data_range: str | DataRangeDict, 
         dataset_splits: int | DatasetSplitsDict | BaseCrossValidator
     ) -> BaseDataTool:
         from pfeed.enums import DataTool
         data_tool = DataTool[data_tool.lower()]
         DataTool: type[BaseDataTool] = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool}'), f'{data_tool.capitalize()}DataTool')
-        return DataTool(use_duckdb=use_duckdb, data_range=data_range, dataset_splits=dataset_splits)
+        return DataTool(data_range=data_range, dataset_splits=dataset_splits)
         
     def _setup_logging(self):
-        from pfund.config import get_config
         from pfund.plogging import setup_loggers
-        config = get_config()
         log_path = f'{config.log_path}/{self.env.value.lower()}'
         logging_config_file_path = config.logging_config_file_path
         logging_configurator  = setup_loggers(log_path, logging_config_file_path, user_logging_config=config.logging_config)
@@ -131,7 +129,7 @@ class BaseEngine(Singleton):
             data_source = DataSource[data_source.upper()]
         DataFeed = data_source.feed_class
         assert DataFeed is not None, f"Failed to import data feed for {data_source}, make sure it has been installed using `pip install pfeed[{data_source.value.lower()}]`"
-        feed = DataFeed(data_tool=self._data_tool.name.value, use_ray=self._use_ray, **pfeed_kwargs)
+        feed = DataFeed(data_tool=self._data_tool.name.value, **pfeed_kwargs)
         if not isinstance(feed, MarketFeed):
             if hasattr(feed, 'market'):
                 feed = feed.market

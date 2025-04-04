@@ -39,18 +39,14 @@ class BacktestEngine(BaseEngine):
         data_range: str | DataRangeDict='ytd',
         dataset_splits: int | DatasetSplitsDict | BaseCrossValidator=721,
         use_ray: bool=True,
-        use_duckdb: bool=False,
         settings: BacktestEngineSettingsDict | None = None,
+        # TODO: move inside settings?
         save_backtests: bool=True,
         use_signal_df: bool=False,
         assert_signals: bool=True,
     ):
         '''
         Args:
-            use_ray:
-                if True, uses ray to parallelize backtesting.
-            use_duckdb:
-                if True, uses duckdb to load dfs from .duckdb files instead of storing dfs in memory.
             use_signal_df:
                 if True, uses signals from dumped signal_df in _next() instead of recalculating the signals. 
                 This will make event-driven backtesting a LOT faster but inconsistent with live trading.
@@ -66,10 +62,9 @@ class BacktestEngine(BaseEngine):
                 data_range=data_range, 
                 dataset_splits=dataset_splits,
                 use_ray=use_ray,
-                use_duckdb=use_duckdb,
                 settings=settings,
             )
-            self.mode = BacktestMode[mode.lower()]
+            self._mode = BacktestMode[mode.lower()]
             self._save_backtests = save_backtests
             self._use_signal_df = use_signal_df
             if use_signal_df:
@@ -83,6 +78,10 @@ class BacktestEngine(BaseEngine):
             
             # TODO: move to mtflow
             # self.history = mt.BacktestHistory()
+    
+    @property
+    def mode(self) -> BacktestMode:
+        return self._mode
     
     @classmethod
     def _initialize_settings(cls, settings: BacktestEngineSettingsDict):
@@ -195,7 +194,10 @@ class BacktestEngine(BaseEngine):
         if not params or params[0].name != 'df':
             raise Exception(f'{backtestee.name} backtest() must have "df" as its first arg, i.e. backtest(self, df)')
         
-    def run(self, num_chunks: int=1, ray_kwargs: dict | None=None):
+    def run(self, num_chunks: int=1, **ray_kwargs):
+        assert num_chunks > 0, 'num_chunks must be greater than 0'
+        if num_chunks > 1 and not self._use_ray:
+            self.logger.warning('num_chunks > 1 but ray is not enabled, chunks will be processed sequentially')
         for broker in self.brokers.values():
             broker.start()
         self.strategy_manager.start()
@@ -243,7 +245,7 @@ class BacktestEngine(BaseEngine):
         # Backtesting
         if not self._use_ray:
             tqdm_desc = f'Backtesting {backtestee.name} (per chunk)'
-            tqdm_bar = tqdm(total=self.num_chunks, desc=tqdm_desc, colour='green')
+            tqdm_bar = tqdm(total=num_chunks, desc=tqdm_desc, colour='green')
         else:
             ray_tasks = []
             if 'num_cpus' not in ray_kwargs:
@@ -253,7 +255,7 @@ class BacktestEngine(BaseEngine):
                 num_chunks = num_cpus
                 print(f'num_chunks is adjusted to {num_cpus} because {num_cpus=}')
         start_time = time.time()
-        for chunk_num, df_chunk in enumerate(dtl.iterate_df_by_chunks(df, num_chunks=self.num_chunks)):
+        for chunk_num, df_chunk in enumerate(dtl.iterate_df_by_chunks(df, num_chunks=num_chunks)):
             if self._use_ray:
                 ray_tasks.append((df_chunk, chunk_num))
             else:

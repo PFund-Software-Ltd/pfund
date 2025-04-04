@@ -6,7 +6,6 @@ if TYPE_CHECKING:
 from collections import defaultdict
 
 from pfund.brokers.broker_base import BaseBroker
-from pfund.enums import Broker
 
 
 def BacktestBroker(Broker: type[BaseBroker]) -> BaseBroker:

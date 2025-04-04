@@ -199,7 +199,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     
     def _add_historical_data(self, data: TimeBasedData, data_config: DataConfig, storage_config: StorageConfig):
         product = data.product
-        feed: MarketFeed = self._engine.get_feed(data_config.data_source)
+        feed: MarketFeed = self._engine.get_feed(data_config.data_source, use_ray=storage_config.pfeed_use_ray)
         df = feed.get_historical_data(
             product=product.basis, 
             symbol=product.symbol,
@@ -207,10 +207,11 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             start_date=self.dataset.start_date, 
             end_date=self.dataset.end_date,
             data_layer=storage_config.data_layer,
-            data_domain=storage_config.data_domain,
             data_origin=data_config.data_origin,
             from_storage=storage_config.from_storage,
+            to_storage=storage_config.to_storage,
             storage_options=storage_config.storage_options,
+            retrieve_per_date=storage_config.retrieve_per_date,
             **product.specs
         )
         self.data_tool._add_raw_df(data, df)
@@ -219,6 +220,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self, 
         trading_venue: tTRADING_VENUE,
         product: str,
+        symbol: str='',
         data_source: tDATA_SOURCE | None=None,
         data_origin: str='',
         data_config: DataConfigDict | DataConfig | None=None,
@@ -237,9 +239,9 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             broker: BaseBroker = self.add_broker(trading_venue)
             if broker.name == Broker.CRYPTO:
                 exch = trading_venue
-                datas: list[TimeBasedData] = broker.add_data(exch, product, data_config=data_config, **product_specs)
+                datas: list[TimeBasedData] = broker.add_data(exch, product, symbol=symbol, data_config=data_config, **product_specs)
             else:
-                datas: list[TimeBasedData] = broker.add_data(product, data_config=data_config, **product_specs)
+                datas: list[TimeBasedData] = broker.add_data(product, symbol=symbol, data_config=data_config, **product_specs)
             for data in datas:
                 self._add_data(data)
                 if data.resolution == self.resolution:

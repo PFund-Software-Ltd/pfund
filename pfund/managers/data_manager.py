@@ -182,6 +182,7 @@ class DataManager(BaseManager):
             scheduler.add_job(lambda: self._flush_stale_bar(data), 'interval', seconds=timeout)
             
     # TODO: convert topic to enum
+    # TODO: write data to duckdb files
     def handle_msgs(self, topic, msg: tuple):
         if topic == 1:  # quote data
             bkr, exch, pdt, quote = msg
