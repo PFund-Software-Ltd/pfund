@@ -25,7 +25,6 @@ from numpy import sign
 from websocket import WebSocketApp, WebSocketConnectionClosedException
 
 from pfund.managers.order_manager import OrderUpdateSource
-from pfund.zeromq import ZeroMQ
 from pfund.adapter import Adapter
 from pfund.enums import PublicDataChannel, PrivateDataChannel, DataChannelType
 

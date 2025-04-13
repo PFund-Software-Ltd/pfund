@@ -4,11 +4,12 @@ if TYPE_CHECKING:
     import torch
     import pandas as pd
     import polars as pl
-    from pfeed.typing import tDATA_SOURCE, tSTORAGE
+    from pfeed.typing import tDATA_SOURCE, tSTORAGE, GenericFrame
     from pfund.typing import ModelT, DataConfigDict, tTRADING_VENUE
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.engines.backtest_engine import BacktestEngine
+    from pfund.models.dataset_splitter import DatasetPeriods, CrossValidatorDatasetPeriods
 
 import numpy as np
 
@@ -53,6 +54,29 @@ class BacktestMixin:
         self._is_dummy_strategy = False
         self._is_signal_df_required = self._check_if_signal_df_required()
         self._is_append_to_df = self._check_if_append_to_df()
+    
+    @property
+    def dataset_periods(self: BacktestMixin | BaseStrategy | BaseModel) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
+        return self._engine.dataset_periods
+    
+    # TODO
+    @property
+    def train_set(self: BaseStrategy | BaseModel) -> GenericFrame:
+        storage_config = self._engine._storage_config
+        return self.store.load_data_from_storage(
+            storage=storage_config.storage,
+            storage_options=storage_config.storage_options,
+        )
+    
+    # TODO
+    @property
+    def val_set(self: BaseStrategy | BaseModel) -> GenericFrame:
+        return self.store.load_data(...)
+    
+    # TODO
+    @property
+    def test_set(self: BaseStrategy | BaseModel) -> GenericFrame:
+        return self.store.load_data(...)
     
     def on_stop(self: BaseStrategy | BaseModel):
         super().on_stop()

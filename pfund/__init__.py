@@ -2,7 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     # need these imports to support IDE hints:
-    aliases = ...
+    import pfund_plot as plot
+    from pfund.const.aliases import ALIASES as aliases
     from pfund.engines import BacktestEngine, TradeEngine
     from pfund.strategies.strategy_base import BaseStrategy as Strategy
     from pfund.models.model_base import BaseModel as Model, BaseFeature as Feature
@@ -25,8 +26,8 @@ if TYPE_CHECKING:
         Exchange as BinanceExchange, 
     )
     from pfund.exchanges.okx.exchange import (
-        Exchange as OKX,
-        Exchange as OKXExchange, 
+        Exchange as Okx,
+        Exchange as OkxExchange, 
     )
 
 import sys
@@ -51,6 +52,9 @@ def __getattr__(name: str):
     if name == 'aliases':
         from pfund.const.aliases import ALIASES
         return ALIASES
+    elif name == 'plot':
+        import pfund_plot as plot
+        return plot
     elif name == 'BacktestEngine':
         from pfund.engines.backtest_engine import BacktestEngine
         return BacktestEngine
@@ -93,7 +97,7 @@ def __getattr__(name: str):
     elif name in ("BinanceExchange", "Binance"):
         from pfund.exchanges.binance.exchange import Exchange
         return Exchange
-    elif name in ("OKXExchange", "OKX"):
+    elif name in ("OkxExchange", "Okx"):
         from pfund.exchanges.okx.exchange import Exchange
         return Exchange
 
@@ -110,6 +114,22 @@ __all__ = (
     'get_config',
     'aliases',
     "what_is",
-    # TODO:
-    ...
+    'plot',
+    'BacktestEngine',
+    'TradeEngine',
+    'Strategy',
+    'Model',
+    'Feature',
+    'PytorchModel',
+    'SklearnModel',
+    'Indicator',
+    'TalibIndicator',
+    'TaIndicator',
+    'CryptoBroker',
+    'IBBroker',
+    'BybitExchange',
+    'BinanceExchange',
+    'OkxExchange',
 )
+def __dir__():
+    return sorted(__all__)

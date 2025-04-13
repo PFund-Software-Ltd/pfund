@@ -2,12 +2,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     import pandas as pd
-    from sklearn.model_selection._split import BaseCrossValidator
+    from sklearn.model_selection import TimeSeriesSplit
     from pfeed.typing import tDATA_TOOL
     from pfund.typing import StrategyT, ModelT, FeatureT, IndicatorT
     from pfund.models.model_base import BaseModel
     from pfund.mixins.backtest_mixin import BacktestMixin
     from pfund.typing import DataRangeDict, DatasetSplitsDict, BacktestEngineSettingsDict
+    from pfund.models.dataset_splitter import CrossValidatorDatasetPeriods, DatasetPeriods
 
 import os
 import inspect
@@ -22,7 +23,8 @@ from pfund import cprint
 from pfund.engines.base_engine import BaseEngine
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.brokers.broker_backtest import BacktestBroker
-from pfund.enums import BacktestMode
+from pfund.models.dataset_splitter import DatasetSplitter
+from pfund.enums import BacktestMode, ComponentType
 
 
 class BacktestEngine(BaseEngine):
@@ -37,9 +39,11 @@ class BacktestEngine(BaseEngine):
         mode: Literal['vectorized', 'event_driven']='vectorized',
         data_tool: tDATA_TOOL='polars',
         data_range: str | DataRangeDict='ytd',
-        dataset_splits: int | DatasetSplitsDict | BaseCrossValidator=721,
         use_ray: bool=True,
+        dataset_splits: int | DatasetSplitsDict | TimeSeriesSplit=721,
+        cv_test_ratio: float=0.1,
         settings: BacktestEngineSettingsDict | None = None,
+        profiling: bool=False,  # TODO
         # TODO: move inside settings?
         save_backtests: bool=True,
         use_signal_df: bool=False,
@@ -47,6 +51,9 @@ class BacktestEngine(BaseEngine):
     ):
         '''
         Args:
+            cv_test_ratio:
+                if passing in a cross-validator in dataset_splits, 
+                this is the ratio of the entire dataset to be reserved as a final hold-out test set.
             use_signal_df:
                 if True, uses signals from dumped signal_df in _next() instead of recalculating the signals. 
                 This will make event-driven backtesting a LOT faster but inconsistent with live trading.
@@ -60,11 +67,17 @@ class BacktestEngine(BaseEngine):
                 env='BACKTEST', 
                 data_tool=data_tool, 
                 data_range=data_range, 
-                dataset_splits=dataset_splits,
                 use_ray=use_ray,
                 settings=settings,
             )
             self._mode = BacktestMode[mode.lower()]
+            self._dataset_splitter = DatasetSplitter(
+                dataset_start=self.dataset_start,
+                dataset_end=self.dataset_end,
+                dataset_splits=dataset_splits, 
+                cv_test_ratio=cv_test_ratio
+            )
+            
             self._save_backtests = save_backtests
             self._use_signal_df = use_signal_df
             if use_signal_df:
@@ -75,13 +88,14 @@ class BacktestEngine(BaseEngine):
             self._assert_signals = assert_signals
             if self.mode == BacktestMode.event_driven and use_signal_df and assert_signals:
                 raise ValueError('use_signal_df must be False when assert_signals=True in event-driven backtesting')
-            
-            # TODO: move to mtflow
-            # self.history = mt.BacktestHistory()
     
     @property
     def mode(self) -> BacktestMode:
         return self._mode
+    
+    @property
+    def dataset_periods(self) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
+        return self._dataset_splitter.dataset_periods
     
     @classmethod
     def _initialize_settings(cls, settings: BacktestEngineSettingsDict):
@@ -174,15 +188,9 @@ class BacktestEngine(BaseEngine):
             signal_cols=signal_cols,
         )
     
-    def add_broker(self, bkr: str):
-        bkr = bkr.upper()
-        if bkr in self.brokers:
-            return self.get_broker(bkr)
+    def _create_broker(self, bkr: str) -> BacktestBroker:
         Broker = self.get_Broker(bkr)
         broker = BacktestBroker(Broker)
-        bkr = broker.name
-        self.brokers[bkr] = broker
-        self.logger.debug(f'added {bkr=}')
         return broker
     
     def _assert_backtest_function(self, backtestee: BaseStrategy | BaseModel):
@@ -195,6 +203,7 @@ class BacktestEngine(BaseEngine):
             raise Exception(f'{backtestee.name} backtest() must have "df" as its first arg, i.e. backtest(self, df)')
         
     def run(self, num_chunks: int=1, **ray_kwargs):
+        super().run()
         assert num_chunks > 0, 'num_chunks must be greater than 0'
         if num_chunks > 1 and not self._use_ray:
             self.logger.warning('num_chunks > 1 but ray is not enabled, chunks will be processed sequentially')
@@ -325,7 +334,7 @@ class BacktestEngine(BaseEngine):
         
         
         # Post-Backtesting
-        if backtestee.type == 'strategy':
+        if backtestee.component_type == ComponentType.strategy:
             if self.mode == BacktestMode.vectorized:
                 df = dtl.postprocess_vectorized_df(df_chunks)
             # TODO

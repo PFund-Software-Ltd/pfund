@@ -8,4 +8,4 @@ from pfund.enums.backtest_mode import BacktestMode
 from pfund.enums.data_channel import PublicDataChannel, PrivateDataChannel, DataChannelType
 from pfund.enums.option_type import OptionType
 from pfund.enums.event import Event
-from pfund.enums.component import Component
+from pfund.enums.component_type import ComponentType, ModelComponentType

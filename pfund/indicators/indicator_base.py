@@ -7,7 +7,6 @@ if TYPE_CHECKING:
     TaFunction = Callable[..., Any]  # Type for functions from the 'ta' library
 
 from pfund.models.model_base import BaseModel
-from pfund.enums import Component
 
 
 class BaseIndicator(BaseModel):
@@ -15,7 +14,6 @@ class BaseIndicator(BaseModel):
         from pfeed.enums import DataTool
         
         super().__init__(indicator, *args, **kwargs)
-        self.type = Component.indicator
         
         if self.data_tool.name == DataTool.pandas:
             self.predict = self._predict_pandas

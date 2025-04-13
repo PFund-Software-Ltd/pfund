@@ -11,7 +11,6 @@ from typing import Callable
 from pfund.brokers.ib.ib_client import IBClient
 from pfund.brokers.ib.ib_wrapper import *
 from pfund.enums import PublicDataChannel, PrivateDataChannel
-from pfund.zeromq import ZeroMQ
 
 
 class IBApi(IBClient, IBWrapper):

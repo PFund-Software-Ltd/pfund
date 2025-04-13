@@ -27,7 +27,6 @@ from pfund.enums import (
     PrivateDataChannel, 
     DataChannelType,
 )
-from pfund.zeromq import ZeroMQ
 from pfund.const.paths import PROJ_PATH
 from pfund.utils.utils import get_last_modified_time, load_yaml_file
 from pfund.config import get_config

@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    from pfund.typing import tSTORAGE
     from pfund.plogging.config import LoggingDictConfigurator
     
 import os
@@ -11,7 +12,7 @@ import logging
 import shutil
 import importlib.resources
 from types import TracebackType
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 
 import yaml
 # from rich.traceback import install
@@ -72,6 +73,8 @@ class Configuration:
     custom_excepthook: bool = True
     env_file_path: str = f'{CONFIG_PATH}/.env'
     debug: bool = False
+    storage: tSTORAGE = 'local'
+    storage_options: dict = field(default_factory=dict)
 
     # NOTE: without type annotation, they will NOT be treated as dataclass fields but as class attributes
     _logging_config = {}
@@ -259,6 +262,8 @@ def configure(
     env_file_path: str | None = None,
     custom_excepthook: bool | None = None,
     debug: bool | None = None,
+    storage: tSTORAGE | None = None,
+    storage_options: dict | None = None,
     verbose: bool = False,
     write: bool = False,
 ):

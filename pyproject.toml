@@ -24,16 +24,14 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "pfeed (>=0.0.4,<0.1.0)",
-    "rich (>=14.0.0,<15.0.0)",
-    "tqdm (>=4.67.1,<5.0.0)",
+    "mtflow (>=0.0.1.dev1,<0.1.0)",
+    "pfolio (>=0.0.2,<0.1.0)",
     "click (>=8.1.8,<9.0.0)",
     "trogon (>=0.6.0,<0.7.0) ; python_version < '4.0.0'",
     "platformdirs (>=4.3.7,<5.0.0)",
     "python-dotenv (>=1.1.0,<2.0.0)",
     "pyyaml (>=6.0.2,<7.0.0)",
     "orjson (>=3.10.16,<4.0.0)",
-    "apscheduler (>=3.11.0,<4.0.0)",
     "requests (>=2.31.0,<3.0.0)",  # TODO: to be removed
     "httpx (>=0.28.1,<0.29.0)",
     "websocket-client (>=1.8.0,<2.0.0)",  # TODO: to be removed
@@ -44,19 +42,9 @@ dependencies = [
 
 [project.optional-dependencies]
 core = [
-    "pfeed[core] (>=0.0.3,<0.1.0)",
-    "pfolio (>=0.0.2,<0.1.0)",
-    "mtflow (>=0.0.1.dev1,<0.1.0)",
-    "psutil (>=7.0.0,<8.0.0)", 
-    "pyzmq (>=26.2.1,<27.0.0)",
-    "redis[hiredis] (>=5.2.1,<6.0.0)",
+    "mtflow[core] (>=0.0.1.dev1,<0.1.0)",
+    "pfolio[core] (>=0.0.2,<0.1.0)",
 ]
-ml = [
-    "joblib (>=1.4.2,<2.0.0)",
-    "torch (>=2.6.0,<3.0.0)",
-    "optuna (>=4.2.1,<5.0.0)",
-]
-ta = ["ta-lib (>=0.6.3,<0.7.0)"]
 telegram = ["python-telegram-bot (>=21.11.1,<22.0.0)"]
 
 [project.scripts]
@@ -75,9 +63,11 @@ optional = true
 
 [tool.poetry.group.dev.dependencies]
 pfeed = {path = "../pfeed", extras = ["core"],  develop = true}
-pfolio = {path = "../pfolio", develop = true}
-pfund-plot = {path = "../pfund-plot", extras = ["notebook"], develop = true}
-mtflow = {path = "../mtflow", develop = true}
+pfolio = {path = "../pfolio", extras = ["core"], develop = true}
+pfund-plot = {path = "../pfund-plot", extras = ["core"], develop = true}
+mtflow = {path = "../mtflow", extras = ["core"], develop = true}
+torch = "^2.6.0"
+ta-lib = "^0.6.3"
 pybit = "^5.8.0"
 mypy = "^1.11.2"
 ruff = "^0.6.9"

@@ -48,7 +48,7 @@ def BacktestModel(Model: type[ModelT], ml_model: MachineLearningModel, *args, **
             if self.is_model() and not self._is_dummy_strategy:
                 error_msg = (
                     f"please make sure '{self.name}' was dumped "
-                    f"using '{self.type}.dump()' correctly.\n"
+                    f"using '{self.component_type}.dump()' correctly.\n"
                     # FIXME: correct the link
                     "Please refer to the doc for more details: https://pfund.ai"  
                 )

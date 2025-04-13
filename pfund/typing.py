@@ -1,7 +1,6 @@
 from typing_extensions import TypedDict, Annotated
 from typing import TypeVar, Literal
 
-from pfeed.typing import tDATA_LAYER, tSTORAGE
 from pfund.datas.resolution import Resolution
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.models.model_base import BaseModel, BaseFeature
@@ -43,16 +42,6 @@ class DataConfigDict(TypedDict, total=False):  # total=False makes fields option
     shift: dict[Resolution, int]
     skip_first_bar: dict[Resolution, bool]
     stale_bar_timeout: int
-
-
-class StorageConfigDict(TypedDict, total=False):
-    pfeed_use_ray: bool  # if use_ray in pfeed
-    retrieve_per_date: bool  # refer to `retrieve_per_date` in pfeed's get_historical_data()
-    data_layer: tDATA_LAYER
-    from_storage: tSTORAGE
-    to_storage: tSTORAGE
-    # configs specific to the storage type, for MinIO, it's access_key and secret_key etc.
-    storage_options: dict
 
 
 class TradeEngineSettingsDict(TypedDict, total=False):

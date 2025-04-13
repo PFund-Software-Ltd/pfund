@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Literal, TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.typing import tENVIRONMENT
-    from pfund.datas.data_config import DataConfig
+    from pfund.data_tools.data_config import DataConfig
     from pfund.datas.data_time_based import TimeBasedData
 
 from pfund.adapter import Adapter

@@ -13,13 +13,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from sklearn.model_selection._split import BaseCrossValidator
     from pfeed.enums import DataSource
     from pfeed.typing import tDATA_TOOL
     from pfund.enums import TradFiBroker
-    from pfund.typing import DataRangeDict, DatasetSplitsDict, TradeEngineSettingsDict
-
-from apscheduler.schedulers.background import BackgroundScheduler
+    from pfund.typing import DataRangeDict, TradeEngineSettingsDict
 
 from pfund.engines.base_engine import BaseEngine
 from pfund.brokers.broker_base import BaseBroker
@@ -34,15 +31,13 @@ class TradeEngine(BaseEngine):
             'stop': True,
         },
     }
-    scheduler = BackgroundScheduler()
     
     def __init__(
         self,
         env: Literal['SANDBOX', 'PAPER', 'LIVE']='SANDBOX',
         data_tool: tDATA_TOOL='polars',
         data_range: str | DataRangeDict='ytd',
-        dataset_splits: int | DatasetSplitsDict | BaseCrossValidator=721,
-        use_ray: bool=False,
+        use_ray: bool=True,
         settings: TradeEngineSettingsDict | None=None,
         # TODO: move inside settings?
         df_min_rows: int=1_000,
@@ -50,7 +45,7 @@ class TradeEngine(BaseEngine):
         # TODO: handle "broker_data_source", e.g. {'IB': 'DATABENTO'}
         broker_data_source: dict[TradFiBroker, DataSource] | None=None,
     ):
-        from pfund.zeromq import ZeroMQ
+        from mtflow.trading.mtengine import MTEngine
 
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):
@@ -58,16 +53,16 @@ class TradeEngine(BaseEngine):
                 env=env,
                 data_tool=data_tool, 
                 data_range=data_range, 
-                dataset_splits=dataset_splits,
                 use_ray=use_ray,
                 settings=settings,
             )
             self._is_running = True
-            self._zmq = ZeroMQ('engine')
+            self._mtengine = MTEngine(use_ray=use_ray)
             self.DataTool.set_min_rows(df_min_rows)
             self.DataTool.set_max_rows(df_max_rows)
             self.broker_data_source = broker_data_source
 
+    # TODO: move to mtflow
     @classmethod
     def assign_cpus(cls, name) -> list:
         if 'cpu_affinity' in cls.settings and name in cls.settings['cpu_affinity']:
@@ -78,6 +73,7 @@ class TradeEngine(BaseEngine):
             assigned_cpus = [assigned_cpus]
         return assigned_cpus
     
+    # TODO: move to mtflow
     def _assign_zmq_ports(self, zmq_port: int=5557) -> dict:
         _assigned_ports = []
         def _is_port_available(_port):
@@ -115,6 +111,7 @@ class TradeEngine(BaseEngine):
                 self.settings['zmq_ports'][strategy.name] = _get_port()
         self.logger.debug(f"{self.settings['zmq_ports']=}")
 
+    # TODO: move to mtflow
     def _start_scheduler(self):
         '''start scheduler for background tasks'''
         self.scheduler.add_job(
@@ -129,6 +126,7 @@ class TradeEngine(BaseEngine):
             broker.schedule_jobs(self.scheduler)
         self.scheduler.start()
     
+    # TODO: move to mtflow
     def _ping_processes(self):
         self._zmq.send(0, 0, ('engine', 'ping',))
 
@@ -141,17 +139,13 @@ class TradeEngine(BaseEngine):
         if restart_strats := [strat for strat, strategy in self.strategy_manager.strategies.items() if self._use_ray and not self.strategy_manager.is_process_healthy(strat)]:
             self.strategy_manager.restart(restart_strats, reason='process not responding')
 
-    def add_broker(self, bkr: str) -> BaseBroker:
-        bkr = bkr.upper()
-        if bkr in self.brokers:
-            return self.get_broker(bkr)
+    def _create_broker(self, bkr: str) -> BaseBroker:
         Broker = self.get_Broker(bkr)
         broker = Broker(self.env)
-        self.brokers[bkr] = broker
-        self.logger.debug(f'added {bkr=}')
         return broker
     
     def run(self, zmq_port: int=5557):
+        super().run()
         self._assign_zmq_ports(zmq_port=zmq_port)
         self._zmq.start(
             logger=self.logger,

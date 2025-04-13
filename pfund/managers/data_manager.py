@@ -13,7 +13,7 @@ from pprint import pformat
 import importlib
 
 from pfund.products.product_base import BaseProduct
-from pfund.datas.data_config import DataConfig
+from pfund.data_tools.data_config import DataConfig
 from pfund.datas.resolution import Resolution
 from pfund.enums import Event, Broker, CryptoExchange
 from pfund.managers.base_manager import BaseManager
@@ -180,7 +180,7 @@ class DataManager(BaseManager):
     def schedule_jobs(self, scheduler: BackgroundScheduler):
         for data, timeout in self._stale_bar_timeouts.items():
             scheduler.add_job(lambda: self._flush_stale_bar(data), 'interval', seconds=timeout)
-            
+        
     # TODO: convert topic to enum
     # TODO: write data to duckdb files
     def handle_msgs(self, topic, msg: tuple):

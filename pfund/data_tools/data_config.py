@@ -1,8 +1,7 @@
 from typing_extensions import Annotated
 
-from pydantic import BaseModel, Field, ConfigDict, model_validator, field_validator
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
-from pfeed.enums import DataSource
 from pfund.datas.resolution import Resolution
 from pfund.enums import Environment
 from pfund.utils.envs import backtest
@@ -13,8 +12,6 @@ from pfund.engines import get_engine
 class DataConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    data_source: DataSource
-    data_origin: str=''
     primary_resolution: Resolution = Field(description='primary resolution used for trading, must be a bar resolution (e.g. "1s", "1m", "1h", "1d")')
     extra_resolutions: list[Resolution] = Field(default_factory=list, description='extra resolutions, e.g. "1t" for tick data, "1q" for quote data')
     orderbook_depth: int = Field(
@@ -45,17 +42,6 @@ class DataConfig(BaseModel):
         description="time (in seconds) after a bar's expected completion (bar.end_ts) to wait for any delayed updates before flushing the bar."
     )
     
-    @field_validator('data_source', mode='before')
-    @classmethod
-    def validate_data_source(cls, data_source: str) -> str:
-        from pfeed.const.aliases import ALIASES
-        data_source = data_source.upper()
-        SUPPORTED_DATA_SOURCES = [ds.value for ds in DataSource]
-        data_source = ALIASES.get(data_source, data_source)
-        if data_source not in SUPPORTED_DATA_SOURCES:
-            raise ValueError(f"'data_source' must be one of {SUPPORTED_DATA_SOURCES}")
-        return data_source
-
     @backtest
     def _force_primary_resolution_as_resampler(self):
         '''force using the primary resolution as a resampler for any extra resolutions that are <= primary resolution

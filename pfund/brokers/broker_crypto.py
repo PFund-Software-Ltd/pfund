@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.typing import tCRYPTO_EXCHANGE, tENVIRONMENT
-    from pfund.datas.data_config import DataConfig
+    from pfund.data_tools.data_config import DataConfig
 
 import inspect
 import importlib

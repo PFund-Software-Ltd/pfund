@@ -7,8 +7,7 @@ from abc import ABC
 from typing import Literal, TYPE_CHECKING, overload
 if TYPE_CHECKING:
     from pfeed.typing import tDATA_SOURCE
-    from pfeed.feeds.market_feed import MarketFeed
-    from pfund.typing import tTRADING_VENUE, tCRYPTO_EXCHANGE
+    from pfund.typing import StrategyT, DataConfigDict, tTRADING_VENUE, tCRYPTO_EXCHANGE
     from pfund.brokers.broker_base import BaseBroker
     from pfund.products.product_base import BaseProduct
     from pfund.positions.position_base import BasePosition
@@ -17,43 +16,46 @@ if TYPE_CHECKING:
     from pfund.balances.balance_base import BaseBalance
     from pfund.balances.balance_crypto import CryptoBalance
     from pfund.balances.balance_ib import IBBalance
-    from pfund.typing import StrategyT, DataConfigDict, StorageConfigDict
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.accounts.account_base import BaseAccount
     from pfund.accounts.account_crypto import CryptoAccount
     from pfund.accounts.account_ib import IBAccount
     from pfund.orders.order_base import BaseOrder
     from pfund.datas.data_base import BaseData
-    from pfund.models.model_base import BaseModel
+    from pfund.models.model_base import BaseModel, BaseFeature
+    from pfund.indicators.indicator_base import BaseIndicator
     from pfund.datas.data_bar import Bar
     from pfund.data_tools import data_tool_backtest
+    from pfund.data_tools.data_tool_base import BaseDataTool
 
+from mtflow.stores.trading_store import TradingStore
 from pfund.datas.resolution import Resolution
 from pfund.strategies.strategy_meta import MetaStrategy
 from pfund.engines import get_engine
 from pfund.utils.envs import backtest
 from pfund.mixins.trade_mixin import TradeMixin
-from pfund.enums import Component, Broker
-from pfund.datas.data_config import DataConfig
-from pfund.datas.storage_config import StorageConfig
+from pfund.enums import Broker
+from pfund.data_tools.data_config import DataConfig
 
 
 class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):    
     def __init__(self, *args, **kwargs):
         self._args = args
         self._kwargs = kwargs
-        self._zmq = None
-        self.name = self.get_default_name()
+        self._name = self.get_default_name()
         self._engine = get_engine()
         self.logger = None
         self._is_running = False
         self._datas = defaultdict(dict)  # {product: {'1m': data}}
+        self._data_tool: BaseDataTool = self._create_data_tool()
+        self._store: TradingStore | None = None
         self._resolution: Resolution | None = None
         self._orderbooks = {}  # {product: data}
         self._tradebooks = {}  # {product: data}
+        
+        # TODO: move to mtflow
         self._consumer: BaseStrategy | None = None
         self._listeners: dict[BaseData, list[BaseStrategy | BaseModel]] = defaultdict(list)
-        self.type = Component.strategy
 
         self.accounts = defaultdict(dict)  # {trading_venue: {acc1: account1, acc2: account2} }
         self.positions = {}  # {account: {pdt: position} }
@@ -63,7 +65,10 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self.trades = {}  # {account: [trade, ...]}
         
         self.strategies: dict[str, BaseStrategy] = {}
+        self._model_components: dict[str, BaseModel | BaseFeature | BaseIndicator] = {}
         self.models: dict[str, BaseModel] = {}
+        self.features: dict[str, BaseFeature] = {}
+        self.indicators: dict[str, BaseIndicator] = {}
         # NOTE: current strategy's signal is consumer's prediction
         self.predictions = {}  # {strat/mdl: pred_y}
         self._signals = {}  # {data: signal}, for strategy, signal is buy/sell/null
@@ -71,7 +76,6 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self._signal_cols = []
         self._num_signal_cols = 0
 
-        # TODO: move to mtflow
         self._data_signatures = []
         self._strategy_signature = (args, kwargs)
         
@@ -82,6 +86,10 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     @backtest
     def backtest(self, df: data_tool_backtest.BacktestDataFrame):
         raise Exception(f'Strategy "{self.name}" does not have a backtest() method, cannot run vectorized backtesting')
+    
+    def _set_trading_store(self):
+        mtstore = self._engine.store
+        self._store = mtstore.get_trading_store(self.name)
     
     # TODO
     def is_ready(self):
@@ -94,6 +102,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     def is_sub_strategy(self) -> bool:
         return bool(self._consumer)
     
+    # TODO: add versioning
     def to_dict(self):
         return {
             'class': self.__class__.__name__,
@@ -103,7 +112,9 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             'accounts': [repr(account) for account in self.list_accounts()],
             'datas': [repr(data) for data in self.list_datas()],
             'strategies': [strategy.to_dict() for strategy in self.strategies.values()],
-            'models': [model.to_dict() for model in self.models.values()],
+            'models': [model.to_dict() for model in self.models.values() if model.is_model()],
+            'features': [model.to_dict() for model in self.models.values() if model.is_feature()],
+            'indicators': [model.to_dict() for model in self.models.values() if model.is_indicator()],
             'strategy_signature': self._strategy_signature,
             'data_signatures': self._data_signatures,
         }
@@ -120,7 +131,6 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         return self._zmq
 
     def start_zmq(self):
-        from pfund.zeromq import ZeroMQ
         zmq_ports = self._engine.zmq_ports
         self._zmq = ZeroMQ(self.name)
         self._zmq.start(
@@ -197,25 +207,6 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             self.logger.debug(f'added account {trading_venue=} {account.name=}')
         return account
     
-    def _add_historical_data(self, data: TimeBasedData, data_config: DataConfig, storage_config: StorageConfig):
-        product = data.product
-        feed: MarketFeed = self._engine.get_feed(data_config.data_source, use_ray=storage_config.pfeed_use_ray)
-        df = feed.get_historical_data(
-            product=product.basis, 
-            symbol=product.symbol,
-            resolution=data.resolution,
-            start_date=self.dataset.start_date, 
-            end_date=self.dataset.end_date,
-            data_layer=storage_config.data_layer,
-            data_origin=data_config.data_origin,
-            from_storage=storage_config.from_storage,
-            to_storage=storage_config.to_storage,
-            storage_options=storage_config.storage_options,
-            retrieve_per_date=storage_config.retrieve_per_date,
-            **product.specs
-        )
-        self.data_tool._add_raw_df(data, df)
-    
     def add_data(
         self, 
         trading_venue: tTRADING_VENUE,
@@ -224,7 +215,6 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         data_source: tDATA_SOURCE | None=None,
         data_origin: str='',
         data_config: DataConfigDict | DataConfig | None=None,
-        storage_config: StorageConfigDict | StorageConfig | None=None,
         **product_specs
     ) -> list[TimeBasedData]:
         '''
@@ -232,8 +222,15 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
             product_specs: product specifications, e.g. expiration, strike_price etc.
         '''
+        # TODO: save data signatures properly, data_signatures should be a set
+        # TODO: add data_config (dict form) to data_signatures
+        # TODO: rename data_signatures to data_inputs?
+        self._data_signatures.append({k: v for k, v in locals().items() if k not in ['self', '__class__']})
+        
         trading_venue, product = trading_venue.upper(), product.upper()
-        data_config, storage_config = self._parse_data_and_storage_config(trading_venue, data_source, data_origin, data_config, storage_config)
+        data_source = trading_venue if data_source is None else data_source
+        data_config = self._parse_data_config(data_config)
+        
 
         if not self.is_sub_strategy():
             broker: BaseBroker = self.add_broker(trading_venue)
@@ -244,17 +241,25 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
                 datas: list[TimeBasedData] = broker.add_data(product, symbol=symbol, data_config=data_config, **product_specs)
             for data in datas:
                 self._add_data(data)
-                if data.resolution == self.resolution:
-                    self._add_historical_data(data, data_config, storage_config)
                 broker._add_data_listener(self, data)
+                if data.resolution == self.resolution:
+                    self._engine.store.register_market_data(
+                        consumer=self.name,
+                        data_source=data_source,
+                        data_origin=data_origin,
+                        product=data.product,
+                        resolution=self.resolution,
+                        start_date=self.dataset_start,
+                        end_date=self.dataset_end,
+                    )
         else:
             datas: list[TimeBasedData] = self._add_data_to_consumer(
-                trading_venue, 
-                product, 
+                trading_venue=trading_venue, 
+                product=product, 
+                symbol=symbol,
                 data_source=data_source, 
                 data_origin=data_origin, 
                 data_config=data_config, 
-                storage_config=storage_config, 
                 **product_specs
             )
         return datas
@@ -283,6 +288,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             f"strategy '{strategy.__class__.__name__}' is not an instance of BaseStrategy. Please create your strategy using 'class {strategy.__class__.__name__}(pf.Strategy)'"
         if name:
             strategy._set_name(name)
+        strategy._set_trading_store()
         strategy._create_logger()
         strategy._set_consumer(self)
         strategy._set_resolution(self.resolution)
@@ -332,6 +338,16 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         # pred_y = self.predict(X)
         pass
     
+    def _register_to_mtstore(self):
+        for model in self._model_components.values():
+            metadata = model.to_dict()
+            if model.is_model():
+                self._engine.store.register_model(self.name, model, metadata)
+            elif model.is_feature():
+                self._engine.store.register_feature(self.name, model, metadata)
+            elif model.is_indicator():
+                self._engine.store.register_indicator(self.name, model, metadata)
+    
     def start(self):
         if not self.is_running():
             self.add_datas()
@@ -348,6 +364,9 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
                 pass
                 # self._zmq ...
             self.on_start()
+
+            self._register_to_mtstore()
+            # TODO: self._store.materialize(), after on_start()?
             
             self._is_running = True
             self.logger.info(f"strategy '{self.name}' has started")

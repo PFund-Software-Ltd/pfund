@@ -6,11 +6,6 @@ import inspect
 import datetime
 from pathlib import Path
 
-import yaml
-import requests
-
-from pfund.enums import Environment
-
 
 class Singleton:
     _instances = {}
@@ -66,6 +61,7 @@ def lowercase(func):
 
 
 def load_yaml_file(file_path) -> dict | list[dict]:
+    import yaml
     if os.path.exists(file_path):
         with open(file_path, 'r') as f:
             contents = list(yaml.safe_load_all(f))
@@ -91,6 +87,7 @@ def flatten_dict(d, parent_key='', sep='.'):
 
 
 def get_telegram_bot_updates(token):
+    import requests
     url = f'https://api.telegram.org/bot{token}/getUpdates'
     ret = requests.get(url)
     try:
@@ -203,7 +200,6 @@ def get_function_signature(function: object, without_self=True) -> inspect.Signa
         params_without_self = [param for name, param in signature.parameters.items() if name != 'self']
         signature = inspect.signature(function).replace(parameters=params_without_self)
     return signature
-
 
 
 def get_args_and_kwargs_from_function(function: object) -> tuple[list[str], list[tuple[str, Any]], str | None, str | None]:
