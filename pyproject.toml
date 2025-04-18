@@ -24,7 +24,7 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "mtflow (>=0.0.1.dev1,<0.1.0)",
+    "mtflow (>=0.0.1.dev2,<0.1.0)",
     "pfolio (>=0.0.2,<0.1.0)",
     "click (>=8.1.8,<9.0.0)",
     "trogon (>=0.6.0,<0.7.0) ; python_version < '4.0.0'",
@@ -42,7 +42,7 @@ dependencies = [
 
 [project.optional-dependencies]
 core = [
-    "mtflow[core] (>=0.0.1.dev1,<0.1.0)",
+    "mtflow[core] (>=0.0.1.dev2,<0.1.0)",
     "pfolio[core] (>=0.0.2,<0.1.0)",
 ]
 telegram = ["python-telegram-bot (>=21.11.1,<22.0.0)"]

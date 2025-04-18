@@ -1,19 +1,22 @@
 from typing_extensions import TypedDict, Annotated
-from typing import TypeVar, Literal
+from typing import TypeVar, Literal, TypeAlias
 
 from pfund.datas.resolution import Resolution
+from pfund.engines.base_engine import BaseEngine
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.models.model_base import BaseModel, BaseFeature
 from pfund.indicators.indicator_base import BaseIndicator
 from pfund.products.product_base import BaseProduct
 
 
+EngineT = TypeVar('EngineT', bound=BaseEngine)
 StrategyT = TypeVar('StrategyT', bound=BaseStrategy)
 ModelT = TypeVar('ModelT', bound=BaseModel)
 FeatureT = TypeVar('FeatureT', bound=BaseFeature)
 IndicatorT = TypeVar('IndicatorT', bound=BaseIndicator)
 ProductT = TypeVar('ProductT', bound=BaseProduct)
 
+ComponentName: TypeAlias = str
 
 # since Literal doesn't support variables as inputs, define variables in common.py here with prefix 't'
 tENVIRONMENT = Literal['BACKTEST', 'SANDBOX', 'PAPER', 'LIVE']

@@ -12,7 +12,7 @@ import logging
 import shutil
 import importlib.resources
 from types import TracebackType
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict, field, MISSING
 
 import yaml
 # from rich.traceback import install
@@ -97,11 +97,15 @@ class Configuration:
         '''Loads user's config file and returns a Configuration object'''
         CONFIG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
         # Create default config from dataclass fields
-        default_config = {
-            field.name: field.default 
-            for field in cls.__dataclass_fields__.values()
-            if not field.name.startswith('_')  # Skip private fields
-        }
+        default_config = {}
+        for field in cls.__dataclass_fields__.values():
+            if field.name.startswith('_'):  # Skip private fields
+                continue
+            if field.default_factory is not MISSING:
+                default_config[field.name] = field.default_factory()
+            else:
+                default_config[field.name] = field.default
+                
         needs_update = False
         if CONFIG_FILE_PATH.is_file():
             with open(CONFIG_FILE_PATH, 'r') as f:

@@ -102,7 +102,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     def is_sub_strategy(self) -> bool:
         return bool(self._consumer)
     
-    # TODO: add versioning
+    # TODO: add versioning, run_id etc.
     def to_dict(self):
         return {
             'class': self.__class__.__name__,
@@ -339,14 +339,14 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         pass
     
     def _register_to_mtstore(self):
-        for model in self._model_components.values():
-            metadata = model.to_dict()
-            if model.is_model():
-                self._engine.store.register_model(self.name, model, metadata)
-            elif model.is_feature():
-                self._engine.store.register_feature(self.name, model, metadata)
-            elif model.is_indicator():
-                self._engine.store.register_indicator(self.name, model, metadata)
+        for component in self._model_components.values():
+            metadata = component.to_dict()
+            if component.is_model():
+                self._engine.store.register_model(self.name, component, metadata)
+            elif component.is_feature():
+                self._engine.store.register_feature(self.name, component, metadata)
+            elif component.is_indicator():
+                self._engine.store.register_indicator(self.name, component, metadata)
     
     def start(self):
         if not self.is_running():
