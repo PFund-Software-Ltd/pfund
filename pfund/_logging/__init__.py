@@ -3,7 +3,7 @@ import logging
 
 from typing import Literal
 
-from pfund.plogging.config import LoggingDictConfigurator
+from pfund._logging.config import LoggingDictConfigurator
 from pfund.utils.utils import load_yaml_file
 
 

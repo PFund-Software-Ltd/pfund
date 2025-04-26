@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.typing import tSTORAGE
-    from pfund.plogging.config import LoggingDictConfigurator
+    from pfeed.typing import tSTORAGE
+    from pfund._logging.config import LoggingDictConfigurator
     
 import os
 import sys
@@ -75,6 +75,7 @@ class Configuration:
     debug: bool = False
     storage: tSTORAGE = 'local'
     storage_options: dict = field(default_factory=dict)
+    use_deltalake: bool = False
 
     # NOTE: without type annotation, they will NOT be treated as dataclass fields but as class attributes
     _logging_config = {}
@@ -268,6 +269,7 @@ def configure(
     debug: bool | None = None,
     storage: tSTORAGE | None = None,
     storage_options: dict | None = None,
+    use_deltalake: bool | None = None,
     verbose: bool = False,
     write: bool = False,
 ):

@@ -13,6 +13,10 @@ loggers:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
+  mtflow:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
   # _ means the logger name will change based on strategy/model/manager name
   _strategy:
     level: 'DEBUG'
@@ -68,7 +72,7 @@ handlers:
     level: 'DEBUG'
     formatter: 'file'
   compressed_timed_rotating_file_handler:
-    class: 'pfund.plogging.handlers.CompressedTimedRotatingFileHandler'
+    class: 'pfund._logging.handlers.CompressedTimedRotatingFileHandler'
     level: 'DEBUG'
     formatter: 'file'
     kwargs: {'when': 'midnight', 'backupCount': 7, 'utc': True, 'encoding': 'utf-8'}
@@ -81,7 +85,7 @@ handlers:
     level: 'INFO'
     formatter: 'path'
   telegram_handler:
-    class: 'pfund.plogging.handlers.TelegramHandler'
+    class: 'pfund._logging.handlers.TelegramHandler'
     level: 'DEBUG'
     formatter: 'console'
     # TODO

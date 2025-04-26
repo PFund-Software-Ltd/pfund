@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 
 class BaseManager:
     def __init__(self, name: str, broker: BaseBroker):
-        from pfund.plogging import create_dynamic_logger
+        from pfund._logging import create_dynamic_logger
         self.name = name.lower()
         self._engine = broker._engine
         self._broker = broker

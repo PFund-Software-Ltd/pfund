@@ -7,9 +7,8 @@ if TYPE_CHECKING:
     import polars as pl
     from mtflow.stores.trading_store import TradingStore
     from pfeed.typing import tDATA_SOURCE
-    from pfund.typing import ModelT, IndicatorT, FeatureT
+    from pfund.typing import ModelT, IndicatorT, FeatureT, DataConfigDict
     from pfund.typing import tTRADING_VENUE, tBROKER, tCRYPTO_EXCHANGE
-    from pfund.typing import DataConfigDict
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.brokers.broker_base import BaseBroker
@@ -20,7 +19,8 @@ if TYPE_CHECKING:
     from pfund.data_tools.data_tool_base import BaseDataTool
     from pfund.datas import QuoteData, TickData, BarData
     from pfund.strategies.strategy_base import BaseStrategy
-    from pfund.models.model_base import BaseModel
+    from pfund.models.model_base import BaseModel, BaseFeature
+    from pfund.indicators.indicator_base import BaseIndicator
 
 import sys
 import time
@@ -31,7 +31,6 @@ from pathlib import Path
 from pfund.enums import CryptoExchange, Broker, ComponentType
 from pfund.datas.resolution import Resolution
 from pfund.utils.utils import load_yaml_file, convert_ts_to_dt
-from pfund.plogging import create_dynamic_logger
 from pfund.data_tools.data_config import DataConfig
 
 
@@ -155,13 +154,12 @@ class TradeMixin:
         return self._name
     
     @property
-    def tname(self: BaseStrategy | BaseModel):
-        '''Add type to the name if it is not already there.'''
-        if self.component_type not in self.name:
-            return f"{self.name}_{self.component_type}"
-        else:
-            return self.name
-    
+    def components(self: BaseStrategy | BaseModel) -> list[BaseStrategy | BaseModel | BaseFeature | BaseIndicator]:
+        components = [*self.models.values(), *self.features.values(), *self.indicators.values()]
+        if self.is_strategy():
+            components.extend([*self.strategies.values()])
+        return components
+
     @staticmethod
     def dt(ts: float) -> datetime.datetime:
         return convert_ts_to_dt(ts)
@@ -174,24 +172,56 @@ class TradeMixin:
     def get_delay(ts: float) -> float:
         return time.time() - ts
     
+    @staticmethod
+    def is_ray_actor() -> bool:
+        from ray.actor import ActorClass
+        return False
+    
+    def is_strategy(self: BaseStrategy | BaseModel) -> bool:
+        return self.component_type == ComponentType.strategy
+    
+    def is_model(self: BaseStrategy | BaseModel) -> bool:
+        return self.component_type == ComponentType.model
+    
+    def is_indicator(self: BaseStrategy | BaseModel) -> bool:
+        return self.component_type == ComponentType.indicator
+    
+    def is_feature(self: BaseStrategy | BaseModel) -> bool:
+        return self.component_type == ComponentType.feature
+    
     def is_running(self: BaseStrategy | BaseModel):
         return self._is_running
     
     def _create_logger(self: BaseStrategy | BaseModel):
+        from pfund._logging import create_dynamic_logger
         self.logger = create_dynamic_logger(self.name, self.component_type)
         self.store.set_logger(self.logger)
-    
+        
+    def _setup_zmq(self: BaseStrategy | BaseModel):
+        import zmq
+        from mtflow.messaging.zeromq import ZeroMQ
+        from pfund.engines.base_engine import BaseEngine
+
+        zmq_urls = BaseEngine.settings.zmq_urls
+        self._zmq = ZeroMQ(
+            url=zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL),
+            receiver_socket_type=zmq.SUB,  # receive data from engine
+            sender_socket_type=zmq.PUSH,  # send e.g. orders to engine
+        )
+        
     def _prepare_df(self: BaseStrategy | BaseModel):
         return self.data_tool.prepare_df(ts_col_type='timestamp')
     
     def _append_to_df(self: BaseStrategy | BaseModel, data: BaseData, **extra_data):
         return self.data_tool.append_to_df(data, self.predictions, **extra_data)
     
-    def get_default_name(self: BaseStrategy | BaseModel):
+    def _get_default_name(self: BaseStrategy | BaseModel):
         return self.__class__.__name__
     
     def _set_name(self, name: str):
-        self._name = name
+        self._name = name.lower()
+        if self.component_type.lower() not in self._name:
+            self._name += f"_{self.component_type}"
     
     def get_default_signal_cols(self: BaseStrategy | BaseModel, num_cols: int) -> list[str]:
         if num_cols == 1:
@@ -334,7 +364,7 @@ class TradeMixin:
     
     def _add_model_component(
         self: BaseStrategy | BaseModel, 
-        model: ModelT | FeatureT | IndicatorT, 
+        component: ModelT | FeatureT | IndicatorT,
         name: str='',
         min_data: None | int=None,
         max_data: None | int=None,
@@ -356,31 +386,41 @@ class TradeMixin:
             
             signal_cols: signal columns, if not provided, it will be derived in predict()
         '''
-        Model = model.get_model_type_of_ml_model()
-        assert isinstance(model, Model), \
-            f"{model.type} '{model.__class__.__name__}' is not an instance of {Model.__name__}. Please create your {model.type} using 'class {model.__class__.__name__}({Model.__name__})'"
+        Model = component.get_ml_model_type()
+        assert isinstance(component, Model), \
+            f"{component.component_type} '{component.__class__.__name__}' is not an instance of {Model.__name__}. Please create your {component.component_type} using 'class {component.__class__.__name__}({Model.__name__})'"
         if name:
-            model._set_name(name)
-        model._create_logger()
-        model._set_consumer(self)
-        model._set_resolution(self._consumer.resolution)
+            component._set_name(name)
+        component._create_logger()
+        component._set_consumer(self)
+        component._set_resolution(self._consumer.resolution)
         if min_data:
-            model.set_min_data(min_data)
+            component.set_min_data(min_data)
         if max_data:
-            model.set_max_data(max_data)
-        model.set_group_data(group_data)
+            component.set_max_data(max_data)
+        component.set_group_data(group_data)
         if signal_cols:
-            model.set_signal_cols(signal_cols)
-        mdl = model.name
-        if mdl in self._model_components:
-            return self._model_components[mdl]
-        self._model_components[mdl] = model
-        self.logger.debug(f"added {model.tname}")
-        return model
+            component.set_signal_cols(signal_cols)
+        
+        if component.is_model():
+            components = self.models
+        elif component.is_feature():
+            components = self.features
+        elif component.is_indicator():
+            components = self.indicators
+
+        if component.name in components:
+            raise ValueError(f"{component.name} already exists")
+        else:
+            components[component.name] = component
+            self.logger.debug(f"added {component.name}")
+            return component
     
-    def _remove_model_component(self: BaseStrategy | BaseModel, name: str):
-        if name in self._model_components:
-            del self._model_components[name]
+    def _remove_model_component(self: BaseStrategy | BaseModel, name: str, component_type: ComponentType):
+        # get e.g. self.models, self.features, self.indicators
+        components = getattr(self, component_type.value+'s')
+        if name in components:
+            del components[name]
             self.logger.debug(f"removed '{name}'")
         else:
             self.logger.error(f"'{name}' cannot be found, failed to remove")
@@ -394,14 +434,10 @@ class TradeMixin:
         group_data: bool=True,
         signal_cols: list[str] | None=None,
     ) -> ModelT:
-        model = self._add_model_component(model, name, min_data, max_data, group_data, signal_cols)
-        self.models[model.name] = model
-        return model
+        return self._add_model_component(model, name, min_data, max_data, group_data, signal_cols)
     
     def remove_model(self: BaseStrategy | BaseModel, name: str):
-        self._remove_model_component(name)
-        if name in self.models:
-            del self.models[name]
+        self._remove_model_component(name, ComponentType.model)
     
     def add_feature(
         self: BaseStrategy | BaseModel, 
@@ -412,7 +448,7 @@ class TradeMixin:
         group_data: bool=True,
         signal_cols: list[str] | None=None,
     ) -> FeatureT:
-        feature = self._add_model_component(
+        return self._add_model_component(
             feature, 
             name=name, 
             min_data=min_data, 
@@ -420,12 +456,9 @@ class TradeMixin:
             group_data=group_data,
             signal_cols=signal_cols,
         )
-        self.features[feature.name] = feature
     
     def remove_feature(self: BaseStrategy | BaseModel, name: str):
-        self._remove_model_component(name)
-        if name in self.features:
-            del self.features[name]
+        self._remove_model_component(name, ComponentType.feature)
     
     def add_indicator(
         self: BaseStrategy | BaseModel, 
@@ -436,7 +469,7 @@ class TradeMixin:
         group_data: bool=True,
         signal_cols: list[str] | None=None,
     ) -> IndicatorT:
-        indicator = self._add_model_component(
+        return self._add_model_component(
             indicator, 
             name=name, 
             min_data=min_data, 
@@ -444,13 +477,9 @@ class TradeMixin:
             group_data=group_data,
             signal_cols=signal_cols,
         )
-        self.indicators[indicator.name] = indicator
-        return indicator
 
     def remove_indicator(self: BaseStrategy | BaseModel, name: str):
-        self._remove_model_component(name)
-        if name in self.indicators:
-            del self.indicators[name]
+        self._remove_model_component(name, ComponentType.indicator)
         
     def update_quote(self: BaseStrategy | BaseModel, data: QuoteData, **extra_data):
         product, bids, asks, ts = data.product, data.bids, data.asks, data.ts

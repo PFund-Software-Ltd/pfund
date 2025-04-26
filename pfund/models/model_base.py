@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     import polars as pl
     import torch
     import torch.nn as nn
+    from mtflow.messaging.zeromq import ZeroMQ
     from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
     from sklearn.pipeline import Pipeline
     from pfeed.typing import tDATA_SOURCE
@@ -43,7 +44,6 @@ except ImportError:
 import numpy as np
 from rich.console import Console
 
-from pfund.enums.component_type import ComponentType
 from pfund.models.model_meta import MetaModel
 from pfund.utils.utils import short_path
 from pfund.engines import get_engine
@@ -55,7 +55,7 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         self._args = args
         self._kwargs = kwargs
         self.ml_model = ml_model  # user-defined machine learning model
-        self.name = self.get_default_name()
+        self.name = self._get_default_name()
         self._engine = get_engine()
         self.logger = None
         self._is_running = False
@@ -73,7 +73,6 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         self._num_data = defaultdict(int)  # {data: int}
         self._group_data = True
         
-        self._model_components: dict[str, BaseModel | BaseFeature | BaseIndicator] = {}
         self.models: dict[str, BaseModel] = {}
         self.features: dict[str, BaseFeature] = {}
         self.indicators: dict[str, BaseIndicator] = {}
@@ -86,6 +85,8 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         
         self._data_signatures = []
         self._model_signature = (args, kwargs)
+
+        self._zmq: ZeroMQ | None = None
 
         self.params = {}
         self.load_params()
@@ -117,15 +118,6 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
                 self._is_ready[data] = True
         return self._is_ready[data]
     
-    def is_model(self) -> bool:
-        return not self.is_feature() and not self.is_indicator()
-    
-    def is_indicator(self) -> bool:
-        return self.component_type == ComponentType.indicator
-    
-    def is_feature(self) -> bool:
-        return self.component_type == ComponentType.feature
-    
     def to_dict(self):
         return {
             'class': self.__class__.__name__,
@@ -139,7 +131,7 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
             'data_signatures': self._data_signatures,
         }
     
-    def get_model_type_of_ml_model(self) -> PytorchModel | SklearnModel | BaseModel:
+    def get_ml_model_type(self) -> PytorchModel | SklearnModel | BaseModel:
         try:
             import torch.nn as nn
         except ImportError:
@@ -153,10 +145,10 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
             sklearn = None
 
         if nn is not None and isinstance(self.ml_model, nn.Module):
-            from pfund.models import PytorchModel
+            from pfund.models.pytorch_model import PytorchModel
             Model = PytorchModel
         elif sklearn is not None and isinstance(self.ml_model, (BaseEstimator, ClassifierMixin, RegressorMixin, Pipeline)):
-            from pfund.models import SklearnModel
+            from pfund.models.sklearn_model import SklearnModel
             Model = SklearnModel
         else:
             Model = BaseModel

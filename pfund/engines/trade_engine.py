@@ -10,180 +10,81 @@ In order to communicate with other processes, it uses ZeroMQ as the core
 message queue.
 """
 from __future__ import annotations
-
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfeed.enums import DataSource
     from pfeed.typing import tDATA_TOOL
     from pfund.enums import TradFiBroker
-    from pfund.typing import DataRangeDict, TradeEngineSettingsDict
+    from pfund.typing import DataRangeDict, TradeEngineSettingsDict, tDATABASE, ExternalListenersDict
 
 from pfund.engines.base_engine import BaseEngine
 from pfund.brokers.broker_base import BaseBroker
-from pfund.utils.utils import flatten_dict, is_port_in_use
 
 
 class TradeEngine(BaseEngine):
-    settings: TradeEngineSettingsDict = {
-        'zmq_ports': {},
-        'cancel_all_at': {
-            'start': True,
-            'stop': True,
-        },
-    }
-    
     def __init__(
         self,
         env: Literal['SANDBOX', 'PAPER', 'LIVE']='SANDBOX',
+        use_ray: bool=True,
         data_tool: tDATA_TOOL='polars',
         data_range: str | DataRangeDict='ytd',
-        use_ray: bool=True,
+        database: tDATABASE | None=None,
         settings: TradeEngineSettingsDict | None=None,
+        external_listeners: ExternalListenersDict | None=None,
+        # TODO: handle "broker_data_source", e.g. {'IB': 'DATABENTO'}
+        broker_data_source: dict[TradFiBroker, DataSource] | None=None,
         # TODO: move inside settings?
         df_min_rows: int=1_000,
         df_max_rows: int=3_000,
-        # TODO: handle "broker_data_source", e.g. {'IB': 'DATABENTO'}
-        broker_data_source: dict[TradFiBroker, DataSource] | None=None,
-    ):
-        from mtflow.trading.mtengine import MTEngine
-
+    ):  
         # avoid re-initialization to implement singleton class correctly
         if not hasattr(self, '_initialized'):
+            from pfund.engines.trade_engine_settings import TradeEngineSettings
             super().__init__(
                 env=env,
+                use_ray=use_ray,
                 data_tool=data_tool, 
                 data_range=data_range, 
-                use_ray=use_ray,
-                settings=settings,
+                database=database,
+                settings=TradeEngineSettings(**(settings or {})),
+                external_listeners=external_listeners,
             )
-            self._is_running = True
-            self._mtengine = MTEngine(use_ray=use_ray)
-            self.DataTool.set_min_rows(df_min_rows)
-            self.DataTool.set_max_rows(df_max_rows)
             self.broker_data_source = broker_data_source
-
-    # TODO: move to mtflow
-    @classmethod
-    def assign_cpus(cls, name) -> list:
-        if 'cpu_affinity' in cls.settings and name in cls.settings['cpu_affinity']:
-            assigned_cpus = cls.settings['cpu_affinity'][name]
-        else:
-            assigned_cpus = []
-        if not isinstance(assigned_cpus, list):
-            assigned_cpus = [assigned_cpus]
-        return assigned_cpus
-    
-    # TODO: move to mtflow
-    def _assign_zmq_ports(self, zmq_port: int=5557) -> dict:
-        _assigned_ports = []
-        def _is_port_available(_port):
-            _is_port_assigned = (_port in _assigned_ports)
-            if is_port_in_use(_port) or _is_port_assigned:
-                return False
-            else:
-                _assigned_ports.append(_port)
-                return True
-        def _get_port(start_port=None):
-            _port = start_port or zmq_port
-            if _is_port_available(_port):
-                return _port
-            else:
-                return _get_port(start_port=_port+1)
-        self.settings['zmq_ports']['engine'] = _get_port()
-        for broker in self.brokers.values():
-            if broker.name == 'CRYPTO':
-                for exchange in broker.exchanges.values():
-                    self.settings['zmq_ports'][exchange.name] = {'rest_api': _get_port()}
-                    if not exchange.use_separate_private_ws_url():
-                        self.settings['zmq_ports'][exchange.name]['ws_api'] = _get_port()
-                    else:
-                        self.settings['zmq_ports'][exchange.name]['ws_api'] = {'public': {}, 'private': {}}
-                        ws_servers = exchange.get_ws_servers()
-                        for ws_server in ws_servers:
-                            self.settings['zmq_ports'][exchange.name]['ws_api']['public'][ws_server] = _get_port()
-                        for acc in exchange.accounts.keys():
-                            self.settings['zmq_ports'][exchange.name]['ws_api']['private'][acc] = _get_port()
-            else:
-                self.settings['zmq_ports'][broker.name] = _get_port()
-        for strategy in self.strategy_manager.strategies.values():
-            # FIXME:
-            if self._use_ray:
-                self.settings['zmq_ports'][strategy.name] = _get_port()
-        self.logger.debug(f"{self.settings['zmq_ports']=}")
-
-    # TODO: move to mtflow
-    def _start_scheduler(self):
-        '''start scheduler for background tasks'''
-        self.scheduler.add_job(
-            self._ping_processes, 'interval', 
-            seconds=self._PROCESS_NO_PONG_TOLERANCE_IN_SECONDS // 3
-        )
-        self.scheduler.add_job(
-            self._check_processes, 'interval', 
-            seconds=self._PROCESS_NO_PONG_TOLERANCE_IN_SECONDS
-        )
-        for broker in self.brokers.values():
-            broker.schedule_jobs(self.scheduler)
-        self.scheduler.start()
-    
-    # TODO: move to mtflow
-    def _ping_processes(self):
-        self._zmq.send(0, 0, ('engine', 'ping',))
-
-    def _check_processes(self):
-        for broker in self.brokers.values():
-            connection_manager = broker.cm
-            trading_venues = connection_manager.get_trading_venues()
-            if reconnect_trading_venues := [trading_venue for trading_venue in trading_venues if not connection_manager.is_process_healthy(trading_venue)]:
-                connection_manager.reconnect(reconnect_trading_venues, reason='process not responding')
-        if restart_strats := [strat for strat, strategy in self.strategy_manager.strategies.items() if self._use_ray and not self.strategy_manager.is_process_healthy(strat)]:
-            self.strategy_manager.restart(restart_strats, reason='process not responding')
+            # TODO:
+            # self.DataTool.set_min_rows(df_min_rows)
+            # self.DataTool.set_max_rows(df_max_rows)
 
     def _create_broker(self, bkr: str) -> BaseBroker:
         Broker = self.get_Broker(bkr)
         broker = Broker(self.env)
         return broker
     
-    def run(self, zmq_port: int=5557):
-        super().run()
-        self._assign_zmq_ports(zmq_port=zmq_port)
-        self._zmq.start(
-            logger=self.logger,
-            send_port=self.settings['zmq_ports']['engine'],
-            recv_ports=[port for k, port in flatten_dict(self.settings['zmq_ports']).items() if k != 'engine']
-        )
-
+    def _check_processes(self):
         for broker in self.brokers.values():
-            broker.start(zmq=self._zmq)
+            connection_manager = broker.cm
+            trading_venues = connection_manager.get_trading_venues()
+            if reconnect_trading_venues := [trading_venue for trading_venue in trading_venues if not connection_manager.is_process_healthy(trading_venue)]:
+                connection_manager.reconnect(reconnect_trading_venues, reason='process not responding')
+    
+    def run(self):
+        super().run()
+        self._kernel.run()
 
-        self.strategy_manager.start(in_parallel=self._use_ray)
-        
-        self._start_scheduler()
+        # for broker in self.brokers.values():
+        #     broker.start(zmq=self._zmq)
 
-        # TEMP, zeromq examples
-        # self._zmq.send(
-        #     channel=999,
-        #     topic=888,
-        #     info="to private ws",
-        #     receiver=(acc:='test'),
-        # )
-        # self._zmq.send(
-        #     channel=123,
-        #     topic=456,
-        #     info="to strategy",
-        #     receiver=(strat:='test_strategy'),
-        # )
-
-        while self._is_running:
-            if msg := self._zmq.recv():
-                channel, topic, info = msg
-                # TODO
-                if channel == 0:  # from strategy processes to strategy manager
-                    self.strategy_manager.handle_msgs(topic, info)
-                else:
-                    bkr = info[0]
-                    broker = self.brokers[bkr]
-                    broker.distribute_msgs(channel, topic, info)
+        # while self.is_running():
+        #     if msg := self._zmq.recv():
+        #         channel, topic, info = msg
+        #         # TODO
+        #         if channel == 0:  # from strategy processes to strategy manager
+        #             self.strategy_manager.handle_msgs(topic, info)
+        #         else:
+        #             bkr = info[0]
+        #             broker = self.brokers[bkr]
+        #             broker.distribute_msgs(channel, topic, info)
+        #     else:
+        #         time.sleep(0.001)  # avoid busy-waiting
     
     # TODO: implement pause(), resume(), restart()?
     # def pause(self):
@@ -197,7 +98,7 @@ class TradeEngine(BaseEngine):
         
     def end(self):
         """Stop and clear all state (hard stop)."""
-        for strat in list(self.strategy_manager.strategies):
+        for strat in list(self.strategies):
             self.strategy_manager.stop(strat, in_parallel=self._use_ray, reason='end')
             self.remove_strategy(strat)
         for broker in list(self.brokers.values()):
@@ -205,5 +106,4 @@ class TradeEngine(BaseEngine):
             self.remove_broker(broker.name)
         self._zmq.stop()
         self.scheduler.shutdown()
-        self._is_running = False
         self._remove_singleton()

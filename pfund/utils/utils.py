@@ -31,12 +31,6 @@ def is_command_available(cmd):
     return shutil.which(cmd) is not None
 
 
-def is_port_in_use(port):
-    import socket
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        return s.connect_ex(('localhost', port)) == 0
-
-
 def convert_to_uppercases(*args):
     return (s.upper() if type(s) is str else s for s in args)
 
@@ -73,17 +67,6 @@ def load_yaml_file(file_path) -> dict | list[dict]:
                 return contents
     else:
         return {}
-
-
-def flatten_dict(d, parent_key='', sep='.'):
-    items = []
-    for k, v in d.items():
-        new_key = parent_key + sep + k if parent_key else k
-        if isinstance(v, dict):
-            items.extend(flatten_dict(v, new_key, sep=sep).items())
-        else:
-            items.append((new_key, v))
-    return dict(items)
 
 
 def get_telegram_bot_updates(token):

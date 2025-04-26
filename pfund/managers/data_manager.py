@@ -1,11 +1,12 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from apscheduler.schedulers.background import BackgroundScheduler
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.brokers.broker_base import BaseBroker
     from pfund.strategies.strategy_base import BaseStrategy
+    from pfund.typing import ProductName, ResolutionRepr
 
 import time
 from collections import defaultdict
@@ -18,10 +19,6 @@ from pfund.datas.resolution import Resolution
 from pfund.enums import Event, Broker, CryptoExchange
 from pfund.managers.base_manager import BaseManager
 from pfund.datas import QuoteData, TickData, BarData
-
-
-ProductName: TypeAlias = str
-ResolutionRepr: TypeAlias = str
 
 
 class DataManager(BaseManager):
@@ -92,7 +89,7 @@ class DataManager(BaseManager):
 
     def _add_data(self, product: BaseProduct, resolution: Resolution, data_config: DataConfig) -> TimeBasedData:
         if resolution.is_quote():
-            data = QuoteData(product, resolution, orderbook_depth=data_config.orderbook_depth)
+            data = QuoteData(product, resolution, orderbook_depth=data_config.orderbook_depth, fast_orderbook=data_config.fast_orderbook)
         elif resolution.is_tick():
             data = TickData(product, resolution)
         else:

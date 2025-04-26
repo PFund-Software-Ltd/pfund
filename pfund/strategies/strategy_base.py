@@ -1,12 +1,8 @@
 from __future__ import annotations
-
-import os
-from collections import defaultdict, deque
-from abc import ABC
-
 from typing import Literal, TYPE_CHECKING, overload
 if TYPE_CHECKING:
     from pfeed.typing import tDATA_SOURCE
+    from mtflow.messaging.zeromq import ZeroMQ
     from pfund.typing import StrategyT, DataConfigDict, tTRADING_VENUE, tCRYPTO_EXCHANGE
     from pfund.brokers.broker_base import BaseBroker
     from pfund.products.product_base import BaseProduct
@@ -28,6 +24,10 @@ if TYPE_CHECKING:
     from pfund.data_tools import data_tool_backtest
     from pfund.data_tools.data_tool_base import BaseDataTool
 
+import os
+from collections import defaultdict, deque
+from abc import ABC
+
 from mtflow.stores.trading_store import TradingStore
 from pfund.datas.resolution import Resolution
 from pfund.strategies.strategy_meta import MetaStrategy
@@ -42,7 +42,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     def __init__(self, *args, **kwargs):
         self._args = args
         self._kwargs = kwargs
-        self._name = self.get_default_name()
+        self._name = self._get_default_name()
         self._engine = get_engine()
         self.logger = None
         self._is_running = False
@@ -65,7 +65,6 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self.trades = {}  # {account: [trade, ...]}
         
         self.strategies: dict[str, BaseStrategy] = {}
-        self._model_components: dict[str, BaseModel | BaseFeature | BaseIndicator] = {}
         self.models: dict[str, BaseModel] = {}
         self.features: dict[str, BaseFeature] = {}
         self.indicators: dict[str, BaseIndicator] = {}
@@ -78,7 +77,9 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
 
         self._data_signatures = []
         self._strategy_signature = (args, kwargs)
-        
+
+        self._zmq: ZeroMQ | None = None
+
         self.params = {}
         self.load_params()
 
@@ -339,14 +340,18 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         pass
     
     def _register_to_mtstore(self):
-        for component in self._model_components.values():
+        mtstore = self._engine.store
+        components = [*self.strategies.values(), *self.models.values(), *self.features.values(), *self.indicators.values()]
+        for component in components:
             metadata = component.to_dict()
-            if component.is_model():
-                self._engine.store.register_model(self.name, component, metadata)
+            if component.is_strategy():
+                mtstore.register_strategy(self.name, component, metadata)
+            elif component.is_model():
+                mtstore.register_model(self.name, component, metadata)
             elif component.is_feature():
-                self._engine.store.register_feature(self.name, component, metadata)
+                mtstore.register_feature(self.name, component, metadata)
             elif component.is_indicator():
-                self._engine.store.register_indicator(self.name, component, metadata)
+                mtstore.register_indicator(self.name, component, metadata)
     
     def start(self):
         if not self.is_running():

@@ -12,15 +12,6 @@ from pfund.managers.base_manager import BaseManager
 
 def _start_process(api, stop_flag: Value):
     try:
-        from pfund.engines import TradeEngine
-
-        assigned_cpus = TradeEngine.assign_cpus(api.name)
-        current_process = psutil.Process()
-        if hasattr(current_process, 'cpu_affinity') and assigned_cpus:
-            current_process.cpu_affinity(assigned_cpus)
-        else:
-            api.logger.debug('cpu affinity is not supported')
-        
         api.start_zmqs()
         api.connect()
         if hasattr(api, 'get_servers'):
@@ -45,6 +36,8 @@ def _start_process(api, stop_flag: Value):
                             api.cancel_o(*info)
                         elif topic == 3:
                             api.amend_o(*info)
+                else:
+                    time.sleep(0.001)  # avoid busy-waiting
         else:
             api.disconnect(reason='stop process')
             api.stop_zmqs()

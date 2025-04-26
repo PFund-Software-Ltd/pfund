@@ -12,13 +12,16 @@ class BaseAccount:
     def __init__(self, env: Environment, bkr: Broker, name: str='', **kwargs):
         self.env = env
         self.bkr = bkr
-        name = name or 'ACC-' + self.add_account_num()  # may have same oid if running multiple bots; must less than 36 chars for binance
+        name = name or self._get_default_name()
         self.name = self.acc = name.upper()
         for k, v in kwargs.items():
             setattr(self, k, v)
         if not hasattr(self, 'strat'):
             self.strat = ''
 
+    def _get_default_name(self):
+        return self.__class__.__name__ + '-' + self.add_account_num()
+    
     def __str__(self):
         return f'Broker={self.bkr.value}|Account={self.name}|Strategy={self.strat}'
 

@@ -17,12 +17,11 @@ classifiers = [
     "Topic :: Office/Business :: Financial :: Investment",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Application Frameworks",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "mtflow (>=0.0.1.dev2,<0.1.0)",
     "pfolio (>=0.0.2,<0.1.0)",
@@ -34,8 +33,7 @@ dependencies = [
     "orjson (>=3.10.16,<4.0.0)",
     "requests (>=2.31.0,<3.0.0)",  # TODO: to be removed
     "httpx (>=0.28.1,<0.29.0)",
-    "websocket-client (>=1.8.0,<2.0.0)",  # TODO: to be removed
-    "websockets (>=15.0.1,<16.0.0)",
+    "websocket-client (>=1.8.0,<2.0.0)",
     "ta (>=0.11.0,<0.12.0)",
     "scikit-learn (>=1.6.1,<2.0.0)",
 ]
@@ -44,7 +42,9 @@ dependencies = [
 core = [
     "mtflow[core] (>=0.0.1.dev2,<0.1.0)",
     "pfolio[core] (>=0.0.2,<0.1.0)",
+    "order-book (>=0.6.1,<0.7.0)",
 ]
+# kafka = ["confluent-kafka (>=2.8.2,<3.0.0)"]
 telegram = ["python-telegram-bot (>=21.11.1,<22.0.0)"]
 
 [project.scripts]
@@ -68,7 +68,7 @@ pfund-plot = {path = "../pfund-plot", extras = ["core"], develop = true}
 mtflow = {path = "../mtflow", extras = ["core"], develop = true}
 torch = "^2.6.0"
 ta-lib = "^0.6.3"
-pybit = "^5.8.0"
+pybit = "^5.10.1"
 mypy = "^1.11.2"
 ruff = "^0.6.9"
 

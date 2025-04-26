@@ -20,6 +20,10 @@ class DataConfig(BaseModel):
         gt=0,
         description='the number of price levels tracked for both buy (bid) and sell (ask) orders in a market order book.'
     )
+    fast_orderbook: bool = Field(
+        default=True,
+        description='use fast orderbook data structure written in C.'
+    )
     resample: dict[Annotated[Resolution, "ResampleeResolution"], Annotated[Resolution, "ResamplerResolution"]] = Field(
         default_factory=dict, 
         description='key is the resolution to resample to (resamplee), value is the resolution to resample from (resampler), e.g. {"1h": "1m"} means 1 hour bar is resampled by 1 minute bar.'
