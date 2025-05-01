@@ -173,9 +173,9 @@ class TradeMixin:
         return time.time() - ts
     
     @staticmethod
-    def is_ray_actor() -> bool:
+    def is_ray_actor(value) -> bool:
         from ray.actor import ActorClass
-        return False
+        return isinstance(value, ActorClass)
     
     def is_strategy(self: BaseStrategy | BaseModel) -> bool:
         return self.component_type == ComponentType.strategy
