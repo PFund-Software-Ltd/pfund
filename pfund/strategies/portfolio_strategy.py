@@ -95,10 +95,10 @@ class PortfolioStrategy(BaseStrategy):
         else:
             raise ValueError('Optimization strategy not provided.')
     
-    @backtest
-    def backtest(self):
+    # TODO: how to handle rebalancing? separate vectorized backtesting based on rebalancing_period?
+    # TODO: also create the event-driven version
+    # @backtest
+    # def backtest(self):
         # long holding
-        self.df['position'] = 1
-        # TODO: how to handle rebalancing? separate vectorized backtesting based on rebalancing_period?
-        # TODO: also create the event-driven version
-        return self.df
+        # self.df['position'] = 1
+        # return self.df

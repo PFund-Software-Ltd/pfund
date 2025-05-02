@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     from pfeed.typing import tDATA_SOURCE
     from mtflow.messaging.zeromq import ZeroMQ
     from pfund.typing import StrategyT, DataConfigDict, tTRADING_VENUE, tCRYPTO_EXCHANGE
-    from pfund.brokers.broker_base import BaseBroker
+    from pfund.brokers.broker_trade import BaseBroker
     from pfund.products.product_base import BaseProduct
     from pfund.positions.position_base import BasePosition
     from pfund.positions.position_crypto import CryptoPosition
@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from pfund.models.model_base import BaseModel, BaseFeature
     from pfund.indicators.indicator_base import BaseIndicator
     from pfund.datas.data_bar import Bar
-    from pfund.data_tools import data_tool_backtest
     from pfund.data_tools.data_tool_base import BaseDataTool
 
 import os
@@ -31,8 +30,6 @@ from abc import ABC
 from mtflow.stores.trading_store import TradingStore
 from pfund.datas.resolution import Resolution
 from pfund.strategies.strategy_meta import MetaStrategy
-from pfund.engines import get_engine
-from pfund.utils.envs import backtest
 from pfund.mixins.trade_mixin import TradeMixin
 from pfund.enums import Broker
 from pfund.data_tools.data_config import DataConfig
@@ -43,7 +40,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self._args = args
         self._kwargs = kwargs
         self._name = self._get_default_name()
-        self._engine = get_engine()
+        self._engine = None
         self.logger = None
         self._is_running = False
         self._datas = defaultdict(dict)  # {product: {'1m': data}}
@@ -83,11 +80,6 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self.params = {}
         self.load_params()
 
-    # HACK: ideally no backtesting methods should be here, but it is required to improve IDE Intellisense
-    @backtest
-    def backtest(self, df: data_tool_backtest.BacktestDataFrame):
-        raise Exception(f'Strategy "{self.name}" does not have a backtest() method, cannot run vectorized backtesting')
-    
     def _set_trading_store(self):
         mtstore = self._engine.store
         self._store = mtstore.get_trading_store(self.name)

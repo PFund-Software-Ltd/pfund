@@ -46,7 +46,6 @@ from rich.console import Console
 
 from pfund.models.model_meta import MetaModel
 from pfund.utils.utils import short_path
-from pfund.engines import get_engine
 from pfund.mixins.trade_mixin import TradeMixin
 
 
@@ -56,7 +55,7 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         self._kwargs = kwargs
         self.ml_model = ml_model  # user-defined machine learning model
         self.name = self._get_default_name()
-        self._engine = get_engine()
+        self._engine = None
         self.logger = None
         self._is_running = False
         self._is_ready = defaultdict(bool)  # {data: bool}

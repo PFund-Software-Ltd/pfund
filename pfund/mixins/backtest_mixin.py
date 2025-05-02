@@ -205,6 +205,39 @@ class BacktestMixin:
         data_config: DataConfigDict | None=None,
         **product_specs
     ) -> list[BaseData]:
+        # REVIEW
+        def _force_primary_resolution_as_resampler(data_config: DataConfigDict):
+            '''force using the primary resolution as a resampler for any extra resolutions that are <= primary resolution
+            e.g. resolution='1m', extra_resolutions=['1h'], force 'resample' to be {'1h': '1m'}
+            since in live trading, multiple data resolutions can be subscribed, i.e. data of '1h' and '1m' can be both subscribed,
+            but in backtesting, only the primary resolution will be used for event-driven backtesting, 
+            so need to force 'resample' to be {'1h': '1m'}
+            '''
+            extra_resolutions = data_config.get('extra_resolutions', [])
+            primary_resolution = self._resolution
+            for resolution in extra_resolutions:
+                if resolution < primary_resolution:
+                    if resolution._value() % primary_resolution._value() == 0:
+                        data_config['resample'][resolution] = primary_resolution
+                    else:
+                        raise Exception(f'extra_resolution={resolution} is not supported for auto_resampling, since it is not a multiple of resolution={primary_resolution}')
+        # REVIEW
+        def _set_default_skip_first_bar(data_config: DataConfigDict):
+            extra_resolutions = data_config.get('extra_resolutions', [])
+            primary_resolution = self._resolution
+            skip_first_bar = data_config.get('skip_first_bar', {})
+            shift = data_config.get('shift', {})
+            bar_resolutions = [resolution for resolution in [primary_resolution] + extra_resolutions if resolution.is_bar()]
+            for resolution in bar_resolutions:
+                # In backtesting, the first bar might be incomplete due to shifting 
+                # e.g. hourly bar shifts 30 minutes, first bar is 00:00 to 00:30, which is incomplete
+                if resolution not in skip_first_bar and resolution in shift:
+                    skip_first_bar[resolution] = True
+            
+        if data_config:
+            _force_primary_resolution_as_resampler(data_config)
+            _set_default_skip_first_bar(data_config)
+            
         datas: list[TimeBasedData] = super().add_data(trading_venue, product, data_source=data_source, from_storage=from_storage, data_config=data_config, **product_specs)
         use_tick_or_quote = any(data.resolution.is_tick() or data.resolution.is_quote() for data in datas)
         if use_tick_or_quote:

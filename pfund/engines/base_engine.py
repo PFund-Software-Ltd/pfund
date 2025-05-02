@@ -5,8 +5,8 @@ if TYPE_CHECKING:
     from mtflow.kernel import TradeKernel
     from pfeed.typing import tDATA_TOOL
     from pfund.typing import StrategyT, tENVIRONMENT, tBROKER, DataRangeDict, tDATABASE
-    from pfund.typing import TradeEngineSettingsDict, BacktestEngineSettingsDict, ExternalListenersDict
-    from pfund.brokers.broker_base import BaseBroker
+    from pfund.typing import ExternalListenersDict
+    from pfund.brokers.broker_trade import BaseBroker
     from pfund.brokers.broker_crypto import CryptoBroker
     from pfund.brokers.ib.broker_ib import IBBroker
     from pfund.strategies.strategy_base import BaseStrategy
@@ -20,7 +20,7 @@ import importlib
 
 from pfeed.enums import DataTool
 from pfund import cprint
-from pfund.utils.utils import Singleton
+from pfund.engines.meta_engine import MetaEngine
 from pfund.enums import Environment, Broker, RunMode, Database
 from pfund.external_listeners import ExternalListeners
 
@@ -36,16 +36,23 @@ ENV_COLORS = {
 }
 
 
-class BaseEngine(Singleton):
+class BaseEngine(metaclass=MetaEngine):
+    _initialized: ClassVar[bool] = False
     _env: ClassVar[Environment]
     _run_mode: ClassVar[RunMode]
     data_tool: ClassVar[DataTool]
+    dataset_start: ClassVar[datetime.date]
+    dataset_end: ClassVar[datetime.date]
     database: ClassVar[tDATABASE | None]
     settings: ClassVar[TradeEngineSettings | BacktestEngineSettings]
     external_listeners: ClassVar[ExternalListenersDict | None]
     
+    _logger: logging.Logger
     _store: MTStore
     _kernel: TradeKernel | None
+    _brokers: dict[str, BaseBroker]
+    _strategies: dict[str, BaseStrategy]
+    
         
     def __init__(
         self, 
@@ -86,34 +93,46 @@ class BaseEngine(Singleton):
         from mtflow.stores.mtstore import MTStore
         
         cls = self.__class__
-        env = Environment[env.upper()]
-        cls._env = env
-        cls.data_tool = DataTool[data_tool.lower()]
-        cls.database = Database[database.upper()] if database else None
-        if is_wasm():
-            cls._run_mode = RunMode.WASM
-            assert not use_ray, 'Ray is not supported in WASM mode'
-        else:
-            cls._run_mode = RunMode.REMOTE if use_ray else RunMode.LOCAL
-        cls.settings = settings
+        if not hasattr(cls, "_initialized"):
+            env = Environment[env.upper()]
+            cls._env = env
+            if is_wasm():
+                cls._run_mode = RunMode.WASM
+                assert not use_ray, 'Ray is not supported in WASM mode'
+            else:
+                cls._run_mode = RunMode.REMOTE if use_ray else RunMode.LOCAL
+            cls.data_tool = DataTool[data_tool.lower()]
+            cls.database = Database[database.upper()] if database else None
+            cls.settings = settings
+            cls.external_listeners = ExternalListeners(**(external_listeners or {}))
+            if cls.external_listeners.recorder is False and cls.database is not None:
+                cprint(
+                    'WARNING: `database` is set but recorder is disabled in `external_listeners`, '
+                    'data will be written to the database by the engine itself, which will introduce latency',
+                    style='bold yellow'
+                )
+            is_data_range_dict = isinstance(data_range, dict)
+            cls.dataset_start, cls.dataset_end = TimeBasedFeed._parse_date_range(
+                start_date=data_range['start_date'] if is_data_range_dict else '',
+                end_date=data_range.get('end_date', '') if is_data_range_dict else '',
+                rollback_period=data_range if not is_data_range_dict else '',
+            )
+            cls._initialized = True
+            type(cls).lock()  # Locks any future class modifications
+
 
         # FIXME:
         if env == Environment.BACKTEST:
-            assert self.__class__.__name__ == 'BacktestEngine', f'{env=} is only allowed to be created using BacktestEngine'
+            assert cls.__name__ == 'BacktestEngine', f'{env=} is only allowed to be created using BacktestEngine'
         cprint(f"{env} Engine is running", style=ENV_COLORS[env])
         
-        # TODO, do NOT allow PAPER, LIVE env for now
-        assert env not in [Environment.PAPER, Environment.LIVE], f"{env=} is not allowed for now"
         
-        cls.external_listeners = ExternalListeners(**(external_listeners or {}))
-        if cls.external_listeners.recorder is False and cls.database is not None:
-            cprint(
-                'WARNING: `database` is set but recorder is disabled in `external_listeners`, '
-                'data will be written to the database by the engine itself, which will introduce latency',
-                style='bold yellow'
-            )
-
+        # FIXME: do NOT allow LIVE env for now
+        assert env != Environment.LIVE, f"{env=} is not allowed for now"
+        
+        
         self._setup_logging()
+        self._logger = logging.getLogger('pfund')
         self._store = MTStore(env=cls._env, data_tool=cls.data_tool)
         self._kernel = TradeKernel(
             mode=cls._run_mode,
@@ -122,39 +141,9 @@ class BaseEngine(Singleton):
             zmq_urls=cls.settings.zmq_urls,
             zmq_ports=cls.settings.zmq_ports,
         )
-        self._logger = logging.getLogger('pfund')
-
-        is_data_range_dict = isinstance(data_range, dict)
-        self._dataset_start, self._dataset_end = TimeBasedFeed._parse_data_range({
-            'start_date': data_range['start_date'] if is_data_range_dict else '',
-            'end_date': data_range.get('end_date', '') if is_data_range_dict else '',
-            'rollback_period': data_range if not is_data_range_dict else '',
-        })
-        
         self._brokers = {}
         self._strategies = {}
-        self._initialized = True
         
-    @property
-    def env(self) -> Environment:
-        return self._env
-    
-    @property
-    def run_mode(self) -> RunMode:
-        return self._run_mode
-    
-    @property
-    def dataset_start(self) -> datetime.date:
-        return self._dataset_start
-    
-    @property
-    def dataset_end(self) -> datetime.date:
-        return self._dataset_end
-    
-    @property
-    def store(self) -> MTStore:
-        return self._store
-    
     @property
     def brokers(self) -> dict[str, BaseBroker]:
         return self._brokers
@@ -167,7 +156,7 @@ class BaseEngine(Singleton):
         from pfund._logging import setup_loggers
         from pfund import get_config
         config = get_config()
-        log_path = f'{config.log_path}/{self.env.lower()}'
+        log_path = f'{config.log_path}/{self._env.lower()}'
         logging_config_file_path = config.logging_config_file_path
         logging_configurator  = setup_loggers(log_path, logging_config_file_path, user_logging_config=config.logging_config)
         config.set_logging_configurator(logging_configurator)

@@ -18,7 +18,7 @@ from pfund.positions.position_crypto import CryptoPosition
 from pfund.balances.balance_crypto import CryptoBalance
 from pfund.accounts.account_crypto import CryptoAccount
 from pfund.utils.utils import convert_to_uppercases
-from pfund.brokers.broker_base import BaseBroker
+from pfund.brokers.broker_trade import BaseBroker
 from pfund.enums import CryptoExchange, PublicDataChannel, PrivateDataChannel, DataChannelType
 
 

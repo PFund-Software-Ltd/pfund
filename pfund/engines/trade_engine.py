@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from pfund.typing import DataRangeDict, TradeEngineSettingsDict, tDATABASE, ExternalListenersDict
 
 from pfund.engines.base_engine import BaseEngine
-from pfund.brokers.broker_base import BaseBroker
+from pfund.brokers.broker_trade import BaseBroker
 
 
 class TradeEngine(BaseEngine):
@@ -37,22 +37,20 @@ class TradeEngine(BaseEngine):
         df_min_rows: int=1_000,
         df_max_rows: int=3_000,
     ):  
-        # avoid re-initialization to implement singleton class correctly
-        if not hasattr(self, '_initialized'):
-            from pfund.engines.trade_engine_settings import TradeEngineSettings
-            super().__init__(
-                env=env,
-                use_ray=use_ray,
-                data_tool=data_tool, 
-                data_range=data_range, 
-                database=database,
-                settings=TradeEngineSettings(**(settings or {})),
-                external_listeners=external_listeners,
-            )
-            self.broker_data_source = broker_data_source
-            # TODO:
-            # self.DataTool.set_min_rows(df_min_rows)
-            # self.DataTool.set_max_rows(df_max_rows)
+        from pfund.engines.trade_engine_settings import TradeEngineSettings
+        super().__init__(
+            env=env,
+            use_ray=use_ray,
+            data_tool=data_tool, 
+            data_range=data_range, 
+            database=database,
+            settings=TradeEngineSettings(**(settings or {})),
+            external_listeners=external_listeners,
+        )
+        self.broker_data_source = broker_data_source
+        # TODO:
+        # self.DataTool.set_min_rows(df_min_rows)
+        # self.DataTool.set_max_rows(df_max_rows)
 
     def _create_broker(self, bkr: str) -> BaseBroker:
         Broker = self.get_Broker(bkr)

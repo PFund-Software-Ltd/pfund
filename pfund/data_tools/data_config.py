@@ -4,8 +4,6 @@ from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 from pfund.datas.resolution import Resolution
 from pfund.enums import Environment
-from pfund.utils.envs import backtest
-from pfund.engines import get_engine        
 
 
 # TODO: add private channels? remove _add_default_private_channels in exchange_base.py
@@ -45,21 +43,6 @@ class DataConfig(BaseModel):
         default_factory=dict,
         description="time (in seconds) after a bar's expected completion (bar.end_ts) to wait for any delayed updates before flushing the bar."
     )
-    
-    @backtest
-    def _force_primary_resolution_as_resampler(self):
-        '''force using the primary resolution as a resampler for any extra resolutions that are <= primary resolution
-        e.g. resolution='1m', extra_resolutions=['1h'], force 'resample' to be {'1h': '1m'}
-        since in live trading, multiple data resolutions can be subscribed, i.e. data of '1h' and '1m' can be both subscribed,
-        but in backtesting, only the primary resolution will be used for event-driven backtesting, 
-        so need to force 'resample' to be {'1h': '1m'}
-        '''
-        for resolution in self.extra_resolutions:
-            if resolution < self.primary_resolution:
-                if resolution._value() % self.primary_resolution._value() == 0:
-                    self.resample[resolution] = self.primary_resolution
-                else:
-                    raise Exception(f'extra_resolution={resolution} is not supported for auto_resampling, since it is not a multiple of resolution={self.primary_resolution}')
     
     @property
     def resolutions(self) -> list[Resolution]:
@@ -158,10 +141,6 @@ class DataConfig(BaseModel):
         output_resample = {}
         input_resample = self.resample.copy()
 
-        env = get_engine().env
-        if env == Environment.BACKTEST:
-            self._force_primary_resolution_as_resampler()
-        
         for resolution in self.resolutions:
             # quote and tick data cannot be resamplee
             if resolution.is_quote() or resolution.is_tick() or resolution in input_resample:
@@ -209,15 +188,10 @@ class DataConfig(BaseModel):
         pass
     
     def _set_default_skip_first_bar(self, resolution: Resolution):
-        env = get_engine().env
         if resolution in self.skip_first_bar or not resolution.is_bar():
             return
-        # In backtesting, the first bar might be incomplete due to shifting 
-        # e.g. hourly bar shifts 30 minutes, first bar is 00:00 to 00:30, which is incomplete
-        if env == Environment.BACKTEST and resolution in self.shift:
-            default_skip_first_bar = True
-        # In live trading, the first bar is very likely incomplete due to resampling, excluding cases like resample={'1h': '60m'}
-        elif env != Environment.BACKTEST and resolution in self.resample and resolution != self.resample[resolution]:
+        # the first bar is very likely incomplete due to resampling, excluding cases like resample={'1h': '60m'}
+        if resolution in self.resample and resolution != self.resample[resolution]:
             default_skip_first_bar = True
         else:
             default_skip_first_bar = False

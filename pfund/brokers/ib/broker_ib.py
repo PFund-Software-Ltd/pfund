@@ -15,7 +15,7 @@ from pfund.orders.order_ib import IBOrder
 from pfund.positions.position_ib import IBPosition
 from pfund.balances.balance_ib import IBBalance
 from pfund.utils.utils import convert_to_uppercases
-from pfund.brokers.broker_base import BaseBroker
+from pfund.brokers.broker_trade import BaseBroker
 from pfund.brokers.ib.ib_api import IBApi
 from pfund.enums import PublicDataChannel, PrivateDataChannel
 

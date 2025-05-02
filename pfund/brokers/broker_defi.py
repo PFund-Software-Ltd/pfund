@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pfund.brokers.broker_base import BaseBroker
+from pfund.brokers.broker_trade import BaseBroker
 
 
 # TODO

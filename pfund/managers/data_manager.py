@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     from apscheduler.schedulers.background import BackgroundScheduler
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund.brokers.broker_base import BaseBroker
+    from pfund.brokers.broker_trade import BaseBroker
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.typing import ProductName, ResolutionRepr
 

@@ -5,11 +5,11 @@ if TYPE_CHECKING:
 
 from collections import defaultdict
 
-from pfund.brokers.broker_base import BaseBroker
+from pfund.brokers.broker_trade import BaseBroker
 
 
-def BacktestBroker(Broker: type[BaseBroker]) -> BaseBroker:
-    class _BacktestBroker(Broker):
+def BacktestBrokerFactory(Broker: type[BaseBroker]) -> type[BaseBroker]:
+    class BacktestBroker(Broker):
         _DEFAULT_INITIAL_BALANCES = {'BTC': 10, 'USD': 1_000_000}
         
         def __init__(self):
@@ -88,4 +88,4 @@ def BacktestBroker(Broker: type[BaseBroker]) -> BaseBroker:
         def amend_orders(self, account, product, orders):
             pass
 
-    return _BacktestBroker()
+    return BacktestBroker

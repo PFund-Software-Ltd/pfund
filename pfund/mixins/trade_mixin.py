@@ -8,10 +8,11 @@ if TYPE_CHECKING:
     from mtflow.stores.trading_store import TradingStore
     from pfeed.typing import tDATA_SOURCE
     from pfund.typing import ModelT, IndicatorT, FeatureT, DataConfigDict
+    from pfund.engines.base_engine import BaseEngine
     from pfund.typing import tTRADING_VENUE, tBROKER, tCRYPTO_EXCHANGE
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund.brokers.broker_base import BaseBroker
+    from pfund.brokers.broker_trade import BaseBroker
     from pfund.brokers.broker_crypto import CryptoBroker
     from pfund.brokers.ib.broker_ib import IBBroker
     from pfund.products.product_base import BaseProduct
@@ -71,7 +72,9 @@ class TradeMixin:
     dtl = data_tool
     
     def _create_data_tool(self: BaseStrategy | BaseModel) -> BaseDataTool:
-        data_tool = self._engine._data_tool
+        from pfund.engines.trade_engine import TradeEngine
+        
+        data_tool = TradeEngine.data_tool
         DataTool: type[BaseDataTool] = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool}'), f'{data_tool.value.capitalize()}DataTool')
         return DataTool()
     
@@ -192,6 +195,9 @@ class TradeMixin:
     def is_running(self: BaseStrategy | BaseModel):
         return self._is_running
     
+    def _set_engine(self: BaseStrategy | BaseModel, engine: BaseEngine | None):
+        self._engine: BaseEngine | None = engine
+    
     def _create_logger(self: BaseStrategy | BaseModel):
         from pfund._logging import create_dynamic_logger
         self.logger = create_dynamic_logger(self.name, self.component_type)
@@ -200,14 +206,15 @@ class TradeMixin:
     def _setup_zmq(self: BaseStrategy | BaseModel):
         import zmq
         from mtflow.messaging.zeromq import ZeroMQ
-        from pfund.engines.base_engine import BaseEngine
 
-        zmq_urls = BaseEngine.settings.zmq_urls
+        zmq_urls = self._engine.settings.zmq_urls
         self._zmq = ZeroMQ(
             url=zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL),
             receiver_socket_type=zmq.SUB,  # receive data from engine
             sender_socket_type=zmq.PUSH,  # send e.g. orders to engine
         )
+        # TODO: subscribe to selected topics, e.g. b'BYBIT:orderbook:BTCUSDT'
+        self._zmq.setsockopt(zmq.SUBSCRIBE, b'')
         
     def _prepare_df(self: BaseStrategy | BaseModel):
         return self.data_tool.prepare_df(ts_col_type='timestamp')
