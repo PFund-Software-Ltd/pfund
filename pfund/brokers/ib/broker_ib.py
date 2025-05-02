@@ -3,6 +3,8 @@ Conceptually, this is the equivalent of broker_crypto.py + exchange_base.py in c
 """
 from __future__ import annotations
 from typing import Literal, TYPE_CHECKING
+
+from pfund.config import Configuration
 if TYPE_CHECKING:
     from pfund.typing import tENVIRONMENT
     from pfund.data_tools.data_config import DataConfig
@@ -15,22 +17,22 @@ from pfund.orders.order_ib import IBOrder
 from pfund.positions.position_ib import IBPosition
 from pfund.balances.balance_ib import IBBalance
 from pfund.utils.utils import convert_to_uppercases
-from pfund.brokers.broker_trade import BaseBroker
+from pfund.brokers.broker_trade import TradeBroker
 from pfund.brokers.ib.ib_api import IBApi
 from pfund.enums import PublicDataChannel, PrivateDataChannel
 
 
-class IBBroker(BaseBroker):
+class IBBroker(TradeBroker):
     def __init__(self, env: tENVIRONMENT='SANDBOX', **configs):
         super().__init__(env, 'IB', **configs)
-        config_path = f'{PROJ_CONFIG_PATH}/{self.bkr.value.lower()}'
+        config_path = f'{PROJ_CONFIG_PATH}/{self._name.value.lower()}'
         self.configs = Configuration(config_path, 'config')
         self.adapter = Adapter(config_path, self.configs.load_config_section('adapter'))
         self.account = None
         
         # API
-        self._api = IBApi(self.env, self.adapter)
-        self.connection_manager.add_api(self._api)
+        self._api = IBApi(self._env, self.adapter)
+        self._connection_manager.add_api(self._api)
 
     def start(self, zmq=None):
         super().start(zmq=zmq)
@@ -81,7 +83,7 @@ class IBBroker(BaseBroker):
         exch = exch or self.derive_exch(product)
         exch, product_basis = exch.upper(), product.upper()
         product: IBProduct = self.add_product(exch, product_basis, symbol=symbol, **product_specs)
-        datas = self.data_manager.add_data(product, data_config=data_config)
+        datas = self._data_manager.add_data(product, data_config=data_config)
         datas_non_resamplee = [data for data in datas if not data.is_resamplee()]
         for data in datas_non_resamplee:
             self.add_data_channel(data, **kwargs)
@@ -117,19 +119,33 @@ class IBBroker(BaseBroker):
             product = self.create_product(exch, pdt, symbol=symbol, **kwargs)
             self._products[exch][product.name] = product
             self._api.add_product(product, **kwargs)
-            self.logger.debug(f'added product {product.name}')
+            self._logger.debug(f'added product {product.name}')
         return product
 
     def get_account(self, acc: str) -> IBAccount | None:
-        return self._accounts[self.bkr].get(acc.upper(), None)
+        return self._accounts[self._name].get(acc.upper(), None)
 
-    def add_account(self, host: str='', port: int=None, client_id: int=None, name: str='', **kwargs) -> IBAccount:
+    def _create_account(self, name: str, host: str, port: int | None, client_id: int | None) -> IBAccount:
+        return IBAccount(env=self._env, name=name, host=host, port=port, client_id=client_id)
+
+    def add_account(
+        self, 
+        name: str='', 
+        host: str='', 
+        port: int | None=None, 
+        client_id: int | None=None, 
+    ) -> IBAccount:
         if not (account := self.get_account(name)):
-            account = IBAccount(self.env, host=host, port=port, client_id=client_id, name=name, **kwargs)
-            self._accounts[self.bkr][account.name] = account
+            account = self._create_account(
+                name=name, 
+                host=host, 
+                port=port, 
+                client_id=client_id,
+            )
+            self._accounts[self._name][account.name] = account
             self.account = account
             self._api.add_account(account)
-            self.logger.debug(f'added {account=}')
+            self._logger.debug(f'added {account=}')
         else:
             # TODO
             if account.name != name.upper():
@@ -141,8 +157,8 @@ class IBBroker(BaseBroker):
         if not (balance := self.get_balances(acc=acc, ccy=ccy)):
             account = self.get_account(acc)
             balance = IBBalance(account, ccy)
-            self.portfolio_manager.add_balance(balance)
-            self.logger.debug(f'added {balance=}')
+            self._portfolio_manager.add_balance(balance)
+            self._logger.debug(f'added {balance=}')
         return balance
     
     def add_position(self, exch: str, acc: str, pdt: str) -> IBPosition | None:
@@ -151,15 +167,15 @@ class IBBroker(BaseBroker):
             account = self.get_account(acc)
             product = self.add_product(exch, pdt)
             position = IBPosition(account, product)
-            self.portfolio_manager.add_position(position)
-            self.logger.debug(f'added {position=}')
+            self._portfolio_manager.add_position(position)
+            self._logger.debug(f'added {position=}')
         return position
 
     def add_order(self, exch: str, acc: str, pdt: str) -> IBOrder | None:
         exch, acc, pdt = convert_to_uppercases(exch, acc, pdt)
         if not (order := self.get_orders(acc)):
             product = self.add_product(exch, pdt)
-            order = IBOrder(self.env, acc, product)
+            order = IBOrder(self._env, acc, product)
             self.orders[acc][order.oid] = order
         return order
     
@@ -243,5 +259,5 @@ class IBBroker(BaseBroker):
         return IBOrder(account, product, *args, **kwargs)
     
     def place_order(self, o):
-        self.order_manager.on_submitted(o)
+        self._order_manager.on_submitted(o)
         self._api.placeOrder(o.orderId, o.contract, o)

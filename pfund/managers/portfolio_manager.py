@@ -1,20 +1,25 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.brokers.broker_base import BaseBroker
+
 from collections import defaultdict
 
-from pfund.managers.base_manager import BaseManager
 from pfund.balances.balance_base import BaseBalance
 from pfund.positions.position_base import BasePosition
-from pfund.enums import Broker, Event
+from pfund.enums import Broker, Event, RunMode
 
 
-class PortfolioManager(BaseManager):
-    def __init__(self, broker):
-        super().__init__('portfolio_manager', broker)
+class PortfolioManager:
+    def __init__(self, broker: BaseBroker):
+        self._broker = broker
+        self._logger = broker._logger
         self.balances = defaultdict(lambda: defaultdict(dict))
         self.positions = defaultdict(lambda: defaultdict(dict))
 
     def push(self, pos_or_bal, event: Event):
         if strategy := self._engine.strategy_manager.get_strategy(pos_or_bal.strat):
-            if not self._engine._use_ray:
+            if self._broker._run_mode == RunMode.REMOTE:
                 if strategy.is_running():
                     if event == Event.position:
                         strategy.update_positions(pos_or_bal)
@@ -67,7 +72,7 @@ class PortfolioManager(BaseManager):
             del self.positions[exch][acc][pdt]
         else:
             del self.positions[acc][pdt][exch]
-        self.logger.debug(f'removed {position=}')
+        self._logger.debug(f'removed {position=}')
 
     def update_balances(self, trading_venue, acc, balances):
         ts = balances['ts']

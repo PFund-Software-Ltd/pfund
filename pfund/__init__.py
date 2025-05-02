@@ -4,7 +4,8 @@ if TYPE_CHECKING:
     # need these imports to support IDE hints:
     import pfund_plot as plot
     from pfund.const.aliases import ALIASES as aliases
-    from pfund.engines import BacktestEngine, TradeEngine
+    from pfund.engines.backtest_engine import BacktestEngine
+    from pfund.engines.trade_engine import TradeEngine
     from pfund.strategies.strategy_base import BaseStrategy as Strategy
     from pfund.models.model_base import BaseModel as Model, BaseFeature as Feature
     from pfund.models.pytorch_model import PytorchModel
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
     from pfund.indicators.talib_indicator import TalibIndicator
     from pfund.indicators.ta_indicator import TaIndicator
     from pfund.brokers.broker_crypto import CryptoBroker
+    from pfund.brokers.broker_defi import DeFiBroker
     from pfund.brokers.ib.broker_ib import (
         IBBroker,
         IBBroker as IB,
@@ -91,6 +93,9 @@ def __getattr__(name: str):
     elif name in ("IBBroker", 'IB'):
         from pfund.brokers.ib.broker_ib import IBBroker
         return IBBroker
+    elif name == "DeFiBroker":
+        from pfund.brokers.broker_defi import DeFiBroker
+        return DeFiBroker
     elif name in ("BybitExchange", "Bybit"):
         from pfund.exchanges.bybit.exchange import Exchange
         return Exchange
@@ -127,6 +132,7 @@ __all__ = (
     'TaIndicator',
     'CryptoBroker',
     'IBBroker',
+    'DeFiBroker',
     'BybitExchange',
     'BinanceExchange',
     'OkxExchange',

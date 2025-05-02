@@ -12,13 +12,12 @@ message queue.
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfeed.enums import DataSource
     from pfeed.typing import tDATA_TOOL
-    from pfund.enums import TradFiBroker
+    from pfund.brokers.broker_trade import TradeBroker
+    from pfund.brokers.broker_simulated import SimulatedBroker
     from pfund.typing import DataRangeDict, TradeEngineSettingsDict, tDATABASE, ExternalListenersDict
 
 from pfund.engines.base_engine import BaseEngine
-from pfund.brokers.broker_trade import BaseBroker
 
 
 class TradeEngine(BaseEngine):
@@ -31,8 +30,6 @@ class TradeEngine(BaseEngine):
         database: tDATABASE | None=None,
         settings: TradeEngineSettingsDict | None=None,
         external_listeners: ExternalListenersDict | None=None,
-        # TODO: handle "broker_data_source", e.g. {'IB': 'DATABENTO'}
-        broker_data_source: dict[TradFiBroker, DataSource] | None=None,
         # TODO: move inside settings?
         df_min_rows: int=1_000,
         df_max_rows: int=3_000,
@@ -47,19 +44,25 @@ class TradeEngine(BaseEngine):
             settings=TradeEngineSettings(**(settings or {})),
             external_listeners=external_listeners,
         )
-        self.broker_data_source = broker_data_source
         # TODO:
         # self.DataTool.set_min_rows(df_min_rows)
         # self.DataTool.set_max_rows(df_max_rows)
 
-    def _create_broker(self, bkr: str) -> BaseBroker:
-        Broker = self.get_Broker(bkr)
-        broker = Broker(self.env)
+    def _create_broker(self, bkr: str) -> SimulatedBroker | TradeBroker:
+        from pfund.enums import Environment
+        if self._env == Environment.SANDBOX:
+            from pfund.brokers.broker_simulated import SimulatedBrokerFactory
+            SimulatedBroker = SimulatedBrokerFactory(bkr)
+            broker = SimulatedBroker(self._env)
+        else:
+            from pfund.enums import Broker
+            BrokerClass = Broker[bkr.upper()].broker_class
+            broker = BrokerClass(self._env)
         return broker
     
     def _check_processes(self):
-        for broker in self.brokers.values():
-            connection_manager = broker.cm
+        for broker in self._brokers.values():
+            connection_manager = broker._connection_manager
             trading_venues = connection_manager.get_trading_venues()
             if reconnect_trading_venues := [trading_venue for trading_venue in trading_venues if not connection_manager.is_process_healthy(trading_venue)]:
                 connection_manager.reconnect(reconnect_trading_venues, reason='process not responding')
@@ -99,7 +102,7 @@ class TradeEngine(BaseEngine):
         for strat in list(self.strategies):
             self.strategy_manager.stop(strat, in_parallel=self._use_ray, reason='end')
             self.remove_strategy(strat)
-        for broker in list(self.brokers.values()):
+        for broker in list(self._brokers.values()):
             broker.stop()
             self.remove_broker(broker.name)
         self._zmq.stop()

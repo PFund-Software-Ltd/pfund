@@ -140,7 +140,7 @@ class BaseWebsocketApi(ABC):
         return list(self._zmqs.values())
 
     def start_zmqs(self):
-        from pfund.engines import TradeEngine
+        from pfund.engines.trade_engine import TradeEngine
         zmq_ports = TradeEngine.settings['zmq_ports']
         for ws_name in self.get_all_ws_names():
             if ws_name in self._servers:

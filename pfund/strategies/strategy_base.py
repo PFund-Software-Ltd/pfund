@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     from pfeed.typing import tDATA_SOURCE
     from mtflow.messaging.zeromq import ZeroMQ
     from pfund.typing import StrategyT, DataConfigDict, tTRADING_VENUE, tCRYPTO_EXCHANGE
-    from pfund.brokers.broker_trade import BaseBroker
+    from pfund.brokers.broker_base import BaseBroker
     from pfund.products.product_base import BaseProduct
     from pfund.positions.position_base import BasePosition
     from pfund.positions.position_crypto import CryptoPosition
@@ -22,10 +22,12 @@ if TYPE_CHECKING:
     from pfund.indicators.indicator_base import BaseIndicator
     from pfund.datas.data_bar import Bar
     from pfund.data_tools.data_tool_base import BaseDataTool
+    from pfund.risk_guard import RiskGuard
+    from pfund.data_tools import data_tool_backtest
 
 import os
 from collections import defaultdict, deque
-from abc import ABC
+from abc import ABC, abstractmethod
 
 from mtflow.stores.trading_store import TradingStore
 from pfund.datas.resolution import Resolution
@@ -80,9 +82,17 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self.params = {}
         self.load_params()
 
+    @abstractmethod
+    def backtest(self, df: data_tool_backtest.BacktestDataFrame):
+        pass
+
     def _set_trading_store(self):
-        mtstore = self._engine.store
+        mtstore = self._engine._store
         self._store = mtstore.get_trading_store(self.name)
+        
+    # TODO:
+    def add_risk_guard(self, risk_guard: RiskGuard):
+        pass
     
     # TODO
     def is_ready(self):
@@ -120,9 +130,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         zmq_msg = (0, 0, (self.strat,))
         self._zmq.send(*zmq_msg, receiver='engine')
 
-    def get_zmq(self):
-        return self._zmq
-
+    # FIXME
     def start_zmq(self):
         zmq_ports = self._engine.zmq_ports
         self._zmq = ZeroMQ(self.name)
@@ -167,29 +175,48 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         return [balance for ccy_to_balance in self.balances.values() for balance in ccy_to_balance.values()]
     
     @overload
-    def get_account(self, trading_venue: tCRYPTO_EXCHANGE, acc: str='') -> CryptoAccount: ...
+    def get_account(self, trading_venue: tCRYPTO_EXCHANGE, name: str='') -> CryptoAccount: ...
         
     @overload
-    def get_account(self, trading_venue: Literal['IB'], acc: str='') -> IBAccount: ...
+    def get_account(self, trading_venue: Literal['IB'], name: str='') -> IBAccount: ...
     
-    def get_account(self, trading_venue: tTRADING_VENUE, acc: str='') -> BaseAccount:
-        trading_venue, acc = trading_venue.upper(), acc.upper()
-        if not acc:
-            acc = next(iter(self.accounts[trading_venue]))
-            self.logger.warning(f"{trading_venue} account not specified, using first account '{acc}'")
-        return self.accounts[trading_venue][acc]
+    def get_account(self, trading_venue: tTRADING_VENUE, name: str='') -> BaseAccount:
+        trading_venue, name = trading_venue.upper(), name.upper()
+        if not name:
+            name = next(iter(self.accounts[trading_venue]))
+            self.logger.warning(f"{trading_venue} account not specified, using first account '{name}'")
+        return self.accounts[trading_venue][name]
     
     def list_accounts(self) -> list[BaseAccount]:
         return [account for accounts_per_trading_venue in self.accounts.values() for account in accounts_per_trading_venue.values()]
     
-    def add_account(self, trading_venue: tTRADING_VENUE, acc: str='', **kwargs) -> BaseAccount:
-        trading_venue, acc = trading_venue.upper(), acc.upper()
+    @overload
+    def add_account(
+        self, 
+        trading_venue: tCRYPTO_EXCHANGE, 
+        name: str='', 
+        key: str='', 
+        secret: str='', 
+    ) -> CryptoAccount: ...
+    
+    @overload
+    def add_account(
+        self,
+        trading_venue: Literal['IB'],
+        name: str='',
+        host: str='',
+        port: int | None=None,
+        client_id: int | None=None,
+    ) -> IBAccount: ...
+    
+    def add_account(self, trading_venue: tTRADING_VENUE, name: str='', **kwargs) -> BaseAccount:
+        trading_venue, name = trading_venue.upper(), name.upper()
         broker: BaseBroker = self.add_broker(trading_venue)
         if broker.name == Broker.CRYPTO:
             exch = trading_venue
-            account =  broker.add_account(exch=exch, acc=acc, strat=self.name, **kwargs)
+            account =  broker.add_account(exch=exch, name=name or self.name, **kwargs)
         else:
-            account = broker.add_account(acc=acc, strat=self.name, **kwargs)
+            account = broker.add_account(name=name or self.name, **kwargs)
         if account.name not in self.accounts[trading_venue]:
             self.accounts[trading_venue][account.name] = account
             self.positions[account] = {}
@@ -236,7 +263,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
                 self._add_data(data)
                 broker._add_data_listener(self, data)
                 if data.resolution == self.resolution:
-                    self._engine.store.register_market_data(
+                    self._engine._store.register_market_data(
                         consumer=self.name,
                         data_source=data_source,
                         data_origin=data_origin,
@@ -332,7 +359,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         pass
     
     def _register_to_mtstore(self):
-        mtstore = self._engine.store
+        mtstore = self._engine._store
         components = [*self.strategies.values(), *self.models.values(), *self.features.values(), *self.indicators.values()]
         for component in components:
             metadata = component.to_dict()

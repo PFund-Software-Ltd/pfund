@@ -9,21 +9,17 @@ class BaseAccount:
         cls.num += 1
         return str(cls.num)
     
-    def __init__(self, env: Environment, bkr: Broker, name: str='', **kwargs):
+    def __init__(self, env: Environment, bkr: Broker, name: str=''):
         self.env = env
         self.bkr = bkr
         name = name or self._get_default_name()
         self.name = self.acc = name.upper()
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-        if not hasattr(self, 'strat'):
-            self.strat = ''
 
     def _get_default_name(self):
         return self.__class__.__name__ + '-' + self.add_account_num()
     
     def __str__(self):
-        return f'Broker={self.bkr.value}|Account={self.name}|Strategy={self.strat}'
+        return f'Broker={self.bkr.value}|Account={self.name}'
 
     def __repr__(self):
         return f'{self.bkr.value}:{self.name}'

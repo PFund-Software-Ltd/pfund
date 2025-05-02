@@ -1,4 +1,7 @@
-class MetaEngine(type):
+from abc import ABCMeta
+
+
+class MetaEngine(ABCMeta):
     _locked = False
 
     def __setattr__(cls, key, value):
@@ -8,5 +11,3 @@ class MetaEngine(type):
 
     def lock(cls):
         cls._locked = True
-        
-    

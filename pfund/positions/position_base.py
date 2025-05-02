@@ -17,7 +17,6 @@ class BasePosition:
         self.bkr = product.bkr
         self.exch = product.exch
         self.acc = account.acc
-        self.strat = account.strat
         self.pdt = product.name
         self.pair, self.ptype = product.pair, product.ptype
         self.bccy, self.qccy = product.bccy, product.qccy

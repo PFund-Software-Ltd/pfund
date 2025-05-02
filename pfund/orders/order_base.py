@@ -20,6 +20,7 @@ from pfund.orders.order_statuses import *
 class BaseOrder:
     def __init__(
         self, 
+        strategy_name: str,
         account: BaseAccount,
         product: BaseProduct,
         side: int | str,
@@ -35,7 +36,7 @@ class BaseOrder:
         **kwargs
     ):
         self.logger = logging.getLogger('orders')
-        self.strat = account.strat
+        self.strat = strategy_name
         self.acc = account.acc
         self.account = account
         self.bkr = product.bkr

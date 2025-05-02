@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from pfund.models.model_base import BaseModel
     from pfund.mixins.backtest_mixin import BacktestMixin
     from pfund.models.dataset_splitter import CrossValidatorDatasetPeriods, DatasetPeriods
-    from pfund.brokers.broker_backtest import BacktestBroker
+    from pfund.brokers.broker_simulated import SimulatedBroker
 
 import os
 import inspect
@@ -85,6 +85,7 @@ class BacktestEngine(BaseEngine):
         )
         if cls._backtest_mode == BacktestMode.vectorized:
             self._kernel = None
+        assert use_ray_on in ('dataset', 'component', None), f'{use_ray_on=} is not supported'
         self._use_ray_on = use_ray_on
         self._dataset_splitter = DatasetSplitter(
             dataset_start=self.dataset_start,
@@ -204,11 +205,10 @@ class BacktestEngine(BaseEngine):
             signal_cols=signal_cols,
         )
     
-    def _create_broker(self, bkr: str) -> BacktestBroker:
-        from pfund.brokers.broker_backtest import BacktestBrokerFactory
-        Broker = self.get_Broker(bkr)
-        BacktestBroker = BacktestBrokerFactory(Broker)
-        broker = BacktestBroker()
+    def _create_broker(self, bkr: str) -> SimulatedBroker:
+        from pfund.brokers.broker_simulated import SimulatedBrokerFactory
+        SimulatedBroker = SimulatedBrokerFactory(bkr)
+        broker = SimulatedBroker(self._env)
         return broker
     
     def _assert_backtest_function(self, backtestee: BaseStrategy | BaseModel):

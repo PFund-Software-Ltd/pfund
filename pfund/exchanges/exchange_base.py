@@ -241,7 +241,7 @@ class BaseExchange(ABC):
         return trades_combined
     
     def start(self):
-        from pfund.engines import TradeEngine
+        from pfund.engines.trade_engine import TradeEngine
         zmq_ports = TradeEngine.settings['zmq_ports']
         self._zmq = ZeroMQ(self.exch+'_'+'rest_api')
         self._zmq.start(

@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from pfund.typing import tTRADING_VENUE, tBROKER, tCRYPTO_EXCHANGE
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund.brokers.broker_trade import BaseBroker
+    from pfund.brokers.broker_trade import TradeBroker
     from pfund.brokers.broker_crypto import CryptoBroker
     from pfund.brokers.ib.broker_ib import IBBroker
     from pfund.products.product_base import BaseProduct
@@ -264,14 +264,14 @@ class TradeMixin:
     @overload
     def get_broker(self: BaseStrategy | BaseModel, bkr: Literal['IB']) -> IBBroker: ...
     
-    def get_broker(self: BaseStrategy | BaseModel, trading_venue_or_broker: tBROKER | tTRADING_VENUE) -> BaseBroker:
+    def get_broker(self: BaseStrategy | BaseModel, trading_venue_or_broker: tBROKER | tTRADING_VENUE) -> TradeBroker:
         if trading_venue_or_broker in Broker.__members__:
             bkr = trading_venue_or_broker
         else:
             bkr = self._derive_bkr_from_trading_venue(trading_venue_or_broker)
         return self._engine.get_broker(bkr)
     
-    def list_brokers(self: BaseStrategy | BaseModel) -> list[BaseBroker]:
+    def list_brokers(self: BaseStrategy | BaseModel) -> list[TradeBroker]:
         return list(self._engine.brokers.values())
     
     @overload

@@ -40,7 +40,7 @@ def __getattr__(name):
     if name == 'BacktestDataFrame':
         from pfeed.enums import DataTool
         from pfund.data_tools.data_tool_backtest import _BacktestDataFrame
-        from pfund.engines import BacktestEngine
+        from pfund.engines.backtest_engine import BacktestEngine
         data_tool = BacktestEngine.DataTool.name
         if data_tool == DataTool.pandas:
             import pandas as pd

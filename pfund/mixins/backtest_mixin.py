@@ -196,6 +196,7 @@ class BacktestMixin:
         for model in self.models.values():
             model.clear_dfs()
     
+    # TODO: add data_generator to add_data()
     def add_data(
         self: BaseStrategy | BaseModel, 
         trading_venue: tTRADING_VENUE, 

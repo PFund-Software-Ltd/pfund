@@ -22,7 +22,6 @@ class BaseBalance:
         self.bkr = account.bkr
         self.account = account
         self.acc = account.acc
-        self.strat = account.strat
         # EXTEND: add Currency class (≈ Product), e.g. CryptoCurrency, FiatCurrency, ...
         # but need to find a way to add data/info/specs to each currency, e.g. region, country, ...
         self.ccy = ccy

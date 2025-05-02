@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     from apscheduler.schedulers.background import BackgroundScheduler
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund.brokers.broker_trade import BaseBroker
+    from pfund.brokers.broker_base import BaseBroker
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.typing import ProductName, ResolutionRepr
 
@@ -111,14 +111,14 @@ class DataManager(BaseManager):
         product, resolution = self._convert_product_and_resolution_to_str(product, resolution)
         if data := self.get_data(product, resolution):
             del self._datas[product][resolution]
-            self.logger.debug(f'removed {product} {resolution} data')
+            self._logger.debug(f'removed {product} {resolution} data')
             return data
 
     def add_data(self, product: BaseProduct, data_config: DataConfig) -> list[TimeBasedData]:
         supported_resolutions = self.get_supported_resolutions(product.bkr, product.exch)
         is_auto_resampled = data_config.auto_resample(supported_resolutions)
         if is_auto_resampled:
-            self.logger.warning(f'{product} resolution={data_config.primary_resolution} extra_resolutions={data_config.extra_resolutions} data is auto-resampled to:\n{pformat(data_config.resample)}')
+            self._logger.warning(f'{product} resolution={data_config.primary_resolution} extra_resolutions={data_config.extra_resolutions} data is auto-resampled to:\n{pformat(data_config.resample)}')
         
         datas: list[TimeBasedData] = []
         for resolution in data_config.resolutions:
@@ -131,7 +131,7 @@ class DataManager(BaseManager):
             data_resamplee = self.get_data(product, resamplee_resolution)
             data_resampler = self.get_data(product, resampler_resolution)
             data_resamplee.bind_resampler(data_resampler)
-            self.logger.debug(f'{product} resolution={resampler_resolution} (resampler) added listener resolution={resamplee_resolution} (resamplee) data')
+            self._logger.debug(f'{product} resolution={resampler_resolution} (resampler) added listener resolution={resamplee_resolution} (resamplee) data')
         return datas
 
     def update_quote(self, product: ProductName, quote: dict):

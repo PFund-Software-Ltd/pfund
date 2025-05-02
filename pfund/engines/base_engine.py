@@ -6,9 +6,10 @@ if TYPE_CHECKING:
     from pfeed.typing import tDATA_TOOL
     from pfund.typing import StrategyT, tENVIRONMENT, tBROKER, DataRangeDict, tDATABASE
     from pfund.typing import ExternalListenersDict
-    from pfund.brokers.broker_trade import BaseBroker
+    from pfund.brokers.broker_base import BaseBroker
     from pfund.brokers.broker_crypto import CryptoBroker
     from pfund.brokers.ib.broker_ib import IBBroker
+    from pfund.brokers.broker_defi import DeFiBroker
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.models.model_base import BaseModel
     from pfund.engines.trade_engine_settings import TradeEngineSettings
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
 
 import logging
 import datetime
-import importlib
+from abc import ABC, abstractmethod
 
 from pfeed.enums import DataTool
 from pfund import cprint
@@ -36,7 +37,7 @@ ENV_COLORS = {
 }
 
 
-class BaseEngine(metaclass=MetaEngine):
+class BaseEngine(ABC, metaclass=MetaEngine):
     _initialized: ClassVar[bool] = False
     _env: ClassVar[Environment]
     _run_mode: ClassVar[RunMode]
@@ -119,13 +120,8 @@ class BaseEngine(metaclass=MetaEngine):
             )
             cls._initialized = True
             type(cls).lock()  # Locks any future class modifications
-
-
-        # FIXME:
-        if env == Environment.BACKTEST:
-            assert cls.__name__ == 'BacktestEngine', f'{env=} is only allowed to be created using BacktestEngine'
         cprint(f"{env} Engine is running", style=ENV_COLORS[env])
-        
+
         
         # FIXME: do NOT allow LIVE env for now
         assert env != Environment.LIVE, f"{env=} is not allowed for now"
@@ -141,11 +137,15 @@ class BaseEngine(metaclass=MetaEngine):
             zmq_urls=cls.settings.zmq_urls,
             zmq_ports=cls.settings.zmq_ports,
         )
-        self._brokers = {}
-        self._strategies = {}
-        
+        self._brokers: dict[Broker, BaseBroker] = {}
+        self._strategies: dict[str, BaseStrategy] = {}
+    
+    @abstractmethod
+    def _create_broker(self, bkr: str) -> BaseBroker:
+        pass
+    
     @property
-    def brokers(self) -> dict[str, BaseBroker]:
+    def brokers(self) -> dict[Broker, BaseBroker]:
         return self._brokers
     
     @property
@@ -204,13 +204,14 @@ class BaseEngine(metaclass=MetaEngine):
         else:
             self._logger.error(f'strategy {strat} cannot be found, failed to remove')
 
-    # conditional typing, returns the exact type of broker
     @overload
     def get_broker(self, bkr: Literal['CRYPTO']) -> CryptoBroker: ...
         
-    # conditional typing, returns the exact type of broker
     @overload
     def get_broker(self, bkr: Literal['IB']) -> IBBroker: ...
+    
+    @overload
+    def get_broker(self, bkr: Literal['DEFI']) -> DeFiBroker: ...
 
     def get_broker(self, bkr: tBROKER) -> BaseBroker:
         return self._brokers[bkr.upper()]
@@ -228,13 +229,3 @@ class BaseEngine(metaclass=MetaEngine):
         broker = self._brokers.pop(bkr.upper())
         self._logger.debug(f'removed broker {bkr}')
         return broker
-    
-    def get_Broker(self, bkr: tBROKER) -> type[BaseBroker]:
-        broker = Broker[bkr.upper()]
-        if broker == Broker.CRYPTO:
-            BrokerClass = getattr(importlib.import_module('pfund.brokers.broker_crypto'), 'CryptoBroker')
-        elif broker == Broker.IB:
-            BrokerClass = getattr(importlib.import_module('pfund.brokers.ib.broker_ib'), 'IBBroker')
-        else:
-            raise ValueError(f'broker {bkr} is not supported')
-        return BrokerClass

@@ -261,7 +261,7 @@ class IBApi(IBClient, IBWrapper):
         return [self._zmq]
 
     def start_zmqs(self):
-        from pfund.engines import TradeEngine
+        from pfund.engines.trade_engine import TradeEngine
         zmq_ports = TradeEngine.settings['zmq_ports']
         self._zmq = ZeroMQ(self.name)
         self._zmq.start(

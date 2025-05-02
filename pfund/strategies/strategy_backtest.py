@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.typing import StrategyT
+    from pfund.products.product_base import BaseProduct
     from pfund.data_tools import data_tool_backtest
     
 from pfund.mixins.backtest_mixin import BacktestMixin
@@ -22,8 +23,19 @@ def BacktestStrategy(Strategy: type[StrategyT], *args, **kwargs) -> BacktestMixi
         def backtest(self, df: data_tool_backtest.BacktestDataFrame):
             raise Exception(f'Strategy "{self.name}" does not have a backtest() method, cannot run vectorized backtesting')
         
-        def add_account(self, trading_venue: str, acc: str='', initial_balances: dict[str, int|float]|None=None, **kwargs):
-            return super().add_account(trading_venue, acc=acc, initial_balances=initial_balances, **kwargs)
+        def add_account(
+            self, 
+            trading_venue: str, 
+            name: str='', 
+            initial_balances: dict[str, int | float] | None=None, 
+            initial_positions: dict[BaseProduct, int | float] | None=None,
+        ):
+            return super().add_account(
+                trading_venue=trading_venue, 
+                name=name, 
+                initial_balances=initial_balances, 
+                initial_positions=initial_positions,
+            )
             
         def add_strategy(self, strategy: StrategyT, name: str='') -> BacktestMixin | StrategyT:
             strategy = BacktestStrategy(type(strategy), *strategy._args, **strategy._kwargs)
@@ -32,11 +44,7 @@ def BacktestStrategy(Strategy: type[StrategyT], *args, **kwargs) -> BacktestMixi
         def on_start(self):
             if not self.accounts:
                 for trading_venue in self.get_trading_venues():
-                    if trading_venue == 'BYBIT':
-                        kwargs = {'account_type': 'UNIFIED'}
-                    else:
-                        kwargs = {}
-                    account = self.add_account(trading_venue, **kwargs)
+                    account = self.add_account(trading_venue)
                     broker = self.get_broker(account.bkr)
                     broker.initialize_balances()
             # TODO

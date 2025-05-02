@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from apscheduler.schedulers.background import BackgroundScheduler
+    from pfund.brokers.broker_base import BaseBroker
     
 import time
 from collections import OrderedDict, defaultdict
@@ -13,8 +13,7 @@ from enum import Enum
 from pfund.orders.order_statuses import *
 from pfund.orders.order_crypto import CryptoOrder
 from pfund.orders.order_ib import IBOrder
-from pfund.managers.base_manager import BaseManager
-from pfund.enums import Event
+from pfund.enums import Event, RunMode
 
 
 class OrderUpdateSource(Enum):
@@ -25,19 +24,19 @@ class OrderUpdateSource(Enum):
     WST = 'websocket_api_trades'
 
 
-
 OrderClosedReason = Union[FillOrderStatus, CancelOrderStatus, MainOrderStatus]
 
 
-class OrderManager(BaseManager):
+class OrderManager:
     _NUM_OF_CACHED_CLOSED_ORDERS = 200
     _MAX_NUM_OF_CLOSED_ORDERS = 500
     _NO_ORDER_UPDATE_TOLERANCE_IN_SECONDS = 3
     _MAX_MISSED_NUM = 3
     _MAX_RECON_NUM = 5
 
-    def __init__(self, broker):
-        super().__init__('order_manager', broker)
+    def __init__(self, broker: BaseBroker):
+        self._broker = broker
+        self._logger = broker._logger
         # { trading_venue: { acc: OrderedDict(order_id: OrderObject) } }
         self.submitted_orders = defaultdict(lambda: defaultdict(OrderedDict))
         self.opened_orders = defaultdict(lambda: defaultdict(OrderedDict))
@@ -50,7 +49,7 @@ class OrderManager(BaseManager):
 
     def push(self, order, event: Event, type_):
         if strategy := self._engine.strategy_manager.get_strategy(order.strat):
-            if not self._engine._use_ray:
+            if self._broker._run_mode == RunMode.REMOTE:
                 if strategy.is_running():
                     if event == Event.order:
                         strategy.update_orders(order, type_)
@@ -59,7 +58,7 @@ class OrderManager(BaseManager):
             else:
                 raise NotImplementedError('parallel strategy is not implemented')
                 # TODO
-                # self._zmq
+                # self._broker._zmq
 
     def get_order(self, trading_venue, acc, oid='', eoid=''):
         assert oid or eoid, 'At least one of oid or eoid should be provided'
@@ -89,6 +88,7 @@ class OrderManager(BaseManager):
                 orders += list(self.submitted_orders[trading_venue][acc].values())
             return orders if not pdt else [order for order in orders if order.pdt == pdt]
 
+    # FIXME
     def schedule_jobs(self, scheduler: BackgroundScheduler):
         scheduler.add_job(self.clear_cached_closed_orders, 'interval', seconds=10)
         scheduler.add_job(self.check_missed_opened_orders, 'interval', seconds=10)
@@ -103,9 +103,9 @@ class OrderManager(BaseManager):
             for o in opened_orders:
                 if o.eoid and o.eoid not in official_eoids:
                     self._recon_nums[o.oid] += 1
-                    self.logger.debug(f'{trading_venue} {acc=} {o.oid=} {o.eoid=} add recon_num to {self._recon_nums[o.oid]}')
+                    self._logger.debug(f'{trading_venue} {acc=} {o.oid=} {o.eoid=} add recon_num to {self._recon_nums[o.oid]}')
                     if self._recon_nums[o.oid] >= self._MAX_RECON_NUM:
-                        self.logger.warning(f'cancel order {o.oid} due to reconciliation')
+                        self._logger.warning(f'cancel order {o.oid} due to reconciliation')
                         self._broker.cancel_orders(o.account, o.product, [o])
 
     def clear_cached_closed_orders(self):
@@ -118,7 +118,7 @@ class OrderManager(BaseManager):
                     oids_to_be_removed = oids[:-self._NUM_OF_CACHED_CLOSED_ORDERS]
                     for k in oids_to_be_removed:
                         del orders_dict[k]
-                    self.logger.debug(f'{tv} {acc=} clear closed orders cache')
+                    self._logger.debug(f'{tv} {acc=} clear closed orders cache')
 
     def check_missed_opened_orders(self):
         now = time.time()
@@ -129,9 +129,9 @@ class OrderManager(BaseManager):
                     submitted_ts = o.timestamps[MainOrderStatus.SUBMITTED]
                     if submitted_ts - now > self._NO_ORDER_UPDATE_TOLERANCE_IN_SECONDS:
                         self._missed_nums[o.oid] += 1
-                        self.logger.debug(f'{tv} {acc=} {o.oid} add missed_num to {self._missed_nums[o.oid]}')
+                        self._logger.debug(f'{tv} {acc=} {o.oid} add missed_num to {self._missed_nums[o.oid]}')
                         if self._missed_nums[o.oid] >= self._MAX_MISSED_NUM:
-                            self.logger.warning(f'cancel order {o.oid} due to missing update')
+                            self._logger.warning(f'cancel order {o.oid} due to missing update')
                             self._broker.cancel_orders(o.account, o.product, [o])
                             self._on_rejected(o, ts=now, reason='MISSED')
 
@@ -160,7 +160,7 @@ class OrderManager(BaseManager):
                     if source == OrderUpdateSource.GTH:
                         pass
                     else:
-                        self.logger.error(f'Cannot find order {trading_venue=} {acc=} {pdt} {update=}')
+                        self._logger.error(f'Cannot find order {trading_venue=} {acc=} {pdt} {update=}')
                     return
 
                 # NOTE: add/remove_order and on_update logic, analogous to add_position and position/balance.on_update() in portfolio_manager
@@ -206,7 +206,7 @@ class OrderManager(BaseManager):
 
     def _on_opened(self, order, ts=None, reason=''):
         if order.oid in self.closed_orders[order.tv][order.acc]:
-            self.logger.warning(f'closed order {order} is trying to be re-opened, probably due to a delayed update')
+            self._logger.warning(f'closed order {order} is trying to be re-opened, probably due to a delayed update')
             return
         if is_updated := order.on_status_update(status=MainOrderStatus.OPENED, ts=ts, reason=reason):
             self.opened_orders[order.tv][order.acc][order.oid] = order

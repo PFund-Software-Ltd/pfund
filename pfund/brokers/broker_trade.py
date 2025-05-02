@@ -9,98 +9,53 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfund.brokers.broker_crypto import CryptoBroker
     from pfund.brokers.ib.broker_ib import IBBroker
-    from pfund.strategies.strategy_base import BaseStrategy
+    from pfund.engines.trade_engine_settings import TradeEngineSettings
     from pfund.typing import tENVIRONMENT, tBROKER
-    from pfund.typing import TradeEngineSettingsDict
-
-import logging
-from collections import defaultdict
 
 from pfund.datas.data_base import BaseData
 from pfund.managers.connection_manager import ConnectionManager
-from pfund.managers.data_manager import DataManager
-from pfund.managers.order_manager import OrderManager
-from pfund.managers.portfolio_manager import PortfolioManager
-from pfund.managers.risk_manager import RiskManager
-from pfund.enums import Environment, Broker, PublicDataChannel, PrivateDataChannel, DataChannelType
+from pfund.enums import PublicDataChannel, PrivateDataChannel, DataChannelType
 from pfund.brokers.broker_base import BaseBroker
 
 
 class TradeBroker(BaseBroker):
     def __init__(self, env: tENVIRONMENT, name: tBROKER):
-        super().__init__(env=env, name=name)
-        self.env = Environment[env.upper()]
-        if self.env == Environment.BACKTEST:
-            assert self.__class__.__name__ == '_BacktestBroker', f'env={self.env} is only allowed to be created using _BacktestBroker'
-        self.name = self.bkr = Broker[name.upper()]
-        self.logger = logging.getLogger('pfund')
-        
-        self._zmq = None
-        self._settings: TradeEngineSettingsDict = {}
-        
-        self._products = defaultdict(dict)  # {exch: {pdt1: product1, pdt2: product2, exch1_pdt3: product, exch2_pdt3: product} }
-        self._accounts = defaultdict(dict)  # {trading_venue: {acc1: account1, acc2: account2} }
-    
-        self._data_feed: MarketFeed | None = None
-        self.connection_manager = ConnectionManager(self)
-        self.data_manager = DataManager(self)
-        self.order_manager = OrderManager(self)
-        self.portfolio_manager = PortfolioManager(self)
-        self.risk_manager = RiskManager(self)
-    
-    # TODO: use other data source, e.g. databento, only support TradFi Broker
-    def use_data_source(self, data_source: tDATA_SOURCE | DataSource):
-        from pfund.engines import TradeEngine
-        self._data_feed: MarketFeed = TradeEngine.get_feed(data_source, use_deltalake=True)
-        # TODO: create feed for streaming and somehow pass it to connection manager
-        
-    @property
-    def products(self):
-        return self._products
-    
-    @property
-    def accounts(self):
-        return self._accounts
+        from pfund.engines.trade_engine import TradeEngine
 
-    @property
-    def balances(self):
-        return self.portfolio_manager.balances[self.bkr.value] if self.bkr != Broker.CRYPTO else self.portfolio_manager.balances
-    
-    @property
-    def positions(self):
-        return self.portfolio_manager.positions
-    
-    @property
-    def orders(self, type_='opened'):
-        if type_ == 'opened':
-            return self.order_manager.opened_orders
-        elif type_ == 'submitted':
-            return self.order_manager.submitted_orders
-        elif type_ == 'closed':
-            return self.order_manager.closed_orders
-    
+        super().__init__(env=env, name=name)
+        self._connection_manager = ConnectionManager(self)
+        
+        self._run_mode = TradeEngine._run_mode
+        self._settings: TradeEngineSettings = TradeEngine.settings
+        
+        # TODO: use other data source, e.g. databento, only support TradFi Broker
+        # TODO: create feed for streaming and somehow pass it to connection manager
+        self._data_feed: MarketFeed | None = None
+        if self._settings.broker_data_source and self._name in self._settings.broker_data_source:
+            from pfeed.feeds import get_market_feed
+            data_source = self._settings.broker_data_source[self._name]
+            self._data_feed: MarketFeed = get_market_feed(data_source=data_source)
+        else:
+            self._data_feed = None
+        
     def start(self, zmq=None):
-        from pfund.engines import TradeEngine
-        self._settings = TradeEngine.settings
         self._zmq = zmq
-        self.connection_manager.connect()
+        self._connection_manager.connect()
         if self._settings.get('cancel_all_at', {}).get('start', True):
             self.cancel_all_orders(reason='start')
-        self.logger.debug(f'broker {self.name} started')
+        self._logger.debug(f'broker {self._name} started')
 
     def stop(self):
         self._zmq = None
         if self._settings.get('cancel_all_at', {}).get('stop', True):
             self.cancel_all_orders(reason='stop')
-        self.connection_manager.disconnect()
-        self.logger.debug(f'broker {self.name} stopped')
-
-    def get_zmq(self):
-        return self._zmq
+        self._connection_manager.disconnect()
+        self._logger.debug(f'broker {self._name} stopped')
 
     def get_data(self, product: BaseProduct, resolution: str) -> BaseData | None:
-        return self.data_manager.get_data(product, resolution=resolution)
+        return self._data_manager.get_data(product, resolution=resolution)
     
+    # TODO
     def cancel_all_orders(self, reason=None):
         print(f'broker cancel_all_orders, reason={reason}')
 
@@ -127,28 +82,23 @@ class TradeBroker(BaseBroker):
             channel_type = DataChannelType[channel_type.upper()]
         return channel_type
     
-    def _add_data_listener(self, listener: BaseStrategy, data: BaseData):
-        self.data_manager._add_listener(listener, data)
-
-    def _remove_data_listener(self, listener: BaseStrategy, data: BaseData):
-        self.data_manager._remove_listener(listener, data)
-    
     def distribute_msgs(self, channel, topic, info):
         if channel == 1:
-            self.data_manager.handle_msgs(topic, info)
+            self._data_manager.handle_msgs(topic, info)
         elif channel == 2:  # from api processes to data manager
-            self.order_manager.handle_msgs(topic, info)
+            self._order_manager.handle_msgs(topic, info)
         elif channel == 3:
-            self.portfolio_manager.handle_msgs(topic, info)
+            self._portfolio_manager.handle_msgs(topic, info)
         elif channel == 4:  # from api processes to connection manager 
-            self.connection_manager.handle_msgs(topic, info)
+            self._connection_manager.handle_msgs(topic, info)
             if topic == 3 and self._settings.get('cancel_all_at', {}).get('disconnect', True):  # on disconnected
                 self.cancel_all_orders(reason='disconnect')
 
+    # FIXME: move to mtflow
     def schedule_jobs(self: CryptoBroker | IBBroker, scheduler: BackgroundScheduler):
         scheduler.add_job(self.reconcile_balances, 'interval', seconds=10)
         scheduler.add_job(self.reconcile_positions, 'interval', seconds=10)
         scheduler.add_job(self.reconcile_orders, 'interval', seconds=10)
         scheduler.add_job(self.reconcile_trades, 'interval', seconds=10)
-        for manager in [self.risk_manager, self.connection_manager, self.order_manager, self.portfolio_manager, self.data_manager]:
+        for manager in [self._connection_manager, self._order_manager, self._portfolio_manager]:
             manager.schedule_jobs(scheduler)

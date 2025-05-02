@@ -52,15 +52,15 @@ def setup_loggers(log_path, logging_config_file_path, user_logging_config: dict 
     return logging_configurator
 
 
-def create_dynamic_logger(name: str, type_: Literal['strategy', 'model', 'indicator', 'feature', 'manager']):
-    """Set up logger for strategy/model/manager
+def create_dynamic_logger(name: str, type_: Literal['strategy', 'model', 'indicator', 'feature']):
+    """Set up logger for strategy/model
     
-    Since loggers for strategy/model/manager require dynamic names,
-    setup_loggers() will not create loggers for strategy/model/manager.
-    Instead, they will be created here and use the logger config of strategy/model/manager by default if not specified.
+    Since loggers for strategy/model require dynamic names,
+    setup_loggers() will not create loggers for strategy/model.
+    Instead, they will be created here and use the logger config of strategy/model by default if not specified.
     """
     assert name, "logger name cannot be empty/None"
-    assert type_ in ['strategy', 'model', 'indicator', 'feature', 'manager'], f"Unsupported {type_=}"
+    assert type_ in ['strategy', 'model', 'indicator', 'feature'], f"Unsupported {type_=}"
     
     from pfund import get_config
     
@@ -73,7 +73,7 @@ def create_dynamic_logger(name: str, type_: Literal['strategy', 'model', 'indica
     if logger_name in loggers_config:
         logger_config = loggers_config[logger_name]
     else:
-        # use strategy*/model*/manager* config as default if not specified
+        # use strategy*/model* config as default if not specified
         logger_config = loggers_config[f'_{type_}']
     if type_ not in logger_name:
         logger_name += f'_{type_}'

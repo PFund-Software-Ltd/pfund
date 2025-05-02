@@ -1,14 +1,17 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.brokers.broker_trade import TradeBroker
+
 import time
 from collections import defaultdict
 from multiprocessing import Process, Value
-
 try:
     import psutil
 except ImportError:
     pass
 
-from pfund.managers.base_manager import BaseManager
-
+from pfund.enums import Event, RunMode
 
 def _start_process(api, stop_flag: Value):
     try:
@@ -45,11 +48,12 @@ def _start_process(api, stop_flag: Value):
         api.logger.exception(f'api {api.name} _start_process exception:')
 
 
-class ConnectionManager(BaseManager):
+class ConnectionManager:
     _PROCESS_NO_PONG_TOLERANCE_IN_SECONDS = 30
 
-    def __init__(self, broker):
-        super().__init__('connection_manager', broker)
+    def __init__(self, broker: TradeBroker):
+        self._broker = broker
+        self._logger = broker._logger
         self._is_connected = defaultdict(bool)
         self._is_reconnecting = defaultdict(bool)
         self._pids = defaultdict(lambda: None)
@@ -68,26 +72,26 @@ class ConnectionManager(BaseManager):
 
     def add_api(self, api):
         self._apis[api.name] = api
-        self.logger.debug(f'added {api.name} api')
+        self._logger.debug(f'added {api.name} api')
 
     def remove_api(self, api):
         if api.name in self._apis:
             del self._apis[api.name]
-            self.logger.debug(f'removed {api.name} api')
+            self._logger.debug(f'removed {api.name} api')
 
     def _set_pid(self, trading_venue: str, pid: int):
         prev_pid = self._pids[trading_venue]
         self._pids[trading_venue] = pid
-        self.logger.debug(f'set {trading_venue} api process pid from {prev_pid} to {pid}')
+        self._logger.debug(f'set {trading_venue} api process pid from {prev_pid} to {pid}')
 
     def _on_pong(self, trading_venue: str):
         """Handles pongs from api processes"""
         self._last_pong_ts[trading_venue] = time.time()
-        self.logger.debug(f'{trading_venue} ponged')
+        self._logger.debug(f'{trading_venue} ponged')
 
     def is_process_healthy(self, trading_venue: str):
         if time.time() - self._last_pong_ts[trading_venue] >= self._PROCESS_NO_PONG_TOLERANCE_IN_SECONDS:
-            self.logger.error(f'process {trading_venue} is not responding')
+            self._logger.error(f'process {trading_venue} is not responding')
             return False
         else:
             return True
@@ -99,28 +103,28 @@ class ConnectionManager(BaseManager):
     def _on_connected(self, trading_venue: str):
         if not self._is_connected[trading_venue]:
             self._is_connected[trading_venue] = True
-            self.logger.debug(f'{trading_venue} is connected')
+            self._logger.debug(f'{trading_venue} is connected')
         else:
-            self.logger.warning(f'{trading_venue} is already connected')
+            self._logger.warning(f'{trading_venue} is already connected')
     
     def _on_disconnected(self, trading_venue: str):
         if self._is_connected[trading_venue]:
             self._is_connected[trading_venue] = False
-            self.logger.debug(f'{trading_venue} is disconnected')
+            self._logger.debug(f'{trading_venue} is disconnected')
         else:
-            self.logger.warning(f'{trading_venue} is already disconnected')
+            self._logger.warning(f'{trading_venue} is already disconnected')
 
     def _terminate_process(self, trading_venue: str):
         pid = self._pids[trading_venue]
         if pid is not None and psutil.pid_exists(pid):
             psutil.Process(pid).kill()
-            self.logger.warning(f'force to terminate {trading_venue} process ({pid=})')
+            self._logger.warning(f'force to terminate {trading_venue} process ({pid=})')
             self._set_pid(trading_venue, None)
 
     def connect(self, trading_venues: str|list[str]|None=None):
         trading_venues = self._adjust_input_trading_venues(trading_venues)
         for trading_venue in trading_venues:
-            self.logger.debug(f'{trading_venue} is connecting')
+            self._logger.debug(f'{trading_venue} is connecting')
             api = self._apis[trading_venue]
             stop_flag = self._api_stop_flags[trading_venue]
             stop_flag.value = False
@@ -130,17 +134,17 @@ class ConnectionManager(BaseManager):
     def disconnect(self, trading_venues: str|list[str]|None=None):
         trading_venues = self._adjust_input_trading_venues(trading_venues)
         for trading_venue in trading_venues:
-            self.logger.debug(f'{trading_venue} is disconnecting')
+            self._logger.debug(f'{trading_venue} is disconnecting')
             stop_flag = self._api_stop_flags[trading_venue]
             stop_flag.value = True
             # need to wait for the process to finish 
             # in case no pid has been returned (i.e. cannot terminate the process by pid)
             while self._api_procs[trading_venue].is_alive():
-                self.logger.debug(f'waiting for api process {trading_venue} to finish')
+                self._logger.debug(f'waiting for api process {trading_venue} to finish')
                 self._terminate_process(trading_venue)
                 time.sleep(1)
             else:
-                self.logger.debug(f'api process {trading_venue} is finished')
+                self._logger.debug(f'api process {trading_venue} is finished')
                 del self._api_procs[trading_venue]
                 self._on_disconnected(trading_venue)
 
@@ -148,13 +152,13 @@ class ConnectionManager(BaseManager):
         trading_venues = self._adjust_input_trading_venues(trading_venues)
         for trading_venue in trading_venues:
             if not self._is_reconnecting[trading_venue]:
-                self.logger.debug(f'{trading_venue} is reconnecting ({reason=})')
+                self._logger.debug(f'{trading_venue} is reconnecting ({reason=})')
                 self._is_reconnecting[trading_venue] = True
                 self.disconnect(trading_venue)
                 self.connect(trading_venue)
                 self._is_reconnecting[trading_venue] = False
             else:
-                self.logger.warning(f'{trading_venue} is already reconnecting, do not reconnect again ({reason=})')
+                self._logger.warning(f'{trading_venue} is already reconnecting, do not reconnect again ({reason=})')
 
     def handle_msgs(self, topic, info):
         if topic == 0:  # pong
