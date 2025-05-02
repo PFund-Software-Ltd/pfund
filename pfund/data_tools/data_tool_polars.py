@@ -11,6 +11,7 @@ from pfund.data_tools.data_tool_base import BaseDataTool
 from pfund.utils.envs import backtest
 
 
+# TODO: set ⁠ pl.Config.set_engine_affinity(engine="streaming"), 4x faster
 # NOTE: convention: all function names that endswith "_df" will directly modify self.df, e.g. "xxx_df"
 class PolarsDataTool(BaseDataTool):
     name = DataTool.polars
