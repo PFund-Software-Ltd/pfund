@@ -10,7 +10,6 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 
 from pfund.datas.data_base import BaseData
-from pfund.managers.data_manager import DataManager
 from pfund.managers.order_manager import OrderManager
 from pfund.managers.portfolio_manager import PortfolioManager
 from pfund.enums import Environment, Broker
@@ -28,8 +27,6 @@ class BaseBroker(ABC):
     
         self._order_manager = OrderManager(self)
         self._portfolio_manager = PortfolioManager(self)
-        # FIXME: move to databoy
-        self._data_manager = DataManager(self)
     
     @property
     def name(self):
@@ -73,16 +70,4 @@ class BaseBroker(ABC):
     @abstractmethod
     def cancel_all_orders(self, reason=None):
         pass
-    
-    # FIXME: move to databoy
-    def get_data(self, product: BaseProduct, resolution: str) -> BaseData | None:
-        return self._data_manager.get_data(product, resolution=resolution)
-    
-    # FIXME: move to databoy
-    def _add_data_listener(self, listener: BaseStrategy, data: BaseData):
-        self._data_manager._add_listener(listener, data)
-
-    # FIXME: move to databoy
-    def _remove_data_listener(self, listener: BaseStrategy, data: BaseData):
-        self._data_manager._remove_listener(listener, data)
     

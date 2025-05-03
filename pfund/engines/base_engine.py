@@ -1,15 +1,13 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, overload, ClassVar
+from typing import TYPE_CHECKING, Literal, ClassVar
 if TYPE_CHECKING:
+    from ray.actor import ActorHandle
     from mtflow.stores.mtstore import MTStore
     from mtflow.kernel import TradeKernel
     from pfeed.typing import tDATA_TOOL
-    from pfund.typing import StrategyT, tENVIRONMENT, tBROKER, DataRangeDict, tDATABASE
+    from pfund.typing import StrategyT, tENVIRONMENT, tBROKER, DataRangeDict, tDATABASE, tTRADING_VENUE
     from pfund.typing import ExternalListenersDict
     from pfund.brokers.broker_base import BaseBroker
-    from pfund.brokers.broker_crypto import CryptoBroker
-    from pfund.brokers.ib.broker_ib import IBBroker
-    from pfund.brokers.broker_defi import DeFiBroker
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.models.model_base import BaseModel
     from pfund.engines.trade_engine_settings import TradeEngineSettings
@@ -17,12 +15,11 @@ if TYPE_CHECKING:
 
 import logging
 import datetime
-from abc import ABC, abstractmethod
 
 from pfeed.enums import DataTool
 from pfund import cprint
 from pfund.engines.meta_engine import MetaEngine
-from pfund.enums import Environment, Broker, RunMode, Database
+from pfund.enums import Environment, Broker, RunMode, Database, CryptoExchange, TradingVenue
 from pfund.external_listeners import ExternalListeners
 
 
@@ -37,7 +34,7 @@ ENV_COLORS = {
 }
 
 
-class BaseEngine(ABC, metaclass=MetaEngine):
+class BaseEngine(metaclass=MetaEngine):
     _num: ClassVar[int] = 0
     _initialized: ClassVar[bool]
     _env: ClassVar[Environment]
@@ -139,6 +136,7 @@ class BaseEngine(ABC, metaclass=MetaEngine):
         # FIXME: do NOT allow LIVE env for now
         assert env != Environment.LIVE, f"{env=} is not allowed for now"
         
+
         self.name = name or self._get_default_name()
         self._setup_logging()
         self._logger = logging.getLogger('pfund')
@@ -152,10 +150,6 @@ class BaseEngine(ABC, metaclass=MetaEngine):
         )
         self.brokers: dict[Broker, BaseBroker] = {}
         self.strategies: dict[str, BaseStrategy] = {}
-    
-    @abstractmethod
-    def _create_broker(self, bkr: str) -> BaseBroker:
-        pass
     
     @property
     def env(self) -> Environment:
@@ -186,71 +180,90 @@ class BaseEngine(ABC, metaclass=MetaEngine):
         logging_configurator  = setup_loggers(log_path, logging_config_file_path, user_logging_config=config.logging_config)
         config.set_logging_configurator(logging_configurator)
     
-    def _setup_ray_actors(self, auto_wrap: bool=True):
-        def _check_if_add_ray_actor(component: BaseStrategy | BaseModel):
-            if component.is_ray_actor():
-                component._setup_zmq()
-                self._kernel.add_ray_actor(component, auto_wrap=auto_wrap)
+    @staticmethod
+    def _is_ray_actor(value) -> bool:
+        from ray.actor import ActorHandle
+        return isinstance(value, ActorHandle)
+    
+    def _setup_ray_actors(self):
+        def _add_ray_actor(component: BaseStrategy | BaseModel):
+            databoy = component._databoy
+            databoy._setup_zmq()
+            self._kernel.add_ray_actor(component)
             for subcomponent in component.components:
-                _check_if_add_ray_actor(subcomponent)
+                if self._is_ray_actor(subcomponent):
+                    _add_ray_actor(subcomponent)
         for strategy in self.strategies.values():
-            _check_if_add_ray_actor(strategy)
+            _add_ray_actor(strategy)
 
     def run(self):
         self._store.freeze()
         if self._kernel is not None and self._run_mode == RunMode.REMOTE:
             self._setup_ray_actors()
     
+    # FIXME
     def is_running(self) -> bool:
         return self._kernel._is_running
     
-    def get_strategy(self, strat: str) -> BaseStrategy | None:
-        return self.strategies.get(strat, None)
-
-    def add_strategy(self, strategy: StrategyT, resolution: str, name: str='') -> StrategyT:        
-        assert isinstance(strategy, BaseStrategy), \
-            f"strategy '{strategy.__class__.__name__}' is not an instance of BaseStrategy. Please create your strategy using 'class {strategy.__class__.__name__}(BaseStrategy)'"
+    def add_strategy(self, strategy: StrategyT | ActorHandle, resolution: str, name: str='') -> StrategyT | ActorHandle:
+        if self._is_ray_actor(strategy):
+            import ray
+            assert self._run_mode == RunMode.REMOTE, \
+                f'Ray actors can only be added in remote mode, but current run mode is {self._run_mode}, please set use_ray=True'
+            StrategyClass = ray.get(strategy._get_pfund_strategy_class.remote())
+            assert issubclass(StrategyClass, BaseStrategy), \
+                f"strategy '{StrategyClass.__name__}' is not an instance of BaseStrategy. Please create your strategy using 'class {StrategyClass.__name__}(BaseStrategy)'"
+        else:
+            assert isinstance(strategy, BaseStrategy), \
+                f"strategy '{strategy.__class__.__name__}' is not an instance of BaseStrategy. Please create your strategy using 'class {strategy.__class__.__name__}(BaseStrategy)'"
         if name:
             strategy._set_name(name)
-        strategy._create_logger()
         strategy._set_resolution(resolution)
         strat = strategy.name
         if strat in self.strategies:
-            raise ValueError(f"{strategy.name} already exists")
+            raise ValueError(f"{strat} already exists")
         else:
+            strategy._set_engine(self)
+            trading_store = self._store.add_trading_store(strat)
+            strategy._set_trading_store(trading_store)
+            strategy._create_logger()
             self.strategies[strat] = strategy
-            self._logger.debug(f"added '{strategy.name}'")
+            self._logger.debug(f"added '{strat}'")
             return strategy
     
-    def remove_strategy(self, strat: str):
-        if strat in self.strategies:
-            del self.strategies[strat]
-            self._logger.debug(f'removed strategy {strat}')
+    def remove_strategy(self, name: str) -> BaseStrategy:
+        if name in self.strategies:
+            strategy = self.strategies.pop(name)
+            self._logger.debug(f'removed strategy {name}')
+            return strategy
         else:
-            self._logger.error(f'strategy {strat} cannot be found, failed to remove')
-
-    @overload
-    def get_broker(self, bkr: Literal['CRYPTO']) -> CryptoBroker: ...
-        
-    @overload
-    def get_broker(self, bkr: Literal['IB']) -> IBBroker: ...
+            raise ValueError(f"strategy {name} cannot be found, failed to remove")
     
-    @overload
-    def get_broker(self, bkr: Literal['DEFI']) -> DeFiBroker: ...
-
-    def get_broker(self, bkr: tBROKER) -> BaseBroker:
-        return self.brokers[bkr.upper()]
-    
-    def add_broker(self, bkr: str) -> BaseBroker:
-        bkr = bkr.upper()
-        if bkr in self.brokers:
-            return self.get_broker(bkr)
-        broker = self._create_broker(bkr)
-        self.brokers[bkr] = broker
-        self._logger.debug(f'added broker {bkr}')
+    def _create_broker(self, bkr: tBROKER) -> BaseBroker:
+        if self._env in [Environment.BACKTEST, Environment.SANDBOX]:
+            from pfund.brokers.broker_simulated import SimulatedBrokerFactory
+            SimulatedBroker = SimulatedBrokerFactory(bkr)
+            broker = SimulatedBroker(self._env)
+        else:
+            BrokerClass = Broker[bkr.upper()].broker_class
+            broker = BrokerClass(self._env)
         return broker
+
+    def add_broker(self, trading_venue: tTRADING_VENUE) -> BaseBroker:
+        trading_venue = TradingVenue[trading_venue.upper()]
+        if trading_venue in CryptoExchange.__members__:
+            bkr = Broker.CRYPTO
+        # TODO: handle trading venues in DeFi
+        else:
+            bkr = Broker[trading_venue]
+        if bkr not in self.brokers:
+            broker = self._create_broker(bkr)
+            self.brokers[bkr] = broker
+            self._logger.debug(f'added broker {bkr}')
+        return self.brokers[bkr]
     
     def remove_broker(self, bkr: tBROKER) -> BaseBroker:
-        broker = self.brokers.pop(bkr.upper())
+        bkr = Broker[bkr.upper()]
+        broker = self.brokers.pop(bkr)
         self._logger.debug(f'removed broker {bkr}')
         return broker

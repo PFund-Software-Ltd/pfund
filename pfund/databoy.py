@@ -1,32 +1,38 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from apscheduler.schedulers.background import BackgroundScheduler
+    from mtflow.messaging.zeromq import ZeroMQ
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund.brokers.broker_base import BaseBroker
     from pfund.strategies.strategy_base import BaseStrategy
-    from pfund.typing import ProductName, ResolutionRepr
+    from pfund.typing import ProductName, ResolutionRepr, DataConfigDict
 
 import time
+import importlib
+from logging import Logger
 from collections import defaultdict
 from pprint import pformat
-import importlib
 
 from pfund.products.product_base import BaseProduct
-from pfund.data_tools.data_config import DataConfig
+from pfund.datas.data_config import DataConfig
 from pfund.datas.resolution import Resolution
 from pfund.enums import Event, Broker, CryptoExchange
-from pfund.managers.base_manager import BaseManager
-from pfund.datas import QuoteData, TickData, BarData
 
 
-class DataManager(BaseManager):
-    def __init__(self, broker: BaseBroker):
-        super().__init__('data_manager', broker)
-        self._datas: dict[ProductName, dict[ResolutionRepr, BaseData]] = defaultdict(dict)
+class DataBoy:
+    def __init__(self):
+        self._logger: Logger | None = None
+        self._datas: dict[BaseProduct, dict[Resolution, BaseData]] = defaultdict(dict)
         self._listeners: dict[BaseData, list[BaseStrategy]] = defaultdict(list)
         self._stale_bar_timeouts: dict[BaseData, int] = {}
+        self._zmq: ZeroMQ | None = None
+        # TODO: save data signatures properly, data_signatures should be a set
+        # TODO: add data_config (dict form) to data_signatures
+        # TODO: rename data_signatures to data_inputs?
+        self._data_signatures = []
+        
+    def _set_logger(self, logger: Logger):
+        self._logger = logger
     
     def _add_listener(self, listener: BaseStrategy, data: BaseData):
         if listener not in self._listeners[data]:
@@ -37,7 +43,7 @@ class DataManager(BaseManager):
             self._listeners[data].remove(listener)
     
     @staticmethod
-    def get_supported_resolutions(bkr: Broker | str, exch: CryptoExchange | str) -> dict:
+    def _get_supported_resolutions(bkr: Broker, exch: CryptoExchange | str) -> dict:
         if bkr == Broker.CRYPTO:
             WebsocketApi = getattr(importlib.import_module(f'pfund.exchanges.{exch.lower()}.ws_api'), 'WebsocketApi')
             supported_resolutions = WebsocketApi.SUPPORTED_RESOLUTIONS
@@ -48,46 +54,8 @@ class DataManager(BaseManager):
             raise NotImplementedError(f'{bkr=} is not supported')
         return supported_resolutions
     
-    @property
-    def datas(self) -> dict[BaseProduct, dict[Resolution, BaseData]]:
-        return self._datas
-    
-    @property
-    def products(self) -> list[BaseProduct]:
-        return list(self._datas.keys())
-    
-    @staticmethod
-    def _convert_product_and_resolution_to_str(product: BaseProduct | ProductName, resolution: Resolution | ResolutionRepr) -> tuple[ProductName, ResolutionRepr]:
-        if isinstance(product, BaseProduct):
-            product = product.name
-        if isinstance(resolution, Resolution):
-            resolution = repr(resolution)
-        return product, resolution
-    
-    def push(self, data: BaseData, event: Event, **extra_data):
-        for strategy in self._listeners[data]:
-            if not self._engine._use_ray:
-                if strategy.is_running():
-                    if event == Event.quote:
-                        strategy.update_quote(data, **extra_data)
-                        for data_resamplee in data.get_resamplees():
-                            self.push(data_resamplee, event=event)
-                    elif event == Event.tick:
-                        strategy.update_tick(data, **extra_data)
-                        for data_resamplee in data.get_resamplees():
-                            self.push(data_resamplee, event=event)
-                    elif event == Event.bar:
-                        strategy.update_bar(data, **extra_data)
-                        for data_resamplee in data.get_resamplees():
-                            if data_resamplee.is_ready(now=data.end_ts) and not data_resamplee.skip_first_bar():
-                                self.push(data_resamplee, event=event)
-                        data.clear()
-            else:
-                raise NotImplementedError('parallel strategy is not implemented')
-                # TODO
-                # self._zmq
-
     def _add_data(self, product: BaseProduct, resolution: Resolution, data_config: DataConfig) -> TimeBasedData:
+        from pfund.datas import QuoteData, TickData, BarData
         if resolution.is_quote():
             data = QuoteData(product, resolution, orderbook_depth=data_config.orderbook_depth, fast_orderbook=data_config.fast_orderbook)
         elif resolution.is_tick():
@@ -95,27 +63,26 @@ class DataManager(BaseManager):
         else:
             data = BarData(product, resolution, shift=data_config.shift.get(resolution, 0), skip_first_bar=data_config.skip_first_bar.get(resolution, True))
             self._stale_bar_timeouts[data] = data_config.stale_bar_timeout[resolution]
-        product, resolution = self._convert_product_and_resolution_to_str(product, resolution)
         self._datas[product][resolution] = data
         return data
     
-    # TODO
-    def add_custom_data(self):
-        raise NotImplementedError('add_custom_data is not implemented')
-    
-    def get_data(self, product: ProductName | BaseProduct, resolution: ResolutionRepr | Resolution) -> BaseData | None:
-        product, resolution = self._convert_product_and_resolution_to_str(product, resolution)
+    def get_data(self, product: BaseProduct, resolution: ResolutionRepr | Resolution) -> TimeBasedData | None:
+        if isinstance(resolution, str):
+            resolution = Resolution(resolution)
         return self._datas[product].get(resolution, None)
     
-    def remove_data(self, product: ProductName | BaseProduct, resolution: ResolutionRepr | Resolution) -> BaseData | None:
-        product, resolution = self._convert_product_and_resolution_to_str(product, resolution)
+    def remove_data(self, product: BaseProduct, resolution: ResolutionRepr | Resolution) -> TimeBasedData:
         if data := self.get_data(product, resolution):
-            del self._datas[product][resolution]
-            self._logger.debug(f'removed {product} {resolution} data')
+            del self._datas[product][data.resolution]
+            self._logger.debug(f'removed {product} {data.resolution} data')
             return data
+        else:
+            raise ValueError(f'{product} {resolution} data not found')
 
-    def add_data(self, product: BaseProduct, data_config: DataConfig) -> list[TimeBasedData]:
-        supported_resolutions = self.get_supported_resolutions(product.bkr, product.exch)
+    def add_data(self, product: BaseProduct, data_config: DataConfigDict | DataConfig | None) -> list[TimeBasedData]:
+        if not isinstance(data_config, DataConfig):
+            data_config = DataConfig(**(data_config or {}))
+        supported_resolutions = self._get_supported_resolutions(product.bkr, product.exch)
         is_auto_resampled = data_config.auto_resample(supported_resolutions)
         if is_auto_resampled:
             self._logger.warning(f'{product} resolution={data_config.primary_resolution} extra_resolutions={data_config.extra_resolutions} data is auto-resampled to:\n{pformat(data_config.resample)}')
@@ -177,6 +144,68 @@ class DataManager(BaseManager):
     def schedule_jobs(self, scheduler: BackgroundScheduler):
         for data, timeout in self._stale_bar_timeouts.items():
             scheduler.add_job(lambda: self._flush_stale_bar(data), 'interval', seconds=timeout)
+    
+    def _setup_zmq(self):
+        import zmq
+        from mtflow.messaging.zeromq import ZeroMQ
+
+        zmq_urls = self._engine.settings.zmq_urls
+        self._zmq = ZeroMQ(
+            url=zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL),
+            receiver_socket_type=zmq.SUB,  # receive data from engine
+            sender_socket_type=zmq.PUSH,  # send e.g. orders to engine
+        )
+        # TODO: subscribe to selected topics, e.g. b'BYBIT:orderbook:BTCUSDT'
+        self._zmq.setsockopt(zmq.SUBSCRIBE, b'')
+    
+    # FIXME
+    def pong(self):
+        """Pongs back to Engine's ping to show that it is alive"""
+        zmq_msg = (0, 0, (self.strat,))
+        self._zmq.send(*zmq_msg, receiver='engine')
+
+    # FIXME: to be removed
+    def start_zmq(self):
+        zmq_ports = self._engine.zmq_ports
+        self._zmq = ZeroMQ(self.name)
+        self._zmq.start(
+            logger=self.logger,
+            send_port=zmq_ports[self.name],
+            recv_ports=[zmq_ports['engine']]
+        )
+        zmq_msg = (0, 1, (self.strat, os.getpid(),))
+        self._zmq.send(*zmq_msg, receiver='engine')
+
+    def stop_zmq(self):
+        self._zmq.stop()
+        self._zmq = None
+        
+    # TODO:
+    def collect(self):
+        pass
+    
+    def deliver(self, data: BaseData, event: Event, **extra_data):
+        for strategy in self._listeners[data]:
+            if not self._engine._use_ray:
+                if strategy.is_running():
+                    if event == Event.quote:
+                        strategy.update_quote(data, **extra_data)
+                        for data_resamplee in data.get_resamplees():
+                            self.push(data_resamplee, event=event)
+                    elif event == Event.tick:
+                        strategy.update_tick(data, **extra_data)
+                        for data_resamplee in data.get_resamplees():
+                            self.push(data_resamplee, event=event)
+                    elif event == Event.bar:
+                        strategy.update_bar(data, **extra_data)
+                        for data_resamplee in data.get_resamplees():
+                            if data_resamplee.is_ready(now=data.end_ts) and not data_resamplee.skip_first_bar():
+                                self.push(data_resamplee, event=event)
+                        data.clear()
+            else:
+                raise NotImplementedError('parallel strategy is not implemented')
+                # TODO
+                # self._zmq
         
     # TODO: convert topic to enum
     # TODO: write data to duckdb files

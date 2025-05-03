@@ -41,20 +41,17 @@ class TradeBroker(BaseBroker):
     def start(self, zmq=None):
         self._zmq = zmq
         self._connection_manager.connect()
-        if self._settings.get('cancel_all_at', {}).get('start', True):
+        if self._settings.cancel_all_at['start']:
             self.cancel_all_orders(reason='start')
         self._logger.debug(f'broker {self._name} started')
 
     def stop(self):
         self._zmq = None
-        if self._settings.get('cancel_all_at', {}).get('stop', True):
+        if self._settings.cancel_all_at['stop']:
             self.cancel_all_orders(reason='stop')
         self._connection_manager.disconnect()
         self._logger.debug(f'broker {self._name} stopped')
 
-    def get_data(self, product: BaseProduct, resolution: str) -> BaseData | None:
-        return self._data_manager.get_data(product, resolution=resolution)
-    
     # TODO
     def cancel_all_orders(self, reason=None):
         print(f'broker cancel_all_orders, reason={reason}')
@@ -82,9 +79,10 @@ class TradeBroker(BaseBroker):
             channel_type = DataChannelType[channel_type.upper()]
         return channel_type
     
+    # FIXME
     def distribute_msgs(self, channel, topic, info):
         if channel == 1:
-            self._data_manager.handle_msgs(topic, info)
+            pass
         elif channel == 2:  # from api processes to data manager
             self._order_manager.handle_msgs(topic, info)
         elif channel == 3:

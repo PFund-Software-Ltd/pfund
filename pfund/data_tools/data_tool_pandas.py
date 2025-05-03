@@ -11,7 +11,6 @@ import pandas as pd
 
 from pfeed.enums import DataTool
 from pfund.data_tools.data_tool_base import BaseDataTool
-from pfund.utils.envs import backtest
 
 
 # NOTE: convention: all function names that endswith "_df" will directly modify self.df, e.g. "xxx_df"

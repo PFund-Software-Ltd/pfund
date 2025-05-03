@@ -3,6 +3,22 @@ from abc import ABCMeta
 
 
 class MetaStrategy(ABCMeta):
+    def __new__(mcs, name, bases, namespace, **kwargs):
+        cls = super().__new__(mcs, name, bases, namespace, **kwargs)
+        module_name = namespace.get('__module__', '')
+        is_user_strategy_class = (
+            name != 'BaseStrategy' 
+            and not module_name.startswith('pfund.') 
+            and not module_name.startswith('ray.')
+        )
+        if is_user_strategy_class:
+            for base in bases:
+                if base.__name__ == 'BaseStrategy':
+                    # NOTE: since ray's ActorHandle doesn't save the original class, we need to save it manually
+                    base.__pfund_strategy_class__ = cls
+                    break
+        return cls
+    
     def __call__(cls, *args, **kwargs):
         is_backtest = cls.__name__ == '_BacktestStrategy'
         if is_backtest:

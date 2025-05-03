@@ -1,8 +1,7 @@
-from abc import ABCMeta
 from collections import defaultdict
 
 
-class MetaEngine(ABCMeta):
+class MetaEngine(type):
     _locked_classes = defaultdict(lambda: False)
     _first_engine_cls = None  # Tracks the first concrete engine class created
     _attrs_not_locked = ('_num',)

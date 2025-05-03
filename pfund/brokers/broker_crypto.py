@@ -5,9 +5,7 @@ if TYPE_CHECKING:
     from pfund.orders.order_base import BaseOrder
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.datas.data_base import BaseData
-    from pfund.datas.data_time_based import TimeBasedData
     from pfund.typing import tCRYPTO_EXCHANGE, tENVIRONMENT
-    from pfund.data_tools.data_config import DataConfig
 
 import inspect
 import importlib
@@ -47,32 +45,6 @@ class CryptoBroker(TradeBroker):
         for exchange in self.exchanges.values():
             exchange.stop()
 
-    # TODO
-    def add_custom_data(self):
-        pass
-
-    def add_data(
-        self, 
-        exch: tCRYPTO_EXCHANGE, 
-        product: str, 
-        data_config: DataConfig, 
-        symbol: str='', 
-        **product_specs
-    ) -> list[TimeBasedData]:
-        '''
-        Args:
-            product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
-            product_specs: product specifications, e.g. expiration, strike_price etc.
-        '''
-        exch, product_basis = exch.upper(), product.upper()
-        product = self.add_product(exch, product_basis, symbol=symbol, **product_specs)
-        datas: list[TimeBasedData] = self._data_manager.add_data(product, data_config=data_config)
-        datas_non_resamplee = [data for data in datas if not data.is_resamplee()]
-        for data in datas_non_resamplee:
-            channel: PublicDataChannel = self._create_public_data_channel(data)
-            self.add_channel(exch, channel, data=data)
-        return datas
-    
     def add_channel(
         self, 
         exch: tCRYPTO_EXCHANGE, 
@@ -93,6 +65,8 @@ class CryptoBroker(TradeBroker):
             data: BaseData object, required for public channels
                 Contains product and resolution information needed for subscription
         '''
+        # TODO:
+        # channel: PublicDataChannel = self._create_public_data_channel(data)
         exchange = self.exchanges[exch]
         if channel in PublicDataChannel:
             assert data, f'data must be provided for {channel=}'
@@ -110,12 +84,6 @@ class CryptoBroker(TradeBroker):
         exchange = self.exchanges[exch]
         channel_type: DataChannelType = self._create_data_channel_type(channel, channel_type=channel_type)
         exchange.remove_channel(channel, channel_type, data=data)
-
-    def remove_data(self, product: BaseProduct, resolution: str):
-        self.remove_product(product)
-        data: BaseData = self._data_manager.remove_data(product, resolution)
-        if channel := self._create_public_data_channel(data):
-            self.remove_channel(product.exch, channel, data=data)
             
     def get_account(self, exch: tCRYPTO_EXCHANGE, acc: str) -> CryptoAccount | None:
         return self._accounts[exch.upper()].get(acc.upper(), None)

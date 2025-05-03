@@ -5,7 +5,6 @@ if TYPE_CHECKING:
     import polars as pl
     import torch
     import torch.nn as nn
-    from mtflow.messaging.zeromq import ZeroMQ
     from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
     from sklearn.pipeline import Pipeline
     from pfeed.typing import tDATA_SOURCE
@@ -17,7 +16,7 @@ if TYPE_CHECKING:
     from pfund.indicators.indicator_base import BaseIndicator, TaFunction, TalibFunction
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.typing import tTRADING_VENUE
-    from pfund.data_tools.data_config import DataConfig
+    from pfund.datas.data_config import DataConfig
     from pfund.datas.data_base import BaseData
     from pfund.datas.resolution import Resolution
     MachineLearningModel = Union[
@@ -84,8 +83,6 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         
         self._data_signatures = []
         self._model_signature = (args, kwargs)
-
-        self._zmq: ZeroMQ | None = None
 
         self.params = {}
         self.load_params()

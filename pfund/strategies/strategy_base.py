@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Literal, TYPE_CHECKING, overload
 if TYPE_CHECKING:
     from pfeed.typing import tDATA_SOURCE
-    from mtflow.messaging.zeromq import ZeroMQ
+    from mtflow.stores.trading_store import TradingStore
     from pfund.typing import StrategyT, DataConfigDict, tTRADING_VENUE, tCRYPTO_EXCHANGE
     from pfund.brokers.broker_base import BaseBroker
     from pfund.products.product_base import BaseProduct
@@ -24,34 +24,39 @@ if TYPE_CHECKING:
     from pfund.datas.data_bar import Bar
     from pfund.data_tools.data_tool_base import BaseDataTool
     from pfund.risk_guard import RiskGuard
+    from pfund.datas.data_config import DataConfig
     from pfund.data_tools import data_tool_backtest
+    from pfund.datas.resolution import Resolution
 
-import os
 from collections import defaultdict, deque
 from abc import ABC, abstractmethod
 
-from mtflow.stores.trading_store import TradingStore
-from pfund.datas.resolution import Resolution
 from pfund.strategies.strategy_meta import MetaStrategy
 from pfund.mixins.trade_mixin import TradeMixin
-from pfund.enums import Broker
-from pfund.data_tools.data_config import DataConfig
+from pfund.enums import TradingVenue, Broker
 
 
 class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):    
     def __init__(self, *args, **kwargs):
+        from pfund.databoy import DataBoy
+        
+        cls = self.__class__
+        cls.load_config()
+        cls.load_params()
+        
         self._args = args
         self._kwargs = kwargs
         self._name = self._get_default_name()
-        self._engine = None
+        
         self.logger = None
-        self._is_running = False
-        self._datas = defaultdict(dict)  # {product: {'1m': data}}
-        self._data_tool: BaseDataTool = self._create_data_tool()
+        self._engine = None
         self._store: TradingStore | None = None
+        self._databoy = DataBoy()
+        
+        # FIXME: move to mtflow?
+        # self._data_tool: BaseDataTool = self._create_data_tool()
+        
         self._resolution: Resolution | None = None
-        self._orderbooks = {}  # {product: data}
-        self._tradebooks = {}  # {product: data}
         
         # TODO: move to mtflow
         self._consumer: BaseStrategy | None = None
@@ -75,25 +80,22 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self._signal_cols = []
         self._num_signal_cols = 0
 
-        self._data_signatures = []
         self._strategy_signature = (args, kwargs)
 
-        self._zmq: ZeroMQ | None = None
-
-        self.params = {}
-        self.load_params()
-
+        self._is_running = False
+    
+    @staticmethod
+    def _get_pfund_strategy_class():
+        '''Gets the actual strategy class under ray's ActorHandle'''
+        return BaseStrategy.__pfund_strategy_class__
+        
     @abstractmethod
     def backtest(self, df: data_tool_backtest.BacktestDataFrame):
         pass
 
-    def _set_trading_store(self):
-        mtstore = self._engine._store
-        self._store = mtstore.get_trading_store(self.name)
-        
     # TODO:
     def add_risk_guard(self, risk_guard: RiskGuard):
-        pass
+        raise NotImplementedError("RiskGuard is not implemented yet")
     
     # TODO
     def is_ready(self):
@@ -120,36 +122,11 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             'features': [model.to_dict() for model in self.models.values() if model.is_feature()],
             'indicators': [model.to_dict() for model in self.models.values() if model.is_indicator()],
             'strategy_signature': self._strategy_signature,
-            'data_signatures': self._data_signatures,
+            'data_signatures': self._databoy._data_signatures,
         }
     
     def get_trading_venues(self) -> list[tTRADING_VENUE]:
         return list(self.accounts.keys())
-    
-    def pong(self):
-        """Pongs back to Engine's ping to show that it is alive"""
-        zmq_msg = (0, 0, (self.strat,))
-        self._zmq.send(*zmq_msg, receiver='engine')
-
-    # FIXME
-    def start_zmq(self):
-        zmq_ports = self._engine.zmq_ports
-        self._zmq = ZeroMQ(self.name)
-        self._zmq.start(
-            logger=self.logger,
-            send_port=zmq_ports[self.name],
-            recv_ports=[zmq_ports['engine']]
-        )
-        zmq_msg = (0, 1, (self.strat, os.getpid(),))
-        self._zmq.send(*zmq_msg, receiver='engine')
-
-    def stop_zmq(self):
-        self._zmq.stop()
-        self._zmq = None
-    
-    def add_broker(self, trading_venue: tTRADING_VENUE) -> BaseBroker:
-        bkr = self._derive_bkr_from_trading_venue(trading_venue)
-        return self._engine.add_broker(bkr)
     
     @overload
     def get_position(self, account: CryptoAccount, pdt: str) -> CryptoPosition | None: ...
@@ -221,7 +198,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     
     def add_account(self, trading_venue: tTRADING_VENUE, name: str='', **kwargs) -> BaseAccount:
         trading_venue, name = trading_venue.upper(), name.upper()
-        broker: BaseBroker = self.add_broker(trading_venue)
+        broker: BaseBroker = self._engine.add_broker(trading_venue)
         if broker.name == Broker.CRYPTO:
             exch = trading_venue
             account =  broker.add_account(exch=exch, name=name or self.name, **kwargs)
@@ -241,6 +218,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self, 
         trading_venue: tTRADING_VENUE,
         product: str,
+        exchange: str='',
         symbol: str='',
         data_source: tDATA_SOURCE | None=None,
         data_origin: str='',
@@ -249,31 +227,34 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     ) -> list[TimeBasedData]:
         '''
         Args:
+            exchange: useful for TradFi brokers, e.g. IB, to specify the exchange
             product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
             product_specs: product specifications, e.g. expiration, strike_price etc.
         '''
-        # TODO: save data signatures properly, data_signatures should be a set
-        # TODO: add data_config (dict form) to data_signatures
-        # TODO: rename data_signatures to data_inputs?
-        self._data_signatures.append({k: v for k, v in locals().items() if k not in ['self', '__class__']})
-        
-        trading_venue, product = trading_venue.upper(), product.upper()
-        data_source = trading_venue if data_source is None else data_source
-        data_config = self._parse_data_config(data_config)
-        
+        trading_venue: TradingVenue = TradingVenue[trading_venue.upper()]
+        data_source = data_source or trading_venue.value
+        if isinstance(data_config, dict):
+            data_config['primary_resolution'] = self.resolution
 
         if not self.is_sub_strategy():
-            broker: BaseBroker = self.add_broker(trading_venue)
+            broker: BaseBroker = self._engine.add_broker(trading_venue)
             if broker.name == Broker.CRYPTO:
-                exch = trading_venue
-                datas: list[TimeBasedData] = broker.add_data(exch, product, symbol=symbol, data_config=data_config, **product_specs)
+                exch = trading_venue.value
+                product: BaseProduct = broker.add_product(exch, product, symbol=symbol, **product_specs)
+            elif broker.name == Broker.IB:
+                product: BaseProduct = broker.add_product(product, exchange=exchange, symbol=symbol, **product_specs)
             else:
-                datas: list[TimeBasedData] = broker.add_data(product, symbol=symbol, data_config=data_config, **product_specs)
+                raise NotImplementedError(f"Broker {broker.name} is not supported")
+            datas: list[TimeBasedData] = self._databoy.add_data(product, data_config=data_config)
             for data in datas:
                 self._add_data(data)
+                if not data.is_resamplee():
+                    # TODO: add channel to broker
+                    broker.add_channel()
                 broker._add_data_listener(self, data)
                 if data.resolution == self.resolution:
-                    self._engine._store.register_market_data(
+                    mtstore = self._engine._store
+                    mtstore.register_market_data(
                         consumer=self.name,
                         data_source=data_source,
                         data_origin=data_origin,
@@ -394,9 +375,9 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             self._start_models()
             self._prepare_df()
             if self._engine._use_ray:
+                self._databoy.collect()
                 # TODO: notice strategy manager it has started running
                 pass
-                # self._zmq ...
             self.on_start()
 
             self._register_to_mtstore()
@@ -414,7 +395,6 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             if self._engine._use_ray:
                 # TODO: notice strategy manager it has stopped running
                 pass
-                # self._zmq ...
             for strategy in self.strategies.values():
                 strategy.stop(reason=reason)
             for model in self.models.values():

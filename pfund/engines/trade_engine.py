@@ -13,8 +13,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfeed.typing import tDATA_TOOL
-    from pfund.brokers.broker_trade import TradeBroker
-    from pfund.brokers.broker_simulated import SimulatedBroker
     from pfund.typing import DataRangeDict, TradeEngineSettingsDict, tDATABASE, ExternalListenersDict
 
 from pfund.engines.base_engine import BaseEngine
@@ -49,18 +47,6 @@ class TradeEngine(BaseEngine):
         # TODO:
         # self.DataTool.set_min_rows(df_min_rows)
         # self.DataTool.set_max_rows(df_max_rows)
-
-    def _create_broker(self, bkr: str) -> SimulatedBroker | TradeBroker:
-        from pfund.enums import Environment
-        if self._env == Environment.SANDBOX:
-            from pfund.brokers.broker_simulated import SimulatedBrokerFactory
-            SimulatedBroker = SimulatedBrokerFactory(bkr)
-            broker = SimulatedBroker(self._env)
-        else:
-            from pfund.enums import Broker
-            BrokerClass = Broker[bkr.upper()].broker_class
-            broker = BrokerClass(self._env)
-        return broker
     
     def _check_processes(self):
         for broker in self._brokers.values():

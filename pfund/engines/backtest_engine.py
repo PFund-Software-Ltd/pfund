@@ -116,11 +116,12 @@ class BacktestEngine(BaseEngine):
         return self._dataset_splitter.dataset_periods
     
     def _setup_ray_actors(self):
-        # automatically wrap components in ray actors only when using ray on 'component', not 'dataset'
-        super()._setup_ray_actors(auto_wrap=(self._use_ray_on == 'component'))
+        if self._use_ray_on == 'component':
+            super()._setup_ray_actors()
     
     # HACK: since python doesn't support dynamic typing, true return type should be subclass of BacktestMixin and StrategyT
     # write -> BacktestMixin | StrategyT for better intellisense in IDEs
+    # TODO: handle ray actors, i.e. UserStrategy.remote() is passed in
     def add_strategy(
         self, 
         strategy: StrategyT, 
@@ -206,12 +207,6 @@ class BacktestEngine(BaseEngine):
             group_data=group_data,
             signal_cols=signal_cols,
         )
-    
-    def _create_broker(self, bkr: str) -> SimulatedBroker:
-        from pfund.brokers.broker_simulated import SimulatedBrokerFactory
-        SimulatedBroker = SimulatedBrokerFactory(bkr)
-        broker = SimulatedBroker(self._env)
-        return broker
     
     def _assert_backtest_function(self, backtestee: BaseStrategy | BaseModel):
         assert self._backtest_mode == BacktestMode.vectorized, 'assert_backtest_function() is only for vectorized backtesting'

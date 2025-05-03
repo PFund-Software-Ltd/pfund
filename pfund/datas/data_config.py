@@ -3,7 +3,6 @@ from typing_extensions import Annotated
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 from pfund.datas.resolution import Resolution
-from pfund.enums import Environment
 
 
 # TODO: add private channels? remove _add_default_private_channels in exchange_base.py

@@ -23,48 +23,35 @@ if TYPE_CHECKING:
     from pfund.models.model_base import BaseModel, BaseFeature
     from pfund.indicators.indicator_base import BaseIndicator
 
-import sys
 import time
 import datetime
 import importlib
-from pathlib import Path
 
-from pfund.enums import CryptoExchange, Broker, ComponentType
+from pfund.enums import Broker, ComponentType
 from pfund.datas.resolution import Resolution
 from pfund.utils.utils import load_yaml_file, convert_ts_to_dt
-from pfund.data_tools.data_config import DataConfig
+from pfund.datas.data_config import DataConfig
 
 
 class TradeMixin:
-    _file_path: Path | None = None  # Get the file path where the strategy was defined
     config = {}
+    params = {}
 
     @classmethod
-    def load_config(cls, config: dict | None=None):
+    def load_config(cls, config: dict | None=None, file_path: str=''):
         if config:
             cls.config = config
-        elif cls._file_path:
-            for file_name in ['config.yml', 'config.yaml']:
-                if config := load_yaml_file(cls._file_path.parent / file_name):
-                    cls.config = config
-                    break
+        elif file_path:
+            if config := load_yaml_file(file_path):
+                cls.config = config
     
-    def load_params(self: BaseStrategy | BaseModel, params: dict | None=None):
+    @classmethod
+    def load_params(cls, params: dict | None=None, file_path: str=''):
         if params:
-            self.params = params
-        elif self._file_path:
-            for file_name in ['params.yml', 'params.yaml']:
-                if params := load_yaml_file(self._file_path.parent / file_name):
-                    self.params = params
-                    break
-    
-    def __new__(cls, *args, **kwargs):
-        if not cls._file_path:
-            module = sys.modules[cls.__module__]
-            if file_path := getattr(module, '__file__', None):
-                cls._file_path = Path(file_path)
-                cls.load_config()
-        return super().__new__(cls)
+            cls.params = params
+        elif file_path:
+            if params := load_yaml_file(file_path):
+                cls.params = params
     
     @property
     def data_tool(self: BaseStrategy | BaseModel) -> BaseDataTool:
@@ -124,7 +111,7 @@ class TradeMixin:
     
     @property
     def datas(self: BaseStrategy | BaseModel):
-        return self._datas
+        return self._databoy._datas
     
     @property
     def dataset_start(self: BaseStrategy | BaseModel) -> datetime.date:
@@ -175,11 +162,6 @@ class TradeMixin:
     def get_delay(ts: float) -> float:
         return time.time() - ts
     
-    @staticmethod
-    def is_ray_actor(value) -> bool:
-        from ray.actor import ActorClass
-        return isinstance(value, ActorClass)
-    
     def is_strategy(self: BaseStrategy | BaseModel) -> bool:
         return self.component_type == ComponentType.strategy
     
@@ -198,23 +180,14 @@ class TradeMixin:
     def _set_engine(self: BaseStrategy | BaseModel, engine: BaseEngine | None):
         self._engine: BaseEngine | None = engine
     
+    def _set_trading_store(self: BaseStrategy | BaseModel, trading_store: TradingStore):
+        self._store = trading_store
+    
     def _create_logger(self: BaseStrategy | BaseModel):
         from pfund._logging import create_dynamic_logger
         self.logger = create_dynamic_logger(self.name, self.component_type)
-        self.store.set_logger(self.logger)
-        
-    def _setup_zmq(self: BaseStrategy | BaseModel):
-        import zmq
-        from mtflow.messaging.zeromq import ZeroMQ
-
-        zmq_urls = self._engine.settings.zmq_urls
-        self._zmq = ZeroMQ(
-            url=zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL),
-            receiver_socket_type=zmq.SUB,  # receive data from engine
-            sender_socket_type=zmq.PUSH,  # send e.g. orders to engine
-        )
-        # TODO: subscribe to selected topics, e.g. b'BYBIT:orderbook:BTCUSDT'
-        self._zmq.setsockopt(zmq.SUBSCRIBE, b'')
+        self._store._set_logger(self.logger)
+        self._databoy._set_logger(self.logger)
         
     def _prepare_df(self: BaseStrategy | BaseModel):
         return self.data_tool.prepare_df(ts_col_type='timestamp')
@@ -254,10 +227,6 @@ class TradeMixin:
         if listener not in self._listeners[data]:
             self._listeners[data].append(listener)
     
-    def _derive_bkr_from_trading_venue(self: BaseStrategy | BaseModel, trading_venue: tTRADING_VENUE) -> tBROKER:
-        trading_venue = trading_venue.upper()
-        return 'CRYPTO' if trading_venue in CryptoExchange.__members__ else trading_venue
-    
     @overload
     def get_broker(self: BaseStrategy | BaseModel, bkr: Literal['CRYPTO']) -> CryptoBroker: ...
         
@@ -293,14 +262,6 @@ class TradeMixin:
     
     def list_products(self: BaseStrategy | BaseModel) -> list[BaseProduct]:
         return list(self._datas.keys())
-
-    def _parse_data_config(self: BaseStrategy | BaseModel, data_config: DataConfigDict | DataConfig | None) -> DataConfig:
-        if isinstance(data_config, DataConfig):
-            return data_config
-        data_config = data_config or {}
-        data_config['primary_resolution'] = self.resolution
-        data_config = DataConfig(**data_config)
-        return data_config
     
     # TODO
     def add_custom_data(self: BaseStrategy | BaseModel):

@@ -7,7 +7,7 @@ from typing import Literal, TYPE_CHECKING
 from pfund.config import Configuration
 if TYPE_CHECKING:
     from pfund.typing import tENVIRONMENT
-    from pfund.data_tools.data_config import DataConfig
+    from pfund.datas.data_config import DataConfig
     from pfund.datas.data_time_based import TimeBasedData
 
 from pfund.adapter import Adapter
@@ -39,8 +39,8 @@ class IBBroker(TradeBroker):
 
     # EXTEND
     @staticmethod
-    def derive_exch(pdt: str):
-        bccy, qccy, ptype, *args = IBProduct.parse_product_name(pdt)
+    def _derive_exch(product_basis: str):
+        bccy, qccy, ptype, *args = IBProduct.parse_product_name(product_basis)
         if ptype == 'FX':
             exch = 'IDEALPRO'
         elif ptype == 'CRYPTO':
@@ -71,24 +71,6 @@ class IBBroker(TradeBroker):
             assert 'account' in kwargs, 'Keyword argument "account" is missing'
         self._api.add_channel(channel, type_, **kwargs)
 
-    # TODO
-    def add_custom_data(self):
-        pass
-    
-    def add_data(self, product: str, data_config: DataConfig, exch: str='', symbol: str='', **product_specs) -> list[TimeBasedData]:
-        '''
-        Args:
-            product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
-        '''
-        exch = exch or self.derive_exch(product)
-        exch, product_basis = exch.upper(), product.upper()
-        product: IBProduct = self.add_product(exch, product_basis, symbol=symbol, **product_specs)
-        datas = self._data_manager.add_data(product, data_config=data_config)
-        datas_non_resamplee = [data for data in datas if not data.is_resamplee()]
-        for data in datas_non_resamplee:
-            self.add_data_channel(data, **kwargs)
-        return datas
-    
     def add_data_channel(self, data: TimeBasedData, **kwargs):
         if data.is_time_based():
             if data.is_resamplee():
@@ -110,15 +92,16 @@ class IBBroker(TradeBroker):
         return product
 
     def get_product(self, pdt: str, exch: str='') -> IBProduct | None:
-        exch = exch or self.derive_exch(pdt)
+        exch = exch or self._derive_exch(pdt)
         return self._products[exch.upper()].get(pdt.upper(), None)
 
-    def add_product(self, exch: str, pdt: str, symbol: str='', **kwargs) -> IBProduct:
-        exch, pdt = exch.upper(), pdt.upper()
-        if not (product := self.get_product(exch=exch, pdt=pdt)):
-            product = self.create_product(exch, pdt, symbol=symbol, **kwargs)
-            self._products[exch][product.name] = product
-            self._api.add_product(product, **kwargs)
+    def add_product(self, product_basis: str, exchange: str='', symbol: str='', **product_specs) -> IBProduct:
+        product_basis = product_basis.upper()
+        exchange = exchange or self._derive_exch(product_basis)
+        if not (product := self.get_product(exchange=exchange, pdt=product_basis)):
+            product = self.create_product(exchange, product_basis, symbol=symbol, **product_specs)
+            self._products[exchange][product.name] = product
+            self._api.add_product(product, **product_specs)
             self._logger.debug(f'added product {product.name}')
         return product
 
