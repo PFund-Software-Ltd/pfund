@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.typing import StrategyT
+    from pfund.typing import StrategyT, tTRADING_VENUE
     from pfund.products.product_base import BaseProduct
     from pfund.data_tools import data_tool_backtest
     
@@ -19,24 +19,9 @@ def BacktestStrategy(Strategy: type[StrategyT], *args, **kwargs) -> BacktestMixi
                 class_name = Strategy.__name__
                 raise AttributeError(f"'{class_name}' object has no attribute '{name}'")
         
-        # REVIEW
         def backtest(self, df: data_tool_backtest.BacktestDataFrame):
             raise Exception(f'Strategy "{self.name}" does not have a backtest() method, cannot run vectorized backtesting')
         
-        def add_account(
-            self, 
-            trading_venue: str, 
-            name: str='', 
-            initial_balances: dict[str, int | float] | None=None, 
-            initial_positions: dict[BaseProduct, int | float] | None=None,
-        ):
-            return super().add_account(
-                trading_venue=trading_venue, 
-                name=name, 
-                initial_balances=initial_balances, 
-                initial_positions=initial_positions,
-            )
-            
         def add_strategy(self, strategy: StrategyT, name: str='') -> BacktestMixin | StrategyT:
             strategy = BacktestStrategy(type(strategy), *strategy._args, **strategy._kwargs)
             return super().add_strategy(strategy, name=name)
@@ -46,6 +31,7 @@ def BacktestStrategy(Strategy: type[StrategyT], *args, **kwargs) -> BacktestMixi
                 for trading_venue in self.get_trading_venues():
                     account = self.add_account(trading_venue)
                     broker = self.get_broker(account.bkr)
+                    # TODO: move to broker
                     broker.initialize_balances()
             # TODO
             if self._is_signal_df_required and self._signal_df is None:

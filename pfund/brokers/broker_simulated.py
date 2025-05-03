@@ -50,8 +50,8 @@ class SimulatedBroker(BaseBroker):
     def add_account(
         self, 
         name: str='', 
-        initial_balances: dict[str, int | float] | None=None,
-        initial_positions: dict[BaseProduct, int | float]|None=None,
+        initial_balances: dict[str, float] | None=None,
+        initial_positions: dict[BaseProduct, float]|None=None,
     ):
         account = super().add_account(name=name)
         if initial_balances is None:

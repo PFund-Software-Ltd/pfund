@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from pfund.accounts.account_base import BaseAccount
     from pfund.accounts.account_crypto import CryptoAccount
     from pfund.accounts.account_ib import IBAccount
+    from pfund.accounts.account_simulated import SimulatedAccount
     from pfund.orders.order_base import BaseOrder
     from pfund.datas.data_base import BaseData
     from pfund.models.model_base import BaseModel, BaseFeature
@@ -208,6 +209,15 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         port: int | None=None,
         client_id: int | None=None,
     ) -> IBAccount: ...
+    
+    @overload
+    def add_account(
+        self,
+        trading_venue: tTRADING_VENUE,
+        name: str='',
+        initial_balances: dict[str, float] | None=None, 
+        initial_positions: dict[BaseProduct, float] | None=None,
+    ) -> SimulatedAccount: ...
     
     def add_account(self, trading_venue: tTRADING_VENUE, name: str='', **kwargs) -> BaseAccount:
         trading_venue, name = trading_venue.upper(), name.upper()

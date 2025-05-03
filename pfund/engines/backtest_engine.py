@@ -32,9 +32,10 @@ class BacktestEngine(BaseEngine):
     def __init__(
         self,
         mode: Literal['vectorized', 'event_driven']='vectorized',
+        name: str='',
         use_ray_on: Literal['dataset', 'component'] | None='dataset',
         data_tool: tDATA_TOOL='polars',
-        data_range: str | DataRangeDict | Literal['ytd']='1w',
+        data_range: str | DataRangeDict | Literal['ytd']='1d',
         database: tDATABASE | None=None,
         settings: BacktestEngineSettingsDict | None = None,
         external_listeners: ExternalListenersDict | None=None,
@@ -76,6 +77,7 @@ class BacktestEngine(BaseEngine):
         cls._backtest_mode = BacktestMode[mode.lower()]
         super().__init__(
             env='BACKTEST', 
+            name=name,
             use_ray=(use_ray_on is not None),
             data_tool=data_tool,
             data_range=data_range,

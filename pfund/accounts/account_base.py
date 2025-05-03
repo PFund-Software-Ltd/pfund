@@ -1,37 +1,47 @@
+from typing import ClassVar
+
 from pfund.enums import Environment, Broker
+from pfund.typing import tENVIRONMENT
 
 
 class BaseAccount:
-    num = 0
+    _num: ClassVar[int] = 0
 
     @classmethod
-    def add_account_num(cls):
-        cls.num += 1
-        return str(cls.num)
+    def _next_account_id(cls):
+        cls._num += 1
+        return str(cls._num)
     
-    def __init__(self, env: Environment, bkr: Broker, name: str=''):
-        self.env = env
-        self.bkr = bkr
-        name = name or self._get_default_name()
-        self.name = self.acc = name.upper()
-
     def _get_default_name(self):
-        return self.__class__.__name__ + '-' + self.add_account_num()
+        return f"{self.__class__.__name__}-{self._next_account_id()}"
+    
+    def __init__(self, env: tENVIRONMENT, bkr: str, name: str):
+        self._env = Environment[env.upper()]
+        self._bkr = Broker[bkr.upper()]
+        self.name = name or self._get_default_name()
+        
+    @property
+    def env(self) -> Environment:
+        return self._env
+    
+    @property
+    def bkr(self) -> Broker:
+        return self._bkr
     
     def __str__(self):
-        return f'Broker={self.bkr.value}|Account={self.name}'
+        return f'Broker={self._bkr.value}|Account={self.name}'
 
     def __repr__(self):
-        return f'{self.bkr.value}:{self.name}'
+        return f'{self._bkr.value}:{self.name}'
 
     def __eq__(self, other):
         if not isinstance(other, BaseAccount):
             return NotImplemented  # Allow other types to define equality with BaseProduct
         return (
-            self.env == other.env
-            and self.bkr == other.bkr
-            and self.name == other.name
+            self._env == other._env
+            and self._bkr == other._bkr
+            and self.name == other._name
         )
         
     def __hash__(self):
-        return hash((self.env, self.bkr, self.name))
+        return hash((self._env, self._bkr, self.name))

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pfund.engines.base_engine_settings import BaseEngineSettings
 
 
 '''
@@ -7,5 +7,5 @@ settings: BacktestEngineSettings = {
         'retention_period': '7d',
     }
 '''
-class BacktestEngineSettings(BaseModel):
+class BacktestEngineSettings(BaseEngineSettings):
     pass

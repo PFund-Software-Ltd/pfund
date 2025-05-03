@@ -24,6 +24,7 @@ class TradeEngine(BaseEngine):
     def __init__(
         self,
         env: Literal['SANDBOX', 'PAPER', 'LIVE']='SANDBOX',
+        name: str='',
         use_ray: bool=True,
         data_tool: tDATA_TOOL='polars',
         data_range: str | DataRangeDict='ytd',
@@ -37,6 +38,7 @@ class TradeEngine(BaseEngine):
         from pfund.engines.trade_engine_settings import TradeEngineSettings
         super().__init__(
             env=env,
+            name=name,
             use_ray=use_ray,
             data_tool=data_tool, 
             data_range=data_range, 

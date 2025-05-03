@@ -1,17 +1,17 @@
+from pfund.typing import tENVIRONMENT
 from pfund.accounts.account_base import BaseAccount
-from pfund.enums import Environment, Broker
 
 
 class IBAccount(BaseAccount):
     def __init__(
         self, 
-        env: Environment, 
+        env: tENVIRONMENT, 
         name: str='',
         host: str='', 
         port: int | None=None, 
         client_id: int | None=None, 
     ):
-        super().__init__(env, Broker.IB, name=name)
+        super().__init__(env=env, bkr='IB', name=name)
         # FIXME: load from .env
         self._host = host
         self._port = port
