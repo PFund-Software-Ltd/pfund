@@ -1,15 +1,16 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, ClassVar
 if TYPE_CHECKING:
-    from ray.actor import ActorHandle
     from mtflow.stores.mtstore import MTStore
     from mtflow.kernel import TradeKernel
     from pfeed.typing import tDATA_TOOL
+    from pfund.actor_proxy import ActorProxy
+    from pfund.messaging.zeromq import ZeroMQ
+    from pfund.messaging.localmq import LocalMQ
     from pfund.typing import StrategyT, tENVIRONMENT, tBROKER, DataRangeDict, tDATABASE, tTRADING_VENUE
     from pfund.typing import ExternalListenersDict
     from pfund.brokers.broker_base import BaseBroker
     from pfund.strategies.strategy_base import BaseStrategy
-    from pfund.models.model_base import BaseModel
     from pfund.engines.trade_engine_settings import TradeEngineSettings
     from pfund.engines.backtest_engine_settings import BacktestEngineSettings
 
@@ -35,6 +36,12 @@ ENV_COLORS = {
 
 
 class BaseEngine(metaclass=MetaEngine):
+    '''
+    _proxy: ZeroMQ xsub-xpub proxy for messaging from trading venues -> engine -> components
+    _router: ZeroMQ router-pull for pulling messages from components (e.g. strategies/models) -> engine -> (routing to) trading venues
+    _publisher: ZeroMQ publisher for broadcasting internal states to external apps
+    '''
+    
     _num: ClassVar[int] = 0
     _initialized: ClassVar[bool]
     _env: ClassVar[Environment]
@@ -138,18 +145,24 @@ class BaseEngine(metaclass=MetaEngine):
         
 
         self.name = name or self._get_default_name()
+        
         self._setup_logging()
         self._logger = logging.getLogger('pfund')
+        
+        self._proxy: ZeroMQ | LocalMQ | None = None
+        self._router: ZeroMQ | LocalMQ | None = None
+        self._publisher: ZeroMQ | LocalMQ | None = None
+        self._setup_messaging()
+        
         self._store = MTStore(env=cls._env, data_tool=cls._data_tool)
         self._kernel = TradeKernel(
             mode=cls._run_mode,
             database=cls._database,
             external_listeners=cls._external_listeners,
-            zmq_urls=cls._settings.zmq_urls,
-            zmq_ports=cls._settings.zmq_ports,
         )
+
         self.brokers: dict[Broker, BaseBroker] = {}
-        self.strategies: dict[str, BaseStrategy] = {}
+        self.strategies: dict[str, BaseStrategy | StrategyProxy] = {}
     
     @property
     def env(self) -> Environment:
@@ -180,57 +193,92 @@ class BaseEngine(metaclass=MetaEngine):
         logging_configurator  = setup_loggers(log_path, logging_config_file_path, user_logging_config=config.logging_config)
         config.set_logging_configurator(logging_configurator)
     
-    @staticmethod
-    def _is_ray_actor(value) -> bool:
-        from ray.actor import ActorHandle
-        return isinstance(value, ActorHandle)
+    def _setup_messaging(self):
+        if self._run_mode == RunMode.REMOTE:
+            import zmq
+            from pfund.messaging.zeromq import ZeroMQ
+            urls = self._settings.zmq_urls
+            engine_url = urls.get('engine', ZeroMQ.DEFAULT_URL)
+            self._proxy = ZeroMQ(
+                url=engine_url,
+                io_threads=2,
+                receiver_socket_type=zmq.XSUB,  # msgs from trading venues -> engine
+                sender_socket_type=zmq.XPUB,  # msgs from engine -> components
+            )
+            self._router = ZeroMQ(
+                url=engine_url,
+                receiver_socket_type=zmq.PULL,  # msgs (e.g. orders) from components -> engine
+                sender_socket_type=zmq.ROUTER,  # msgs (e.g. orders) from engine -> trading venues
+            )
+            is_any_listener = any(value for value in self._external_listeners.model_dump().values())
+            if is_any_listener:
+                self._publisher = ZeroMQ(url=engine_url, sender_socket_type=zmq.PUB)
+        else:
+            # TODO: add LocalMQ
+            pass
     
-    def _setup_ray_actors(self):
-        def _add_ray_actor(component: BaseStrategy | BaseModel):
-            databoy = component._databoy
-            databoy._setup_zmq()
-            self._kernel.add_ray_actor(component)
-            for subcomponent in component.components:
-                if self._is_ray_actor(subcomponent):
-                    _add_ray_actor(subcomponent)
-        for strategy in self.strategies.values():
-            _add_ray_actor(strategy)
-
+    def _start_messaging(self):
+        if self._run_mode == RunMode.REMOTE:
+            self._proxy.start(
+                sender_port=self._ports['proxy'],
+                receiver_ports=[self._ports[tv] for tv in active_trading_venues]
+            )
+            self._router.start(
+                sender_port=self._ports['router'],
+                receiver_ports=[self._ports[c] for c in active_components]
+            )
+            if self._publisher:
+                self._publisher.start(sender_port=self._ports['publisher'])
+            # FIXME: zmq.proxy(...)
+            self._proxy.run_proxy()
+    
+    # TODO:
+    def _stop_messaging(self):
+        pass
+    
     def run(self):
         self._store.freeze()
-        if self._kernel is not None and self._run_mode == RunMode.REMOTE:
-            self._setup_ray_actors()
     
     # FIXME
     def is_running(self) -> bool:
         return self._kernel._is_running
     
-    def add_strategy(self, strategy: StrategyT | ActorHandle, resolution: str, name: str='') -> StrategyT | ActorHandle:
-        if self._is_ray_actor(strategy):
+    def add_strategy(
+        self, 
+        strategy: StrategyT, 
+        resolution: str, 
+        name: str='',
+        num_cpus: int=1,
+        **ray_kwargs
+    ) -> StrategyT | ActorProxy:
+        from pfund.strategies.strategy_base import BaseStrategy
+        Strategy = strategy.__class__
+        assert isinstance(strategy, BaseStrategy), \
+                f"strategy '{Strategy.__name__}' is not an instance of BaseStrategy. Please create your strategy using 'class {Strategy.__name__}(BaseStrategy)'"
+        if self._run_mode == RunMode.REMOTE:
             import ray
-            assert self._run_mode == RunMode.REMOTE, \
-                f'Ray actors can only be added in remote mode, but current run mode is {self._run_mode}, please set use_ray=True'
-            StrategyClass = ray.get(strategy._get_pfund_strategy_class.remote())
-            assert issubclass(StrategyClass, BaseStrategy), \
-                f"strategy '{StrategyClass.__name__}' is not an instance of BaseStrategy. Please create your strategy using 'class {StrategyClass.__name__}(BaseStrategy)'"
-        else:
-            assert isinstance(strategy, BaseStrategy), \
-                f"strategy '{strategy.__class__.__name__}' is not an instance of BaseStrategy. Please create your strategy using 'class {strategy.__class__.__name__}(BaseStrategy)'"
+            from ray.actor import ActorHandle
+            from pfund.actor_proxy import ActorProxy
+            ray_kwargs['num_cpus'] = num_cpus
+            StrategyActor = ray.remote(**ray_kwargs)(Strategy)
+            strategy_args, strategy_kwargs = strategy.__pfund_args__, strategy.__pfund_kwargs__
+            strategy: ActorHandle = StrategyActor.remote(*strategy_args, **strategy_kwargs)
+            strategy = ActorProxy(strategy)
         if name:
             strategy._set_name(name)
         strategy._set_resolution(resolution)
-        strat = strategy.name
+        strat = strategy.get_name()
         if strat in self.strategies:
             raise ValueError(f"{strat} already exists")
         else:
-            strategy._set_engine(self)
-            trading_store = self._store.add_trading_store(strat)
-            strategy._set_trading_store(trading_store)
+            # FIXME: doesn't work when using ray
             strategy._create_logger()
             self.strategies[strat] = strategy
+            if self._run_mode == RunMode.REMOTE:
+                self._kernel.add_ray_actor(strategy)
             self._logger.debug(f"added '{strat}'")
-            return strategy
-    
+        return strategy
+        
     def remove_strategy(self, name: str) -> BaseStrategy:
         if name in self.strategies:
             strategy = self.strategies.pop(name)

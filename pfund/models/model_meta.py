@@ -3,22 +3,6 @@ from abc import ABCMeta
 
 
 class MetaModel(ABCMeta):
-    def __new__(mcs, name, bases, namespace, **kwargs):
-        cls = super().__new__(mcs, name, bases, namespace, **kwargs)
-        module_name = namespace.get('__module__', '')
-        is_user_model_class = (
-            name != 'BaseModel' 
-            and not module_name.startswith('pfund.') 
-            and not module_name.startswith('ray.')
-        )
-        if is_user_model_class:
-            for base in bases:
-                if base.__name__ == 'BaseModel':
-                    # NOTE: since ray's ActorHandle doesn't save the original class, we need to save it manually
-                    base.__pfund_model_class__ = cls
-                    break
-        return cls
-    
     def __call__(cls, *args, **kwargs):
         is_backtest = cls.__name__ == '_BacktestModel'
         if is_backtest:

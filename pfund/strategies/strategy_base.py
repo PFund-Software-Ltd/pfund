@@ -33,23 +33,21 @@ from abc import ABC, abstractmethod
 
 from pfund.strategies.strategy_meta import MetaStrategy
 from pfund.mixins.trade_mixin import TradeMixin
-from pfund.enums import TradingVenue, Broker
+from pfund.enums import TradingVenue, Broker, RunMode
 
 
 class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):    
-    def __init__(self, *args, **kwargs):
+    def __init__(self):
         from pfund.databoy import DataBoy
         
+        # TODO
         cls = self.__class__
         cls.load_config()
         cls.load_params()
         
-        self._args = args
-        self._kwargs = kwargs
-        self._name = self._get_default_name()
+        self.name = self._get_default_name()
         
         self.logger = None
-        self._engine = None
         self._store: TradingStore | None = None
         self._databoy = DataBoy()
         
@@ -80,15 +78,8 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         self._signal_cols = []
         self._num_signal_cols = 0
 
-        self._strategy_signature = (args, kwargs)
-
         self._is_running = False
     
-    @staticmethod
-    def _get_pfund_strategy_class():
-        '''Gets the actual strategy class under ray's ActorHandle'''
-        return BaseStrategy.__pfund_strategy_class__
-        
     @abstractmethod
     def backtest(self, df: data_tool_backtest.BacktestDataFrame):
         pass
@@ -121,7 +112,8 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             'models': [model.to_dict() for model in self.models.values() if model.is_model()],
             'features': [model.to_dict() for model in self.models.values() if model.is_feature()],
             'indicators': [model.to_dict() for model in self.models.values() if model.is_indicator()],
-            'strategy_signature': self._strategy_signature,
+            # FIXME
+            'strategy_signature': (self.__pfund_args__, self.__pfund_kwargs__),
             'data_signatures': self._databoy._data_signatures,
         }
     
@@ -247,7 +239,6 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
                 raise NotImplementedError(f"Broker {broker.name} is not supported")
             datas: list[TimeBasedData] = self._databoy.add_data(product, data_config=data_config)
             for data in datas:
-                self._add_data(data)
                 if not data.is_resamplee():
                     # TODO: add channel to broker
                     broker.add_channel()
@@ -260,8 +251,8 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
                         data_origin=data_origin,
                         product=data.product,
                         resolution=self.resolution,
-                        start_date=self.dataset_start,
-                        end_date=self.dataset_end,
+                        start_date=self._engine._dataset_start,
+                        end_date=self._engine._dataset_end,
                     )
         else:
             datas: list[TimeBasedData] = self._add_data_to_consumer(
@@ -285,11 +276,6 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             broker = self.get_broker(product.bkr)
             for data in datas:
                 del self._datas[data.product][repr(data.resolution)]
-                timeframe = data.resolution.timeframe
-                if timeframe.is_quote():
-                    del self._orderbooks[data.product]
-                if timeframe.is_tick():
-                    del self._tradebooks[data.product]
                 broker._remove_data_listener(self, data)
             if not self._datas[product]:
                 del self._datas[product]
@@ -363,7 +349,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             elif component.is_indicator():
                 mtstore.register_indicator(self.name, component, metadata)
     
-    def start(self):
+    def start(self, run_mode: RunMode):
         if not self.is_running():
             self.add_datas()
             self._add_datas_from_consumer_if_none()
@@ -374,14 +360,15 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
             self.add_indicators()
             self._start_models()
             self._prepare_df()
-            if self._engine._use_ray:
-                self._databoy.collect()
+            if run_mode == RunMode.REMOTE:
+                self._databoy._setup_messaging(run_mode)
+                self._databoy._collect()
                 # TODO: notice strategy manager it has started running
                 pass
             self.on_start()
 
             self._register_to_mtstore()
-            # TODO: self._store.materialize(), after on_start()?
+            # TODO: self._store.materialioe(), after on_start()?
             
             self._is_running = True
             self.logger.info(f"strategy '{self.name}' has started")

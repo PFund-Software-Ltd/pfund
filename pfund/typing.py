@@ -1,7 +1,6 @@
 from typing_extensions import TypedDict, Annotated
 from typing import TypeVar, Literal, TypeAlias
 
-from mtflow.typing import tZMQ_MESSENGER
 from pfund.datas.resolution import Resolution
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.models.model_base import BaseModel, BaseFeature
@@ -17,8 +16,7 @@ ProductT = TypeVar('ProductT', bound=BaseProduct)
 
 Component = BaseStrategy | BaseModel | BaseFeature | BaseIndicator
 
-# TODO: set EngineName to str instead of Literal['engine'] when multiple engines are supported
-EngineName: TypeAlias = Literal['engine']
+EngineName: TypeAlias = str
 ComponentName: TypeAlias = str
 ProductName: TypeAlias = str
 ResolutionRepr: TypeAlias = str
@@ -54,14 +52,26 @@ class DataConfigDict(TypedDict, total=False):  # total=False makes fields option
     stale_bar_timeout: int
 
 
-class TradeEngineSettingsDict(TypedDict, total=False):
+class BaseEngineSettingsDict(TypedDict, total=False):
     zmq_urls: dict[EngineName | tTRADING_VENUE | ComponentName, str]
-    zmq_ports: dict[tZMQ_MESSENGER | tTRADING_VENUE | ComponentName, int]
+    zmq_ports: dict[
+        Literal[
+            "proxy",  # ZeroMQ xsub-xpub proxy for messaging from trading venues -> engine -> components
+            "router",  # ZeroMQ router-pull for pulling messages from components (e.g. strategies/models) -> engine -> trading venues
+            "publisher",  # ZeroMQ publisher for broadcasting internal states to external apps
+        ] 
+        | tTRADING_VENUE 
+        | ComponentName,
+        int
+    ]
+
+
+class TradeEngineSettingsDict(BaseEngineSettingsDict, total=False):
     cancel_all_at: dict[str, bool]
     # TODO: bytewax_dataflow: dict
 
 
-class BacktestEngineSettingsDict(TypedDict, total=False):
+class BacktestEngineSettingsDict(BaseEngineSettingsDict, total=False):
     retention_period: int
     commit_to_git: bool
 

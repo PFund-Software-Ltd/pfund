@@ -93,6 +93,4 @@ class TradeEngine(BaseEngine):
         for broker in list(self._brokers.values()):
             broker.stop()
             self.remove_broker(broker.name)
-        self._zmq.stop()
-        self.scheduler.shutdown()
-        self._remove_singleton()
+        

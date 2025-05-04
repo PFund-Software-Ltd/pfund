@@ -10,7 +10,6 @@ if TYPE_CHECKING:
     from pfund.models.model_base import BaseModel
     from pfund.mixins.backtest_mixin import BacktestMixin
     from pfund.models.dataset_splitter import CrossValidatorDatasetPeriods, DatasetPeriods
-    from pfund.brokers.broker_simulated import SimulatedBroker
 
 import os
 import inspect

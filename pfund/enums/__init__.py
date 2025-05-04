@@ -11,3 +11,5 @@ from pfund.enums.event import Event
 from pfund.enums.component_type import ComponentType, ModelComponentType
 from pfund.enums.run_mode import RunMode
 from pfund.enums.database import Database
+from pfund.enums.signal import Signal
+from pfund.enums.channel import Channel

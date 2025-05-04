@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from mtflow.messaging.zeromq import ZeroMQ
+    from pfund.messaging import ZeroMQ, LocalMQ
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.strategies.strategy_base import BaseStrategy
@@ -16,16 +16,16 @@ from pprint import pformat
 from pfund.products.product_base import BaseProduct
 from pfund.datas.data_config import DataConfig
 from pfund.datas.resolution import Resolution
-from pfund.enums import Event, Broker, CryptoExchange
+from pfund.enums import Event, Broker, CryptoExchange, RunMode
 
 
 class DataBoy:
     def __init__(self):
         self._logger: Logger | None = None
-        self._datas: dict[BaseProduct, dict[Resolution, BaseData]] = defaultdict(dict)
+        self._datas: dict[BaseProduct, dict[Resolution, TimeBasedData]] = defaultdict(dict)
         self._listeners: dict[BaseData, list[BaseStrategy]] = defaultdict(list)
         self._stale_bar_timeouts: dict[BaseData, int] = {}
-        self._zmq: ZeroMQ | None = None
+        self._queue: ZeroMQ | None = None
         # TODO: save data signatures properly, data_signatures should be a set
         # TODO: add data_config (dict form) to data_signatures
         # TODO: rename data_signatures to data_inputs?
@@ -145,18 +145,20 @@ class DataBoy:
         for data, timeout in self._stale_bar_timeouts.items():
             scheduler.add_job(lambda: self._flush_stale_bar(data), 'interval', seconds=timeout)
     
-    def _setup_zmq(self):
+    def _setup_messaging(self, run_mode: RunMode):
         import zmq
-        from mtflow.messaging.zeromq import ZeroMQ
-
-        zmq_urls = self._engine.settings.zmq_urls
-        self._zmq = ZeroMQ(
-            url=zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL),
-            receiver_socket_type=zmq.SUB,  # receive data from engine
-            sender_socket_type=zmq.PUSH,  # send e.g. orders to engine
-        )
-        # TODO: subscribe to selected topics, e.g. b'BYBIT:orderbook:BTCUSDT'
-        self._zmq.setsockopt(zmq.SUBSCRIBE, b'')
+        from pfund.messaging import ZeroMQ, LocalMQ
+        if run_mode == RunMode.REMOTE:
+            zmq_urls = self._engine.settings.zmq_urls
+            self._queue = ZeroMQ(
+                url=zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL),
+                receiver_socket_type=zmq.SUB,  # receive data from engine
+                sender_socket_type=zmq.PUSH,  # send e.g. orders to engine
+            )
+            # TODO: subscribe to selected topics, e.g. b'BYBIT:orderbook:BTCUSDT'
+            self._queue.setsockopt(zmq.SUBSCRIBE, b'')
+        else:
+            self._queue = LocalMQ()
     
     # FIXME
     def pong(self):
@@ -181,10 +183,10 @@ class DataBoy:
         self._zmq = None
         
     # TODO:
-    def collect(self):
+    def _collect(self):
         pass
     
-    def deliver(self, data: BaseData, event: Event, **extra_data):
+    def _deliver(self, data: BaseData, event: Event, **extra_data):
         for strategy in self._listeners[data]:
             if not self._engine._use_ray:
                 if strategy.is_running():

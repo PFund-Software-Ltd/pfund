@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Callable
 
 import os
 import importlib
@@ -172,23 +172,35 @@ def get_duplicate_functions(obj: object, obj2: object):
     return obj_funcs & obj2_funcs
 
 
-def get_function_signature(function: object, without_self=True) -> inspect.Signature:
-    '''
-    without_self: 
-        if False, signature will be e.g. (self, a, b, c)
-        if True, signature will be e.g. (a, b, c)
-    '''
+def get_function_signature(function: object, skip_self_and_cls: bool=True) -> inspect.Signature:
+    """
+    Returns the function signature.
+    
+    If skip_self_and_cls is True, removes 'self' and 'cls' from the parameters.
+    """
     signature = inspect.signature(function)
-    if without_self:
-        params_without_self = [param for name, param in signature.parameters.items() if name != 'self']
-        signature = inspect.signature(function).replace(parameters=params_without_self)
+    if skip_self_and_cls:
+        filtered_params = [
+            param for name, param in signature.parameters.items() if name not in ('self', 'cls')
+        ]
+        signature = signature.replace(parameters=filtered_params)
     return signature
 
 
-def get_args_and_kwargs_from_function(function: object) -> tuple[list[str], list[tuple[str, Any]], str | None, str | None]:
-    signature = get_function_signature(function)
-    args = []
-    kwargs: list[tuple[str, Any]] = []  # [(name, default_value)]
+def get_args_and_kwargs_from_function(
+    function: Callable,
+    skip_self_and_cls: bool=True,
+) -> tuple[list[str], dict[str, Any], str | None, str | None]:
+    """
+    Parses the function's signature into:
+    - a list of required positional/keyword arguments (without defaults),
+    - a dict of keyword arguments with default values,
+    - the name of *args if present,
+    - the name of **kwargs if present.
+    """
+    signature = get_function_signature(function, skip_self_and_cls=skip_self_and_cls)
+    args: list[str] = []
+    kwargs: dict[str, Any] = {}
     var_args = var_kwargs = None
     # Iterate over the parameters of the signature
     for name, param in signature.parameters.items():
@@ -203,5 +215,5 @@ def get_args_and_kwargs_from_function(function: object) -> tuple[list[str], list
             args.append(name)
         else:
             # Keyword argument with a default value
-            kwargs.append((name, param.default))
+            kwargs[name] = param.default
     return args, kwargs, var_args, var_kwargs
