@@ -1,11 +1,6 @@
 import os
 import logging
 
-from typing import Literal
-
-from pfund._logging.config import LoggingDictConfigurator
-from pfund.utils.utils import load_yaml_file
-
 
 def print_all_loggers():
     for name, logger in logging.Logger.manager.loggerDict.items():
@@ -13,7 +8,8 @@ def print_all_loggers():
             print(name, logger, logger.handlers)
             
 
-def setup_loggers(log_path, logging_config_file_path, user_logging_config: dict | None=None) -> LoggingDictConfigurator:
+def setup_logging_config(log_path, logging_config_file_path, user_logging_config: dict | None=None) -> dict:
+    from pfund.utils.utils import load_yaml_file
     def deep_update(default_dict, override_dict, raise_if_key_not_exist=False):
         '''Updates a default dictionary with an override dictionary, supports nested dictionaries.'''
         for key, value in override_dict.items():
@@ -45,38 +41,4 @@ def setup_loggers(log_path, logging_config_file_path, user_logging_config: dict 
     if user_logging_config:
         deep_update(logging_config, user_logging_config)
     logging_config['log_path'] = log_path
-    # ≈ logging.config.dictConfig(logging_config) with a custom configurator
-    
-    logging_configurator = LoggingDictConfigurator(logging_config)
-    logging_configurator.configure()
-    return logging_configurator
-
-
-def create_dynamic_logger(name: str, type_: Literal['strategy', 'model', 'indicator', 'feature']):
-    """Set up logger for strategy/model
-    
-    Since loggers for strategy/model require dynamic names,
-    setup_loggers() will not create loggers for strategy/model.
-    Instead, they will be created here and use the logger config of strategy/model by default if not specified.
-    """
-    assert name, "logger name cannot be empty/None"
-    assert type_ in ['strategy', 'model', 'indicator', 'feature'], f"Unsupported {type_=}"
-    
-    from pfund import get_config
-    
-    config = get_config()
-    configurator: LoggingDictConfigurator = config._logging_configurator
-    
-    logging_config = configurator.config_orig
-    loggers_config = logging_config['loggers']
-    logger_name = name.lower()
-    if logger_name in loggers_config:
-        logger_config = loggers_config[logger_name]
-    else:
-        # use strategy*/model* config as default if not specified
-        logger_config = loggers_config[f'_{type_}']
-    if type_ not in logger_name:
-        logger_name += f'_{type_}'
-    
-    configurator.configure_logger(logger_name, logger_config)
-    return logging.getLogger(logger_name.lower())
+    return logging_config

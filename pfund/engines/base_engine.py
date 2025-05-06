@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from pfund.messaging.localmq import LocalMQ
     from pfund.typing import StrategyT, tENVIRONMENT, tBROKER, DataRangeDict, tDATABASE, tTRADING_VENUE
     from pfund.typing import ExternalListenersDict
+    from pfund._logging.config import LoggingDictConfigurator
     from pfund.brokers.broker_base import BaseBroker
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.engines.trade_engine_settings import TradeEngineSettings
@@ -45,7 +46,6 @@ class BaseEngine(metaclass=MetaEngine):
     _num: ClassVar[int] = 0
     _initialized: ClassVar[bool]
     _env: ClassVar[Environment]
-    _run_mode: ClassVar[RunMode]
     _data_tool: ClassVar[DataTool]
     _dataset_start: ClassVar[datetime.date]
     _dataset_end: ClassVar[datetime.date]
@@ -54,7 +54,9 @@ class BaseEngine(metaclass=MetaEngine):
     _external_listeners: ClassVar[ExternalListenersDict | None]
     
     name: str
+    _run_mode: RunMode
     _logger: logging.Logger
+    _logging_configurator: LoggingDictConfigurator
     _store: MTStore
     _kernel: TradeKernel | None
     brokers: dict[str, BaseBroker]
@@ -75,7 +77,6 @@ class BaseEngine(metaclass=MetaEngine):
         name: str,
         data_tool: tDATA_TOOL,
         data_range: str | DataRangeDict | Literal['ytd'],
-        use_ray: bool,
         database: tDATABASE | None,
         settings: TradeEngineSettings | BacktestEngineSettings,
         external_listeners: ExternalListenersDict | None,
@@ -103,7 +104,6 @@ class BaseEngine(metaclass=MetaEngine):
                 If None, no data will be written.
         '''
         from pfeed.feeds.time_based_feed import TimeBasedFeed
-        from mtflow.utils.utils import is_wasm
         from mtflow.kernel import TradeKernel
         from mtflow.stores.mtstore import MTStore
         
@@ -111,11 +111,6 @@ class BaseEngine(metaclass=MetaEngine):
         env = Environment[env.upper()]
         if not hasattr(cls, "_initialized"):
             cls._env = env
-            if is_wasm():
-                cls._run_mode = RunMode.WASM
-                assert not use_ray, 'Ray is not supported in WASM mode'
-            else:
-                cls._run_mode = RunMode.REMOTE if use_ray else RunMode.LOCAL
             cls._data_tool = DataTool[data_tool.lower()]
             cls._database = Database[database.upper()] if database else None
             cls._settings = settings
@@ -145,10 +140,11 @@ class BaseEngine(metaclass=MetaEngine):
         
 
         self.name = name or self._get_default_name()
+        self._run_mode = RunMode.LOCAL
         
-        self._setup_logging()
+        self._logging_configurator = self._setup_logging()
         self._logger = logging.getLogger('pfund')
-        
+
         self._proxy: ZeroMQ | LocalMQ | None = None
         self._router: ZeroMQ | LocalMQ | None = None
         self._publisher: ZeroMQ | LocalMQ | None = None
@@ -156,13 +152,12 @@ class BaseEngine(metaclass=MetaEngine):
         
         self._store = MTStore(env=cls._env, data_tool=cls._data_tool)
         self._kernel = TradeKernel(
-            mode=cls._run_mode,
             database=cls._database,
             external_listeners=cls._external_listeners,
         )
 
         self.brokers: dict[Broker, BaseBroker] = {}
-        self.strategies: dict[str, BaseStrategy | StrategyProxy] = {}
+        self.strategies: dict[str, BaseStrategy | ActorProxy] = {}
     
     @property
     def env(self) -> Environment:
@@ -184,14 +179,19 @@ class BaseEngine(metaclass=MetaEngine):
     def dataset_end(self) -> datetime.date:
         return self._dataset_end
     
-    def _setup_logging(self):
-        from pfund._logging import setup_loggers
+    def _setup_logging(self) -> LoggingDictConfigurator:
+        from pfund._logging import setup_logging_config
+        from pfund._logging.config import LoggingDictConfigurator
         from pfund import get_config
         config = get_config()
-        log_path = f'{config.log_path}/{self._env.lower()}'
+        log_path = f'{config.log_path}/{self._env}'
+        user_logging_config = config.logging_config
         logging_config_file_path = config.logging_config_file_path
-        logging_configurator  = setup_loggers(log_path, logging_config_file_path, user_logging_config=config.logging_config)
-        config.set_logging_configurator(logging_configurator)
+        logging_config = setup_logging_config(log_path, logging_config_file_path, user_logging_config=user_logging_config)
+        # ≈ logging.config.dictConfig(logging_config) with a custom configurator
+        logging_configurator = LoggingDictConfigurator(logging_config)
+        logging_configurator.configure()
+        return logging_configurator
     
     def _setup_messaging(self):
         if self._run_mode == RunMode.REMOTE:
@@ -217,6 +217,11 @@ class BaseEngine(metaclass=MetaEngine):
             # TODO: add LocalMQ
             pass
     
+    # TODO
+    def _setup_ray_actors(self):
+        # self._kernel.add_ray_actor(strategy)
+        pass
+    
     def _start_messaging(self):
         if self._run_mode == RunMode.REMOTE:
             self._proxy.start(
@@ -238,44 +243,41 @@ class BaseEngine(metaclass=MetaEngine):
     
     def run(self):
         self._store.freeze()
+        self._setup_ray_actors()
     
     # FIXME
     def is_running(self) -> bool:
         return self._kernel._is_running
     
-    def add_strategy(
-        self, 
-        strategy: StrategyT, 
-        resolution: str, 
-        name: str='',
-        num_cpus: int=1,
-        **ray_kwargs
-    ) -> StrategyT | ActorProxy:
+    def add_strategy(self, strategy: StrategyT, resolution: str, name: str='', **ray_kwargs) -> StrategyT | ActorProxy:
         from pfund.strategies.strategy_base import BaseStrategy
+        from mtflow.utils.utils import derive_run_mode
+        
         Strategy = strategy.__class__
         assert isinstance(strategy, BaseStrategy), \
-                f"strategy '{Strategy.__name__}' is not an instance of BaseStrategy. Please create your strategy using 'class {Strategy.__name__}(BaseStrategy)'"
-        if self._run_mode == RunMode.REMOTE:
+            f"strategy '{Strategy.__name__}' is not an instance of BaseStrategy. Please create your strategy using 'class {Strategy.__name__}(pf.Strategy)'"
+        
+        run_mode: RunMode = derive_run_mode(ray_kwargs)
+        if run_mode == RunMode.REMOTE:
             import ray
             from ray.actor import ActorHandle
             from pfund.actor_proxy import ActorProxy
-            ray_kwargs['num_cpus'] = num_cpus
             StrategyActor = ray.remote(**ray_kwargs)(Strategy)
             strategy_args, strategy_kwargs = strategy.__pfund_args__, strategy.__pfund_kwargs__
             strategy: ActorHandle = StrategyActor.remote(*strategy_args, **strategy_kwargs)
             strategy = ActorProxy(strategy)
+        
         if name:
             strategy._set_name(name)
         strategy._set_resolution(resolution)
+        strategy._set_run_mode(run_mode)
         strat = strategy.get_name()
         if strat in self.strategies:
             raise ValueError(f"{strat} already exists")
         else:
-            # FIXME: doesn't work when using ray
-            strategy._create_logger()
+            # logging_configurator can't be serialized, so we need to pass in the original config instead in REMOTE mode
+            strategy._setup_logging(self._logging_configurator._pfund_config if run_mode == RunMode.REMOTE else self._logging_configurator)
             self.strategies[strat] = strategy
-            if self._run_mode == RunMode.REMOTE:
-                self._kernel.add_ray_actor(strategy)
             self._logger.debug(f"added '{strat}'")
         return strategy
         

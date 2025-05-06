@@ -79,7 +79,6 @@ class Configuration:
 
     # NOTE: without type annotation, they will NOT be treated as dataclass fields but as class attributes
     _logging_config = {}
-    _logging_configurator = None
     _instance = None
     _verbose = False
 
@@ -99,13 +98,13 @@ class Configuration:
         CONFIG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
         # Create default config from dataclass fields
         default_config = {}
-        for field in cls.__dataclass_fields__.values():
-            if field.name.startswith('_'):  # Skip private fields
+        for _field in cls.__dataclass_fields__.values():
+            if _field.name.startswith('_'):  # Skip private fields
                 continue
-            if field.default_factory is not MISSING:
-                default_config[field.name] = field.default_factory()
+            if _field.default_factory is not MISSING:
+                default_config[_field.name] = _field.default_factory()
             else:
-                default_config[field.name] = field.default
+                default_config[_field.name] = _field.default
                 
         needs_update = False
         if CONFIG_FILE_PATH.is_file():
@@ -253,9 +252,6 @@ class Configuration:
             if handler not in self.logging_config['handlers']:
                 self.logging_config['handlers'][handler] = {}
             self.logging_config['handlers'][handler]['level'] = 'DEBUG'
-    
-    def set_logging_configurator(self, logging_configurator: LoggingDictConfigurator):
-        self._logging_configurator = logging_configurator
     
 
 def configure(

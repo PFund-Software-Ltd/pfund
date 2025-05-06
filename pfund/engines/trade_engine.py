@@ -23,7 +23,6 @@ class TradeEngine(BaseEngine):
         self,
         env: Literal['SANDBOX', 'PAPER', 'LIVE']='SANDBOX',
         name: str='',
-        use_ray: bool=True,
         data_tool: tDATA_TOOL='polars',
         data_range: str | DataRangeDict='ytd',
         database: tDATABASE | None=None,
@@ -37,7 +36,6 @@ class TradeEngine(BaseEngine):
         super().__init__(
             env=env,
             name=name,
-            use_ray=use_ray,
             data_tool=data_tool, 
             data_range=data_range, 
             database=database,

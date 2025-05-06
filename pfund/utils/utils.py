@@ -42,8 +42,10 @@ def convert_to_lowercases(*args):
 def convert_ts_to_dt(ts: float):
     return datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
 
+
 def get_local_timezone() -> datetime.timezone:
     return datetime.datetime.now().astimezone().tzinfo
+
 
 def lowercase(func):
     """Convert all args and kwargs to lowercases, used as a decorator"""

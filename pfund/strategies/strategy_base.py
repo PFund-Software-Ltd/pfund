@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Literal, TYPE_CHECKING, overload
 if TYPE_CHECKING:
+    from logging import Logger
     from pfeed.typing import tDATA_SOURCE
     from mtflow.stores.trading_store import TradingStore
     from pfund.typing import StrategyT, DataConfigDict, tTRADING_VENUE, tCRYPTO_EXCHANGE
@@ -46,8 +47,10 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         cls.load_params()
         
         self.name = self._get_default_name()
+        self._run_mode = RunMode.LOCAL
         
-        self.logger = None
+        self.logger: Logger | None = None
+
         self._store: TradingStore | None = None
         self._databoy = DataBoy()
         
