@@ -34,23 +34,23 @@ class BaseIndicator(BaseModel):
     
     @property
     def indicator(self):
-        return self.ml_model
+        return self.model
 
     def load(self) -> dict:
-        # since ml_model is None when dumping, 
-        # use the initialized ml_model to avoid ml_model=None after loading
-        indicator = self.ml_model
-        obj: dict = super().load()  # -> self.ml_model = None after loading
-        self.ml_model = indicator
+        # since model is None when dumping, 
+        # use the initialized model to avoid model=None after loading
+        indicator = self.model
+        obj: dict = super().load()  # -> self.model = None after loading
+        self.model = indicator
         return obj
     
     def dump(self, obj: dict[str, Any] | None=None):
-        # NOTE: ml_model is indicator (function of talib.abstract, e.g. abstract.SMA), 
+        # NOTE: model is indicator (function of talib.abstract, e.g. abstract.SMA), 
         # which is not serializable, so make it None before dumping
-        self.ml_model = None
+        self.model = None
         super().dump(obj)
     
     def to_dict(self):
         indicator_dict = super().to_dict()
-        indicator_dict['ml_model'] = None
+        indicator_dict['model'] = None
         return indicator_dict

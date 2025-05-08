@@ -1,14 +1,16 @@
 from typing import Any
 
+from pfeed.enums import DataSource
 from pfund.products.product_base import BaseProduct
 
 
 class BaseData:
-    def __init__(self, product: BaseProduct):
-        self.bkr: str = product.bkr
-        self.exch: str = product.exch
-        self.pdt: str = product.name
-        self.product = product
+    def __init__(self, data_source: DataSource, data_origin: str, product: BaseProduct):
+        self.data_source: DataSource = data_source
+        self.data_origin: str = data_origin
+        self.broker: str = product.broker
+        self.exchange: str = product.exchange
+        self.product: BaseProduct = product
     
     def is_crypto(self):
         return self.product.is_crypto()

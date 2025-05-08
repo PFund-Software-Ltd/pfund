@@ -22,9 +22,9 @@ class PortfolioManager:
             if self._broker._run_mode == RunMode.REMOTE:
                 if strategy.is_running():
                     if event == Event.position:
-                        strategy.update_positions(pos_or_bal)
+                        strategy._update_positions(pos_or_bal)
                     elif event == Event.balance:
-                        strategy.update_balances(pos_or_bal)
+                        strategy._update_balances(pos_or_bal)
             else:
                 raise NotImplementedError('parallel strategy is not implemented')
                 # TODO

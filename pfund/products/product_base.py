@@ -2,8 +2,7 @@ from typing import Any
 
 from decimal import Decimal
 
-from pydantic import model_validator, validate_call
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator, validate_call
 
 from pfund.enums import ProductType, Broker
 
@@ -31,18 +30,19 @@ def get_product_class(product_basis: str):
 class BaseProduct(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    bkr: Broker | str
-    exch: str=''
+    broker: Broker | str
+    exchange: str=''
     base_asset: str
     quote_asset: str
-    type: ProductType
-    asset_pair: str=''
-    basis: str=''
+    ptype: ProductType
+    asset_pair: str | None=None
+    basis: str | None=None
     # specifications that make a product unique, e.g. for options, specs are strike_price, expiration_date, etc.
     specs: dict = Field(default_factory=dict)
-    name: str=''
+    name: str | None=None
+    alias: str | None=None
     # if not provided, might be derived from name. e.g. AAPL_USD_STK -> AAPL. For crypto, it's empty.
-    symbol: str=''  
+    symbol: str | None=None  
 
     # information that requires data fetching
     tick_size: Decimal | None = None
@@ -65,13 +65,13 @@ class BaseProduct(BaseModel):
         }
     
     def model_post_init(self, __context: Any):
-        if isinstance(self.bkr, str):
-            self.bkr = Broker[self.bkr.upper()]
-        self.exch = self.exch.upper()
+        if isinstance(self.broker, str):
+            self.broker = Broker[self.broker.upper()]
+        self.exchange = self.exchange.upper()
         self.base_asset = self.base_asset.upper()
         self.quote_asset = self.quote_asset.upper()
         self.asset_pair = '_'.join([self.base_asset, self.quote_asset])
-        self.basis = '_'.join([self.base_asset, self.quote_asset, self.type.value])
+        self.basis = '_'.join([self.base_asset, self.quote_asset, self.ptype.value])
         self.symbol = self._create_symbol()
         self.specs = self._create_specs()
         self.name = self._create_product_name()
@@ -109,55 +109,55 @@ class BaseProduct(BaseModel):
         return self.basis
     
     def is_crypto(self) -> bool:
-        return (self.type == ProductType.CRYPTO) or (self.bkr == Broker.CRYPTO)
+        return (self.ptype == ProductType.CRYPTO) or (self.broker == Broker.CRYPTO)
      
     def is_future(self) -> bool:
-        return (self.type in [ProductType.FUT, ProductType.IFUT])
+        return (self.ptype in [ProductType.FUT, ProductType.IFUT])
     
     def is_option(self) -> bool:
-        return (self.type == ProductType.OPT)
+        return (self.ptype == ProductType.OPT)
     
     def is_index(self) -> bool:
-        return (self.type == ProductType.INDEX)
+        return (self.ptype == ProductType.INDEX)
 
     def is_stock(self) -> bool:
-        return (self.type == ProductType.STK)
+        return (self.ptype == ProductType.STK)
     
     def is_etf(self) -> bool:
-        return (self.type == ProductType.ETF)
+        return (self.ptype == ProductType.ETF)
     
     def is_fx(self) -> bool:
-        return (self.type == ProductType.FX)
+        return (self.ptype == ProductType.FX)
     
     def is_bond(self) -> bool:
-        return (self.type == ProductType.BOND)
+        return (self.ptype == ProductType.BOND)
     
     def is_mutual_fund(self) -> bool:
-        return (self.type == ProductType.MTF)
+        return (self.ptype == ProductType.MTF)
     
     def is_commodity(self) -> bool:
-        return (self.type == ProductType.CMDTY)
+        return (self.ptype == ProductType.CMDTY)
     
     def __str__(self):
-        if self.exch:
-            return f'Broker={self.bkr}|Exchange={self.exch}|Product={self.name}'
+        if self.exchange:
+            return f'Broker={self.broker}|exchangeange={self.exchange}|Product={self.name}'
         else:
-            return f'Broker={self.bkr}|Product={self.name}'
+            return f'Broker={self.broker}|Product={self.name}'
 
     def __repr__(self):
-        if self.exch:
-            return f'{self.bkr}:{self.exch}:{self.name}'
+        if self.exchange:
+            return f'{self.broker}:{self.exchange}:{self.name}'
         else:
-            return f'{self.bkr}:{self.name}'
+            return f'{self.broker}:{self.name}'
     
     def __eq__(self, other):
         if not isinstance(other, BaseProduct):
             return NotImplemented  # Allow other types to define equality with BaseProduct
         return (
-            self.bkr == other.bkr
-            and self.exch == other.exch
+            self.broker == other.broker
+            and self.exchange == other.exchange
             and self.name == other.name
         )
         
     def __hash__(self):
-        return hash((self.bkr, self.exch, self.name))
+        return hash((self.broker, self.exchange, self.name))

@@ -23,7 +23,7 @@ from pfund.brokers.broker_trade import TradeBroker
 class CryptoBroker(TradeBroker):
     def __init__(self, env: tENVIRONMENT='SANDBOX'):
         super().__init__(env, 'CRYPTO')
-        self.exchanges = {}
+        self.exchanges: dict[CryptoExchange, BaseExchange] = {}
     
     def start(self, zmq=None):
         for exch in self._accounts:
@@ -112,17 +112,17 @@ class CryptoBroker(TradeBroker):
             self._accounts[exch][account.name] = account
             self._logger.debug(f'added {account=}')
         else:
-            self._logger.warning(f'{account=} has already been added, please make sure the account names are not duplicated')
+            raise ValueError(f'{account=} has already been added')
         return account
     
     def get_product(self, exch: tCRYPTO_EXCHANGE, product_name: str) -> BaseProduct | None:
         return self._products[exch.upper()].get(product_name.upper(), None)
 
-    def add_product(self, exch: tCRYPTO_EXCHANGE, product_basis: str, symbol: str='', **product_specs) -> BaseProduct:
+    def add_product(self, exch: tCRYPTO_EXCHANGE, product_basis: str, product_alias: str='', **product_specs) -> BaseProduct:
         exch, product_basis = exch.upper(), product_basis.upper()
         exchange = self.add_exchange(exch)
         # create another product object to format a correct product name
-        product = exchange.create_product(product_basis, symbol=symbol, **product_specs)
+        product = exchange.create_product(product_basis, product_alias=product_alias, **product_specs)
         existing_product = self.get_product(exch, product.name)
         if not existing_product:
             exchange.add_product(product)
@@ -144,8 +144,7 @@ class CryptoBroker(TradeBroker):
         return self.exchanges.get(exch.upper(), None)
 
     def add_exchange(self, exch: tCRYPTO_EXCHANGE) -> BaseExchange:
-        exch = exch.upper()
-        assert exch in CryptoExchange.__members__, f'exchange {exch} is not supported'
+        exch = CryptoExchange[exch.upper()]
         if not (exchange := self.get_exchange(exch)):
             Exchange = getattr(importlib.import_module(f'pfund.exchanges.{exch.lower()}.exchange'), 'Exchange')
             exchange = Exchange(self._env.value)

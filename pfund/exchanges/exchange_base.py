@@ -62,6 +62,7 @@ class BaseExchange(ABC):
         self._rest_api = RestApi(self.env, self.adapter)
         WebsocketApi = getattr(importlib.import_module(f'pfund.exchanges.{self.exch.lower()}.ws_api'), 'WebsocketApi')
         self._ws_api = WebsocketApi(self.env, self.adapter)
+        # FIXME: remove it
         self._add_default_private_channels()
 
         # used for REST API to send back results in threads to engine
@@ -137,29 +138,30 @@ class BaseExchange(ABC):
     def accounts(self):
         return self._accounts
     
-    def create_product(self, product_basis: str, symbol: str='', **product_specs) -> BaseProduct:
+    def create_product(self, product_basis: str, product_alias: str='', **product_specs) -> BaseProduct:
         base_asset, quote_asset, ptype = product_basis.split('_')
+        ptype = CeFiProductType[ptype]
         CeFiCryptoProduct = get_CeFiCryptoProduct(product_basis)
         category = self._derive_product_category(ptype)
+        # symbol = epdt = external product, e.g. BTC_USDT_PERP -> BTCUSDT
+        symbol = self._map_internal_to_external_product_name(
+            base_asset.upper(), 
+            quote_asset.upper(), 
+            ptype,
+            specs=product_specs,
+        )
         product = CeFiCryptoProduct(
             bkr='CRYPTO',
             exch=self.exch,
+            symbol=symbol,
             base_asset=base_asset,
             quote_asset=quote_asset,
-            type=CeFiProductType[ptype],
+            type=ptype,
             category=category,
-            symbol=symbol,
+            alias=product_alias,
             **product_specs,
         )
             
-        # symbol = epdt = external product, e.g. BTC_USDT_PERP -> BTCUSDT
-        symbol = self._map_internal_to_external_product_name(
-            product.base_asset, 
-            product.quote_asset, 
-            product.type, 
-            specs=product.specs,
-        )
-        product.set_symbol(symbol)
         return product
 
     def get_product(self, pdt: str) -> BaseProduct | None:

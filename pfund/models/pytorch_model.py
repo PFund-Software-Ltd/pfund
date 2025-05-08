@@ -13,7 +13,7 @@ class PytorchModel(BaseModel):
         file_path = self._get_file_path(extension='.pt')
         if os.path.exists(file_path):
             obj = torch.load(file_path)
-            self.ml_model.load_state_dict(obj['state_dict'])
+            self.model.load_state_dict(obj['state_dict'])
             self._assert_no_missing_datas(obj)
             self.logger.debug(f"loaded trained '{self.name}' from {short_path(file_path)}")
             return obj
@@ -23,7 +23,7 @@ class PytorchModel(BaseModel):
         if obj is None:
             obj = {}
         obj.update({
-            "state_dict": self.ml_model.state_dict(),
+            "state_dict": self.model.state_dict(),
             'datas': self.datas,
             # TODO, refer to model_base, e.g. dump self.datas
             # 'dataset_periods': {
@@ -53,10 +53,10 @@ class PytorchModel(BaseModel):
             X = torch.tensor( X.collect().to_numpy(), dtype=torch.float32 )
         else:
             raise ValueError(f"Unsupported data type: {type(X)}")
-        pred_y = self.ml_model(X, *args, **kwargs)
+        pred_y = self.model(X, *args, **kwargs)
 
         if not self._signal_cols:
             num_cols = pred_y.shape[-1]
             signal_cols = self.get_default_signal_cols(num_cols)
-            self.set_signal_cols(signal_cols)
+            self._set_signal_cols(signal_cols)
         return pred_y

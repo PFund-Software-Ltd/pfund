@@ -30,7 +30,7 @@ class TalibIndicator(BaseIndicator):
         self._model_signature = (talib_func.info, *args[1:], kwargs)
 
         if min_data := self._derive_min_data():
-            self.set_min_data(min_data)
+            self._set_min_data(min_data)
     
     def _derive_min_data(self) -> int | None:
         '''Derives min_data from indicator parameters. If no specified params, use the default ones'''
@@ -67,7 +67,7 @@ class TalibIndicator(BaseIndicator):
             df.sort_index(inplace=True)
 
         if not self._signal_cols:
-            self.set_signal_cols(df.columns.to_list())
+            self._set_signal_cols(df.columns.to_list())
         
         return df.to_numpy()
 

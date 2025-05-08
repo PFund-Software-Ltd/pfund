@@ -15,7 +15,7 @@ IndicatorT = TypeVar('IndicatorT', bound=BaseIndicator)
 ProductT = TypeVar('ProductT', bound=BaseProduct)
 
 Component = BaseStrategy | BaseModel | BaseFeature | BaseIndicator
-
+LocalComponent: TypeAlias = Component
 EngineName: TypeAlias = str
 ComponentName: TypeAlias = str
 ProductName: TypeAlias = str

@@ -2,13 +2,15 @@ from typing_extensions import Annotated
 
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 
+from pfeed.enums import DataSource
 from pfund.datas.resolution import Resolution
 
 
-# TODO: add private channels? remove _add_default_private_channels in exchange_base.py
 class DataConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
+    data_source: DataSource
+    data_origin: str=''
     primary_resolution: Resolution = Field(description='primary resolution used for trading, must be a bar resolution (e.g. "1s", "1m", "1h", "1d")')
     extra_resolutions: list[Resolution] = Field(default_factory=list, description='extra resolutions, e.g. "1t" for tick data, "1q" for quote data')
     orderbook_depth: int = Field(

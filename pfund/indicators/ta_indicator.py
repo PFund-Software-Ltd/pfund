@@ -27,7 +27,7 @@ class TaIndicator(BaseIndicator):
         '''
         super().__init__(indicator, *args, funcs=funcs, **kwargs)
         if min_data := self._derive_min_data():
-            self.set_min_data(min_data)
+            self._set_min_data(min_data)
     
     def _derive_min_data(self) -> int | None:
         '''Derives min_data from indicator parameters.
@@ -74,7 +74,7 @@ class TaIndicator(BaseIndicator):
         ta_type = 'class' if funcs else 'function'
         dfs = []
         if len(self.datas) == 1:
-            indicator = self.ml_model(X)
+            indicator = self.model(X)
             if ta_type == 'class':
                 for func in funcs:
                     df = getattr(indicator, func)()
@@ -86,7 +86,7 @@ class TaIndicator(BaseIndicator):
         else:
             if ta_type == 'class':
                 for func in funcs:
-                    indicate = lambda df: getattr(self.ml_model(df), func)()
+                    indicate = lambda df: getattr(self.model(df), func)()
                     grouped_df = X.groupby(level=self._GROUP).apply(indicate)
                     if is_correct := self._check_grouped_df_nlevels(grouped_df):
                         df = grouped_df.droplevel([0, 1])
@@ -94,7 +94,7 @@ class TaIndicator(BaseIndicator):
                     else:
                         return
             elif ta_type == 'function':
-                indicate = lambda df: self.ml_model(df)
+                indicate = lambda df: self.model(df)
                 grouped_df = X.groupby(level=self._GROUP).apply(indicate)
                 if is_correct := self._check_grouped_df_nlevels(grouped_df):
                     df = grouped_df.droplevel([0, 1])
@@ -105,7 +105,7 @@ class TaIndicator(BaseIndicator):
             df.sort_index(level='ts', inplace=True)
     
         if not self._signal_cols:
-            self.set_signal_cols(df.columns.to_list())
+            self._set_signal_cols(df.columns.to_list())
     
         return df.to_numpy()
 

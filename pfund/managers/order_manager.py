@@ -52,9 +52,9 @@ class OrderManager:
             if self._broker._run_mode == RunMode.REMOTE:
                 if strategy.is_running():
                     if event == Event.order:
-                        strategy.update_orders(order, type_)
+                        strategy._update_orders(order, type_)
                     elif event == Event.trade:
-                        strategy.update_trades(order, type_)
+                        strategy._update_trades(order, type_)
             else:
                 raise NotImplementedError('parallel strategy is not implemented')
                 # TODO

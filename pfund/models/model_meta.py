@@ -1,57 +1,88 @@
-import inspect
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.models.model_base import BaseModel, MachineLearningModel
+    
+
 from abc import ABCMeta
 
 
 class MetaModel(ABCMeta):
-    def __call__(cls, *args, **kwargs):
-        is_backtest = cls.__name__ == '_BacktestModel'
-        if is_backtest:
-            # cls.__bases__ are (BacktestMixin, Model)
-            _cls = cls.__bases__[1]
-            backtest_mixin_cls = cls.__bases__[0]
-        else:
-            _cls = cls
-        instance = super().__call__(*args, **kwargs)
-        module = inspect.getmodule(_cls)
-        is_user_defined_class = not module.__name__.startswith('pfund.')
-        has_its_own_init = _cls.__init__ is not super(_cls, _cls).__init__
-        has_super_init_inside_its_own_init = '_args' in instance.__dict__ and '_kwargs' in instance.__dict__
-        if is_user_defined_class and has_its_own_init and not has_super_init_inside_its_own_init:
-            if _cls.__bases__:
-                BaseClass = _cls.__bases__[0]
-            BaseClass.__init__(instance, *args, **kwargs)
+    def __new__(mcs, name, bases, namespace, **kwargs):
+        cls = super().__new__(mcs, name, bases, namespace, **kwargs)
+        module_name = namespace.get('__module__', '')
+        is_user_defined_class = not module_name.startswith('pfund.')
+        if is_user_defined_class:
+            original_init = cls.__init__  # capture before overwrite
+            def init_in_correct_order(self, *args, **kwargs):
+                # force to init the BaseClass first
+                BaseClass = cls.__bases__[0]
+                BaseClass.__init__(self, *args, **kwargs)
+                cls.__original_init__(self, *args, **kwargs)
+            cls.__init__ = init_in_correct_order
+            cls.__original_init__ = original_init
+        return cls
 
-        if is_backtest:
-            backtest_mixin_cls.__post_init__(instance, *args, **kwargs)
-        
-        return instance
-        
+    # NOTE: both __call__ and __init__ will NOT be called when using Ray
     def __init__(cls, name, bases, dct):
         super().__init__(name, bases, dct)
+        module_name = dct.get('__module__', '')
+        is_user_defined_class = not module_name.startswith('pfund.')
+        if is_user_defined_class:
+            from pfund.utils.utils import get_args_and_kwargs_from_function
+            init_args, _, _, _ = get_args_and_kwargs_from_function(cls.__original_init__)
+            # assert users to include 'model'/'indicator' as the first argument in __init__()
+            MetaModel._assert_required_arg(cls, init_args)
+            
+        # FIXME: update backtest model 
+        # if name == '_BacktestModel':
+        #     assert '__init__' not in dct, '_BacktestModel should not have __init__()'
         
-        if name == '_BacktestModel':
-            assert '__init__' not in dct, '_BacktestModel should not have __init__()'
-    
-        if '__init__' not in dct:
-            return
+    def __call__(cls, *args, **kwargs):
+        model = args[0] if args else kwargs["model"]
+        # # TODO: do the same for BaseIndicator, derive if its ta or talib
+        ModelClass: type[BaseModel] = cls._derive_model_class(model)
+        if not issubclass(cls, ModelClass):
+            raise TypeError(
+                f"{cls.__name__} using model {model} must inherit from {ModelClass.__name__}, please create your class like this:\n"
+                f"class {cls.__name__}(pf.{ModelClass.__name__})"
+            )
+        instance = super().__call__(*args, **kwargs)
+        return instance
         
-        # force users to include 'ml_model'/'indicator' as the first argument in __init__()
-        required_arg = ''
-        base_names = {b.__name__: b for b in bases}
-                
-        if 'BaseModel' in base_names:
-            if name == 'BaseIndicator':
-                pass
-            elif name == 'BaseFeature':
-                pass
-            else:
-                required_arg = 'ml_model'
-        elif 'BaseIndicator' in base_names or 'TalibIndicator' in base_names or 'TaIndicator' in base_names:
+    @classmethod
+    def _assert_required_arg(mcs, cls, init_args: list[str]) -> str:
+        BaseClass = cls.__bases__[0]
+        if BaseClass.__name__ == 'BaseModel':
+            required_arg = 'model'
+        elif BaseClass.__name__ == 'BaseIndicator':
             required_arg = 'indicator'
-        
+        else:
+            required_arg = ''
         if required_arg:
-            args = cls.__init__.__code__.co_varnames
-            if required_arg not in args:
-                raise TypeError(f"{name}.__init__() must include an '{required_arg}' argument")
-            elif args[1] != required_arg:
-                raise TypeError(f"'{required_arg}' argument must be the first argument (next to 'self') in {name}.__init__()")
+            if required_arg not in init_args or init_args[0] != required_arg:
+                raise TypeError(
+                    f"{cls.__name__}.__init__() must include the '{required_arg}' as the first argument after 'self', like this:\n"
+                    f"{cls.__name__}.__init__(self, {required_arg}, *args, **kwargs)"
+                )
+
+    @staticmethod
+    def _derive_model_class(model: MachineLearningModel) -> type[BaseModel]:
+        try:
+            import torch.nn as nn
+        except ImportError:
+            nn = None
+
+        try:
+            from sklearn.base import BaseEstimator
+        except ImportError:
+            BaseEstimator = None
+
+        if nn is not None and isinstance(model, nn.Module):
+            from pfund.models.pytorch_model import PytorchModel
+            return PytorchModel
+        elif BaseEstimator is not None and isinstance(model, BaseEstimator):
+            from pfund.models.sklearn_model import SklearnModel
+            return SklearnModel
+        else:
+            return BaseModel

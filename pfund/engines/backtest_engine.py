@@ -89,8 +89,8 @@ class BacktestEngine(BaseEngine):
         assert use_ray_on in ('dataset', 'component', None), f'{use_ray_on=} is not supported'
         self._use_ray_on = use_ray_on
         self._dataset_splitter = DatasetSplitter(
-            dataset_start=self.dataset_start,
-            dataset_end=self.dataset_end,
+            dataset_start=self.data_start,
+            dataset_end=self.data_end,
             dataset_splits=dataset_splits, 
             cv_test_ratio=cv_test_ratio
         )
@@ -142,8 +142,8 @@ class BacktestEngine(BaseEngine):
         model: ModelT, 
         resolution: str,
         name: str='',
-        min_data: None | int=None,
-        max_data: None | int=None,
+        min_data: int | None=None,
+        max_data: int | None=None,
         group_data: bool=True,
         signal_cols: list[str] | None=None,
     ) -> BacktestMixin | ModelT:
@@ -172,8 +172,8 @@ class BacktestEngine(BaseEngine):
         feature: FeatureT, 
         resolution: str,
         name: str='',
-        min_data: None | int=None,
-        max_data: None | int=None,
+        min_data: int | None=None,
+        max_data: int | None=None,
         group_data: bool=True,
         signal_cols: list[str] | None=None,
     ) -> BacktestMixin | FeatureT:
@@ -192,8 +192,8 @@ class BacktestEngine(BaseEngine):
         indicator: IndicatorT, 
         resolution: str,
         name: str='',
-        min_data: None | int=None,
-        max_data: None | int=None,
+        min_data: int | None=None,
+        max_data: int | None=None,
         group_data: bool=True,
         signal_cols: list[str] | None=None,
     ) -> BacktestMixin | IndicatorT:
@@ -382,12 +382,12 @@ class BacktestEngine(BaseEngine):
                 # TODO
                 raise NotImplementedError('Quote data is not supported in event-driven backtesting yet')
                 quote = {}
-                data_manager.update_quote(product, quote)
+                data_manager._update_quote(product, quote)
             elif row.is_tick:
                 # TODO
                 raise NotImplementedError('Tick data is not supported in event-driven backtesting yet')
                 tick = {}
-                data_manager.update_tick(product, tick)
+                data_manager._update_tick(product, tick)
             else:
                 bar_cols = ['open', 'high', 'low', 'close', 'volume']
                 bar = {
@@ -405,7 +405,7 @@ class BacktestEngine(BaseEngine):
                         if col not in COMMON_COLS + bar_cols
                     },
                 }
-                data_manager.update_bar(product, bar, is_incremental=False)
+                data_manager._update_bar(product, bar, is_incremental=False)
     
     # NOTE: end() vs stop()
     # end() means everything is done and NO state will be kept, can't be restarted

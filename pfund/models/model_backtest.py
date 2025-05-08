@@ -12,7 +12,7 @@ from pfund.models.model_base import BaseFeature
 from pfund.mixins.backtest_mixin import BacktestMixin
 
 
-def BacktestModel(Model: type[ModelT], ml_model: MachineLearningModel, *args, **kwargs) -> BacktestMixin | ModelT:
+def BacktestModel(Model: type[ModelT], model: MachineLearningModel, *args, **kwargs) -> BacktestMixin | ModelT:
     class _BacktestModel(BacktestMixin, Model):
         def __getattr__(self, name):
             if hasattr(super(), name):
@@ -23,7 +23,7 @@ def BacktestModel(Model: type[ModelT], ml_model: MachineLearningModel, *args, **
 
         def on_start(self):
             if self._is_signal_df_required:
-                self.set_group_data(False)
+                self._set_group_data(False)
             super().on_start()
             
         def flow(self) -> pd.DataFrame | pl.LazyFrame:
@@ -31,7 +31,7 @@ def BacktestModel(Model: type[ModelT], ml_model: MachineLearningModel, *args, **
                 f"creating '{self.name}' signal_df on the fly: "
                 "featurize() -> predict(X) -> signalize(X, pred_y)"
             )
-            self.set_group_data(False)
+            self._set_group_data(False)
             X: pd.DataFrame | pl.LazyFrame = self.featurize()
             pred_y: torch.Tensor | np.ndarray = self.predict(X)
             signal_df: pd.DataFrame | pl.LazyFrame = self.signalize(X, pred_y)
@@ -52,7 +52,7 @@ def BacktestModel(Model: type[ModelT], ml_model: MachineLearningModel, *args, **
                     # FIXME: correct the link
                     "Please refer to the doc for more details: https://pfund.ai"  
                 )
-                assert self.ml_model, f"{self.ml_model=}, {error_msg}"
+                assert self.model, f"{self.model=}, {error_msg}"
             return obj
 
         def dump(self, signal_df: pd.DataFrame | pl.LazyFrame):
@@ -60,7 +60,7 @@ def BacktestModel(Model: type[ModelT], ml_model: MachineLearningModel, *args, **
         
     try:       
         if not issubclass(Model, BaseFeature):
-            return _BacktestModel(ml_model, *args, **kwargs)
+            return _BacktestModel(model, *args, **kwargs)
         else:
             return _BacktestModel(*args, **kwargs)
     except TypeError as e:

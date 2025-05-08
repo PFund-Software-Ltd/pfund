@@ -5,30 +5,15 @@ if TYPE_CHECKING:
     import polars as pl
     import torch
     import torch.nn as nn
-    from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
-    from sklearn.pipeline import Pipeline
-    from pfeed.typing import tDATA_SOURCE
-    from pfund.typing import DataConfigDict
-    from pfund.data_tools.data_tool_base import BaseDataTool
-    from pfund.datas.data_time_based import TimeBasedData
-    from pfund.models.pytorch_model import PytorchModel
-    from pfund.models.sklearn_model import SklearnModel
-    from pfund.indicators.indicator_base import BaseIndicator, TaFunction, TalibFunction
-    from pfund.strategies.strategy_base import BaseStrategy
-    from pfund.typing import tTRADING_VENUE
-    from pfund.datas.data_config import DataConfig
-    from pfund.datas.data_base import BaseData
-    from pfund.datas.resolution import Resolution
+    from sklearn.base import BaseEstimator
+    from pfund.indicators.indicator_base import TaFunction, TalibFunction
     MachineLearningModel = Union[
         nn.Module,
         BaseEstimator,
-        ClassifierMixin,
-        RegressorMixin, 
-        Pipeline,
         TaFunction,  # ta.utils.IndicatorMixin
         TalibFunction,
-        Any,
     ]
+    from pfund.datas.data_base import BaseData
 
 import os
 import sys
@@ -49,44 +34,17 @@ from pfund.mixins.trade_mixin import TradeMixin
 
 
 class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
-    def __init__(self, ml_model: MachineLearningModel, *args, **kwargs):
-        self._args = args
-        self._kwargs = kwargs
-        self.ml_model = ml_model  # user-defined machine learning model
-        self.name = self._get_default_name()
-        self._engine = None
-        self.logger = None
-        self._is_running = False
-        self._is_ready = defaultdict(bool)  # {data: bool}
-        self._datas = defaultdict(dict)  # {product: {resolution: data}}
-        self._data_tool: BaseDataTool = self._create_data_tool()
-        self._resolution: Resolution | None = None
-        self._orderbooks = {}  # {product: data}
-        self._tradebooks = {}  # {product: data}
-        self._consumer: BaseStrategy | BaseModel | None = None
-        self._listeners = defaultdict(list)  # {data: model}
+    def __init__(self, model: MachineLearningModel, *args, **kwargs):
+        self.model = model  # user-defined machine learning model
 
         self._min_data = {}  # {data: int}
         self._max_data = {}  # {data: int}
         self._num_data = defaultdict(int)  # {data: int}
         self._group_data = True
         
-        self.models: dict[str, BaseModel] = {}
-        self.features: dict[str, BaseFeature] = {}
-        self.indicators: dict[str, BaseIndicator] = {}
-        # NOTE: current model's signal is consumer's prediction
-        self.predictions = {}  # {model_name: pred_y}
-        self._signals = {}  # {data: signal}, signal = output of predict()
-        self._last_signal_ts = {}  # {data: ts}
-        self._signal_cols = []
-        self._num_signal_cols = 0
-        
-        self._data_signatures = []
-        self._model_signature = (args, kwargs)
-
-        self.params = {}
-        self.load_params()
-        self._assert_predict_function()
+        # FIXME
+        # self._assert_predict_function()
+        self.__post_init__(model, *args, **kwargs)  # calls TradeMixin.__post_init__()
     
     @abstractmethod
     def predict(self, X: pd.DataFrame | pl.LazyFrame, *args, **kwargs) -> torch.Tensor | np.ndarray:
@@ -114,49 +72,13 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
                 self._is_ready[data] = True
         return self._is_ready[data]
     
-    def to_dict(self):
-        return {
-            'class': self.__class__.__name__,
-            'name': self.name,
-            'config': self.config,
-            'params': self.params,
-            'ml_model': self.ml_model,
-            'datas': [repr(data) for data in self.list_datas()],
-            'models': [model.to_dict() for model in self.models.values()],
-            'model_signature': self._model_signature,
-            'data_signatures': self._data_signatures,
-        }
-    
-    def get_ml_model_type(self) -> PytorchModel | SklearnModel | BaseModel:
-        try:
-            import torch.nn as nn
-        except ImportError:
-            nn = None
-
-        try:
-            import sklearn
-            from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
-            from sklearn.pipeline import Pipeline
-        except ImportError:
-            sklearn = None
-
-        if nn is not None and isinstance(self.ml_model, nn.Module):
-            from pfund.models.pytorch_model import PytorchModel
-            Model = PytorchModel
-        elif sklearn is not None and isinstance(self.ml_model, (BaseEstimator, ClassifierMixin, RegressorMixin, Pipeline)):
-            from pfund.models.sklearn_model import SklearnModel
-            Model = SklearnModel
-        else:
-            Model = BaseModel
-        return Model
-    
-    def set_min_data(self, min_data: int | dict[BaseData, int]):
+    def _set_min_data(self, min_data: int | dict[BaseData, int]):
         self._min_data = min_data
 
-    def set_max_data(self, max_data: int | dict[BaseData, int]):
+    def _set_max_data(self, max_data: int | dict[BaseData, int]):
         self._max_data = max_data
     
-    def set_group_data(self, group_data: bool):
+    def _set_group_data(self, group_data: bool):
         self._group_data = group_data
     
     def _get_file_path(self, extension='.joblib'):
@@ -179,7 +101,7 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         file_path = self._get_file_path()
         if os.path.exists(file_path):
             obj: dict = joblib.load(file_path)
-            self.ml_model = obj['ml_model']
+            self.model = obj['model']
             self._assert_no_missing_datas(obj)
             self.logger.debug(f"loaded '{self.name}' from {short_path(file_path)}")
             return obj
@@ -189,34 +111,13 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         if obj is None:
             obj = {}
         obj.update({
-            'ml_model': self.ml_model,
+            'model': self.model,
             'datas': self._datas,
             # TODO: dump dates as well
         })
         file_path = self._get_file_path()
         joblib.dump(obj, file_path, compress=True)
         self.logger.debug(f"dumped '{self.name}' to {short_path(file_path)}")
-    
-    def add_data(
-        self, 
-        trading_venue: tTRADING_VENUE, 
-        product: str,
-        symbol: str='',
-        data_source: tDATA_SOURCE | None=None,
-        data_origin: str='',
-        data_config: DataConfigDict | DataConfig | None=None,
-        **product_specs
-    ) -> list[TimeBasedData]:
-        datas: list[TimeBasedData] = self._add_data_to_consumer(
-            trading_venue=trading_venue, 
-            product=product, 
-            symbol=symbol,
-            data_source=data_source, 
-            data_origin=data_origin, 
-            data_config=data_config, 
-            **product_specs
-        )
-        return datas
     
     def _convert_min_max_data_to_dict(self):
         '''Converts min_data and max_data from int to dict[product, dict[resolution, int]]'''
@@ -235,8 +136,8 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         
         # check if set up correctly
         for data in self.list_datas():
-            assert data in self._min_data, f"{data} not found in {self._min_data=}, make sure set_min_data() is called correctly"
-            assert data in self._max_data, f"{data} not found in {self._max_data=}, make sure set_max_data() is called correctly"
+            assert data in self._min_data, f"{data} not found in {self._min_data=}, make sure _set_min_data() is called correctly"
+            assert data in self._max_data, f"{data} not found in {self._max_data=}, make sure _set_max_data() is called correctly"
     
             min_data = self._min_data[data]
             max_data = self._max_data[data]
@@ -289,35 +190,18 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         return new_pred
             
     def start(self):
-        if not self.is_running():
-            self.add_datas()
-            self._add_datas_from_consumer_if_none()
-            self._convert_min_max_data_to_dict()
-            self.add_models()
-            self.add_features()
-            self.add_indicators()
-            self._start_models()
-            self._prepare_df()
-            self.load()
-            self.on_start()
-            self._is_running = True
-            self.logger.info(
-                f"model '{self.name}' has started.\n"
-                f"min_data={self._min_data}\n"
-                f"max_data={self._max_data}\n"
-                f"group_data={self._group_data}"
-            )
-        else:
-            self.logger.warning(f'model {self.name} has already started')
+        super().start()
+        self._convert_min_max_data_to_dict()
+        self.load()
+        self.logger.info(
+            f"model '{self.name}' has started.\n"
+            f"min_data={self._min_data}\n"
+            f"max_data={self._max_data}\n"
+            f"group_data={self._group_data}"
+        )
         
-    def stop(self):
-        if self.is_running():
-            self._is_running = False
-            self.on_stop()
-            for model in self.models.values():
-                model.stop()
-        else:
-            self.logger.warning(f'model {self.name} has already stopped')
+    def stop(self, reason: str=''):
+        super().stop(reason=reason)
         
     '''
     ************************************************
@@ -336,11 +220,11 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
     
     
 class BaseFeature(BaseModel):
-    '''Feature is a model with ml_model=None'''
+    '''Feature is a model with model=None'''
     def __init__(self, *args, **kwargs):
-        ml_model = None
-        super().__init__(ml_model, *args, **kwargs)
-        self.set_signal_cols([self.name])
+        model = None
+        super().__init__(model, *args, **kwargs)
+        self._set_signal_cols([self.name])
     
     def predict(self, X: pd.DataFrame | pl.LazyFrame, *args, **kwargs) -> np.ndarray:
         raise NotImplementedError

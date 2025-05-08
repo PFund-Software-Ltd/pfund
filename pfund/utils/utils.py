@@ -7,6 +7,9 @@ import datetime
 from pathlib import Path
 
 
+from pfund.enums import RunMode
+
+
 class Singleton:
     _instances = {}
     
@@ -19,6 +22,22 @@ class Singleton:
     def _remove_singleton(cls):
         if cls in cls._instances:
             del cls._instances[cls]
+
+
+def derive_run_mode(ray_kwargs: dict) -> RunMode:
+    from mtflow.utils.utils import is_wasm
+    if is_wasm():
+        run_mode = RunMode.WASM
+        assert not ray_kwargs, 'Ray is not supported in WASM mode'
+    else:
+        if ray_kwargs:
+            # NOTE: if `num_cpus` is not set, Ray will only use 1 CPU for scheduling, and 0 CPU for running
+            assert 'num_cpus' in ray_kwargs, '`num_cpus` must be set for a Ray actor'
+            assert ray_kwargs['num_cpus'] > 0, '`num_cpus` must be greater than 0'
+            run_mode = RunMode.REMOTE
+        else:
+            run_mode = RunMode.LOCAL
+    return run_mode
 
 
 # used to explicitly mark a function that includes an api call

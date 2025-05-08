@@ -20,7 +20,7 @@ class SklearnModel(BaseModel):
         elif isinstance(X, pl.LazyFrame):
             X = X.collect().to_numpy()
         
-        return self.ml_model.fit(X, y)
+        return self.model.fit(X, y)
     
     def predict(
         self, 
@@ -34,11 +34,11 @@ class SklearnModel(BaseModel):
             X = X.collect().to_numpy()
         else:
             raise ValueError(f"Unsupported data type: {type(X)}")
-        pred_y = self.ml_model.predict(X, *args, **kwargs)
+        pred_y = self.model.predict(X, *args, **kwargs)
 
         if not self._signal_cols:
             num_cols = pred_y.shape[-1]
             signal_cols = self.get_default_signal_cols(num_cols)
-            self.set_signal_cols(signal_cols)
+            self._set_signal_cols(signal_cols)
         return pred_y
 

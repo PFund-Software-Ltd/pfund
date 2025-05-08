@@ -54,6 +54,8 @@ class BacktestMixin:
         self._is_dummy_strategy = False
         self._is_signal_df_required = self._check_if_signal_df_required()
         self._is_append_to_df = self._check_if_append_to_df()
+
+        # TODO: need to call super().__post_init__() to trigger TradeMixin.__post_init__()?
     
     @property
     def dataset_periods(self: BacktestMixin | BaseStrategy | BaseModel) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
@@ -252,14 +254,14 @@ class BacktestMixin:
         self: BaseStrategy | BaseModel, 
         model: ModelT, 
         name: str='',
-        min_data: None | int=None,
-        max_data: None | int=None,
+        min_data: int | None=None,
+        max_data: int | None=None,
         group_data: bool=True,
         signal_cols: list[str] | None=None,
     ) -> BacktestMixin | ModelT:
         from pfund.models.model_backtest import BacktestModel
         name = name or model.get_default_name()
-        model = BacktestModel(type(model), model.ml_model, *model._args, **model._kwargs)
+        model = BacktestModel(type(model), model.model, *model._args, **model._kwargs)
         return super().add_model(
             model, 
             name=name, 
