@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from mtflow.stores.trading_store import TradingStore
     from pfeed.typing import tDATA_SOURCE
     from pfund.datas.databoy import DataBoy
-    from pfund.typing import ModelT, IndicatorT, FeatureT, DataConfigDict
+    from pfund.typing import StrategyT, ModelT, IndicatorT, FeatureT, DataConfigDict
     from pfund.typing import tTRADING_VENUE, Component
     from pfund.datas.data_bar import Bar
     from pfund.datas.data_base import BaseData
@@ -78,7 +78,6 @@ class TradeMixin:
         # FIXME
         # self._is_ready = defaultdict(bool)  # {data: bool}
         self._is_running = False
-        self._frozen = False
         self._assert_functions_signatures()
     
     # TODO: also check on_bar, on_tick, on_quote etc.
@@ -101,16 +100,6 @@ class TradeMixin:
             if params := load_yaml_file(file_path):
                 cls.params = params
     
-    def _freeze(self):
-        self._frozen = True
-    
-    def is_frozen(self):
-        return self._frozen
-    
-    def _assert_not_frozen(self):
-        if self._frozen:
-            raise RuntimeError(f"{self.name} is frozen, cannot modify it")
-        
     # TODO: add versioning, run_id etc.
     def to_dict(self: Component) -> dict:
         metadata = {
@@ -331,7 +320,6 @@ class TradeMixin:
             return False
     
     def _add_product(self: Component, product_key: str, product: BaseProduct) -> BaseProduct:
-        self._assert_not_frozen()
         if product_key not in self.products:
             self.products[product_key] = product
         else:
@@ -398,7 +386,6 @@ class TradeMixin:
                 such as 'BTC' instead of 'BTC_USDT_PERP'.
             product_specs: product specifications, e.g. expiration, strike_price etc.
         '''
-        self._assert_not_frozen()
         data_source = data_source or trading_venue.upper()
         product: BaseProduct = self._engine._register_product(
             trading_venue=trading_venue,
@@ -430,7 +417,6 @@ class TradeMixin:
     
     # TODO
     def add_custom_data(self: Component):
-        self._assert_not_frozen()
         raise NotImplementedError
     
     def _add_datas_from_consumer_if_none(self: Component) -> list[BaseData]:
@@ -450,9 +436,9 @@ class TradeMixin:
     def get_tradebook(self: Component, product: BaseProduct) -> TimeBasedData | None:
         return self.databoy.get_data(product, '1t')
     
-    def _add_model_component(
+    def _add_component(
         self: Component, 
-        component: ModelT | FeatureT | IndicatorT,
+        component: StrategyT | ModelT | FeatureT | IndicatorT,
         name: str='',
         min_data: int | None=None,
         max_data: int | None=None,
@@ -460,7 +446,7 @@ class TradeMixin:
         signal_cols: list[str] | None=None,
         ray_actor_options: dict | None=None,
         **ray_kwargs
-    ) -> ModelT | FeatureT | IndicatorT | ActorProxy:
+    ) -> StrategyT | ModelT | FeatureT | IndicatorT | ActorProxy:
         '''Adds a model component to the current component.
         A model component is a model, feature, or indicator.
         Args:
@@ -483,12 +469,15 @@ class TradeMixin:
         '''
         from pfund.utils.utils import derive_run_mode
         
-        self._assert_not_frozen()
-
         Component = component.__class__
         ComponentName = Component.__name__
         component_type = component.component_type
-        if component.is_model():
+        if component.is_strategy():
+            assert self.component_type == ComponentType.strategy, \
+                f"cannot add strategy '{ComponentName}' to {self.component_type} '{self.name}'"
+            components = self.strategies
+            BaseClass = BaseStrategy
+        elif component.is_model():
             from pfund.models.model_base import BaseModel
             components = self.models
             BaseClass = BaseModel
@@ -512,30 +501,35 @@ class TradeMixin:
         run_mode: RunMode = derive_run_mode(ray_kwargs)
         if is_remote := (run_mode == RunMode.REMOTE):
             component = ActorProxy(component, name=component_name, ray_actor_options=ray_actor_options, **ray_kwargs)
+        # NOTE: if the consumer component (which the model component is added to) is remote (ray actor), 
+        # re-create the added component to avoid serialization issues, i.e. making the component "local" to the ray actor
+        elif self.is_remote():
+            Component = component.__class__
+            component = Component(*component.__pfund_args__, **component.__pfund_kwargs__)
         component._set_name(component_name)
         component._set_run_mode(run_mode)
         component._set_resolution(self._resolution)
-        # logging_configurator can't be serialized, so we need to pass in the original config instead in REMOTE mode
+        # # logging_configurator can't be serialized, so we need to pass in the original config instead in REMOTE mode
         component._setup_logging(self._logging_configurator._pfund_config if is_remote else self._logging_configurator)
         component._set_consumer(None if is_remote else self)
         component._set_engine(None if is_remote else self._engine)
 
-        if min_data:
-            component._set_min_data(min_data)
-        if max_data:
-            component._set_max_data(max_data)
-        component._set_group_data(group_data)
         if signal_cols:
             component._set_signal_cols(signal_cols)
+
+        # FIXME: check if min_data, max_data and group_data are needed when component_type is strategy
+        if not component.is_strategy():
+            if min_data:
+                component._set_min_data(min_data)
+            if max_data:
+                component._set_max_data(max_data)
+            component._set_group_data(group_data)
         
         components[component_name] = component
         self.logger.debug(f"added {component_name}")
-
-        # NOTE: freeze the component when it's a local component but the consumer is a remote component
-        # because the returned component is just a reference
-        if self.is_remote() and not is_remote:
-            component._freeze()
-        return component
+        
+        # NOTE: cannot return component object when the consumer is remote but the component is not due to serialization issues
+        return component if not self.is_remote() or component.is_remote() else None
     
     def add_model(
         self: Component, 
@@ -547,8 +541,8 @@ class TradeMixin:
         signal_cols: list[str] | None=None,
         ray_actor_options: dict | None=None,
         **ray_kwargs
-    ) -> ModelT:
-        return self._add_model_component(
+    ) -> ModelT | ActorProxy:
+        return self._add_component(
             component=model,
             name=name,
             min_data=min_data,
@@ -572,8 +566,8 @@ class TradeMixin:
         signal_cols: list[str] | None=None,
         ray_actor_options: dict | None=None,
         **ray_kwargs
-    ) -> FeatureT:
-        return self._add_model_component(
+    ) -> FeatureT | ActorProxy:
+        return self._add_component(
             component=feature, 
             name=name, 
             min_data=min_data, 
@@ -597,8 +591,8 @@ class TradeMixin:
         signal_cols: list[str] | None=None,
         ray_actor_options: dict | None=None,
         **ray_kwargs
-    ) -> IndicatorT:
-        return self._add_model_component(
+    ) -> IndicatorT | ActorProxy:
+        return self._add_component(
             component=indicator,
             name=name,
             min_data=min_data,

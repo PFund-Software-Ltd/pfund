@@ -30,9 +30,20 @@ class ActorProxy:
         self.name = component_name
         self.resolution = component.resolution
         
+    # NOTE: added __setstate__ and __getstate__ to avoid ray's serialization issues when returning ActorProxy objects
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        
+    def __getstate__(self):
+        return self.__dict__
+    
     def __getattr__(self, name):
-        import ray
-        attr = getattr(self._actor, name)
-        def remote_method(*args, **kwargs):
-            return ray.get(attr.remote(*args, **kwargs))
-        return remote_method
+        if name in self.__dict__:
+            return self.__dict__[name]
+        else:
+            import ray
+            actor = self.__dict__["_actor"]
+            attr = getattr(actor, name)
+            def remote_method(*args, **kwargs):
+                return ray.get(attr.remote(*args, **kwargs))
+            return remote_method
