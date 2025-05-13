@@ -1,11 +1,11 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Union
 if TYPE_CHECKING:
-    import pandas as pd
-    import polars as pl
-    import torch
+    from torch import Tensor
+    from numpy import ndarray
     import torch.nn as nn
     from sklearn.base import BaseEstimator
+    from pfeed.typing import GenericFrame
     from pfund.indicators.indicator_base import TaFunction, TalibFunction
     MachineLearningModel = Union[
         nn.Module,
@@ -16,25 +16,15 @@ if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
 
 import os
-import sys
-import inspect
 from abc import ABC, abstractmethod
-from collections import defaultdict
-
-try:
-    import joblib
-except ImportError:
-    pass
-import numpy as np
-from rich.console import Console
 
 from pfund.models.model_meta import MetaModel
-from pfund.utils.utils import short_path
 from pfund.mixins.trade_mixin import TradeMixin
 
 
 class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
     def __init__(self, model: MachineLearningModel, *args, **kwargs):
+        from collections import defaultdict
         self.model = model  # user-defined machine learning model
 
         self._min_data = {}  # {data: int}
@@ -42,22 +32,24 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         self._num_data = defaultdict(int)  # {data: int}
         self._group_data = True
         
-        # FIXME
-        # self._assert_predict_function()
         self.__post_init__(model, *args, **kwargs)  # calls TradeMixin.__post_init__()
     
     @abstractmethod
-    def predict(self, X: pd.DataFrame | pl.LazyFrame, *args, **kwargs) -> torch.Tensor | np.ndarray:
+    def predict(self, X: GenericFrame, *args, **kwargs) -> Tensor | ndarray:
         pass
     
-    def _assert_predict_function(self):
-        sig = inspect.signature(self.predict)
-        params = list(sig.parameters.values())
-        if not params or params[0].name != 'X':
-            raise Exception(f'{self.name} predict() must have "X" as its first arg, i.e. predict(self, X, *args, **kwargs)')
+    def _assert_functions_signatures(self):
+        from pfund.utils.utils import get_args_and_kwargs_from_function
+        super()._assert_functions_signatures()
+        def _assert_predict_function():
+            args, kwargs, _, _ = get_args_and_kwargs_from_function(self.predict)
+            if not args or args[0] != 'X':
+                raise Exception(f'{self.name} predict() must have "X" as its first arg, i.e. predict(self, X, *args, **kwargs)')
+        _assert_predict_function()
 
-    def featurize(self) -> pd.DataFrame | pl.LazyFrame:
-        Console().print(
+    def featurize(self) -> GenericFrame:
+        from pfund import cprint
+        cprint(
             f"WARNING: '{self.name}' is using the default featurize(), "
             "which assumes X = self.df, it could be a wrong input for predict(X).\n"
             f"It is highly recommended to override featurize() in your '{self.name}'.",
@@ -98,6 +90,8 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
             raise Exception(f"missing data {missing_datas} in model '{self.name}', please use add_data() to add them back")
     
     def load(self) -> dict:
+        import joblib
+        from pfund.utils.utils import short_path
         file_path = self._get_file_path()
         if os.path.exists(file_path):
             obj: dict = joblib.load(file_path)
@@ -108,6 +102,8 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         return {}
     
     def dump(self, obj: dict[str, Any] | None=None):
+        import joblib
+        from pfund.utils.utils import short_path
         if obj is None:
             obj = {}
         obj.update({
@@ -121,6 +117,7 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
     
     def _convert_min_max_data_to_dict(self):
         '''Converts min_data and max_data from int to dict[product, dict[resolution, int]]'''
+        from sys import maxsize
         DEFAULT_MIN_DATA = 1
         if not self._min_data:
             self._min_data = {data: DEFAULT_MIN_DATA for data in self.list_datas()}
@@ -143,13 +140,14 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
             max_data = self._max_data[data]
             # NOTE: -1 means include all data
             if max_data == -1:
-                max_data = sys.maxsize
+                max_data = maxsize
                 
             assert min_data >= 1, f'{min_data=} for {data} must be >= 1'
             assert max_data >= min_data, f'{max_data=} for {data} must be >= {min_data=}'
     
-    def _next(self, data: BaseData) -> torch.Tensor | np.ndarray | None:
+    def _next(self, data: BaseData) -> Tensor | ndarray | None:
         '''Returns the next prediction in event-driven manner.'''
+        from numpy import isnan
         if data in self._last_signal_ts and self._last_signal_ts[data] == data.ts:
             return self._signals[data]
         
@@ -175,9 +173,9 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
             copy=False
         )
         
-        pred_y: torch.Tensor | np.ndarray = self.predict(X)
-        new_pred: torch.Tensor | np.ndarray = pred_y[-1]
-        if np.isnan(new_pred).all():
+        pred_y: Tensor | ndarray = self.predict(X)
+        new_pred: Tensor | ndarray = pred_y[-1]
+        if isnan(new_pred).all():
             raise Exception(
                 f"model '{self.name}' was ready but predicted all NaNs for {data}, \n"
                 f"Setting: min_data={self._min_data[data]} (≈ warmup period), max_data={self._max_data[data]}, group_data={self._group_data}, "
@@ -202,31 +200,3 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         
     def stop(self, reason: str=''):
         super().stop(reason=reason)
-        
-    '''
-    ************************************************
-    Model Functions
-    Users can customize these functions in their models.
-    ************************************************
-    '''
-    def on_quote(self, product, bids, asks, ts, **kwargs):
-        pass
-    
-    def on_tick(self, product, px, qty, ts, **kwargs):
-        pass
-
-    def on_bar(self, product, bar, ts, **kwargs):
-        pass
-    
-    
-class BaseFeature(BaseModel):
-    '''Feature is a model with model=None'''
-    def __init__(self, *args, **kwargs):
-        model = None
-        super().__init__(model, *args, **kwargs)
-        self._set_signal_cols([self.name])
-    
-    def predict(self, X: pd.DataFrame | pl.LazyFrame, *args, **kwargs) -> np.ndarray:
-        raise NotImplementedError
-    extract = predict
-    

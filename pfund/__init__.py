@@ -7,9 +7,10 @@ if TYPE_CHECKING:
     from pfund.engines.backtest_engine import BacktestEngine
     from pfund.engines.trade_engine import TradeEngine
     from pfund.strategies.strategy_base import BaseStrategy as Strategy
-    from pfund.models.model_base import BaseModel as Model, BaseFeature as Feature
+    from pfund.models.model_base import BaseModel as Model
     from pfund.models.pytorch_model import PytorchModel
     from pfund.models.sklearn_model import SklearnModel
+    from pfund.features.feature_base import BaseFeature as Feature
     from pfund.indicators.indicator_base import BaseIndicator as Indicator
     from pfund.indicators.talib_indicator import TalibIndicator
     from pfund.indicators.ta_indicator import TaIndicator
@@ -70,7 +71,7 @@ def __getattr__(name: str):
         from pfund.models.model_base import BaseModel as Model
         return Model
     elif name == "Feature":
-        from pfund.models.model_base import BaseFeature as Feature
+        from pfund.features.feature_base import BaseFeature as Feature
         return Feature
     elif name == "PytorchModel":
         from pfund.models.pytorch_model import PytorchModel

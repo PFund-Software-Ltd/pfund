@@ -1,19 +1,11 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Type, Any
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import numpy as np
-    try:
-        from talib import abstract as talib
-        TalibFunction = Type[talib.Function]  # If talib is available, use its Function type
-    except ImportError:
-        TalibFunction = Any  # Fallback type if talib is not installed
 
 import pandas as pd
 import polars as pl
-try:
-    from talib import abstract as talib
-except ImportError:
-    raise ImportError('talib is not installed, please install it referring to https://github.com/TA-Lib/ta-lib-python')
+from talib._ta_lib import Function as TalibFunction
 
 from pfund.indicators.indicator_base import BaseIndicator
 
@@ -25,6 +17,7 @@ class TalibIndicator(BaseIndicator):
             from talib import abstract as talib
             e.g. indicator = talib.SMA
         '''
+        assert isinstance(indicator, TalibFunction), 'indicator must be a talib function, e.g. from talib.abstract import SMA'
         super().__init__(indicator, *args, **kwargs)
         talib_func = args[0]
         self._model_signature = (talib_func.info, *args[1:], kwargs)

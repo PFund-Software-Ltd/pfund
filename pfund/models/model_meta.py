@@ -1,7 +1,9 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfund.models.model_base import BaseModel, MachineLearningModel
+    from pfund.indicators.indicator_base import BaseIndicator
+    from pfund.indicators.indicator_base import IndicatorFunction
     
 
 from abc import ABCMeta
@@ -37,34 +39,50 @@ class MetaModel(ABCMeta):
         # FIXME: update backtest model 
         # if name == '_BacktestModel':
         #     assert '__init__' not in dct, '_BacktestModel should not have __init__()'
-        
-    def __call__(cls, *args, **kwargs):
-        model = args[0] if args else kwargs["model"]
-        # # TODO: do the same for BaseIndicator, derive if its ta or talib
-        ModelClass: type[BaseModel] = cls._derive_model_class(model)
-        if not issubclass(cls, ModelClass):
-            raise TypeError(
-                f"{cls.__name__} using model {model} must inherit from {ModelClass.__name__}, please create your class like this:\n"
-                f"class {cls.__name__}(pf.{ModelClass.__name__})"
-            )
-        instance = super().__call__(*args, **kwargs)
-        return instance
+    
+    @staticmethod
+    def _get_required_arg(cls) -> Literal['model', 'indicator', '']:
+        from pfund.models.model_base import BaseModel
+        from pfund.indicators.indicator_base import BaseIndicator
+        from pfund.features.feature_base import BaseFeature
+        if issubclass(cls, BaseFeature):
+            return ''
+        elif issubclass(cls, BaseIndicator):
+            return 'indicator'
+        elif issubclass(cls, BaseModel):
+            return 'model'
+        else:
+            return ''
         
     @classmethod
     def _assert_required_arg(mcs, cls, init_args: list[str]) -> str:
         BaseClass = cls.__bases__[0]
-        if BaseClass.__name__ == 'BaseModel':
-            required_arg = 'model'
-        elif BaseClass.__name__ == 'BaseIndicator':
-            required_arg = 'indicator'
-        else:
-            required_arg = ''
+        required_arg = cls._get_required_arg(BaseClass)
         if required_arg:
             if required_arg not in init_args or init_args[0] != required_arg:
                 raise TypeError(
-                    f"{cls.__name__}.__init__() must include the '{required_arg}' as the first argument after 'self', like this:\n"
+                    f"{cls.__name__}.__init__() must include `{required_arg}` as the first argument after `self`, like this:\n"
                     f"{cls.__name__}.__init__(self, {required_arg}, *args, **kwargs)"
                 )
+                
+    def __call__(cls, *args, **kwargs):
+        if required_arg := cls._get_required_arg(cls):
+            # required_component could be model or indicator
+            required_component = args[0] if args else kwargs.get(required_arg, None)
+            if required_component is not None:
+                if required_arg == 'model':
+                    ParentClass: type[BaseModel] = cls._derive_model_class(required_component)
+                elif required_arg == 'indicator':
+                    ParentClass: type[BaseIndicator] = cls._derive_indicator_class(required_component)
+                else:
+                    raise ValueError(f"Unsupported required_arg: {required_arg}")
+                if not issubclass(cls, ParentClass):
+                    raise TypeError(
+                        f"'{cls.__name__}' must inherit from '{ParentClass.__name__}' when arg `{required_arg}` is of type '{type(required_component)}', please create your class like this:\n"
+                        f"class {cls.__name__}(pf.{ParentClass.__name__})"
+                    )
+        instance = super().__call__(*args, **kwargs)
+        return instance
 
     @staticmethod
     def _derive_model_class(model: MachineLearningModel) -> type[BaseModel]:
@@ -85,4 +103,15 @@ class MetaModel(ABCMeta):
             from pfund.models.sklearn_model import SklearnModel
             return SklearnModel
         else:
+            from pfund.models.model_base import BaseModel
             return BaseModel
+    
+    @staticmethod
+    def _derive_indicator_class(indicator: IndicatorFunction) -> type[BaseIndicator]:
+        from pfund.indicators.talib_indicator import TalibFunction
+        if isinstance(indicator, TalibFunction):
+            from pfund.indicators.talib_indicator import TalibIndicator
+            return TalibIndicator
+        else:
+            from pfund.indicators.ta_indicator import TaIndicator
+            return TaIndicator

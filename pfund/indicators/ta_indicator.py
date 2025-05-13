@@ -1,10 +1,10 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Any
 if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
     import polars as pl
-    from pfund.indicators.indicator_base import TaFunction
+    TaFunction = Callable[..., Any]  # Type for functions from the 'ta' library
 
 import inspect
 import re

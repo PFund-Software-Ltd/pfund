@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from pfund.accounts.account_simulated import SimulatedAccount
     from pfund.orders.order_base import BaseOrder
     from pfund.datas.data_base import BaseData
-    from pfund.datas.data_bar import Bar
     from pfund.risk_guard import RiskGuard
     from pfund.data_tools import data_tool_backtest
 
@@ -208,24 +207,16 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     def amend_orders(self, bkr, exch='', acc=''):
         pass
 
+
     '''
     ************************************************
-    Strategy Functions
-    Users can customize these functions in their strategies.
+    Override Methods
+    Override these methods in your subclass to implement your custom behavior.
     ************************************************
     '''
     def add_strategies(self):
         pass
     
-    def on_quote(self, product, bids, asks, ts, **kwargs):
-        raise NotImplementedError(f"Please define your own on_quote(product, bids, asks, ts, **kwargs) in your strategy '{self.name}'.")
-    
-    def on_tick(self, product, px, qty, ts, **kwargs):
-        raise NotImplementedError(f"Please define your own on_tick(product, px, qty, ts, **kwargs) in your strategy '{self.name}'.")
-
-    def on_bar(self, product, bar: Bar, ts, **kwargs):
-        raise NotImplementedError(f"Please define your own on_bar(product, bar, ts, **kwargs) in your strategy '{self.name}'.")
-
     def on_position(self, account, position):
         pass
 

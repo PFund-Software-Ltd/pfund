@@ -3,7 +3,8 @@ from typing import TypeVar, Literal, TypeAlias
 
 from pfund.datas.resolution import Resolution
 from pfund.strategies.strategy_base import BaseStrategy
-from pfund.models.model_base import BaseModel, BaseFeature
+from pfund.models.model_base import BaseModel
+from pfund.features.feature_base import BaseFeature
 from pfund.indicators.indicator_base import BaseIndicator
 from pfund.products.product_base import BaseProduct
 

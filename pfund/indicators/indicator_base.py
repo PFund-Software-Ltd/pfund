@@ -1,10 +1,11 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import pandas as pd
     import polars as pl
     from pfund.indicators.talib_indicator import TalibFunction
-    TaFunction = Callable[..., Any]  # Type for functions from the 'ta' library
+    from pfund.indicators.ta_indicator import TaFunction
+    IndicatorFunction = TalibFunction | TaFunction
 
 from pfund.models.model_base import BaseModel
 
@@ -15,12 +16,13 @@ class BaseIndicator(BaseModel):
         
         super().__init__(indicator, *args, **kwargs)
         
-        if self.data_tool.name == DataTool.pandas:
-            self.predict = self._predict_pandas
-        elif self.data_tool.name == DataTool.polars:
-            self.predict = self._predict_polars
-        else:
-            raise ValueError(f'Unsupported data tool: {self.data_tool.name.value}')
+        # FIXME
+        # if self.data_tool.name == DataTool.pandas:
+        #     self.predict = self._predict_pandas
+        # elif self.data_tool.name == DataTool.polars:
+        #     self.predict = self._predict_polars
+        # else:
+        #     raise ValueError(f'Unsupported data tool: {self.data_tool.name.value}')
     
     def get_default_name(self):
         return self.get_indicator_name()

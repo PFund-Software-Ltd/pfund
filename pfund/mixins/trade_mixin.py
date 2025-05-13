@@ -10,28 +10,29 @@ if TYPE_CHECKING:
     from pfund.datas.databoy import DataBoy
     from pfund.typing import ModelT, IndicatorT, FeatureT, DataConfigDict
     from pfund.typing import tTRADING_VENUE, Component
+    from pfund.datas.data_bar import Bar
     from pfund.datas.data_base import BaseData
     from pfund._logging.config import LoggingDictConfigurator
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.products.product_base import BaseProduct
     from pfund.data_tools.data_tool_base import BaseDataTool
     from pfund.datas import QuoteData, TickData, BarData
-    from pfund.strategies.strategy_base import BaseStrategy
-    from pfund.models.model_base import BaseModel, BaseFeature
-    from pfund.indicators.indicator_base import BaseIndicator
     from pfund.engines.base_engine import BaseEngine
+    from pfund.strategies.strategy_base import BaseStrategy
+    from pfund.models.model_base import BaseModel
+    from pfund.features.feature_base import BaseFeature
+    from pfund.indicators.indicator_base import BaseIndicator
 
 import time
 import logging
 import datetime
-import importlib
 
-from pfund.enums import ComponentType, RunMode
 from pfund.datas.resolution import Resolution
-from pfund.utils.utils import load_yaml_file, convert_ts_to_dt
 from pfund.datas.data_config import DataConfig
 from pfund.proxies.engine_proxy import EngineProxy
 from pfund.proxies.actor_proxy import ActorProxy
+from pfund.utils.utils import load_yaml_file
+from pfund.enums import ComponentType, RunMode
 
 
 class TradeMixin:
@@ -78,6 +79,11 @@ class TradeMixin:
         # self._is_ready = defaultdict(bool)  # {data: bool}
         self._is_running = False
         self._frozen = False
+        self._assert_functions_signatures()
+    
+    # TODO: also check on_bar, on_tick, on_quote etc.
+    def _assert_functions_signatures(self):
+        pass
 
     @classmethod
     def load_config(cls, config: dict | None=None, file_path: str=''):
@@ -133,6 +139,7 @@ class TradeMixin:
     dtl = data_tool
     
     def _create_data_tool(self: Component) -> BaseDataTool:
+        import importlib
         from pfund.engines.trade_engine import TradeEngine
         data_tool = TradeEngine.data_tool
         DataTool: type[BaseDataTool] = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool}'), f'{data_tool.value.capitalize()}DataTool')
@@ -160,8 +167,9 @@ class TradeMixin:
     @property
     def component_type(self) -> ComponentType:
         from pfund.strategies.strategy_base import BaseStrategy
-        from pfund.models.model_base import BaseModel, BaseFeature
         from pfund.indicators.indicator_base import BaseIndicator
+        from pfund.features.feature_base import BaseFeature
+        from pfund.models.model_base import BaseModel
         if isinstance(self, BaseStrategy):
             return ComponentType.strategy
         elif isinstance(self, BaseIndicator):
@@ -231,6 +239,7 @@ class TradeMixin:
 
     @staticmethod
     def dt(ts: float) -> datetime.datetime:
+        from pfund.utils.utils import convert_ts_to_dt
         return convert_ts_to_dt(ts)
     
     @staticmethod
@@ -473,8 +482,6 @@ class TradeMixin:
                 will be passed to ray actor like this: Actor.options(**ray_options).remote(**ray_kwargs)
         '''
         from pfund.utils.utils import derive_run_mode
-        from pfund.models.model_base import BaseModel, BaseFeature
-        from pfund.indicators.indicator_base import BaseIndicator
         
         self._assert_not_frozen()
 
@@ -482,12 +489,15 @@ class TradeMixin:
         ComponentName = Component.__name__
         component_type = component.component_type
         if component.is_model():
+            from pfund.models.model_base import BaseModel
             components = self.models
             BaseClass = BaseModel
         elif component.is_feature():
+            from pfund.features.feature_base import BaseFeature
             components = self.features
             BaseClass = BaseFeature
         elif component.is_indicator():
+            from pfund.indicators.indicator_base import BaseIndicator
             components = self.indicators
             BaseClass = BaseIndicator
         else:
@@ -671,10 +681,19 @@ class TradeMixin:
     
     '''
     ************************************************
-    Custom Functions
-    Users can customize these functions in their strategies/models.
+    Override Methods
+    Override these methods in your subclass to implement your custom behavior.
     ************************************************
     '''
+    def on_quote(self, product, bids, asks, ts, **kwargs):
+        raise NotImplementedError(f"Please define your own on_quote(product, bids, asks, ts, **kwargs) in your strategy '{self.name}'.")
+    
+    def on_tick(self, product, px, qty, ts, **kwargs):
+        raise NotImplementedError(f"Please define your own on_tick(product, px, qty, ts, **kwargs) in your strategy '{self.name}'.")
+
+    def on_bar(self, product, bar: Bar, ts, **kwargs):
+        raise NotImplementedError(f"Please define your own on_bar(product, bar, ts, **kwargs) in your strategy '{self.name}'.")
+
     def add_datas(self: Component):
         pass
     

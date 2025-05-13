@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from pfund.models.model_base import MachineLearningModel
     from pfund.typing import ModelT
 
-from pfund.models.model_base import BaseFeature
+from pfund.features.feature_base import BaseFeature
 from pfund.mixins.backtest_mixin import BacktestMixin
 
 
