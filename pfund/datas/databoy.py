@@ -70,8 +70,7 @@ class DataBoy:
         return data
     
     def get_data(self, product: BaseProduct, resolution: ResolutionRepr | Resolution) -> TimeBasedData | None:
-        if isinstance(resolution, str):
-            resolution = Resolution(resolution)
+        resolution = Resolution(resolution)
         return self.datas[product].get(resolution, None)
     
     def remove_data(self, product: BaseProduct, resolution: ResolutionRepr | Resolution) -> TimeBasedData:

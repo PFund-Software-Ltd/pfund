@@ -4,7 +4,7 @@ import re
 
 
 class Resolution:
-    def __init__(self, resolution: str):
+    def __init__(self, resolution: str | Resolution):
         '''
         Args:
             resolution: e.g. '1m', '1minute', '1quote_L1'
@@ -14,12 +14,21 @@ class Resolution:
         '''
         from pfund.datas.timeframe import Timeframe
 
+        if isinstance(resolution, Resolution):
+            # Copy all attributes from the resolution object
+            self.__dict__.update(resolution.__dict__)
+            return
+
         # Add "1" if the resolution doesn't start with a number
         if not re.match(r"^\d", resolution):
             resolution = "1" + resolution
+        # Only remove hyphens and underscores after the initial numbers
+        resolution = re.sub(r'^(\d+)[-_]', r'\1', resolution)
         assert re.match(r"^\d+[a-zA-Z]+(?:_L[1-3])?$", resolution), f"Invalid {resolution=}, pattern should be e.g. '1d', '2m', '3h', '1quote_L1' etc."
+ 
         resolution, *orderbook_level = resolution.strip().split('_')
         self._resolution = self._standardize(resolution)
+
         # split resolution (e.g. '1m') into period (e.g. '1') and timeframe (e.g. 'm')
         self.period, timeframe = re.split('(\d+)', self._resolution.strip())[1:]
         self.period = int(self.period)
