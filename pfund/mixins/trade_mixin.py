@@ -528,8 +528,7 @@ class TradeMixin:
         components[component_name] = component
         self.logger.debug(f"added {component_name}")
         
-        # NOTE: cannot return component object when the consumer is remote but the component is not due to serialization issues
-        return component if not self.is_remote() or component.is_remote() else None
+        return component
     
     def add_model(
         self: Component, 

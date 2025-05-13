@@ -9,26 +9,29 @@ from pfund import cprint
 
 class ActorProxy:
     def __init__(self, component: Component, name: str='', ray_actor_options: dict | None=None, **ray_kwargs):
-        import ray
-        Component = component.__class__
         component_name = name or component.name
-        try:
-            ComponentActor = ray.remote(**ray_kwargs)(Component)
-        except ValueError as err:
-            raise ValueError(f"{Component.__name__} {ray_kwargs=}:\n{err}")
         ray_actor_options = ray_actor_options or {}
         if 'name' not in ray_actor_options:
             ray_actor_options['name'] = component_name
-        self._actor: ActorHandle = (
-            ComponentActor
-            .options(**ray_actor_options)
-            .remote(*component.__pfund_args__, **component.__pfund_kwargs__)
-        )
+        self._actor: ActorHandle = self._create_actor(component, ray_actor_options, **ray_kwargs)
         cprint(f'Ray Actor "{component_name}" is created', style='bold')
 
         # set up essential attributes for convenience
         self.name = component_name
         self.resolution = component.resolution
+    
+    def _create_actor(self, component: Component, ray_actor_options: dict, **ray_kwargs):
+        import ray
+        Component = component.__class__
+        try:
+            ComponentActor = ray.remote(**ray_kwargs)(Component)
+        except ValueError as err:
+            raise ValueError(f"{Component.__name__} {ray_kwargs=}:\n{err}")
+        return (
+            ComponentActor
+            .options(**ray_actor_options)
+            .remote(*component.__pfund_args__, **component.__pfund_kwargs__)
+        )
         
     # NOTE: added __setstate__ and __getstate__ to avoid ray's serialization issues when returning ActorProxy objects
     def __setstate__(self, state):
@@ -45,5 +48,13 @@ class ActorProxy:
             actor = self.__dict__["_actor"]
             attr = getattr(actor, name)
             def remote_method(*args, **kwargs):
-                return ray.get(attr.remote(*args, **kwargs))
+                try:
+                    return ray.get(attr.remote(*args, **kwargs))
+                except TypeError as err:
+                    # NOTE: catch TypeError when trying to pickle and return a component
+                    # e.g. model = strategy.add_model(...), where strategy is a ray actor but model is not, so model can't be serialized and returned correctly
+                    if 'cannot pickle' in str(err):
+                        return None
+                    else:
+                        raise err
             return remote_method
