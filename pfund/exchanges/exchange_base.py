@@ -6,33 +6,20 @@ if TYPE_CHECKING:
     from pfund.enums import PublicDataChannel
 
 import os
-import datetime
 import logging
-from abc import ABC, abstractmethod
-from collections import defaultdict
-from functools import reduce
+import datetime
 import importlib
-
-from numpy import sign
-import yaml
+from functools import reduce
+from collections import defaultdict
 
 from pfund.managers.order_manager import OrderUpdateSource
-from pfund.adapter import Adapter
-from pfund.products.product_crypto_cefi import get_CeFiCryptoProduct
-from pfund.products.product_base import BaseProduct
+from pfund.products.product_crypto import CryptoProduct
 from pfund.accounts.account_crypto import CryptoAccount
-from pfund.enums import (
-    Environment, 
-    CeFiProductType, 
-    PrivateDataChannel, 
-    DataChannelType,
-)
-from pfund.const.paths import PROJ_PATH
-from pfund.utils.utils import get_last_modified_time, load_yaml_file
+from pfund.enums import Environment, PrivateDataChannel, DataChannelType
 from pfund.config import get_config
 
 
-class BaseExchange(ABC):
+class BaseExchange:
     SUPPORT_PLACE_BATCH_ORDERS = False
     SUPPORT_CANCEL_BATCH_ORDERS = False 
     
@@ -49,11 +36,13 @@ class BaseExchange(ABC):
                 even if the config files exist.
                 if False, markets will be automatically refetched on a weekly basis
         '''
+        from pfund.adapter import Adapter
+        
         self.env = Environment[env.upper()]
         self.bkr = 'CRYPTO'
         self.name = self.exch = name.upper()
         self.logger = logging.getLogger(self.name.lower())
-        self.adapter = Adapter(f'{PROJ_PATH}/exchanges/{self.exch.lower()}/adapter.yml')
+        self.adapter = Adapter(self.exch)
         self._products = {}
         self._accounts = {}
         
@@ -62,8 +51,6 @@ class BaseExchange(ABC):
         self._rest_api = RestApi(self.env, self.adapter)
         WebsocketApi = getattr(importlib.import_module(f'pfund.exchanges.{self.exch.lower()}.ws_api'), 'WebsocketApi')
         self._ws_api = WebsocketApi(self.env, self.adapter)
-        # FIXME: remove it
-        self._add_default_private_channels()
 
         # used for REST API to send back results in threads to engine
         self._zmq = None
@@ -78,6 +65,9 @@ class BaseExchange(ABC):
         - Listed markets/trading pairs
         and then save them to the cache.
         '''
+        import yaml
+        from pfund.utils.utils import get_last_modified_time
+
         filename = 'market_configs.yml'
         config = get_config()
         file_path = f'{config.cache_path}/{self.exch.lower()}/{filename}'
@@ -110,6 +100,7 @@ class BaseExchange(ABC):
         Load market configs from cache.
         The file can contain thousands of markets, so it's not loaded into memory by default,
         '''
+        from pfund.utils.utils import load_yaml_file
         filename = 'market_configs.yml'
         config = get_config()
         file_path = f'{config.cache_path}/{self.exch.lower()}/{filename}'
@@ -123,12 +114,7 @@ class BaseExchange(ABC):
         for category in market_configs:
             for pdt, product_configs in market_configs[category].items():
                 epdt = product_configs['symbol']
-                self.adapter.add_mapping(category, pdt, epdt)
-    
-    @staticmethod
-    @abstractmethod
-    def _derive_product_category(product_type: str) -> str:
-        pass
+                self.adapter._add_mapping(category, pdt, epdt)
     
     @property
     def products(self):
@@ -138,41 +124,20 @@ class BaseExchange(ABC):
     def accounts(self):
         return self._accounts
     
-    def create_product(self, product_basis: str, product_alias: str='', **product_specs) -> BaseProduct:
-        base_asset, quote_asset, ptype = product_basis.split('_')
-        ptype = CeFiProductType[ptype]
-        CeFiCryptoProduct = get_CeFiCryptoProduct(product_basis)
-        category = self._derive_product_category(ptype)
-        # symbol = epdt = external product, e.g. BTC_USDT_PERP -> BTCUSDT
-        symbol = self._map_internal_to_external_product_name(
-            base_asset.upper(), 
-            quote_asset.upper(), 
-            ptype,
-            specs=product_specs,
-        )
-        product = CeFiCryptoProduct(
-            bkr='CRYPTO',
-            exch=self.exch,
-            symbol=symbol,
-            base_asset=base_asset,
-            quote_asset=quote_asset,
-            type=ptype,
-            category=category,
-            alias=product_alias,
-            **product_specs,
-        )
-            
-        return product
+    def create_product(self, basis: str, alias: str='', **specs) -> CryptoProduct:
+        from pfund.products.product_base import ProductFactory
+        Product = ProductFactory(trading_venue=self.exch, basis=basis)
+        return Product(basis=basis, alias=alias, **specs)
 
-    def get_product(self, pdt: str) -> BaseProduct | None:
+    def get_product(self, pdt: str) -> CryptoProduct | None:
         return self._products.get(pdt.upper(), None)
 
-    def add_product(self, product: BaseProduct):
-        self._products[product.name] = product
+    def add_product(self, product: CryptoProduct):
+        self._products[str(product)] = product
         self._rest_api.add_category(product.category)
-        self.adapter.add_mapping(product.category, product.name, product.symbol)
+        self.adapter._add_mapping(product.category, str(product), product.symbol)
         # TODO: check if the product is listed in the markets
-        self.logger.debug(f'added product {product.name}')
+        self.logger.debug(f'added product {str(product)}')
 
     def get_account(self, acc: str) -> CryptoAccount | None:
         return self._accounts.get(acc.upper(), None)
@@ -326,6 +291,8 @@ class BaseExchange(ABC):
         return balances
 
     def get_positions(self, account: CryptoAccount, schema, params=None, **kwargs) -> dict | None:
+        from numpy import sign
+
         positions = {'ts': None, 'data': defaultdict(dict)}
         ret = self._rest_api.get_positions(account, params=params)
         res = self._parse_return(ret, schema['result'], default_result=False)

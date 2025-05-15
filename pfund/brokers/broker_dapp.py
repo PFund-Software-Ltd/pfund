@@ -3,7 +3,7 @@ from pfund.brokers.broker_trade import TradeBroker
 
 
 # TODO
-class DeFiBroker(TradeBroker):
+class DappBroker(TradeBroker):
     def __init__(self, env: tENVIRONMENT='SANDBOX'):
-        super().__init__(env, 'DEFI')
+        super().__init__(env, 'DAPP')
         

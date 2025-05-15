@@ -1,13 +1,14 @@
-from typing import Any
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.products.product_base import BaseProduct
 
 from decimal import Decimal
 
-from pfund.products.product_base import BaseProduct
 
-
-class DerivativeProduct(BaseProduct):
+class DerivativeMixin:
     underlying: str=''
-    # information that requires data fetching or config loading
+    # TODO: information that requires data fetching or config loading
     contract_size: Decimal = Decimal(1)
 
     # contract_unit: str | None = None  # e.g. barrels
@@ -17,10 +18,8 @@ class DerivativeProduct(BaseProduct):
     # maintenance_margin: Decimal | None = None
     # settlement_type: SettlementType
 
-    def model_post_init(self, __context: Any):
-        super().model_post_init(__context)
-        self.underlying = self.base_asset
-        self.contract_size = self.contract_size or self.multiplier
+    def __mixin_post_init__(self: DerivativeMixin | BaseProduct):
+        self.underlying = self.base_asset  # TODO: inaccurate
     
     @property
     def multiplier(self) -> Decimal:

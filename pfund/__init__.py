@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from pfund.indicators.talib_indicator import TalibIndicator
     from pfund.indicators.ta_indicator import TaIndicator
     from pfund.brokers.broker_crypto import CryptoBroker
-    from pfund.brokers.broker_defi import DeFiBroker
+    from pfund.brokers.broker_dapp import DappBroker
     from pfund.brokers.ib.broker_ib import (
         IBBroker,
         IBBroker as IB,
@@ -94,9 +94,9 @@ def __getattr__(name: str):
     elif name in ("IBBroker", 'IB'):
         from pfund.brokers.ib.broker_ib import IBBroker
         return IBBroker
-    elif name == "DeFiBroker":
-        from pfund.brokers.broker_defi import DeFiBroker
-        return DeFiBroker
+    elif name == "DappBroker":
+        from pfund.brokers.broker_dapp import DappBroker
+        return DappBroker
     elif name in ("BybitExchange", "Bybit"):
         from pfund.exchanges.bybit.exchange import Exchange
         return Exchange
@@ -133,7 +133,7 @@ __all__ = (
     'TaIndicator',
     'CryptoBroker',
     'IBBroker',
-    'DeFiBroker',
+    'DappBroker',
     'BybitExchange',
     'BinanceExchange',
     'OkxExchange',

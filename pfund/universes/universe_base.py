@@ -29,27 +29,27 @@ class BaseUniverse:
         elif exch and pdt:
             return assets[exch].get(pdt, None)
         else:  # not exch and pdt
-            return {exch: product for exch, pdt_to_product in assets.items() for product in pdt_to_product.values() if product.name == pdt}
+            return {exch: product for exch, pdt_to_product in assets.items() for product in pdt_to_product.values() if str(product) == pdt}
             
     def add(self, product: BaseProduct):
         assets: dict = self._get_assets(product.ptype)
-        assets[product.exch][product.name] = product
+        assets[product.exch][str(product)] = product
     
     def update(self, product: BaseProduct):
         assets: dict = self._get_assets(product.ptype)
         if self.has(product):
-            assets[product.exch][product.name] = product
+            assets[product.exch][str(product)] = product
         else:
             raise ValueError(f'{product} not in {assets}')
      
     def has(self, product: BaseProduct) -> bool:
         assets: dict = self._get_assets(product.ptype)
-        return product.exch in assets and product.name in assets[product.exch]
+        return product.exch in assets and str(product) in assets[product.exch]
     
     def remove(self, product: BaseProduct):
         assets: dict = self._get_assets(product.ptype)
         if self.has(product):
-            del assets[product.exch][product.name]
+            del assets[product.exch][str(product)]
         else:
             raise ValueError(f'{product} not in {assets}')
     

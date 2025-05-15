@@ -123,17 +123,17 @@ class CryptoBroker(TradeBroker):
         exchange = self.add_exchange(exch)
         # create another product object to format a correct product name
         product = exchange.create_product(product_basis, product_alias=product_alias, **product_specs)
-        existing_product = self.get_product(exch, product.name)
+        existing_product = self.get_product(exch, str(product))
         if not existing_product:
             exchange.add_product(product)
-            self._products[exch][product.name] = product
+            self._products[exch][str(product)] = product
             self._logger.debug(f'added {product=}')
         else:
             product = existing_product
         return product
     
     def remove_product(self, product: BaseProduct):
-        exch, pdt = product.exch, product.name
+        exch, pdt = product.exch, str(product)
         if exch in self._products and pdt in self._products[exch]:
             del self._products[exch][pdt]
         if not self._products[exch]:

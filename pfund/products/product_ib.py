@@ -1,14 +1,30 @@
+from typing import Any
+
+from decimal import Decimal
+
+# FIXME: use pfund-ibapi
 from pfund.externals.ibapi.contract import Contract
-from pfund.utils.utils import convert_to_uppercases
-from pfund.enums import TradFiProductType
+from pfund.enums import TradingVenue, Broker, TraditionalAssetType
+from pfund.products.product_base import BaseProduct
 
 
-class IBProduct(Contract):
-    # product types that will contribute to your total assets
-    _PRODUCT_TYPES_AS_ASSETS = ['CRYPTO', 'STK', 'ETF', 'OPT', 'FX', 'BOND', 'MTF', 'CMDTY']  
+# FIXME
+# product types that will contribute to your total assets
+PRODUCT_TYPES_AS_ASSETS = ['CRYPTO', 'STK', 'ETF', 'OPT', 'FX', 'BOND', 'MTF', 'CMDTY']  
+
+
+class IBProduct(Contract, BaseProduct):
+    trading_venue: TradingVenue = TradingVenue.IB
+    broker: Broker = Broker.IB
+    exchange: str=''
+
+    def model_post_init(self, __context: Any):
+        super().model_post_init(__context)
+        self.exchange = self.exchange.upper()
 
     @staticmethod
     def create_product_name(bccy, qccy, ptype, *args, **kwargs):
+        from pfund.utils.utils import convert_to_uppercases
         bccy, qccy, ptype, *args = convert_to_uppercases(bccy, qccy, ptype, *args)
         name = TradFiProduct.create_product_name(bccy, qccy, ptype, *args, **kwargs)
         if ptype in ['FUT', 'OPT']:

@@ -6,6 +6,7 @@ from pfeed.enums import DataSource
 from pfund.datas.resolution import Resolution
 
 
+# TODO: use field_validator?
 class DataConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

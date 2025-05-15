@@ -47,7 +47,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         
         self.strategies: dict[str, BaseStrategy] = {}
 
-        self.__post_init__(*args, **kwargs)  # calls TradeMixin.__post_init__()
+        self.__mixin_post_init__(*args, **kwargs)  # calls TradeMixin.__mixin_post_init__()
     
     @abstractmethod
     def backtest(self, df: data_tool_backtest.BacktestDataFrame):

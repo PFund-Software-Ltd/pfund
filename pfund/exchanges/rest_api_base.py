@@ -14,7 +14,7 @@ from requests import Session, Request, Response
 
 from pfund.enums import CeFiProductType, Environment
 from pfund.utils.utils import parse_api_response_with_schema, convert_to_uppercases
-from pfund.products.product_crypto_cefi import get_CeFiCryptoProduct
+from pfund.products.brokers.product_crypto import get_CeFiCryptoProduct
 
 
 tENDPOINT_TYPE = Literal['public', 'private']
@@ -143,7 +143,7 @@ class BaseRestApi:
                 specs['option_type'] = market['option_type']
                 specs['strike_price'] = market['strike_price']
             
-            # create a product to get product.name, which is the full product name
+            # create a product to get str(product), which is the full product name
             product_basis = '_'.join([basset, qasset, ptype.value])
             CeFiCryptoProduct = get_CeFiCryptoProduct(product_basis)
             product = CeFiCryptoProduct(
@@ -157,7 +157,7 @@ class BaseRestApi:
             )
             
             # EXTEND to include more fields if needed
-            markets[product.name] = {
+            markets[str(product)] = {
                 'symbol': epdt,
                 'base_asset': basset,
                 'quote_asset': qasset,

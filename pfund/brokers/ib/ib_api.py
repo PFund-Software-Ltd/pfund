@@ -74,8 +74,8 @@ class IBApi(IBClient, IBWrapper):
         self.logger.debug(f'added account {account.name}')
             
     def add_product(self, product, **kwargs):
-        self._products[product.name] = product
-        self.logger.debug(f'added product {product.name}')
+        self._products[str(product)] = product
+        self.logger.debug(f'added product {str(product)}')
             
     def add_channel(self, channel, type_, product=None, account=None, **kwargs):
         if type_ == 'public':
@@ -112,7 +112,7 @@ class IBApi(IBClient, IBWrapper):
         Since IB's subscription does not require channel name,
         this function creates channel only for internal use, clarity and consistency.
         """
-        pdt = product.name
+        pdt = str(product)
         epdt = self._adapter(pdt)
         echannel = self._adapter(channel)
         if channel in PublicDataChannel:
@@ -247,7 +247,7 @@ class IBApi(IBClient, IBWrapper):
             else:
                 bids, asks = self._bids[pdt], None
                 _update(bids)
-            zmq_msg = (1, 1, (self.bkr, product.exch, product.name, bids, asks, None, kwargs))
+            zmq_msg = (1, 1, (self.bkr, product.exch, str(product), bids, asks, None, kwargs))
             self._zmq.send(*zmq_msg, receiver='engine')
         except:
             self.logger.exception(f'_update_orderbook exception ({position=} {operation=} {side=} {px=} {qty=} {kwargs=}):')

@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing_extensions import TypedDict
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.typing import DataRangeDict, DatasetSplitsDict
+    from pfund.typing import DatasetSplitsDict
 
 import datetime
 from dataclasses import dataclass, field

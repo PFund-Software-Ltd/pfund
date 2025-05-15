@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.adapter import Adapter
-    from pfund.exchanges.bybit.exchange import tBYBIT_PRODUCT_CATEGORY
+    from pfund.products.product_bybit import tPRODUCT_CATEGORY
 
 import datetime
 from pathlib import Path
@@ -20,7 +20,7 @@ from requests import Response
 
 from pfund.exchanges.rest_api_base import BaseRestApi
 from pfund.enums import Environment, OptionType
-from pfund.exchanges.bybit.exchange import BybitProductCategory
+from pfund.products.product_bybit import ProductCategory
 
 
 # TODO complete the endpoints
@@ -111,7 +111,7 @@ class RestApi(BaseRestApi):
         )
         return is_successful
     
-    def get_markets(self, category: tBYBIT_PRODUCT_CATEGORY):
+    def get_markets(self, category: tPRODUCT_CATEGORY):
         schema = {
             'result': ['result', 'list'],
             'product': ['symbol'],
@@ -126,11 +126,11 @@ class RestApi(BaseRestApi):
                 lambda expiration: expiration.strftime('%Y-%m-%d')
             ),
         }
-        category = BybitProductCategory[category.upper()]
-        if category == BybitProductCategory.SPOT:
+        category = ProductCategory[category.upper()]
+        if category == ProductCategory.SPOT:
             schema['product_type'] = 'SPOT'
             schema['lot_size'] = ['lotSizeFilter', 'basePrecision']
-        elif category == BybitProductCategory.OPTION:
+        elif category == ProductCategory.OPTION:
             schema['product_type'] = 'OPT'
             schema['option_type'] = (
                 'optionsType', 

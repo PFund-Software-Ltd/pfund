@@ -32,7 +32,7 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         self._num_data = defaultdict(int)  # {data: int}
         self._group_data = True
         
-        self.__post_init__(model, *args, **kwargs)  # calls TradeMixin.__post_init__()
+        self.__mixin_post_init__(model, *args, **kwargs)  # calls TradeMixin.__mixin_post_init__()
     
     @abstractmethod
     def predict(self, X: GenericFrame, *args, **kwargs) -> Tensor | ndarray:

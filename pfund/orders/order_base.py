@@ -17,6 +17,7 @@ from typing import Literal
 from pfund.orders.order_statuses import *
 
 
+# FIXME: refer to BaseProduct, should use mixins to separate different types of orders
 class BaseOrder:
     def __init__(
         self, 
@@ -39,10 +40,11 @@ class BaseOrder:
         self.strat = strategy_name
         self.acc = account.acc
         self.account = account
-        self.bkr = product.bkr
-        self.exch = product.exch
+        self.broker = product.broker
+        self.exchange = product.exchange
+        self.adapter = product.adapter
         self.tv = self.trading_venue = self.exch if self.bkr == 'CRYPTO' else self.bkr
-        self.pdt = product.name
+        self.pdt = str(product)
         self.product = product
 
         if type(side) is str:

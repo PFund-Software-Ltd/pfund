@@ -90,7 +90,7 @@ class WebsocketApi(BaseWebsocketApi):
     def _create_public_channel(self, channel: PublicDataChannel | str, data: BaseData | None=None):
         if channel in PublicDataChannel:
             product = data.product
-            pdt = product.name
+            pdt = str(product)
             epdt = self._adapter(pdt, group=product.category)
             echannel = self._adapter(channel, group='channel')
             if channel == PublicDataChannel.orderbook:

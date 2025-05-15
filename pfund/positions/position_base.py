@@ -17,7 +17,7 @@ class BasePosition:
         self.bkr = product.bkr
         self.exch = product.exch
         self.acc = account.acc
-        self.pdt = product.name
+        self.pdt = str(product)
         self.pair, self.ptype = product.pair, product.ptype
         self.bccy, self.qccy = product.bccy, product.qccy
         self._prev_position = self.Position()

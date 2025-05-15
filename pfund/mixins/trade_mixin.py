@@ -40,7 +40,7 @@ class TradeMixin:
     params = {}
 
     # custom post init for-common attributes of strategy and model
-    def __post_init__(self: Component, *args, **kwargs):
+    def __mixin_post_init__(self: Component, *args, **kwargs):
         from pfund.datas.databoy import DataBoy
         
         self.__pfund_args__ = args
@@ -395,7 +395,7 @@ class TradeMixin:
             product_alias=product_alias,
             **product_specs
         )
-        self._add_product(product_alias or product.name, product)
+        self._add_product(product_alias or str(product), product)
         datas: list[TimeBasedData] = self._databoy.add_data(
             product=product,
             data_source=data_source,
@@ -501,11 +501,6 @@ class TradeMixin:
         run_mode: RunMode = derive_run_mode(ray_kwargs)
         if is_remote := (run_mode == RunMode.REMOTE):
             component = ActorProxy(component, name=component_name, ray_actor_options=ray_actor_options, **ray_kwargs)
-        # NOTE: if the consumer component (which the model component is added to) is remote (ray actor), 
-        # re-create the added component to avoid serialization issues, i.e. making the component "local" to the ray actor
-        elif self.is_remote():
-            Component = component.__class__
-            component = Component(*component.__pfund_args__, **component.__pfund_kwargs__)
         component._set_name(component_name)
         component._set_run_mode(run_mode)
         component._set_resolution(self._resolution)

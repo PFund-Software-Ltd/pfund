@@ -6,14 +6,10 @@ if TYPE_CHECKING:
 from enum import StrEnum
 
 
-class TradFiBroker(StrEnum):
-    IB = 'IB'
-
-
 class Broker(StrEnum):
-    IB = TradFiBroker.IB
+    IB = 'IB'
     CRYPTO = 'CRYPTO'
-    DEFI = 'DEFI'
+    DAPP = 'DAPP'
 
     @property
     def broker_class(self) -> type[BaseBroker]:
@@ -22,6 +18,6 @@ class Broker(StrEnum):
         broker_name = {
             Broker.IB: 'IBBroker',
             Broker.CRYPTO: 'CryptoBroker',
-            Broker.DEFI: 'DeFiBroker',
+            Broker.DAPP: 'DappBroker',
         }[self]
         return getattr(pf, broker_name)

@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from pfund.datas.data_time_based import TimeBasedData
 
 from pfund.adapter import Adapter
-from pfund.products.product_ib import IBProduct
+from pfund.products.brokers.product_ib import IBProduct
 from pfund.accounts.account_ib import IBAccount
 from pfund.orders.order_ib import IBOrder
 from pfund.positions.position_ib import IBPosition
@@ -100,9 +100,9 @@ class IBBroker(TradeBroker):
         exchange = exchange or self._derive_exch(product_basis)
         if not (product := self.get_product(exchange=exchange, pdt=product_basis)):
             product = self.create_product(exchange, product_basis, symbol=symbol, **product_specs)
-            self._products[exchange][product.name] = product
+            self._products[exchange][str(product)] = product
             self._api.add_product(product, **product_specs)
-            self._logger.debug(f'added product {product.name}')
+            self._logger.debug(f'added product {str(product)}')
         return product
 
     def get_account(self, acc: str) -> IBAccount | None:

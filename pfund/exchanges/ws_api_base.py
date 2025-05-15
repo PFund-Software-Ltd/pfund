@@ -187,17 +187,17 @@ class BaseWebsocketApi(ABC):
         self.logger.debug(f'added account {account.name}')
 
     def add_product(self, product: BaseProduct):
-        if product.name in self._products:
+        if str(product) in self._products:
             return
         if product.category:
             self.add_server(product.category)
-        self._products[product.name] = product
-        self.logger.debug(f'added product {product.name}')
+        self._products[str(product)] = product
+        self.logger.debug(f'added product {str(product)}')
     
     def remove_product(self, product: BaseProduct):
-        if product.name in self._products:
-            del self._products[product.name]
-            self.logger.debug(f'removed product {product.name}')
+        if str(product) in self._products:
+            del self._products[str(product)]
+            self.logger.debug(f'removed product {str(product)}')
         # TODO: remove server
 
     def add_channel(

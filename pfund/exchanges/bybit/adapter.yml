@@ -3,12 +3,12 @@ asset: {
   # cryptocurrencies internal-to-external mappings if any
   # e.g. 'BTC': 'XBT', as an example
 }
-product_type: {
+asset_type: {
   # from '/v5/market/instruments-info'
-  'PERP': 'LinearPerpetual',
-  'IPERP': 'InversePerpetual',
-  'FUT': 'LinearFutures',
-  'IFUT': 'InverseFutures',
+  'PERPETUAL': 'LinearPerpetual',
+  'INVERSE-PERPETUAL': 'InversePerpetual',
+  'FUTURE': 'LinearFutures',
+  'INVERSE-FUTURE': 'InverseFutures',
 }
 option_type: {
   'CALL': 'Call',

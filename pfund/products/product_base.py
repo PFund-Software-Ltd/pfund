@@ -1,88 +1,66 @@
+from __future__ import annotations
 from typing import Any
 
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator, validate_call
+from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
 
-from pfund.enums import ProductType, Broker
+from pfund.adapter import Adapter
+from pfund.products.product_basis import ProductBasis, ProductAssetType
+from pfund.enums import Broker, CryptoExchange, TradingVenue
 
 
-def get_product_class(product_basis: str):
-    from pfund.products.product_stock import StockProduct
-    from pfund.products.product_future import FutureProduct
-    from pfund.products.product_option import OptionProduct
-    from pfund.products.product_derivative import DerivativeProduct
-    
-    ptype = product_basis.split('_')[2]
-    ptype = ProductType[ptype]
-    if ptype in [ProductType.FUT, ProductType.IFUT]:
-        return FutureProduct
-    elif ptype == ProductType.OPT:
-        return OptionProduct
-    elif ptype == ProductType.STK:
-        return StockProduct
-    elif ptype in [ProductType.PERP, ProductType.IPERP]:
-        return DerivativeProduct
+def ProductFactory(trading_venue: TradingVenue | str, basis: str) -> type[BaseProduct]:
+    import importlib
+    from pfund.products.product_basis import ProductBasis
+    from pfund.enums import AllAssetType, AssetTypeModifier
+    trading_venue = TradingVenue[trading_venue.upper()]
+    if trading_venue == TradingVenue.IB:
+        tv_capitalized = trading_venue.value
     else:
-        return BaseProduct
-    
-    
-class BaseProduct(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+        tv_capitalized = trading_venue.capitalize()
+    Product = getattr(importlib.import_module(f'pfund.products.product_{trading_venue.lower()}'), f'{tv_capitalized}Product')
+    asset_type = ProductBasis(basis=basis).asset_type
+    Mixins = []
+    for t in asset_type:
+        if t in AssetTypeModifier.__members__:
+            Mixins.append(AssetTypeModifier[t].Mixin)
+        elif t in AllAssetType.__members__:
+            Mixins.append(AllAssetType[t].Mixin)
+        else:
+            raise ValueError(f"Invalid asset type for ProductFactory: {t}")
+    name = f'{tv_capitalized}' + ''.join([m.__name__.replace('Mixin', '') for m in Mixins]) + 'Product'
+    return type(name, (Product, *Mixins), {"__module__": __name__})
 
-    broker: Broker | str
-    exchange: str=''
-    base_asset: str
-    quote_asset: str
-    ptype: ProductType
-    asset_pair: str | None=None
-    basis: str | None=None
+
+class BaseProduct(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra='forbid')
+
+    trading_venue: TradingVenue
+    broker: Broker
+    exchange: CryptoExchange | str = ''
+    adapter: Adapter
+    basis: ProductBasis
     # specifications that make a product unique, e.g. for options, specs are strike_price, expiration_date, etc.
     specs: dict = Field(default_factory=dict)
-    name: str | None=None
+    # if symbol is not provided, will be derived from name for TradFi brokers (e.g. IB). e.g. AAPL_USD_STK -> AAPL.
+    symbol: str | None=None
     alias: str | None=None
-    # if not provided, might be derived from name. e.g. AAPL_USD_STK -> AAPL. For crypto, it's empty.
-    symbol: str | None=None  
-
-    # information that requires data fetching
-    tick_size: Decimal | None = None
-    lot_size: Decimal | None = None
-
-    @classmethod
-    def get_required_specs(cls) -> set[str]:
-        '''
-        Args:
-            specs_only: if True, only specifications such as 'expiration', 'strike_price'
-            will be returned, otherwise all required fields defined in BaseProduct will be returned
-        '''
-        non_specs_required_fields = {
-            field_name for field_name, field in BaseProduct.model_fields.items()
-            if field.is_required()
-        }
-        return {
-            field_name for field_name, field in cls.model_fields.items()
-            if field.is_required() and field_name not in non_specs_required_fields
-        }
+    tick_size: Decimal | None=None
+    lot_size: Decimal | None=None
     
-    def model_post_init(self, __context: Any):
-        if isinstance(self.broker, str):
-            self.broker = Broker[self.broker.upper()]
-        self.exchange = self.exchange.upper()
-        self.base_asset = self.base_asset.upper()
-        self.quote_asset = self.quote_asset.upper()
-        self.asset_pair = '_'.join([self.base_asset, self.quote_asset])
-        self.basis = '_'.join([self.base_asset, self.quote_asset, self.ptype.value])
-        self.symbol = self._create_symbol()
-        self.specs = self._create_specs()
-        self.name = self._create_product_name()
-
+    
+    @field_validator('basis', mode='before')
+    @classmethod
+    def _create_product_basis(cls, basis: str):
+        return ProductBasis(basis=basis)
+    
     @model_validator(mode='before')
     @classmethod
-    def assert_required_fields(cls, data: dict) -> dict:
-        product_basis = '_'.join([data['base_asset'], data['quote_asset'], data['type'].value])
+    def _assert_required_fields(cls, data: dict) -> dict:
         required_specs: set[str] = cls.get_required_specs()
         missing_fields = []
-        missing_fields_msg = f'"{product_basis}" is missing the following required fields:'
+        missing_fields_msg = f'"{data["basis"]}" is missing the following required fields:'
         for field_name in required_specs:
             if field_name not in data:
                 missing_fields.append(field_name)
@@ -92,72 +70,102 @@ class BaseProduct(BaseModel):
             raise ValueError('\n\033[1m' + missing_fields_msg + '\033[0m')
         return data
     
+    def model_post_init(self, __context: Any):
+        self.adapter = Adapter(self.trading_venue)
+        if hasattr(self, '__mixin_post_init__'):
+            self.__mixin_post_init__()
+        self.specs = self._create_specs()
+        if hasattr(self, '_create_symbol'):
+            self.symbol = self._create_symbol()
+    
+    @property
+    def base_asset(self) -> str:
+        return self.basis.base_asset
+    
+    @property
+    def quote_asset(self) -> str:
+        return self.basis.quote_asset
+    
+    @property
+    def asset_type(self) -> ProductAssetType:
+        return self.basis.asset_type
+    
+    @property
+    def asset_pair(self) -> str:
+        return self.basis.asset_pair
+    
+    @classmethod
+    def get_required_specs(cls) -> set[str]:
+        '''Gets required specifications'''
+        return {
+            field_name for field_name, field in cls.model_fields.items()
+            if field.is_required() and field_name not in BaseProduct.model_fields
+        }
+    
     def to_dict(self) -> dict:
         return self.model_dump()
 
-    @validate_call
-    def set_symbol(self, symbol: str):
-        self.symbol = symbol
-    
-    def _create_symbol(self) -> str:
-        return self.symbol
-    
     def _create_specs(self) -> dict:
-        return self.specs
-    
-    def _create_product_name(self) -> str:
-        return self.basis
+        '''Create specifications that make a product unique'''
+        from pfund.products.product_crypto import CryptoProduct
+        # TODO: add DappProduct
+        specification_fields = [
+            field for field in self.__class__.model_fields 
+            if field not in BaseProduct.model_fields
+            and field not in CryptoProduct.model_fields
+        ]
+        return {
+            field: getattr(self, field)
+            for field in specification_fields
+        } 
+        
+    def is_inverse(self) -> bool:
+        return self.asset_type.is_inverse()
     
     def is_crypto(self) -> bool:
-        return (self.ptype == ProductType.CRYPTO) or (self.broker == Broker.CRYPTO)
-     
+        return self.asset_type.is_crypto()
+    
     def is_future(self) -> bool:
-        return (self.ptype in [ProductType.FUT, ProductType.IFUT])
+        return self.asset_type.is_future()
+    
+    def is_perpetual(self) -> bool:
+        return self.asset_type.is_perpetual()
     
     def is_option(self) -> bool:
-        return (self.ptype == ProductType.OPT)
+        return self.asset_type.is_option()
     
     def is_index(self) -> bool:
-        return (self.ptype == ProductType.INDEX)
+        return self.asset_type.is_index()
 
     def is_stock(self) -> bool:
-        return (self.ptype == ProductType.STK)
+        return self.asset_type.is_stock()
     
     def is_etf(self) -> bool:
-        return (self.ptype == ProductType.ETF)
+        return self.asset_type.is_etf()
     
-    def is_fx(self) -> bool:
-        return (self.ptype == ProductType.FX)
+    def is_forex(self) -> bool:
+        return self.asset_type.is_forex()
     
     def is_bond(self) -> bool:
-        return (self.ptype == ProductType.BOND)
+        return self.asset_type.is_bond()
     
     def is_mutual_fund(self) -> bool:
-        return (self.ptype == ProductType.MTF)
+        return self.asset_type.is_mutual_fund()
     
     def is_commodity(self) -> bool:
-        return (self.ptype == ProductType.CMDTY)
+        return self.asset_type.is_commodity()
     
     def __str__(self):
-        if self.exchange:
-            return f'Broker={self.broker}|exchangeange={self.exchange}|Product={self.name}'
-        else:
-            return f'Broker={self.broker}|Product={self.name}'
+        return '|'.join([
+            f'trading_venue={self.trading_venue}',
+            f'basis={self.basis}',
+            *[f'{k}={v}' for k, v in self.specs.items()]
+        ])
 
-    def __repr__(self):
-        if self.exchange:
-            return f'{self.broker}:{self.exchange}:{self.name}'
-        else:
-            return f'{self.broker}:{self.name}'
-    
     def __eq__(self, other):
         if not isinstance(other, BaseProduct):
             return NotImplemented  # Allow other types to define equality with BaseProduct
-        return (
-            self.broker == other.broker
-            and self.exchange == other.exchange
-            and self.name == other.name
-        )
+        return str(self) == str(other)
         
     def __hash__(self):
-        return hash((self.broker, self.exchange, self.name))
+        return hash(str(self))
