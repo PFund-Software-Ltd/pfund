@@ -1,0 +1,1 @@
+from pfund.products.product_base import ProductFactory

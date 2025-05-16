@@ -1,4 +1,4 @@
-from typing import Literal, TypeAlias
+from typing import Literal, TypeAlias, Any
 
 from collections import defaultdict
 from pathlib import Path
@@ -38,15 +38,21 @@ class Adapter:
         self._is_strict = is_strict
         self._load_config(self._get_file_path(trading_venue))
     
+    def __str__(self):
+        import json
+        # only show (key: value) (one-sided), no need to show (value: key)
+        one_sided_mappings = {}
+        for group, mappings in self._adapter.items():
+            if group not in one_sided_mappings:
+                one_sided_mappings[group] = {}
+            for k, v in mappings.items():
+                if k not in one_sided_mappings[group].values():
+                    one_sided_mappings[group][k] = v
+        return json.dumps(one_sided_mappings, indent=4)
+    
     @property
     def groups(self) -> list[str]:
         return list(self._adapter.keys())
-    
-    def print_groups(self):
-        from pprint import pprint
-        pprint(self.groups)
-    
-    # TODO: __str__
     
     @staticmethod
     def _get_file_path(trading_venue: TradingVenue) -> Path:
@@ -68,6 +74,19 @@ class Adapter:
         group = group.lower()
         self._adapter[group][k] = v
         self._adapter[group][v] = k
+    
+    def __len__(self):
+        '''
+        Returns the number of mappings in the adapter, only count one-sided mappings.
+        e.g. a: b, b: a -> counted as 1 mapping
+        '''
+        return sum(len(mappings) for mappings in self._adapter.values()) // 2
+    
+    def __contains__(self, item: Any):
+        for mappings in self._adapter.values():
+            if item in mappings:
+                return True
+        return False
 
     def __call__(self, key: str, group: tADAPTER_GROUP='') -> str | tuple:
         group = group.lower()
