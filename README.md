@@ -5,6 +5,8 @@
 ![PyPI downloads](https://img.shields.io/pypi/dm/pfund)
 [![PyPI](https://img.shields.io/pypi/v/pfund.svg)](https://pypi.org/project/pfund)
 ![PyPI - Support Python Versions](https://img.shields.io/pypi/pyversions/pfund)
+![Discussions](https://img.shields.io/badge/Discussions-Let's%20Chat-green)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/PFund-Software-Ltd/pfund)
 <!-- [![marimo](https://marimo.io/shield.svg)](https://marimo.io) -->
 <!-- [![Jupyter Book Badge](https://raw.githubusercontent.com/PFund-Software-Ltd/pfund/main/docs/images/jupyterbook.svg
 )](https://jupyterbook.org) -->

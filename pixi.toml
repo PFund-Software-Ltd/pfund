@@ -1,0 +1,72 @@
+[workspace]
+authors = ["softwareentrepreneer <softwareentrepreneer+pfund@gmail.com>"]
+channels = ["conda-forge"]
+name = "pfund"
+platforms = ["osx-arm64", "linux-64"]
+version = "0.0.2"
+
+[tasks]
+
+
+[tasks.test-all]
+depends-on = [
+  { task = "test", environment = "test-py311" },
+  { task = "test", environment = "test-py312" },
+  { task = "test", environment = "test-py313" },
+]
+
+[dependencies]
+python = ">=3.11"
+uv = ">=0.7.11"
+
+[pypi-dependencies]
+mtflow = ">=0.0.1.dev1"
+pfolio = ">=0.0.2"
+click = ">=8.1.8"
+trogon = ">=0.6.0"
+platformdirs = ">=4.2.2"
+python-dotenv = ">=1.1.0"
+pyyaml = ">=6.0.2"
+orjson = ">=3.10.18"
+httpx = ">=0.28.1"
+websocket-client = ">=1.8.0"
+ta = ">=0.11.0"
+scikit-learn = ">=1.7.0"
+
+[environments]
+# core = ["core"]
+dev = ["dev"]
+test-py311 = ["py311", "test"]
+test-py312 = ["py312", "test"]
+test-py313 = ["py313", "test"]
+
+# FIXME: need to create editable to solve dependency issues, skip for now
+# [feature.core.pypi-dependencies]
+# mtflow = { version = ">=0.0.1.dev2", extras = ["core"] }
+# pfolio = { version = ">=0.0.2", extras = ["core"] }
+# order-book = ">=0.6.1"
+# python-telegram-bot = ">=22.1"
+
+[feature.dev.pypi-dependencies]
+ruff = ">=0.11.12"
+pybit = ">=5.11.0"
+ta-lib = ">=0.6.4"
+torch = ">=2.6.0"
+
+[feature.test.dependencies]
+pytest = ">=8.4.0"
+pytest-cov = ">=6.1.1"
+pytest-mock = ">=3.14.1"
+pytest-xdist = ">=3.7.0"
+[feature.test.tasks]
+test = "pytest"
+
+[feature.py311.dependencies]
+python = "3.11.*"
+
+[feature.py312.dependencies]
+python = "3.12.*"
+
+[feature.py313.dependencies]
+python = "3.13.*"
+

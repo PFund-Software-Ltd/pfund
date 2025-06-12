@@ -187,3 +187,7 @@ docs/_build/*
 
 # tests data
 tests/data/
+
+# pixi environments
+.pixi
+*.egg-info
