@@ -69,18 +69,41 @@ class RestApi(BaseRestApi):
             return {'retCode': 0, 'retMsg': 'OK', 'result': {'orderId': '79d33fd7-2262-4d0a-b7a7-624f2c1fc3ad', 'orderLinkId': 'ce9e076afb5a69559b3be7f822cdfa45'}, 'retExtInfo': {}, 'time': 1690021242645}
         else:
             raise NotImplementedError(f'{endpoint_name} is not implemented')
+    
+    def _build_request(
+        self, 
+        method: RequestMethod, 
+        endpoint: str, 
+        account: CryptoAccount | None=None,
+        params: dict | None=None, 
+    ) -> Request:
+        headers: dict | None = self._authenticate(account, method, params=params) if account else None
+        if method == RequestMethod.POST:
+            request: Request = self._client.build_request(
+                method=method,
+                url=endpoint,
+                json=params,
+                headers=headers,
+            )
+        elif method == RequestMethod.GET:
+            request: Request = self._client.build_request(
+                method=method,
+                url=endpoint,
+                params=params,
+                headers=headers,
+            )
+        else:
+            raise NotImplementedError(f'request method {method} is not supported')
+        return request
 
-    def _authenticate(self, request: Request, account: CryptoAccount) -> Request:
+    def _authenticate(self, account: CryptoAccount, method: RequestMethod, params: dict | None=None) -> dict:
         timestamp = str(self.nonce)
         recv_window = '5000'
         query_str = timestamp + account._key + recv_window
-        if request.method == RequestMethod.POST:
-            query_str += json.dumps(request.json)
-        elif request.method == RequestMethod.GET:
-            query_str += urllib.parse.urlencode(request.params)
-        else:
-            raise NotImplementedError(f'request method {request.method} is not supported')
-        
+        if method == RequestMethod.POST:
+            query_str += json.dumps(params)
+        elif method == RequestMethod.GET:
+            query_str += urllib.parse.urlencode(params)
         signature = hmac.new(
             account._secret.encode(encoding='utf-8'), 
             query_str.encode(encoding='utf-8'), 
@@ -95,17 +118,11 @@ class RestApi(BaseRestApi):
             "X-BAPI-TIMESTAMP": timestamp,
             "X-BAPI-RECV-WINDOW": recv_window,
         }
-        request.headers = headers
-        return request
+        return headers
 
-    def _is_success(self, response: Response) -> bool:
-        msg = response.json()
-        is_success = (
-            super()._is_success(response) and \
-            'retCode' in msg and \
-            msg['retCode'] == 0
-        )
-        return is_success
+    def _is_success(self, msg: dict) -> bool:
+        '''Checks if the returned message means successful based on the exchange's standard'''
+        return 'retCode' in msg and msg['retCode'] == 0
     
     def get_markets(self, category: tPRODUCT_CATEGORY):
         schema = {

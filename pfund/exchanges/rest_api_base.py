@@ -7,10 +7,8 @@ if TYPE_CHECKING:
 
 import time
 import logging
-import traceback
 from abc import ABC, abstractmethod
 from enum import StrEnum
-from pprint import pprint, pformat
 
 from httpx import AsyncClient
 
@@ -49,18 +47,40 @@ class BaseRestApi(ABC):
     def nonce():
         return int(time.time() * 1000)
     
-    @abstractmethod
-    def _authenticate(self, request: Request, account: CryptoAccount) -> Request:
+    abstractmethod
+    def _build_request(
+        self, 
+        method: RequestMethod, 
+        endpoint: str, 
+        account: CryptoAccount | None=None,
+        params: dict | None=None, 
+        **kwargs
+    ) -> Request:
         pass
     
-    def _is_success(self, response: Response) -> bool:
-        return response.is_success
+    @abstractmethod
+    def _is_success(self, msg: dict) -> bool:
+        pass
     
     def list_endpoints(self, endpoint_type: Literal['public', 'private']) -> None:
+        from pprint import pprint
         endpoints = self.PUBLIC_ENDPOINTS if endpoint_type.lower() == 'public' else self.PRIVATE_ENDPOINTS
         pprint(endpoints)
+
+    def get_endpoint(self, endpoint_name: EndpointName) -> tuple[RequestMethod, str]:
+        if is_public_endpoint := endpoint_name in self.PUBLIC_ENDPOINTS:
+            method, endpoint_path = self.PUBLIC_ENDPOINTS[endpoint_name]
+        else:
+            method, endpoint_path = self.PRIVATE_ENDPOINTS[endpoint_name]
+        # NOTE: allows access to public endpoints in backtest/sandbox environment
+        if self._env.is_simulated and is_public_endpoint:
+            live_url = self.URLS[Environment.LIVE]
+            endpoint = live_url + endpoint_path
+        else:
+            endpoint = self._url + endpoint_path
+        return method, endpoint
     
-    def _request(
+    async def _request(
         self,
         endpoint_name: EndpointName,
         account: CryptoAccount | None=None,
@@ -68,42 +88,10 @@ class BaseRestApi(ABC):
         params: dict | None=None,
         **kwargs
     ) -> dict:
-        from httpx import RequestError, HTTPStatusError
-        from json import JSONDecodeError
-
-        if (is_private_endpoint := account is not None):
-            method, endpoint_path = self.PRIVATE_ENDPOINTS[endpoint_name]
-        else:
-            method, endpoint_path = self.PUBLIC_ENDPOINTS[endpoint_name]
-
-        # NOTE: allows access to public endpoints in backtest/sandbox environment
-        if self._env in [Environment.BACKTEST, Environment.SANDBOX] and not is_private_endpoint:
-            url = self.URLS[Environment.LIVE]
-            endpoint = url + endpoint_path
-            self._logger.warning(f'{self.name} is accessing LIVE {endpoint_path=} in {self._env} environment when calling "{endpoint_name}"')
-        else:
-            endpoint = self._url + endpoint_path
-
-        if method == RequestMethod.POST:
-            request: Request = self._client.build_request(
-                method=method,
-                url=endpoint,
-                json=params,
-                **kwargs
-            )
-        elif method == RequestMethod.GET:
-            request: Request = self._client.build_request(
-                method=method,
-                url=endpoint,
-                params=params,
-                **kwargs
-            )
-        else:
-            raise NotImplementedError(f'request method {method} is not supported')
-
-        if account:
-            request: Request = self._authenticate(request, account)
-        
+        if self._env.is_simulated:
+            assert account is None, "Simulated environment can only access public endpoints, account should be None"
+        method, endpoint = self.get_endpoint(endpoint_name)
+        request: Request = self._build_request(method=method, endpoint=endpoint, account=account, params=params, **kwargs)
         result = {
             'is_success': False,
             'message': None,
@@ -120,12 +108,15 @@ class BaseRestApi(ABC):
             }
         }
         try:
-            response: Response = self._client.send(request)
-            result['status_code'] = response.status_code
+            response: Response = await self._client.send(request)
             try:
-                result['message'] = response.raise_for_status().json()
-                result['is_success'] = self._is_success(response)
+                result['status_code'] = response.status_code
+                msg = response.raise_for_status().json()
+                result['message'] = msg
+                result['is_success'] = response.is_success and self._is_success(msg)
             except Exception as exc:
+                from httpx import RequestError, HTTPStatusError
+                from json import JSONDecodeError
                 result['error'] = f'{type(exc).__name__}: {exc}'
                 if not isinstance(exc, (JSONDecodeError, RequestError, HTTPStatusError)):
                     self._logger.exception(f'Unhandled response exception when calling {endpoint_name}:')

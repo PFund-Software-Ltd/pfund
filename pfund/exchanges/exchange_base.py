@@ -46,7 +46,7 @@ class BaseExchange(ABC):
         # used for REST API to send back results in threads to engine
         self._zmq = None
         
-        if self._env != Environment.BACKTEST and self._check_if_refetch_market_configs():
+        if self._check_if_refetch_market_configs():
             self.fetch_market_configs()
     
     @property
