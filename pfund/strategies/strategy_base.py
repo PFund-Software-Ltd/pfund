@@ -3,9 +3,11 @@ from typing import Literal, TYPE_CHECKING, overload, TypeAlias
 if TYPE_CHECKING:
     from pfund.typing import (
         StrategyT, 
-        tTRADING_VENUE, 
-        tCRYPTO_EXCHANGE,
-        ProductName,
+        tTradingVenue, 
+        tCryptoExchange,
+        ProductKey,
+        AccountName,
+        Currency,
     )
     from pfund.products.product_base import BaseProduct
     from pfund.positions.position_base import BasePosition
@@ -32,13 +34,9 @@ from pfund.enums import TradingVenue, RunMode
 from pfund.proxies.actor_proxy import ActorProxy
 
 
-AccountName: TypeAlias = str
-Currency: TypeAlias = str
-
-
 class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):    
     def __init__(self, *args, **kwargs):
-        self.positions: dict[AccountName, dict[ProductName, BasePosition]] = {}
+        self.positions: dict[AccountName, dict[ProductKey, BasePosition]] = {}
         self.balances: dict[AccountName, dict[Currency, BaseBalance]] = {}
         # NOTE: includes submitted orders and opened orders
         self.orders: dict[AccountName, list[BaseOrder]] = {}
@@ -85,7 +83,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     @overload
     def add_account(
         self, 
-        trading_venue: tCRYPTO_EXCHANGE, 
+        trading_venue: tCryptoExchange, 
         name: str='', 
         key: str='', 
         secret: str='', 
@@ -104,13 +102,13 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     @overload
     def add_account(
         self,
-        trading_venue: tTRADING_VENUE,
+        trading_venue: tTradingVenue,
         name: str='',
         initial_balances: dict[str, float] | None=None, 
         initial_positions: dict[BaseProduct, float] | None=None,
     ) -> SimulatedAccount: ...
     
-    def add_account(self, trading_venue: tTRADING_VENUE, name: str='', **kwargs) -> BaseAccount:
+    def add_account(self, trading_venue: tTradingVenue, name: str='', **kwargs) -> BaseAccount:
         self._assert_not_frozen()
         trading_venue = TradingVenue[trading_venue.upper()]
         account: BaseAccount = self._engine._register_account(trading_venue, name=name, **kwargs)

@@ -6,10 +6,10 @@ if TYPE_CHECKING:
     import pandas as pd
     import polars as pl
     from mtflow.stores.trading_store import TradingStore
-    from pfeed.typing import tDATA_SOURCE
+    from pfeed.typing import tDataSource
     from pfund.datas.databoy import DataBoy
     from pfund.typing import StrategyT, ModelT, IndicatorT, FeatureT, DataConfigDict
-    from pfund.typing import tTRADING_VENUE, Component
+    from pfund.typing import tTradingVenue, Component, ProductKey
     from pfund.datas.data_bar import Bar
     from pfund.datas.data_base import BaseData
     from pfund._logging.config import LoggingDictConfigurator
@@ -319,7 +319,7 @@ class TradeMixin:
                 consumer = consumer._consumer
             return False
     
-    def _add_product(self: Component, product_key: str, product: BaseProduct) -> BaseProduct:
+    def _add_product(self: Component, product_key: ProductKey, product: BaseProduct) -> BaseProduct:
         if product_key not in self.products:
             self.products[product_key] = product
         else:
@@ -365,12 +365,12 @@ class TradeMixin:
                 
     def add_data(
         self, 
-        trading_venue: tTRADING_VENUE,
+        trading_venue: tTradingVenue,
         product: str,
         exchange: str='',
         symbol: str='',
         product_alias: str='',
-        data_source: tDATA_SOURCE | None=None,
+        data_source: tDataSource | None=None,
         data_origin: str='',
         data_config: DataConfigDict | DataConfig | None=None,
         **product_specs
@@ -395,7 +395,7 @@ class TradeMixin:
             product_alias=product_alias,
             **product_specs
         )
-        self._add_product(product_alias or str(product), product)
+        self._add_product(product_alias or product.key, product)
         datas: list[TimeBasedData] = self._databoy.add_data(
             product=product,
             data_source=data_source,

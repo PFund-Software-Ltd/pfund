@@ -20,7 +20,7 @@ from pfund.exchanges.binance.rest_api_option import RestApiOption
 # TODO: "portfolio margin" is not supported yet, can only do it when its included in the testnet
 # so we might need to create a new class RestApiPortfolio for it
 class RestApi(BaseRestApi):
-    _URLS = {}
+    URLS = {}
     PUBLIC_ENDPOINTS = {}
     PRIVATE_ENDPOINTS = {}
     

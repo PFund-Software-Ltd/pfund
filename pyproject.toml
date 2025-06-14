@@ -31,12 +31,12 @@ dependencies = [
     "python-dotenv>=1.1.0",
     "pyyaml>=6.0.2",
     "orjson>=3.10.18",
-    "requests>=2.31.0", # TODO: to be removed
-    # TODO: add cachetools?
     "httpx>=0.28.1",
-    "websocket-client>=1.8.0",
+    "websockets>=15.0.1",
     "ta>=0.11.0",
     "scikit-learn>=1.7.0",
+    "pfeed",
+    "pfund-plot",
 ]
 
 [project.optional-dependencies]
@@ -70,8 +70,8 @@ build-backend = "hatchling.build"
 [tool.uv.sources]
 pfeed = { path = "../pfeed", editable = true }
 pfolio = { path = "../pfolio", editable = true }
-pfund-plot = {path = "../pfund-plot", editable = true}
-mtflow = {path = "../mtflow", editable = true}
+pfund-plot = { path = "../pfund-plot", editable = true }
+mtflow = { path = "../mtflow", editable = true }
 
 [tool.hatch.build.targets.sdist]
 include = ['/pfund', 'logging.yml', 'docker-compose.yml']

@@ -11,7 +11,7 @@ from pfund.exchanges.binance.ws_api_option import WebsocketApiOption
 
 # TODO
 class WebsocketApi(BaseWebsocketApi):
-    _URLS = {}
+    URLS = {}
     
     def __init__(self, env: Environment, adapter):
         exch = Path(__file__).parent.name

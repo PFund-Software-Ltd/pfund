@@ -1,8 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.typing import tSTORAGE
-    from pfund._logging.config import LoggingDictConfigurator
+    from pfeed.typing import tStorage
     
 import os
 import sys
@@ -46,7 +45,7 @@ def _dynamic_import(path: str):
         item_path = os.path.join(path, item)
         if os.path.isdir(item_path) and '__pycache__' not in item_path:
             for type_ in ['strategies', 'models', 'features', 'indicators', 
-                          'notebooks', 'spreadsheets', 'dashboards']:
+                          'notebooks', 'dashboards']:
                 if type_ in path:
                     break
             else:
@@ -73,7 +72,7 @@ class Configuration:
     custom_excepthook: bool = True
     env_file_path: str = f'{CONFIG_PATH}/.env'
     debug: bool = False
-    storage: tSTORAGE = 'local'
+    storage: tStorage = 'local'
     storage_options: dict = field(default_factory=dict)
     use_deltalake: bool = False
 
@@ -173,10 +172,6 @@ class Configuration:
         return f'{self.data_path}/templates/notebooks'
     
     @property
-    def spreadsheet_path(self):
-        return f'{self.data_path}/templates/spreadsheets'
-    
-    @property
     def dashboard_path(self):
         return f'{self.data_path}/templates/dashboards'
     
@@ -206,7 +201,7 @@ class Configuration:
         for path in [
             self.cache_path, self.log_path,
             self.strategy_path, self.model_path, self.feature_path, self.indicator_path,
-            self.backtest_path, self.notebook_path, self.spreadsheet_path, self.dashboard_path, 
+            self.backtest_path, self.notebook_path, self.dashboard_path,
             self.artifact_path,
         ]:
             if not os.path.exists(path):
@@ -263,7 +258,7 @@ def configure(
     env_file_path: str | None = None,
     custom_excepthook: bool | None = None,
     debug: bool | None = None,
-    storage: tSTORAGE | None = None,
+    storage: tStorage | None = None,
     storage_options: dict | None = None,
     use_deltalake: bool | None = None,
     verbose: bool = False,

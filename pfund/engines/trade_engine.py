@@ -12,8 +12,8 @@ message queue.
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfeed.typing import tDATA_TOOL
-    from pfund.typing import DataRangeDict, TradeEngineSettingsDict, tDATABASE, ExternalListenersDict
+    from pfeed.typing import tDataTool
+    from pfund.typing import DataRangeDict, TradeEngineSettingsDict, tDatabase, ExternalListenersDict
 
 from pfund.engines.base_engine import BaseEngine
 
@@ -23,9 +23,9 @@ class TradeEngine(BaseEngine):
         self,
         env: Literal['SANDBOX', 'PAPER', 'LIVE']='SANDBOX',
         name: str='',
-        data_tool: tDATA_TOOL='polars',
+        data_tool: tDataTool='polars',
         data_range: str | DataRangeDict='ytd',
-        database: tDATABASE | None=None,
+        database: tDatabase | None=None,
         settings: TradeEngineSettingsDict | None=None,
         external_listeners: ExternalListenersDict | None=None,
         # TODO: move inside settings?

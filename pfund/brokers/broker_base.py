@@ -1,36 +1,36 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, TypeAlias
 if TYPE_CHECKING:
+    from pfund.typing import tEnvironment, ProductKey, AccountName
     from pfund.products.product_base import BaseProduct
-    from pfund.strategies.strategy_base import BaseStrategy
-    from pfund.typing import tENVIRONMENT, tBROKER
+    from pfund.accounts.account_base import BaseAccount
 
 import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
 
-from pfund.datas.data_base import BaseData
 from pfund.managers.order_manager import OrderManager
 from pfund.managers.portfolio_manager import PortfolioManager
-from pfund.enums import Environment, Broker
+from pfund.enums import Environment, Broker, TradingVenue
+
+
+ExchangeName: TypeAlias = str
 
 
 class BaseBroker(ABC):
-    def __init__(self, env: tENVIRONMENT, name: tBROKER):
+    name: ClassVar[Broker]
+
+    def __init__(self, env: Environment | tEnvironment):
         self._env = Environment[env.upper()]
-        self._name = Broker[name.upper()]
         self._logger = logging.getLogger('pfund')
         
+        self._products: defaultdict[ExchangeName, dict[ProductKey, BaseProduct]] = defaultdict(dict)
+        self._accounts: defaultdict[TradingVenue, dict[AccountName, BaseAccount]] = defaultdict(dict)
+
         self._zmq = None
-        self._products = defaultdict(dict)  # {exch: {pdt1: product1, pdt2: product2, exch1_pdt3: product, exch2_pdt3: product} }
-        self._accounts = defaultdict(dict)  # {trading_venue: {acc1: account1, acc2: account2} }
     
         self._order_manager = OrderManager(self)
         self._portfolio_manager = PortfolioManager(self)
-    
-    @property
-    def name(self):
-        return self._name
     
     @property
     def products(self):

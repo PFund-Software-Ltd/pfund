@@ -1,4 +1,4 @@
-from pfund.typing import tENVIRONMENT, tCRYPTO_EXCHANGE
+from pfund.typing import tEnvironment, tCryptoExchange
 from pfund.accounts.account_base import BaseAccount
 from pfund.enums import CryptoExchange
 
@@ -6,8 +6,8 @@ from pfund.enums import CryptoExchange
 class CryptoAccount(BaseAccount):
     def __init__(
         self, 
-        env: tENVIRONMENT,
-        exch: tCRYPTO_EXCHANGE, 
+        env: tEnvironment,
+        exch: tCryptoExchange, 
         name: str='', 
         key: str='', 
         secret: str='',

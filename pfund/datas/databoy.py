@@ -3,10 +3,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from logging import Logger
     from mtflow.messaging.zeromq import ZeroMQ
-    from pfeed.typing import tDATA_SOURCE
+    from pfeed.typing import tDataSource
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund.typing import LocalComponent, Component, ProductName, ResolutionRepr, DataConfigDict
+    from pfund.typing import LocalComponent, Component, ProductKey, ResolutionRepr, DataConfigDict
 
 import time
 import importlib
@@ -81,7 +81,7 @@ class DataBoy:
         else:
             raise ValueError(f'{product} {resolution} data not found')
 
-    def add_data(self, product: BaseProduct, data_source: tDATA_SOURCE, data_origin: str, data_config: DataConfigDict | DataConfig | None) -> list[TimeBasedData]:
+    def add_data(self, product: BaseProduct, data_source: tDataSource, data_origin: str, data_config: DataConfigDict | DataConfig | None) -> list[TimeBasedData]:
         if not isinstance(data_config, DataConfig):
             data_config['primary_resolution'] = self._component._resolution
             data_config['data_source'] = data_source
@@ -110,7 +110,7 @@ class DataBoy:
         
         return datas
 
-    def _update_quote(self, product: ProductName, quote: dict):
+    def _update_quote(self, product: ProductKey, quote: dict):
         ts = quote['ts']
         update = quote['data']
         extra_data = quote['extra_data']
@@ -119,7 +119,7 @@ class DataBoy:
         data.on_quote(bids, asks, ts, **extra_data)
         self._deliver(data, event=Event.quote, **extra_data)
 
-    def _update_tick(self, product: ProductName, tick: dict):
+    def _update_tick(self, product: ProductKey, tick: dict):
         update = tick['data']
         extra_data = tick['extra_data']
         px, qty, ts = update['px'], update['qty'], update['ts']
@@ -127,7 +127,7 @@ class DataBoy:
         data.on_tick(px, qty, ts, **extra_data)
         self._deliver(data, event=Event.tick, **extra_data)
 
-    def _update_bar(self, product: ProductName, bar: dict, is_incremental: bool=True):
+    def _update_bar(self, product: ProductKey, bar: dict, is_incremental: bool=True):
         '''
         Args:
             is_incremental: if True, the bar update is incremental, otherwise it is a full bar update

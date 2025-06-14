@@ -75,19 +75,24 @@ def lowercase(func):
     return wrapper
 
 
-def load_yaml_file(file_path) -> dict | list[dict]:
+def load_yaml_file(file_path) -> dict | list[dict] | None:
     import yaml
-    if os.path.exists(file_path):
-        with open(file_path, 'r') as f:
-            contents = list(yaml.safe_load_all(f))
-            if not contents:
-                return {}
-            elif len(contents) == 1:
-                return contents[0]
-            else:
-                return contents
-    else:
-        return {}
+    if not os.path.exists(file_path):
+        return None
+    with open(file_path, 'r') as f:
+        contents = list(yaml.safe_load_all(f))
+        if not contents:
+            return {}
+        elif len(contents) == 1:
+            return contents[0]
+        else:
+            return contents
+
+
+def dump_yaml_file(file_path: str, data: dict | list[dict]):
+    import yaml
+    with open(file_path, 'w') as f:
+        yaml.dump(data, f)
 
 
 def get_telegram_bot_updates(token):

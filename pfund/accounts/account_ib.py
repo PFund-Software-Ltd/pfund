@@ -1,11 +1,11 @@
-from pfund.typing import tENVIRONMENT
+from pfund.typing import tEnvironment
 from pfund.accounts.account_base import BaseAccount
 
 
 class IBAccount(BaseAccount):
     def __init__(
         self, 
-        env: tENVIRONMENT, 
+        env: tEnvironment, 
         name: str='',
         host: str='', 
         port: int | None=None, 

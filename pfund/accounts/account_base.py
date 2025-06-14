@@ -1,7 +1,7 @@
 from typing import ClassVar
 
 from pfund.enums import Environment, Broker
-from pfund.typing import tENVIRONMENT
+from pfund.typing import tEnvironment, tBroker
 
 
 class BaseAccount:
@@ -15,15 +15,11 @@ class BaseAccount:
     def _get_default_name(self):
         return f"{self.__class__.__name__}-{self._next_account_id()}"
     
-    def __init__(self, env: tENVIRONMENT, bkr: str, name: str):
+    def __init__(self, env: tEnvironment, bkr: tBroker, name: str):
         self._env = Environment[env.upper()]
         self._bkr = Broker[bkr.upper()]
         self.name = name or self._get_default_name()
         
-    @property
-    def env(self) -> Environment:
-        return self._env
-    
     @property
     def bkr(self) -> Broker:
         return self._bkr

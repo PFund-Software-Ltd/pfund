@@ -6,7 +6,7 @@ from pfund.exchanges.ws_api_base import BaseWebsocketApi
 
 
 class WebsocketApiInverse(BaseWebsocketApi):
-    _URLS = {
+    URLS = {
         'PAPER': 'wss://dstream.binancefuture.com',
         'LIVE': 'wss://dstream.binance.com',
     }

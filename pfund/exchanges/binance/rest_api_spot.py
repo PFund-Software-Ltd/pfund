@@ -13,7 +13,7 @@ from pfund.exchanges.rest_api_base import BaseRestApi
 
 
 class RestApiSpot(BaseRestApi):
-    _URLS = {
+    URLS = {
         'PAPER': 'https://testnet.binance.vision',
         'LIVE': 'https://api.binance.com',
     }

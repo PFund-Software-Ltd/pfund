@@ -57,7 +57,6 @@ def cache(ctx, exch: CryptoExchange | None):
         'template',
         'dashboard',
         'notebook',
-        'spreadsheet',
     ], 
     case_sensitive=True
     ), 
@@ -88,8 +87,6 @@ def data(ctx, target):
         data_path = config.dashboard_path
     elif target == 'notebook':
         data_path = config.notebook_path
-    elif target == 'spreadsheet':
-        data_path = config.spreadsheet_path
     try:
         click.echo(f"Clearing all data in {data_path}...")
         if os.path.exists(data_path):

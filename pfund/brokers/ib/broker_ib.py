@@ -6,7 +6,7 @@ from typing import Literal, TYPE_CHECKING
 
 from pfund.config import Configuration
 if TYPE_CHECKING:
-    from pfund.typing import tENVIRONMENT
+    from pfund.typing import tEnvironment
     from pfund.datas.data_config import DataConfig
     from pfund.datas.data_time_based import TimeBasedData
 
@@ -23,7 +23,7 @@ from pfund.enums import PublicDataChannel, PrivateDataChannel
 
 
 class IBBroker(TradeBroker):
-    def __init__(self, env: tENVIRONMENT='SANDBOX', **configs):
+    def __init__(self, env: tEnvironment='SANDBOX', **configs):
         super().__init__(env, 'IB', **configs)
         config_path = f'{PROJ_CONFIG_PATH}/{self._name.value.lower()}'
         self.configs = Configuration(config_path, 'config')
@@ -34,6 +34,10 @@ class IBBroker(TradeBroker):
         self._api = IBApi(self._env, self.adapter)
         self._connection_manager.add_api(self._api)
 
+    @property
+    def accounts(self):
+        return self._accounts[self._name]
+    
     def start(self, zmq=None):
         super().start(zmq=zmq)
 
@@ -106,7 +110,7 @@ class IBBroker(TradeBroker):
         return product
 
     def get_account(self, acc: str) -> IBAccount | None:
-        return self._accounts[self._name].get(acc.upper(), None)
+        return self.accounts.get(acc.upper(), None)
 
     def _create_account(self, name: str, host: str, port: int | None, client_id: int | None) -> IBAccount:
         return IBAccount(env=self._env, name=name, host=host, port=port, client_id=client_id)
@@ -125,7 +129,7 @@ class IBBroker(TradeBroker):
                 port=port, 
                 client_id=client_id,
             )
-            self._accounts[self._name][account.name] = account
+            self.accounts[account.name] = account
             self.account = account
             self._api.add_account(account)
             self._logger.debug(f'added {account=}')

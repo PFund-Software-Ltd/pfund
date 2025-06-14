@@ -1,8 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.typing import tCRYPTO_EXCHANGE
-    from pfund.enums import Environment
     from pfund.products.product_base import BaseProduct
     from pfund.datas.data_base import BaseData
 
@@ -26,17 +24,17 @@ from websocket import WebSocketApp, WebSocketConnectionClosedException
 
 from pfund.managers.order_manager import OrderUpdateSource
 from pfund.adapter import Adapter
-from pfund.enums import PublicDataChannel, PrivateDataChannel, DataChannelType
+from pfund.enums import Environment, Broker, CryptoExchange, PublicDataChannel, PrivateDataChannel, DataChannelType
 
 
 class BaseWebsocketApi(ABC):
-    _URLS = {}
+    URLS = {}
     SUPPORTED_ORDERBOOK_LEVELS = []
     SUPPORTED_RESOLUTIONS = {}
 
-    def __init__(self, env: Environment, name: tCRYPTO_EXCHANGE, adapter: Adapter):
+    def __init__(self, env: Environment, name: CryptoExchange, adapter: Adapter):
         self.env = env
-        self.bkr = 'CRYPTO'
+        self.bkr = Broker.CRYPTO
         self.name = self.exch = name.upper()
         self.logger = logging.getLogger(self.exch.lower() + '_' + 'ws')
         self._adapter = adapter
@@ -77,10 +75,6 @@ class BaseWebsocketApi(ABC):
 
         # callback function if defined by user
         self._msg_callback = None
-
-    @property
-    def URLS(self) -> dict:
-        return self._URLS
 
     def _clean_up(self):
         self._zmqs = {}

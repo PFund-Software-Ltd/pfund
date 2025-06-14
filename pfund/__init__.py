@@ -20,18 +20,7 @@ if TYPE_CHECKING:
         IBBroker,
         IBBroker as IB,
     )
-    from pfund.exchanges.bybit.exchange import (
-        Exchange as Bybit,
-        Exchange as BybitExchange, 
-    )
-    from pfund.exchanges.binance.exchange import (
-        Exchange as Binance,
-        Exchange as BinanceExchange, 
-    )
-    from pfund.exchanges.okx.exchange import (
-        Exchange as Okx,
-        Exchange as OkxExchange, 
-    )
+    from pfund.exchanges import Bybit
 
 import sys
 from importlib.metadata import version
@@ -97,13 +86,13 @@ def __getattr__(name: str):
     elif name == "DappBroker":
         from pfund.brokers.broker_dapp import DappBroker
         return DappBroker
-    elif name in ("BybitExchange", "Bybit"):
+    elif name == "Bybit":
         from pfund.exchanges.bybit.exchange import Exchange
         return Exchange
-    elif name in ("BinanceExchange", "Binance"):
+    elif name == "Binance":
         from pfund.exchanges.binance.exchange import Exchange
         return Exchange
-    elif name in ("OkxExchange", "Okx"):
+    elif name == "Okx":
         from pfund.exchanges.okx.exchange import Exchange
         return Exchange
 
@@ -134,9 +123,7 @@ __all__ = (
     'CryptoBroker',
     'IBBroker',
     'DappBroker',
-    'BybitExchange',
-    'BinanceExchange',
-    'OkxExchange',
+    'Bybit',
 )
 def __dir__():
     return sorted(__all__)

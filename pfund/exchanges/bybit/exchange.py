@@ -2,35 +2,25 @@ from __future__ import annotations
 from typing import Callable, Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from websocket import WebSocket
-    from pfund.typing import tENVIRONMENT
     from pfund.products.product_base import BaseProduct
+    from pfund.products.product_bybit import tPRODUCT_CATEGORY
 
 import datetime
 from decimal import Decimal
-from pathlib import Path
 
+from pfund.enums import CryptoExchange
 from pfund.exchanges.exchange_base import BaseExchange
 from pfund.accounts.account_crypto import CryptoAccount
 from pfund.orders.order_crypto import CryptoOrder
-from pfund.products.product_bybit import ProductCategory, tPRODUCT_CATEGORY
+from pfund.products.product_bybit import ProductCategory
 
 
 class Exchange(BaseExchange):
-    # NOTE, bybit only supports place_batch_orders for category `options`
-    # TODO, come back to this if bybit supports more
-    # SUPPORT_PLACE_BATCH_ORDERS = True
-    # SUPPORT_CANCEL_BATCH_ORDERS = True
+    name = CryptoExchange.BYBIT
 
-    USE_WS_PLACE_ORDER = True
-    USE_WS_CANCEL_ORDER = True
-     
-    MAX_NUM_OF_PLACE_BATCH_ORDERS = 20
-    MAX_NUM_OF_CANCEL_BATCH_ORDERS = 20
-
-    def __init__(self, env: tENVIRONMENT, refetch_market_configs=False):
-        exch = Path(__file__).parent.name
-        super().__init__(env, exch, refetch_market_configs=refetch_market_configs)
-    
+    # TODO: may allow configure exchange behaviours such as use place_order over place_batch_orders for rate limit control
+    # def configure(self, ...):
+    #     pass
 
     '''
     Functions using REST API
@@ -40,7 +30,7 @@ class Exchange(BaseExchange):
         categories = [category] if category else [category.value for category in ProductCategory]
         markets_per_category = {}
         for category in categories:
-            if (markets := super().get_markets(category)) is None:
+            if (markets := self._rest_api.get_markets(category)) is None:
                 return None
             markets_per_category[category] = markets
         return markets_per_category

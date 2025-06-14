@@ -4,6 +4,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from pfund.enums import TradingVenue
+from pfund.utils.utils import load_yaml_file
 
 
 # NOTE: DynamicGroup can be used to specify a group that is not defined in adapter.yml
@@ -28,15 +29,17 @@ tADAPTER_GROUP = DynamicGroup | Literal[
 
 
 class Adapter:
+    FILENAME = 'adapter.yml'
+    
     def __init__(self, trading_venue: str, is_strict: bool=False):
         '''
         Args:
             is_strict: if False, it will search for the same key in other groups if group is not specified
         '''
-        trading_venue = TradingVenue[trading_venue.upper()]
+        self._trading_venue = TradingVenue[trading_venue.upper()]
         self._adapter = defaultdict(dict)
         self._is_strict = is_strict
-        self._load_config(self._get_file_path(trading_venue))
+        self._load_config(self.get_file_path())
     
     def __str__(self):
         import json
@@ -54,16 +57,15 @@ class Adapter:
     def groups(self) -> list[str]:
         return list(self._adapter.keys())
     
-    @staticmethod
-    def _get_file_path(trading_venue: TradingVenue) -> Path:
+    def get_file_path(self) -> Path:
+        '''Gets the file path of the adapter.yml'''
         from pfund.const.paths import PROJ_PATH
         from pfund.enums import CryptoExchange
-        filename = 'adapter.yml'
-        tv_type = 'exchanges' if trading_venue in CryptoExchange.__members__ else 'brokers'
-        return PROJ_PATH / tv_type / trading_venue.value.lower() / filename
+        tv_type = 'exchanges' if self._trading_venue in CryptoExchange.__members__ else 'brokers'
+        return PROJ_PATH / tv_type / self._trading_venue.value.lower() / self.FILENAME
     
     def _load_config(self, file_path: Path):
-        from pfund.utils.utils import load_yaml_file
+        '''Loads adapter.yml'''
         config: dict = load_yaml_file(file_path)
         for group in config:
             group = group.lower()
@@ -74,6 +76,24 @@ class Adapter:
         group = group.lower()
         self._adapter[group][k] = v
         self._adapter[group][v] = k
+        
+    def load_all_product_mappings(self):
+        '''
+        Load all product mappings from market configs.
+        Useful when e.g. pfeed needs to download all products and hence needs to know all product mappings.
+        '''
+        import importlib
+        from pfund.enums import CryptoExchange
+        if self._trading_venue not in CryptoExchange.__members__:
+            raise ValueError(f'load_all_product_mappings is supported for crypto exchanges only, {self._trading_venue} is not a valid crypto exchange')
+        exch = self._trading_venue.value
+        Exchange = getattr(importlib.import_module(f'pfund.exchanges.{exch.lower()}.exchange'), 'Exchange')
+        market_configs_file_path = Exchange.get_file_path(Exchange.MARKET_CONFIGS_FILENAME)
+        market_configs: dict[str, dict] = load_yaml_file(market_configs_file_path)
+        for category in market_configs:
+            for pdt, product_configs in market_configs[category].items():
+                epdt = product_configs['symbol']
+                self._add_mapping(category, pdt, epdt)
     
     def __len__(self):
         '''

@@ -4,8 +4,8 @@ if TYPE_CHECKING:
     import torch
     import pandas as pd
     import polars as pl
-    from pfeed.typing import tDATA_SOURCE, tSTORAGE, GenericFrame
-    from pfund.typing import ModelT, DataConfigDict, tTRADING_VENUE
+    from pfeed.typing import tDataSource, tStorage, GenericFrame
+    from pfund.typing import ModelT, DataConfigDict, tTradingVenue
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.engines.backtest_engine import BacktestEngine
@@ -201,10 +201,10 @@ class BacktestMixin:
     # TODO: add data_generator to add_data()
     def add_data(
         self: BaseStrategy | BaseModel, 
-        trading_venue: tTRADING_VENUE, 
+        trading_venue: tTradingVenue, 
         product: str,
-        data_source: tDATA_SOURCE | None=None,
-        from_storage: tSTORAGE | None=None,
+        data_source: tDataSource | None=None,
+        from_storage: tStorage | None=None,
         data_config: DataConfigDict | None=None,
         **product_specs
     ) -> list[BaseData]:

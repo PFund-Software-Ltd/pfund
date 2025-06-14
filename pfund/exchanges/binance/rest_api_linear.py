@@ -5,7 +5,7 @@ from pfund.exchanges.rest_api_base import BaseRestApi
 
 
 class RestApiLinear(BaseRestApi):
-    _URLS = {
+    URLS = {
         'PAPER': 'https://testnet.binancefuture.com',
         'LIVE': 'https://fapi.binance.com',
     }

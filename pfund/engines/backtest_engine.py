@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING, Literal, ClassVar
 if TYPE_CHECKING:
     import pandas as pd
     from sklearn.model_selection import TimeSeriesSplit
-    from pfeed.typing import tDATA_TOOL
-    from pfund.typing import StrategyT, ModelT, FeatureT, IndicatorT, tDATABASE
+    from pfeed.typing import tDataTool
+    from pfund.typing import StrategyT, ModelT, FeatureT, IndicatorT, tDatabase
     from pfund.typing import DataRangeDict, DatasetSplitsDict, BacktestEngineSettingsDict, ExternalListenersDict
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.models.model_base import BaseModel
@@ -33,9 +33,9 @@ class BacktestEngine(BaseEngine):
         mode: Literal['vectorized', 'event_driven']='vectorized',
         name: str='',
         use_ray_on: Literal['dataset', 'component'] | None='dataset',
-        data_tool: tDATA_TOOL='polars',
+        data_tool: tDataTool='polars',
         data_range: str | DataRangeDict | Literal['ytd']='1d',
-        database: tDATABASE | None=None,
+        database: tDatabase | None=None,
         settings: BacktestEngineSettingsDict | None = None,
         external_listeners: ExternalListenersDict | None=None,
         dataset_splits: int | DatasetSplitsDict | TimeSeriesSplit=721,

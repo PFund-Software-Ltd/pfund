@@ -5,16 +5,16 @@ if TYPE_CHECKING:
     from mtflow.stores.mtstore import MTStore
     from mtflow.kernel import TradeKernel
     from mtflow.stores.trading_store import TradingStore
-    from pfeed.typing import tDATA_TOOL
+    from pfeed.typing import tDataTool
     from pfund.products.product_base import BaseProduct
     from pfund.accounts.account_base import BaseAccount
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.typing import (
         StrategyT, 
-        tENVIRONMENT, 
-        tBROKER,
-        tDATABASE, 
-        tTRADING_VENUE,
+        tEnvironment, 
+        tBroker,
+        tDatabase, 
+        tTradingVenue,
         DataRangeDict, 
         ExternalListenersDict, 
         Component,
@@ -37,7 +37,6 @@ from pfund.enums import (
     Broker, 
     RunMode, 
     Database, 
-    ComponentType,
     CryptoExchange, 
     TradingVenue, 
 )
@@ -67,7 +66,7 @@ class BaseEngine(metaclass=MetaEngine):
     _data_tool: ClassVar[DataTool]
     _data_start: ClassVar[datetime.date]
     _data_end: ClassVar[datetime.date]
-    _database: ClassVar[tDATABASE | None]
+    _database: ClassVar[tDatabase | None]
     _settings: ClassVar[BaseEngineSettings]
     _external_listeners: ClassVar[ExternalListenersDict | None]
     _ray_init_kwargs: ClassVar[str]
@@ -92,11 +91,11 @@ class BaseEngine(metaclass=MetaEngine):
     def __init__(
         self, 
         *,
-        env: tENVIRONMENT, 
+        env: tEnvironment, 
         name: str,
-        data_tool: tDATA_TOOL,
+        data_tool: tDataTool,
         data_range: str | DataRangeDict | Literal['ytd'],
-        database: tDATABASE | None,
+        database: tDatabase | None,
         settings: BaseEngineSettings,
         ray_init_kwargs: dict | None=None,
         external_listeners: ExternalListenersDict | None,
@@ -277,7 +276,7 @@ class BaseEngine(metaclass=MetaEngine):
     def get_strategy(self, name: str) -> BaseStrategy | ActorProxy:
         return self.strategies[name]
     
-    def _create_broker(self, bkr: tBROKER) -> BaseBroker:
+    def _create_broker(self, bkr: tBroker) -> BaseBroker:
         if self._env in [Environment.BACKTEST, Environment.SANDBOX]:
             from pfund.brokers.broker_simulated import SimulatedBrokerFactory
             SimulatedBroker = SimulatedBrokerFactory(bkr)
@@ -287,7 +286,7 @@ class BaseEngine(metaclass=MetaEngine):
             broker = BrokerClass(self._env)
         return broker
 
-    def _add_broker(self, trading_venue: tTRADING_VENUE) -> BaseBroker:
+    def _add_broker(self, trading_venue: tTradingVenue) -> BaseBroker:
         trading_venue = TradingVenue[trading_venue.upper()]
         if trading_venue not in self.trading_venues:
             self.trading_venues.append(trading_venue)
@@ -301,12 +300,12 @@ class BaseEngine(metaclass=MetaEngine):
             self._logger.debug(f'added broker {bkr}')
         return self.brokers[bkr]
     
-    def get_broker(self, bkr: tBROKER) -> BaseBroker:
+    def get_broker(self, bkr: tBroker) -> BaseBroker:
         return self.brokers[bkr.upper()]
     
     def _register_product(
         self,
-        trading_venue: tTRADING_VENUE, 
+        trading_venue: tTradingVenue, 
         product_basis: str,
         exchange: str='', 
         symbol: str='', 
@@ -323,7 +322,7 @@ class BaseEngine(metaclass=MetaEngine):
             raise NotImplementedError(f"Broker {broker.name} is not supported")
         return product
     
-    def _register_account(self, trading_venue: tTRADING_VENUE, name: str='', **kwargs) -> BaseAccount:
+    def _register_account(self, trading_venue: tTradingVenue, name: str='', **kwargs) -> BaseAccount:
         from pfund.accounts.account_simulated import SimulatedAccount
         if 'initial_balances' in kwargs or 'initial_positions' in kwargs:
             assert self._env == Environment.SANDBOX, \

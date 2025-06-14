@@ -19,17 +19,17 @@ Component = BaseStrategy | BaseModel | BaseFeature | BaseIndicator
 LocalComponent: TypeAlias = Component
 EngineName: TypeAlias = str
 ComponentName: TypeAlias = str
-ProductName: TypeAlias = str
+ProductKey: TypeAlias = str
 ResolutionRepr: TypeAlias = str
+AccountName: TypeAlias = str
+Currency: TypeAlias = str
 
 # since Literal doesn't support variables as inputs, define variables in common.py here with prefix 't'
-tENVIRONMENT = Literal['BACKTEST', 'SANDBOX', 'PAPER', 'LIVE']
-tTRADING_VENUE = Literal['IB', 'BINANCE', 'BYBIT', 'OKX']
-tBROKER = Literal['CRYPTO', 'DEFI', 'IB']
-tCRYPTO_EXCHANGE = Literal['BINANCE', 'BYBIT', 'OKX']
-tTRADFI_PRODUCT_TYPE = Literal['STK', 'FUT', 'ETF', 'OPT', 'FX', 'CRYPTO', 'BOND', 'MTF', 'CMDTY']
-tCEFI_PRODUCT_TYPE = Literal['SPOT', 'PERP', 'IPERP', 'FUT', 'IFUT', 'OPT']
-tDATABASE = Literal['DUCKDB', 'POSTGRESQL', 'PGLITE', 'TIMESCALEDB']
+tEnvironment = Literal['BACKTEST', 'SANDBOX', 'PAPER', 'LIVE']
+tTradingVenue = Literal['IB', 'BINANCE', 'BYBIT', 'OKX']
+tBroker = Literal['CRYPTO', 'DEFI', 'IB']
+tCryptoExchange = Literal['BINANCE', 'BYBIT', 'OKX']
+tDatabase = Literal['DUCKDB', 'POSTGRESQL', 'PGLITE', 'TIMESCALEDB']
 
 
 class DatasetSplitsDict(TypedDict, total=True):
@@ -54,14 +54,14 @@ class DataConfigDict(TypedDict, total=False):  # total=False makes fields option
 
 
 class BaseEngineSettingsDict(TypedDict, total=False):
-    zmq_urls: dict[EngineName | tTRADING_VENUE | ComponentName, str]
+    zmq_urls: dict[EngineName | tTradingVenue | ComponentName, str]
     zmq_ports: dict[
         Literal[
             "proxy",  # ZeroMQ xsub-xpub proxy for messaging from trading venues -> engine -> components
             "router",  # ZeroMQ router-pull for pulling messages from components (e.g. strategies/models) -> engine -> trading venues
             "publisher",  # ZeroMQ publisher for broadcasting internal states to external apps
         ] 
-        | tTRADING_VENUE 
+        | tTradingVenue 
         | ComponentName,
         int
     ]
@@ -69,7 +69,10 @@ class BaseEngineSettingsDict(TypedDict, total=False):
 
 class TradeEngineSettingsDict(BaseEngineSettingsDict, total=False):
     cancel_all_at: dict[str, bool]
-    # TODO: bytewax_dataflow: dict
+    # force refetching market configs
+    refetch_market_configs: bool
+    # Always use the WebSocket API for actions like placing or canceling orders, even if REST is available.
+    websocket_first: bool
 
 
 class BacktestEngineSettingsDict(BaseEngineSettingsDict, total=False):

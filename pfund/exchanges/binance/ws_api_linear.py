@@ -8,7 +8,7 @@ from pfund.exchanges.ws_api_base import BaseWebsocketApi
 class WebsocketApiLinear(BaseWebsocketApi):
     # NOTE: Binance separates order endpoints and data streaming endpoints
     # using different ws urls
-    _URLS = {
+    URLS = {
         'PAPER': {
             # refer to WebSocket API General Info
             'api': 'wss://testnet.binancefuture.com/ws-fapi/v1',

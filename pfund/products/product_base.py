@@ -20,7 +20,7 @@ def ProductFactory(trading_venue: TradingVenue | str, basis: str) -> type[BasePr
     else:
         tv_capitalized = trading_venue.capitalize()
     Product = getattr(importlib.import_module(f'pfund.products.product_{trading_venue.lower()}'), f'{tv_capitalized}Product')
-    asset_type = ProductBasis(basis=basis).asset_type
+    asset_type = ProductBasis(basis=basis.upper()).asset_type
     Mixins = []
     for t in asset_type:
         if t in AssetTypeModifier.__members__:
@@ -43,6 +43,7 @@ class BaseProduct(BaseModel):
     basis: ProductBasis
     # specifications that make a product unique, e.g. for options, specs are strike_price, expiration_date, etc.
     specs: dict = Field(default_factory=dict)
+    key: str | None=None
     # if symbol is not provided, will be derived from name for TradFi brokers (e.g. IB). e.g. AAPL_USD_STK -> AAPL.
     symbol: str | None=None
     alias: str | None=None
@@ -53,7 +54,7 @@ class BaseProduct(BaseModel):
     @field_validator('basis', mode='before')
     @classmethod
     def _create_product_basis(cls, basis: str):
-        return ProductBasis(basis=basis)
+        return ProductBasis(basis=basis.upper())
     
     @model_validator(mode='before')
     @classmethod
@@ -77,6 +78,7 @@ class BaseProduct(BaseModel):
         self.specs = self._create_specs()
         if hasattr(self, '_create_symbol'):
             self.symbol = self._create_symbol()
+        self.key = self._create_product_key(self.trading_venue, self.basis, **self.specs)
     
     @property
     def base_asset(self) -> str:
@@ -101,7 +103,15 @@ class BaseProduct(BaseModel):
             field_name for field_name, field in cls.model_fields.items()
             if field.is_required() and field_name not in BaseProduct.model_fields
         }
-    
+        
+    @staticmethod
+    def _create_product_key(trading_venue: TradingVenue | str, basis: str, **specs) -> str:
+        return ':'.join([
+            TradingVenue[trading_venue.upper()],
+            str(basis),
+            *[f'{k}={v}' for k, v in sorted(specs.items())]
+        ])
+        
     def to_dict(self) -> dict:
         return self.model_dump()
 
@@ -159,13 +169,13 @@ class BaseProduct(BaseModel):
         return '|'.join([
             f'trading_venue={self.trading_venue}',
             f'basis={self.basis}',
-            *[f'{k}={v}' for k, v in self.specs.items()]
+            *[f'{k}={v}' for k, v in sorted(self.specs.items())]
         ])
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         if not isinstance(other, BaseProduct):
             return NotImplemented  # Allow other types to define equality with BaseProduct
-        return str(self) == str(other)
+        return self.key == other.key
         
-    def __hash__(self):
-        return hash(str(self))
+    def __hash__(self) -> int:
+        return hash(self.key)

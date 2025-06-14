@@ -1,120 +1,57 @@
 from __future__ import annotations  
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
-    from pfund.typing import tENVIRONMENT, tCRYPTO_EXCHANGE
+    from pfund.typing import tEnvironment, ProductKey, AccountName
+    from pfund.products.product_crypto import CryptoProduct
+    from pfund.accounts.account_crypto import CryptoAccount
     from pfund.datas.data_base import BaseData
-    from pfund.enums import PublicDataChannel
+    from pfund.engines.trade_engine_settings import TradeEngineSettings
 
 import os
-import logging
 import datetime
+import logging
 import importlib
+from pathlib import Path
 from functools import reduce
 from collections import defaultdict
+from abc import ABC, abstractmethod
 
 from pfund.managers.order_manager import OrderUpdateSource
-from pfund.products.product_crypto import CryptoProduct
-from pfund.accounts.account_crypto import CryptoAccount
-from pfund.enums import Environment, PrivateDataChannel, DataChannelType
-from pfund.config import get_config
+from pfund.enums import Environment, Broker, CryptoExchange, PublicDataChannel, PrivateDataChannel, DataChannelType
 
 
-class BaseExchange:
-    SUPPORT_PLACE_BATCH_ORDERS = False
-    SUPPORT_CANCEL_BATCH_ORDERS = False 
-    
-    USE_WS_PLACE_ORDER = False
-    USE_WS_CANCEL_ORDER = False
-    
-    SUPPORTED_PRIVATE_CHANNELS = ['trade', 'balance', 'position', 'order']
+class BaseExchange(ABC):
+    bkr = Broker.CRYPTO
+    name: ClassVar[CryptoExchange]
+    MARKET_CONFIGS_FILENAME = 'market_configs.yml'
 
-    def __init__(self, env: tENVIRONMENT, name: tCRYPTO_EXCHANGE, refetch_market_configs=False):
-        '''
-        Args:
-            refetch_market_configs: 
-                if True, refetch markets (e.g. tick sizes, lot sizes, listed markets) from exchange 
-                even if the config files exist.
-                if False, markets will be automatically refetched on a weekly basis
-        '''
+    def __init__(self, env: tEnvironment):
         from pfund.adapter import Adapter
+        from pfund.engines.trade_engine import TradeEngine
         
-        self.env = Environment[env.upper()]
-        self.bkr = 'CRYPTO'
-        self.name = self.exch = name.upper()
-        self.logger = logging.getLogger(self.name.lower())
-        self.adapter = Adapter(self.exch)
-        self._products = {}
-        self._accounts = {}
+        self._env = Environment[env.upper()]
+        self._logger = logging.getLogger(self.name.lower())
+        self._adapter = Adapter(self.name)
+        self._products: dict[ProductKey, CryptoProduct] = {}
+        self._accounts: dict[AccountName, CryptoAccount] = {}
+        self._settings: TradeEngineSettings = TradeEngine.settings
         
         # APIs
-        RestApi = getattr(importlib.import_module(f'pfund.exchanges.{self.exch.lower()}.rest_api'), 'RestApi')
-        self._rest_api = RestApi(self.env, self.adapter)
-        WebsocketApi = getattr(importlib.import_module(f'pfund.exchanges.{self.exch.lower()}.ws_api'), 'WebsocketApi')
-        self._ws_api = WebsocketApi(self.env, self.adapter)
+        exchange_path = f'pfund.exchanges.{self.name.lower()}'
+        RestApi = getattr(importlib.import_module(f'{exchange_path}.rest_api'), 'RestApi')
+        self._rest_api = RestApi(self._env, self._adapter)
+        WebsocketApi = getattr(importlib.import_module(f'{exchange_path}.ws_api'), 'WebsocketApi')
+        self._ws_api = WebsocketApi(self._env, self._adapter)
 
         # used for REST API to send back results in threads to engine
         self._zmq = None
         
-        self._check_if_refetch_market_configs(refetch_market_configs)
-            
-    def _check_if_refetch_market_configs(self, refetch_market_configs: bool):
-        '''
-        Fetch market information from exchange, including:
-        - Tick sizes (minimum price increments)
-        - Lot sizes (minimum quantity increments) 
-        - Listed markets/trading pairs
-        and then save them to the cache.
-        '''
-        import yaml
-        from pfund.utils.utils import get_last_modified_time
-
-        filename = 'market_configs.yml'
-        config = get_config()
-        file_path = f'{config.cache_path}/{self.exch.lower()}/{filename}'
-        def _check_if_market_configs_outdated() -> bool:
-            '''
-            Check if the market configs are outdated or do not exist.
-            If outdated or do not exist, return True.
-            '''
-            if not os.path.exists(file_path):
-                self.logger.debug(f'{self.exch} {filename} does not exist, fetching data...')
-                return True
-            last_modified_time = get_last_modified_time(file_path)
-            renew_every_x_days = 7
-            is_outdated = last_modified_time + datetime.timedelta(days=renew_every_x_days) < datetime.datetime.now(tz=datetime.timezone.utc)
-            if is_outdated:
-                os.remove(file_path)
-                self.logger.info(f'{self.exch} {filename} is outdated, refetching data...')
-            return is_outdated
-        if not (refetch_market_configs or _check_if_market_configs_outdated()):
-            return
-        if (markets_per_category := self.get_markets()) is None:
-            return
-        # Create directory if it doesn't exist
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, 'w') as f:
-            f.write(yaml.dump(markets_per_category))
-
-    def load_market_configs(self):
-        '''
-        Load market configs from cache.
-        The file can contain thousands of markets, so it's not loaded into memory by default,
-        '''
-        from pfund.utils.utils import load_yaml_file
-        filename = 'market_configs.yml'
-        config = get_config()
-        file_path = f'{config.cache_path}/{self.exch.lower()}/{filename}'
-        return load_yaml_file(file_path)
+        if self._env != Environment.BACKTEST and self._check_if_refetch_market_configs():
+            self.fetch_market_configs()
     
-    def load_all_product_mappings(self):
-        '''
-        Load all product mappings from market configs.
-        '''
-        market_configs: dict[str, dict] = self.load_market_configs()
-        for category in market_configs:
-            for pdt, product_configs in market_configs[category].items():
-                epdt = product_configs['symbol']
-                self.adapter._add_mapping(category, pdt, epdt)
+    @property
+    def adapter(self):
+        return self._adapter
     
     @property
     def products(self):
@@ -124,28 +61,89 @@ class BaseExchange:
     def accounts(self):
         return self._accounts
     
+    @classmethod
+    def get_file_path(cls, filename: str) -> Path | None:
+        '''
+        Args:
+            filename: the filename of the file to get the path for, e.g. market_configs.yml
+        '''
+        from pfund.config import get_config
+        config = get_config()
+        file_paths = {
+            cls.MARKET_CONFIGS_FILENAME: Path(config.cache_path) / cls.name
+        }
+        if filename in file_paths:
+            return file_paths[filename] / filename
+        else:
+            print(f'{filename} not found')
+            return None
+    
+    def _check_if_refetch_market_configs(self):
+        from pfund.utils.utils import get_last_modified_time
+        
+        filename = self.MARKET_CONFIGS_FILENAME
+        file_path = self.get_file_path(filename)
+        
+        force_refetching = self._settings.refetch_market_configs
+        not_exists = not os.path.exists(file_path)
+        is_outdated = (
+            get_last_modified_time(file_path)
+            + datetime.timedelta(days=self._settings.renew_market_configs_every_x_days) 
+            < datetime.datetime.now(tz=datetime.timezone.utc)
+        )
+
+        if force_refetching:
+            return True
+        elif not_exists:
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            self._logger.debug(f'{self.name} {filename} does not exist, fetching data...')
+            return True
+        elif is_outdated:
+            self._logger.info(f'{self.name} {filename} is outdated, refetching data...')
+            return True
+        else:
+            return False
+    
+    def fetch_market_configs(self):
+        '''
+        Fetch market information from exchange, including:
+        - Tick sizes (minimum price increments)
+        - Lot sizes (minimum quantity increments) 
+        - Listed markets/trading pairs
+        and then save them to the cache.
+        '''
+        if markets_per_category := self.get_markets():
+            from pfund.utils.utils import dump_yaml_file
+            dump_yaml_file(
+                file_path=self.get_file_path(self.MARKET_CONFIGS_FILENAME),
+                data=markets_per_category
+            )
+        else:
+            self._logger.warning(f'failed to fetch market configs for {self.name}')
+
     def create_product(self, basis: str, alias: str='', **specs) -> CryptoProduct:
         from pfund.products.product_base import ProductFactory
-        Product = ProductFactory(trading_venue=self.exch, basis=basis)
+        Product = ProductFactory(trading_venue=self.name, basis=basis)
         return Product(basis=basis, alias=alias, **specs)
 
-    def get_product(self, pdt: str) -> CryptoProduct | None:
-        return self._products.get(pdt.upper(), None)
+    def get_product(self, basis: str, **specs) -> CryptoProduct | None:
+        from pfund.products.product_base import BaseProduct
+        product_key: str = BaseProduct._create_product_key(self.name, basis, **specs)
+        return self._products.get(product_key, None)
 
     def add_product(self, product: CryptoProduct):
-        self._products[str(product)] = product
-        self._rest_api.add_category(product.category)
-        self.adapter._add_mapping(product.category, str(product), product.symbol)
+        self._products[product.key] = product
+        self._adapter._add_mapping(product.category, str(product), product.symbol)
         # TODO: check if the product is listed in the markets
-        self.logger.debug(f'added product {str(product)}')
+        self._logger.debug(f'added product {str(product)}')
 
-    def get_account(self, acc: str) -> CryptoAccount | None:
-        return self._accounts.get(acc.upper(), None)
+    def get_account(self, name: str) -> CryptoAccount:
+        return self._accounts[name]
     
     def add_account(self, account: CryptoAccount):
         self._accounts[account.name] = account
         self._ws_api.add_account(account)
-        self.logger.debug(f'added account {account.name}')
+        self._logger.debug(f'added account {account.name}')
     
     def _add_default_private_channels(self):
         for channel in self.SUPPORTED_PRIVATE_CHANNELS:
@@ -210,10 +208,10 @@ class BaseExchange:
     def start(self):
         from pfund.engines.trade_engine import TradeEngine
         zmq_ports = TradeEngine.settings['zmq_ports']
-        self._zmq = ZeroMQ(self.exch+'_'+'rest_api')
+        self._zmq = ZeroMQ(self.name+'_'+'rest_api')
         self._zmq.start(
-            logger=self.logger,
-            send_port=zmq_ports[self.exch]['rest_api'],
+            logger=self._logger,
+            send_port=zmq_ports[self.name]['rest_api'],
             # only used to send out returns from REST API
             # shouldn't receive any msgs, so recv_ports is empty
             recv_ports=[],
@@ -228,8 +226,9 @@ class BaseExchange:
     API Calls
     ************************************************
     '''
-    def get_markets(self, category: str) -> dict | None:
-        return self._rest_api.get_markets(category)
+    @abstractmethod
+    def get_markets(self, *args, **kwargs):
+        pass
 
     # TODO: update to get rid of step_into()
     def get_orders(self, account: CryptoAccount, schema, params=None, **kwargs) -> dict | None:
@@ -244,19 +243,19 @@ class BaseExchange:
                 for order in res:
                     epdt = step_into(order, schema['pdt'])
                     category = params.get('category', '')
-                    pdt = self.adapter(epdt, group=category)
+                    pdt = self._adapter(epdt, group=category)
                     update = {}
                     for k, (ek, *sequence) in schema['data'].items():
                         group = k + 's' if k in ['tif', 'side'] else ''
-                        initial_value = self.adapter(step_into(order, ek), group=group)
+                        initial_value = self._adapter(step_into(order, ek), group=group)
                         v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
                         update[k] = v
                     orders['data'][pdt].append(update)
                     eoid = update['eoid']
             else:
-                raise Exception(f'{self.exch} unhandled {res_type=}')
+                raise Exception(f'{self.name} unhandled {res_type=}')
         if self._zmq and orders['data']:
-            zmq_msg = (2, 1, (self.bkr, self.exch, account.acc, orders))
+            zmq_msg = (2, 1, (self.bkr, self.name, account.acc, orders))
             self._zmq.send(*zmq_msg, receiver='engine')
         return orders
 
@@ -270,23 +269,23 @@ class BaseExchange:
                 balances['ts'] = float(step_into(ret, schema['ts'])) * schema['ts_adj']
             if res_type is dict:
                 for eccy, balance in res.items():
-                    ccy = self.adapter(eccy, group='asset')
+                    ccy = self._adapter(eccy, group='asset')
                     for k, (ek, *sequence) in schema['data'].items():
-                        initial_value = self.adapter(step_into(balance, ek))
+                        initial_value = self._adapter(step_into(balance, ek))
                         v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
                         balances['data'][ccy][k] = v
             elif res_type is list:
                 for balance in res:
                     eccy = step_into(balance, schema['ccy'])
-                    ccy = self.adapter(eccy, group='asset')
+                    ccy = self._adapter(eccy, group='asset')
                     for k, (ek, *sequence) in schema['data'].items():
-                        initial_value = self.adapter(step_into(balance, ek))
+                        initial_value = self._adapter(step_into(balance, ek))
                         v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
                         balances['data'][ccy][k] = v
             else:
-                raise Exception(f'{self.exch} unhandled {res_type=}')
+                raise Exception(f'{self.name} unhandled {res_type=}')
         if self._zmq and balances['data']:
-            zmq_msg = (3, 1, (self.bkr, self.exch, account.acc, balances,))
+            zmq_msg = (3, 1, (self.bkr, self.name, account.acc, balances,))
             self._zmq.send(*zmq_msg, receiver='engine')
         return balances
 
@@ -304,25 +303,25 @@ class BaseExchange:
                 for position in res:
                     epdt = step_into(position, schema['pdt'])
                     category = params.get('category', '')
-                    pdt = self.adapter(epdt, group=category)
+                    pdt = self._adapter(epdt, group=category)
                     qty = float(step_into(position, schema['data']['qty'][0]))
                     if qty == 0 and pdt not in self._products:
                         continue
                     if 'side' in schema:
                         eside = step_into(position, schema['side'])
-                        side = self.adapter(eside, group='side')
+                        side = self._adapter(eside, group='side')
                     # e.g. BINANCE_USDT only returns position size (signed qty)
                     elif 'size' in schema:
                         side = sign(step_into(position, schema['size']))
                     positions['data'][pdt][side] = {}
                     for k, (ek, *sequence) in schema['data'].items():
-                        initial_value = self.adapter(step_into(position, ek))
+                        initial_value = self._adapter(step_into(position, ek))
                         v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
                         positions['data'][pdt][side][k] = v
             else:
-                raise Exception(f'{self.exch} unhandled {res_type=}')
+                raise Exception(f'{self.name} unhandled {res_type=}')
         if self._zmq and positions['data']:
-            zmq_msg = (3, 2, (self.bkr, self.exch, account.acc, positions,))
+            zmq_msg = (3, 2, (self.bkr, self.name, account.acc, positions,))
             self._zmq.send(*zmq_msg, receiver='engine')
         return positions
 
@@ -338,20 +337,20 @@ class BaseExchange:
                 for trade in res:
                     epdt = step_into(trade, schema['pdt'])
                     category = params.get('category', '')
-                    pdt = self.adapter(epdt, group=category)
+                    pdt = self._adapter(epdt, group=category)
                     update = {}
                     for k, (ek, *sequence) in schema['data'].items():
                         group = k + 's' if k in ['tif', 'side'] else ''
-                        initial_value = self.adapter(step_into(trade, ek), group=group)
+                        initial_value = self._adapter(step_into(trade, ek), group=group)
                         v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
                         update[k] = v
                         if k == 'trade_ts':
                             update[k] *= schema['ts_adj']
                     trades['data'][pdt].append(update)
             else:
-                raise Exception(f'{self.exch} unhandled {res_type=}')
+                raise Exception(f'{self.name} unhandled {res_type=}')
         if self._zmq and trades['data']:
-            zmq_msg = (2, 1, (self.bkr, self.exch, account.acc, trades))
+            zmq_msg = (2, 1, (self.bkr, self.name, account.acc, trades))
             self._zmq.send(*zmq_msg, receiver='engine')
         return trades
     
@@ -366,13 +365,13 @@ class BaseExchange:
             if res_type is dict:
                 for k, (ek, *sequence) in schema['data'].items():
                     group = k + 's' if k in ['tif', 'side'] else ''
-                    initial_value = self.adapter(step_into(res, ek), group=group)
+                    initial_value = self._adapter(step_into(res, ek), group=group)
                     v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
                     order[k] = v
             else:
-                raise Exception(f'{self.exch} unhandled {res_type=}')
+                raise Exception(f'{self.name} unhandled {res_type=}')
         if self._zmq and order['data']:
-            zmq_msg = (2, 1, (self.bkr, self.exch, account.acc, order))
+            zmq_msg = (2, 1, (self.bkr, self.name, account.acc, order))
             self._zmq.send(*zmq_msg, receiver='engine')
         return order
 
@@ -387,13 +386,13 @@ class BaseExchange:
             if res_type is dict:
                 for k, (ek, *sequence) in schema['data'].items():
                     group = k + 's' if k in ['tif', 'side'] else ''
-                    initial_value = self.adapter(step_into(res, ek), group=group)
+                    initial_value = self._adapter(step_into(res, ek), group=group)
                     v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
                     order[k] = v
             else:
-                raise Exception(f'{self.exch} unhandled {res_type=}')
+                raise Exception(f'{self.name} unhandled {res_type=}')
         if self._zmq and order['data']:
-            zmq_msg = (2, 1, (self.bkr, self.exch, account.acc, order))
+            zmq_msg = (2, 1, (self.bkr, self.name, account.acc, order))
             self._zmq.send(*zmq_msg, receiver='engine')
         return order
 

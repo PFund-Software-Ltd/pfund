@@ -1,42 +1,40 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from apscheduler.schedulers.background import BackgroundScheduler
     from pfeed.enums import DataSource
-    from pfeed.typing import tDATA_SOURCE
+    from pfeed.typing import tDataSource
     from pfeed.feeds.market_feed import MarketFeed
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund.products.product_base import BaseProduct
     from pfund.brokers.broker_crypto import CryptoBroker
     from pfund.brokers.ib.broker_ib import IBBroker
     from pfund.engines.trade_engine_settings import TradeEngineSettings
-    from pfund.typing import tENVIRONMENT, tBROKER
+    from pfund.typing import tEnvironment
 
-from pfund.datas.data_base import BaseData
-from pfund.managers.connection_manager import ConnectionManager
-from pfund.enums import PublicDataChannel, PrivateDataChannel, DataChannelType
+from pfund.enums import Environment, PublicDataChannel, PrivateDataChannel, DataChannelType
 from pfund.brokers.broker_base import BaseBroker
 
 
 class TradeBroker(BaseBroker):
-    def __init__(self, env: tENVIRONMENT, name: tBROKER):
+    def __init__(self, env: Environment | tEnvironment=Environment.SANDBOX):
+        from pfund.managers.connection_manager import ConnectionManager
         from pfund.engines.trade_engine import TradeEngine
 
-        super().__init__(env=env, name=name)
-        self._connection_manager = ConnectionManager(self)
+        super().__init__(env=env)
         
-        self._run_mode = TradeEngine._run_mode
         self._settings: TradeEngineSettings = TradeEngine.settings
+        self._is_ws_first: bool = self._settings.websocket_first
         
+        # FIXME: still keep connection manager?
+        # self._connection_manager = ConnectionManager(self)
         # TODO: use other data source, e.g. databento, only support TradFi Broker
         # TODO: create feed for streaming and somehow pass it to connection manager
-        self._data_feed: MarketFeed | None = None
-        if self._settings.broker_data_source and self._name in self._settings.broker_data_source:
-            from pfeed.feeds import get_market_feed
-            data_source = self._settings.broker_data_source[self._name]
-            self._data_feed: MarketFeed = get_market_feed(data_source=data_source)
-        else:
-            self._data_feed = None
+        # self._data_feed: MarketFeed | None = None
+        # if self._settings.broker_data_source and self._name in self._settings.broker_data_source:
+        #     from pfeed.feeds import get_market_feed
+        #     data_source = self._settings.broker_data_source[self._name]
+        #     self._data_feed: MarketFeed = get_market_feed(data_source=data_source)
+        # else:
+        #     self._data_feed = None
         
     def start(self, zmq=None):
         self._zmq = zmq

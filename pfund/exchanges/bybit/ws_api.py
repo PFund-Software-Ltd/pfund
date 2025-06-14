@@ -19,7 +19,7 @@ from pfund.enums import Environment
 
 
 class WebsocketApi(BaseWebsocketApi):
-    _URLS = {
+    URLS = {
         'PAPER': {
             'public': 'wss://stream-testnet.bybit.com/v5/public',
             'private': 'wss://stream-testnet.bybit.com/v5/private',
@@ -51,10 +51,6 @@ class WebsocketApi(BaseWebsocketApi):
         'option': 2000,
         'spot': 10
     }
-
-    def __init__(self, env: Environment, adapter: Adapter):
-        exch = Path(__file__).parent.name
-        super().__init__(env, exch, adapter)
 
     def _ping(self):
         msg = {"op": "ping"}

@@ -11,6 +11,12 @@ DEFAULT_CANCEL_ALL_AT: dict[str, bool] = {
 # TODO: add private channels
 class TradeEngineSettings(BaseEngineSettings):
     cancel_all_at: dict[str, bool] = Field(default_factory=dict)
+    # force refetching market configs
+    refetch_market_configs: bool = Field(default=False)
+    # renew market configs every x days
+    renew_market_configs_every_x_days: int = Field(default=7)
+    # Always use the WebSocket API for actions like placing or canceling orders, even if REST is available.
+    websocket_first: bool = Field(default=True)
     
     @model_validator(mode="after")
     def _merge_defaults(self):
