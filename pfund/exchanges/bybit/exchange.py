@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfund.products.product_bybit import tPRODUCT_CATEGORY
 
+import asyncio
 import datetime
 from decimal import Decimal
 
@@ -22,18 +23,30 @@ class Exchange(BaseExchange):
     # def configure(self, ...):
     #     pass
 
+    def add_all_product_mappings_to_adapter(self):
+        '''
+        Load all product mappings from market configs and add them to the adapter.
+        Useful when e.g. pfeed needs to download all products and hence needs to know all product mappings.
+        '''
+        market_configs = self.load_market_configs()
+        for category in market_configs:
+            for product, product_configs in market_configs[category].items():
+                symbol = product_configs['symbol']
+                self._adapter._add_mapping(category.upper(), product, symbol)
+
     '''
     Functions using REST API
     TODO EXTEND
     '''
-    def get_markets(self, category: tPRODUCT_CATEGORY='') -> dict | None:
-        categories = [category] if category else [category.value for category in ProductCategory]
-        markets_per_category = {}
+    async def aget_markets(self, category: tPRODUCT_CATEGORY='') -> dict:
+        categories = [ProductCategory[category.upper()]] if category else [category for category in ProductCategory]
+        markets: dict[ProductCategory, list[dict]] = {}
         for category in categories:
-            if (markets := self._rest_api.get_markets(category)) is None:
-                return None
-            markets_per_category[category] = markets
-        return markets_per_category
+            markets[category] = await self._rest_api.get_markets(category=category)
+        return markets
+
+    def get_markets(self, category: tPRODUCT_CATEGORY='') -> dict | None:
+        return asyncio.run(self.aget_markets(category=category))
 
     def get_balances(self, account: CryptoAccount, ccy: str='', **kwargs) -> dict[str, dict]:
         schema = {

@@ -10,12 +10,14 @@ if TYPE_CHECKING:
 import os
 import datetime
 import logging
+import asyncio
 import importlib
 from pathlib import Path
 from functools import reduce
 from collections import defaultdict
 from abc import ABC, abstractmethod
 
+from pfund.adapter import Adapter
 from pfund.managers.order_manager import OrderUpdateSource
 from pfund.enums import Environment, Broker, CryptoExchange, PublicDataChannel, PrivateDataChannel, DataChannelType
 
@@ -23,31 +25,34 @@ from pfund.enums import Environment, Broker, CryptoExchange, PublicDataChannel, 
 class BaseExchange(ABC):
     bkr = Broker.CRYPTO
     name: ClassVar[CryptoExchange]
+    _adapter: ClassVar[Adapter]
     MARKET_CONFIGS_FILENAME = 'market_configs.yml'
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        cls._adapter = Adapter(cls.name)
+            
     def __init__(self, env: tEnvironment):
-        from pfund.adapter import Adapter
-        from pfund.engines.trade_engine import TradeEngine
-        
+
         self._env = Environment[env.upper()]
         self._logger = logging.getLogger(self.name.lower())
-        self._adapter = Adapter(self.name)
         self._products: dict[ProductKey, CryptoProduct] = {}
         self._accounts: dict[AccountName, CryptoAccount] = {}
-        self._settings: TradeEngineSettings = TradeEngine.settings
-        
+
         # APIs
         exchange_path = f'pfund.exchanges.{self.name.lower()}'
         RestApi = getattr(importlib.import_module(f'{exchange_path}.rest_api'), 'RestApi')
-        self._rest_api = RestApi(self._env, self._adapter)
-        WebsocketApi = getattr(importlib.import_module(f'{exchange_path}.ws_api'), 'WebsocketApi')
-        self._ws_api = WebsocketApi(self._env, self._adapter)
+        self._rest_api = RestApi(self._env)
+        
+        # FIXME
+        # WebsocketApi = getattr(importlib.import_module(f'{exchange_path}.ws_api'), 'WebsocketApi')
+        # self._ws_api = WebsocketApi(self._env, self._adapter)
 
         # used for REST API to send back results in threads to engine
         self._zmq = None
         
         if self._check_if_refetch_market_configs():
-            self.fetch_market_configs()
+            asyncio.run(self.fetch_market_configs())
     
     @property
     def adapter(self):
@@ -78,23 +83,39 @@ class BaseExchange(ABC):
             print(f'{filename} not found')
             return None
     
+    def load_market_configs(self):
+        from pfund.utils.utils import load_yaml_file
+        market_configs_file_path = self.get_file_path(self.MARKET_CONFIGS_FILENAME)
+        market_configs: dict[str, dict] = load_yaml_file(market_configs_file_path)
+        return market_configs
+    
+    @abstractmethod
+    def add_all_product_mappings_to_adapter(self):
+        '''
+        Load all product mappings from market_configs.yml and add them to the adapter.
+        Useful when e.g. pfeed needs to download all products and hence needs to know all product mappings.
+        '''
+        pass
+    
     def _check_if_refetch_market_configs(self):
         from pfund.utils.utils import get_last_modified_time
-        
+        from pfund.engines.trade_engine import TradeEngine
+        settings: TradeEngineSettings = TradeEngine._settings
+
         filename = self.MARKET_CONFIGS_FILENAME
         file_path = self.get_file_path(filename)
         
-        force_refetching = self._settings.refetch_market_configs
-        not_exists = not os.path.exists(file_path)
-        is_outdated = (
+        force_refetching = settings.refetch_market_configs
+        is_exist = os.path.exists(file_path)
+        is_outdated = (is_exist and (
             get_last_modified_time(file_path)
-            + datetime.timedelta(days=self._settings.renew_market_configs_every_x_days) 
+            + datetime.timedelta(days=settings.renew_market_configs_every_x_days) 
             < datetime.datetime.now(tz=datetime.timezone.utc)
-        )
+        ))
 
         if force_refetching:
             return True
-        elif not_exists:
+        elif not is_exist:
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             self._logger.debug(f'{self.name} {filename} does not exist, fetching data...')
             return True
@@ -104,7 +125,7 @@ class BaseExchange(ABC):
         else:
             return False
     
-    def fetch_market_configs(self):
+    async def fetch_market_configs(self):
         '''
         Fetch market information from exchange, including:
         - Tick sizes (minimum price increments)
@@ -112,19 +133,17 @@ class BaseExchange(ABC):
         - Listed markets/trading pairs
         and then save them to the cache.
         '''
-        if markets_per_category := self.get_markets():
+        if markets := await self.get_markets():
             from pfund.utils.utils import dump_yaml_file
-            dump_yaml_file(
-                file_path=self.get_file_path(self.MARKET_CONFIGS_FILENAME),
-                data=markets_per_category
-            )
+            file_path = self.get_file_path(self.MARKET_CONFIGS_FILENAME)
+            dump_yaml_file(file_path=file_path, data=markets)
         else:
-            self._logger.warning(f'failed to fetch market configs for {self.name}')
+            self._logger.warning('failed to fetch market configs')
 
     def create_product(self, basis: str, alias: str='', **specs) -> CryptoProduct:
         from pfund.products.product_base import ProductFactory
         Product = ProductFactory(trading_venue=self.name, basis=basis)
-        return Product(basis=basis, alias=alias, **specs)
+        return Product(basis=basis, adapter=self._adapter, alias=alias, **specs)
 
     def get_product(self, basis: str, **specs) -> CryptoProduct | None:
         from pfund.products.product_base import BaseProduct
@@ -133,9 +152,9 @@ class BaseExchange(ABC):
 
     def add_product(self, product: CryptoProduct):
         self._products[product.key] = product
-        self._adapter._add_mapping(product.category, str(product), product.symbol)
+        self._adapter._add_mapping(product.category, product.key, product.symbol)
         # TODO: check if the product is listed in the markets
-        self._logger.debug(f'added product {str(product)}')
+        self._logger.debug(f'added product {product}')
 
     def get_account(self, name: str) -> CryptoAccount:
         return self._accounts[name]
@@ -226,6 +245,10 @@ class BaseExchange(ABC):
     API Calls
     ************************************************
     '''
+    @abstractmethod
+    async def aget_markets(self, *args, **kwargs):
+        pass
+    
     @abstractmethod
     def get_markets(self, *args, **kwargs):
         pass

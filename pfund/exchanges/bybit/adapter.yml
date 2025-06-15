@@ -1,3 +1,9 @@
+# need categories as groups to avoid duplicate product names
+# e.g. in SPOT, BTCUSDT means BTC_USDT_CRYPTO, but in PERPETUAL, BTCUSDT means BTC_USDT_PERP
+linear:
+inverse:
+spot:
+option:
 # this is used for mapping internal names and external names
 asset: {
   # cryptocurrencies internal-to-external mappings if any

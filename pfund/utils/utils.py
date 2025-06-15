@@ -112,9 +112,9 @@ def get_last_modified_time(file_path: str) -> datetime.datetime:
     return datetime.datetime.fromtimestamp(last_modified_time, tz=datetime.timezone.utc)
 
 
-def parse_api_response_with_schema(response: dict, schema: dict) -> list[dict]:
+def parse_message_with_schema(message: dict, schema: dict) -> list[dict]:
     """
-    Parse API response according to schema definition.
+    Parse API returned message according to schema definition.
     
     The schema supports:
     1. Direct string values (hardcoded values)
@@ -125,42 +125,39 @@ def parse_api_response_with_schema(response: dict, schema: dict) -> list[dict]:
         List[dict]: Always returns a list of parsed dictionaries for consistency,
                    even if input contains only a single item
     """
-    # Get the data to parse based on 'result' path
-    # result_path is e.g. ['result', 'list'], meaning that the data to parse is under 'result' and 'list'
+    # Get the message to parse based on 'result' path
+    # result_path is e.g. ['result', 'list'], meaning that the message to parse is under 'result' and 'list'
     result_path = schema.get('result', [])
-    data = response
     
     for key in result_path:
-        data = data[key]
+        message = message[key]
     
     # Convert single dict to list[dict] for consistency
-    if isinstance(data, dict):
-        data = [data]
+    if isinstance(message, dict):
+        message = [message]
     
     # Remove 'result' from schema since it's just a path indicator
     parse_schema = {k: v for k, v in schema.items() if k != 'result'}
-    
+
     def parse_single_item(item: dict) -> dict:
         output = {}
         for key, value_path in parse_schema.items():
-            if isinstance(value_path, str):
-                # Case 1: Hardcoded value
-                output[key] = value_path
-            elif isinstance(value_path, (list, tuple)):
-                # Case 2: Path with optional transformers
+            # Case 1: Path with optional transformers
+            if isinstance(value_path, (list, tuple)):
                 current_value = item
                 for transformer in value_path:
                     if isinstance(transformer, str):
                         if transformer in current_value:
                             current_value = current_value[transformer]
                         else:
+                            current_value = None
                             break
                     else:
                         # Apply function transformer
                         current_value = transformer(current_value)
                 output[key] = current_value
+            # Case 2: Nested schema
             elif isinstance(value_path, dict):
-                # Case 3: Nested schema
                 nested_output = {}
                 for nested_key, nested_value_path in value_path.items():
                     current_value = item
@@ -171,10 +168,13 @@ def parse_api_response_with_schema(response: dict, schema: dict) -> list[dict]:
                             current_value = transformer(current_value)
                     nested_output[nested_key] = current_value
                 output[key] = nested_output
+            # Case 3: Hardcoded value
+            else:
+                output[key] = value_path
         return output
     
     # Parse all items and always return a list
-    return [parse_single_item(item) for item in data]
+    return [parse_single_item(item) for item in message]
 
 
 def find_strategy_class(strat: str):

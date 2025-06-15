@@ -1,7 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, ClassVar
 if TYPE_CHECKING:
-    from ray.actor import ActorHandle
     from mtflow.stores.mtstore import MTStore
     from mtflow.kernel import TradeKernel
     from mtflow.stores.trading_store import TradingStore

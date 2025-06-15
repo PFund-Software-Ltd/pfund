@@ -39,8 +39,8 @@ class BaseProduct(BaseModel):
     trading_venue: TradingVenue
     broker: Broker
     exchange: CryptoExchange | str = ''
-    adapter: Adapter
     basis: ProductBasis
+    adapter: Adapter | None = None
     # specifications that make a product unique, e.g. for options, specs are strike_price, expiration_date, etc.
     specs: dict = Field(default_factory=dict)
     key: str | None=None
@@ -72,7 +72,8 @@ class BaseProduct(BaseModel):
         return data
     
     def model_post_init(self, __context: Any):
-        self.adapter = Adapter(self.trading_venue)
+        if not self.adapter:
+            self.adapter = Adapter(self.trading_venue)
         if hasattr(self, '__mixin_post_init__'):
             self.__mixin_post_init__()
         self.specs = self._create_specs()

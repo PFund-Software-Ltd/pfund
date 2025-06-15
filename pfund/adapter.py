@@ -1,44 +1,17 @@
-from typing import Literal, TypeAlias, Any
+from typing import Any
 
-from collections import defaultdict
 from pathlib import Path
 
 from pfund.enums import TradingVenue
 from pfund.utils.utils import load_yaml_file
 
 
-# NOTE: DynamicGroup can be used to specify a group that is not defined in adapter.yml
-# e.g. for Bybit, it uses product category ('spot', 'linear', 'inverse', 'option', etc.) for grouping
-# to achieve converting e.g. TODO ... -> BTCUSDH25
-DynamicGroup: TypeAlias = str
-
-tADAPTER_GROUP = DynamicGroup | Literal[
-    # defined in adapter.yml
-    'asset',
-    'asset_type',
-    'option_type',
-    'order_type',
-    'side',
-    'tif',
-    'order_status',
-    'offset',
-    'price_direction',
-    'channel',
-    'resolution',
-] 
-
-
 class Adapter:
     FILENAME = 'adapter.yml'
     
-    def __init__(self, trading_venue: str, is_strict: bool=False):
-        '''
-        Args:
-            is_strict: if False, it will search for the same key in other groups if group is not specified
-        '''
+    def __init__(self, trading_venue: str):
         self._trading_venue = TradingVenue[trading_venue.upper()]
-        self._adapter = defaultdict(dict)
-        self._is_strict = is_strict
+        self._adapter = {}
         self._load_config(self.get_file_path())
     
     def __str__(self):
@@ -68,32 +41,18 @@ class Adapter:
         '''Loads adapter.yml'''
         config: dict = load_yaml_file(file_path)
         for group in config:
-            group = group.lower()
-            for k, v in config[group].items():
-                self._add_mapping(group, k, v)
+            if config[group]:
+                for k, v in config[group].items():
+                    self._add_mapping(group, k, v)
+            else:
+                self._adapter[group.lower()] = {}
 
-    def _add_mapping(self, group: tADAPTER_GROUP, k: str, v: str):
+    def _add_mapping(self, group: str, k: str, v: str):
         group = group.lower()
+        if group not in self._adapter:
+            self._adapter[group] = {}
         self._adapter[group][k] = v
         self._adapter[group][v] = k
-        
-    def load_all_product_mappings(self):
-        '''
-        Load all product mappings from market configs.
-        Useful when e.g. pfeed needs to download all products and hence needs to know all product mappings.
-        '''
-        import importlib
-        from pfund.enums import CryptoExchange
-        if self._trading_venue not in CryptoExchange.__members__:
-            raise ValueError(f'load_all_product_mappings is supported for crypto exchanges only, {self._trading_venue} is not a valid crypto exchange')
-        exch = self._trading_venue.value
-        Exchange = getattr(importlib.import_module(f'pfund.exchanges.{exch.lower()}.exchange'), 'Exchange')
-        market_configs_file_path = Exchange.get_file_path(Exchange.MARKET_CONFIGS_FILENAME)
-        market_configs: dict[str, dict] = load_yaml_file(market_configs_file_path)
-        for category in market_configs:
-            for pdt, product_configs in market_configs[category].items():
-                epdt = product_configs['symbol']
-                self._add_mapping(category, pdt, epdt)
     
     def __len__(self):
         '''
@@ -108,17 +67,5 @@ class Adapter:
                 return True
         return False
 
-    def __call__(self, key: str, group: tADAPTER_GROUP='') -> str | tuple:
-        group = group.lower()
-        if self._is_strict:
-            assert group, '"group" cannot be empty when strict=True'
-            groups = [group]
-        else:
-            groups = [group] if group else list(self._adapter.keys())
-
-        for group in groups:
-            if group not in self._adapter:
-                continue
-            if key in self._adapter[group]:
-                return self._adapter[group][key]
-        return key
+    def __call__(self, key: str, *, group: str) -> str:
+        return self._adapter[group.lower()].get(key, key)

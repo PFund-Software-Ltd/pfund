@@ -4,8 +4,10 @@ if TYPE_CHECKING:
     from pfund.products.product_bybit import tPRODUCT_CATEGORY
     from pfund.accounts.account_crypto import CryptoAccount
     from httpx import Request, Response
+    from pfund.exchanges.rest_api_base import Result, RawResult
 
 import hmac
+import inspect
 import hashlib
 import urllib
 import datetime
@@ -13,7 +15,7 @@ from decimal import Decimal
 
 import orjson as json
 
-from pfund.enums import Environment, CryptoExchange, OptionType
+from pfund.enums import Environment, CryptoExchange, CryptoAssetType, OptionType
 from pfund.exchanges.rest_api_base import BaseRestApi
 from pfund.products.product_bybit import ProductCategory
 from pfund.exchanges.rest_api_base import RequestMethod
@@ -26,7 +28,7 @@ class RestApi(BaseRestApi):
     VERSION = 'v5'
     URLS = {
         Environment.PAPER: 'https://api-testnet.bybit.com',
-        Environment.LIVE: 'https://api.bybit.com'
+        Environment.LIVE: 'https://api.bybit.com',
     }
     PUBLIC_ENDPOINTS = {
         # Market endpoints:
@@ -124,37 +126,46 @@ class RestApi(BaseRestApi):
         '''Checks if the returned message means successful based on the exchange's standard'''
         return 'retCode' in msg and msg['retCode'] == 0
     
-    def get_markets(self, category: tPRODUCT_CATEGORY):
-        schema = {
+    async def get_markets(self, category: ProductCategory | tPRODUCT_CATEGORY, raw: bool=False) -> Result | RawResult:
+        '''
+        Args:
+            raw: if True, return the raw return message from the exchange
+        '''
+        func_name = inspect.currentframe().f_code.co_name
+        category = ProductCategory[category.upper()]
+        params = {'category': category.lower()}
+        schema = None if raw else {
             'result': ['result', 'list'],
-            'product': ['symbol'],
-            'base_asset': ['baseCoin'],
-            'quote_asset': ['quoteCoin'],
-            'product_type': ['contractType'],
+            'symbol': ['symbol'],
+            'base_asset': [
+                'baseCoin',
+                lambda base_asset: self._adapter(base_asset, group='asset'),
+            ],
+            'quote_asset': [
+                'quoteCoin',
+                lambda quote_asset: self._adapter(quote_asset, group='asset'),
+            ],
+            'asset_type': [
+                'contractType',
+                lambda asset_type: self._adapter(asset_type, group='asset_type'),
+                lambda asset_type: CryptoAssetType[asset_type.upper()],
+            ],
             'tick_size': ['priceFilter', 'tickSize', str],
             'lot_size': ['lotSizeFilter', 'qtyStep', str],
             'expiration': (
                 'deliveryTime', 
-                lambda expiration: datetime.datetime.fromtimestamp(int(expiration) / 1000, tz=datetime.timezone.utc),
-                lambda expiration: expiration.strftime('%Y-%m-%d')
+                lambda expiration: None if expiration == '0' else datetime.datetime.fromtimestamp(int(expiration) / 1000, tz=datetime.timezone.utc),
             ),
+            'category': category,
         }
-        category = ProductCategory[category.upper()]
-        if category == ProductCategory.SPOT:
-            schema['product_type'] = 'SPOT'
-            schema['lot_size'] = ['lotSizeFilter', 'basePrecision']
-        elif category == ProductCategory.OPTION:
-            schema['product_type'] = 'OPT'
-            schema['option_type'] = (
-                'optionsType', 
-                lambda option_type: OptionType[option_type.upper()].value,
-                str
-            )
-            schema['strike_price'] = (
-                'symbol', 
-                lambda symbol: symbol.split('-')[2], 
-                Decimal, 
-                str
-            )
-        params = {'category': category.value.lower()}
-        return super().get_markets(schema, params=params)
+        if schema:
+            if category == ProductCategory.SPOT:
+                schema['expiration'] = None
+                schema['asset_type'] = CryptoAssetType.CRYPTO
+                schema['lot_size'] = ['lotSizeFilter', 'basePrecision', str]
+            elif category == ProductCategory.OPTION:
+                schema['asset_type'] = CryptoAssetType.OPT
+                schema['option_type'] = ('optionsType', lambda option_type: OptionType[option_type.upper()])
+                schema['strike_price'] = ('symbol', lambda symbol: Decimal(symbol.split('-')[2]))
+        result: Result | RawResult = await self._request(func_name, schema=schema, params=params)
+        return result

@@ -21,7 +21,7 @@ class TradeBroker(BaseBroker):
 
         super().__init__(env=env)
         
-        self._settings: TradeEngineSettings = TradeEngine.settings
+        self._settings: TradeEngineSettings = TradeEngine._settings
         self._is_ws_first: bool = self._settings.websocket_first
         
         # FIXME: still keep connection manager?

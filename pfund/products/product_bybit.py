@@ -7,7 +7,6 @@ from pydantic import model_validator
 
 from pfund.enums import TradingVenue, CryptoExchange, CryptoAssetType, AssetTypeModifier
 from pfund.products.product_crypto import CryptoProduct
-from pfund.adapter import Adapter
 
 
 # REVIEW
@@ -33,7 +32,6 @@ class ProductCategory(StrEnum):
 class BybitProduct(CryptoProduct):
     trading_venue: TradingVenue = TradingVenue.BYBIT
     exchange: CryptoExchange = CryptoExchange.BYBIT
-    adapter: Adapter | None = None
     category: ProductCategory | None = None
 
     @model_validator(mode='after')
@@ -63,7 +61,7 @@ class BybitProduct(CryptoProduct):
                 symbol = ebase_asset + str(self.asset_type)
             else:
                 symbol = ebase_asset + equote_asset
-        elif self.asset_type == AssetTypeModifier.INVERSE + '-' + CryptoAssetType.PERP:
+        elif self.asset_type == AssetTypeModifier.INV + '-' + CryptoAssetType.PERP:
             assert equote_asset == 'USD', 'only USD-denominated inverse perpetual contracts are supported'
             symbol = ebase_asset + equote_asset
         elif self.asset_type == CryptoAssetType.CRYPTO:
@@ -72,7 +70,7 @@ class BybitProduct(CryptoProduct):
             # symbol = e.g. BTC-13DEC24
             expiration = self.expiration.strftime("%d%b%y")
             symbol = '-'.join([ebase_asset, expiration])
-        elif self.asset_type == AssetTypeModifier.INVERSE + '-' + CryptoAssetType.FUT:
+        elif self.asset_type == AssetTypeModifier.INV + '-' + CryptoAssetType.FUT:
             # symbol = e.g. BTCUSDH25
             assert equote_asset == 'USD', 'only USD-denominated inverse perpetual contracts are supported'
             symbol = ebase_asset + equote_asset + self.contract_code
