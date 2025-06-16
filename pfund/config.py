@@ -148,6 +148,10 @@ class Configuration:
         self._logging_config = value
     
     @property
+    def file_path(self):
+        return CONFIG_FILE_PATH
+    
+    @property
     def strategy_path(self):
         return f'{self.data_path}/hub/strategies'
     
