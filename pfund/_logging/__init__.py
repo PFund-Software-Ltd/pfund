@@ -36,7 +36,7 @@ def setup_logging_config(log_path, logging_config_file_path, user_logging_config
     # print('Setting up loggers...')
     if not os.path.exists(log_path):
         os.makedirs(log_path)
-        print(f'created {str(log_path)}')
+        print(f'Created {str(log_path)}')
     logging_config: dict = load_yaml_file(logging_config_file_path)
     if user_logging_config:
         deep_update(logging_config, user_logging_config)

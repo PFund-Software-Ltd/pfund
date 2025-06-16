@@ -200,6 +200,7 @@ class BaseEngine(metaclass=MetaEngine):
         from pfund._logging.config import LoggingDictConfigurator
         from pfund import get_config
         config = get_config()
+        config._load_env_file(self._env)
         log_path = f'{config.log_path}/{self._env}'
         user_logging_config = config.logging_config
         logging_config_file_path = config.logging_config_file_path

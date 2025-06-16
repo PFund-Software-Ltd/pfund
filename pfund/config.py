@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.typing import tStorage
+    from pfund.typing import tEnvironment
     
 import os
 import sys
@@ -16,9 +17,10 @@ from dataclasses import dataclass, asdict, field, MISSING
 import yaml
 # from rich.traceback import install
 
+from pfund.enums import Environment
 from pfund.const.paths import (
     PROJ_NAME, 
-    LOG_PATH, 
+    LOG_PATH,
     CONFIG_PATH, 
     DATA_PATH, 
     CACHE_PATH,
@@ -70,7 +72,6 @@ class Configuration:
     logging_config_file_path: str = f'{CONFIG_PATH}/logging.yml'
     docker_compose_file_path: str = f'{CONFIG_PATH}/docker-compose.yml'
     custom_excepthook: bool = True
-    env_file_path: str = f'{CONFIG_PATH}/.env'
     debug: bool = False
     storage: tStorage = 'local'
     storage_options: dict = field(default_factory=dict)
@@ -92,6 +93,20 @@ class Configuration:
         cls._verbose = verbose
     
     @classmethod
+    def _load_env_file(cls, env: Environment | tEnvironment):
+        from dotenv import find_dotenv, load_dotenv
+        env = Environment[env.upper()]
+        filename = f'.env.{env.lower()}'
+        env_file_path = find_dotenv(filename=filename, usecwd=True, raise_error_if_not_found=False)
+        if env_file_path:
+            load_dotenv(env_file_path, override=True)
+            if cls._verbose:
+                print(f'{PROJ_NAME} {filename} file loaded from {env_file_path}')
+        else:
+            if cls._verbose:
+                print(f'{PROJ_NAME} {filename} file is not found')
+    
+    @classmethod
     def load(cls) -> Configuration:
         '''Loads user's config file and returns a Configuration object'''
         CONFIG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -110,7 +125,7 @@ class Configuration:
             with open(CONFIG_FILE_PATH, 'r') as f:
                 saved_config = yaml.safe_load(f) or {}
                 if cls._verbose:
-                    print(f"{PROJ_NAME} config loaded from {CONFIG_FILE_PATH}.")
+                    print(f"Loaded {CONFIG_FILE_PATH}")
                 # Check for new or removed fields
                 new_fields = set(default_config.keys()) - set(saved_config.keys())
                 removed_fields = set(saved_config.keys()) - set(default_config.keys())
@@ -137,7 +152,7 @@ class Configuration:
         with open(CONFIG_FILE_PATH, 'w') as f:
             yaml.dump(asdict(self), f, default_flow_style=False)
             if self._verbose:
-                print(f"{PROJ_NAME} config saved to {CONFIG_FILE_PATH}.")
+                print(f"Created {CONFIG_FILE_PATH}")
     
     @property
     def logging_config(self):
@@ -190,14 +205,14 @@ class Configuration:
     def _initialize_files(self):
         '''Creates .env and copy logging.yml and docker-compose.yml from package directory to the user config path'''
         package_dir = Path(importlib.resources.files(PROJ_NAME)).resolve().parents[0]
-        for path in [self.env_file_path, self.logging_config_file_path, self.docker_compose_file_path]:
+        for path in [self.logging_config_file_path, self.docker_compose_file_path]:
             path = Path(path)
             try:
                 if not path.exists():
-                    if path.name == '.env':
-                        path.touch(exist_ok=True)
-                    else:
-                        shutil.copy(package_dir / path.name, CONFIG_PATH)
+                    # copies the file from site-packages/pfund to the user config path
+                    filename = path.name
+                    shutil.copy(package_dir / filename, CONFIG_PATH)
+                    print(f'Created {filename} in {CONFIG_PATH}')
             except Exception as e:
                 print(f'Error creating or copying {path.name}: {e}')
         
@@ -219,24 +234,8 @@ class Configuration:
         if self.custom_excepthook and sys.excepthook is sys.__excepthook__:
             sys.excepthook = _custom_excepthook
         
-        self.load_env_file(self.env_file_path)
-        
         if self.debug:
             self.enable_debug_mode()
-        
-    def load_env_file(self, env_file_path: str=''):
-        from dotenv import find_dotenv, load_dotenv
-        if not env_file_path:
-            env_file_path = find_dotenv(usecwd=True, raise_error_if_not_found=False)
-        
-        if env_file_path:
-            load_dotenv(env_file_path, override=True)
-            if self._verbose:
-                print(f'{PROJ_NAME} .env file loaded from {env_file_path}')
-        else:
-            if self._verbose:
-                print(f'{PROJ_NAME} .env file is not found')
-            return
     
     def enable_debug_mode(self):
         '''Enables debug mode by setting the log level to DEBUG for all stream handlers'''
@@ -259,7 +258,6 @@ def configure(
     logging_config_file_path: str | None = None,
     logging_config: dict | None = None,
     docker_compose_file_path: str | None = None,
-    env_file_path: str | None = None,
     custom_excepthook: bool | None = None,
     debug: bool | None = None,
     storage: tStorage | None = None,
@@ -279,7 +277,8 @@ def configure(
         config_updates.pop(k)
     config_updates.pop('NON_CONFIG_KEYS')
 
-    config = get_config(verbose=verbose)
+    Configuration.set_verbose(verbose)
+    config = get_config()
 
     # Apply updates for non-None values
     for k, v in config_updates.items():
@@ -293,6 +292,5 @@ def configure(
     return config
 
 
-def get_config(verbose: bool = False) -> Configuration:
-    Configuration.set_verbose(verbose)
+def get_config() -> Configuration:
     return Configuration.get_instance()

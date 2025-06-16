@@ -118,6 +118,10 @@ celerybeat.pid
 
 # Environments
 .env
+.env.live
+.env.paper
+.env.sandbox
+.env.backtest
 .venv
 env/
 venv/

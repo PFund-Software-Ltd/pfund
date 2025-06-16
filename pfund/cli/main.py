@@ -15,7 +15,7 @@ from pfund.cli.commands.clear import clear
 def pfund_group(ctx):
     """pfund's CLI"""
     ctx.ensure_object(dict)
-    ctx.obj['config'] = get_config(verbose=False)
+    ctx.obj['config'] = get_config()
 
 
 pfund_group.add_command(docker_compose)

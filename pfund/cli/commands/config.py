@@ -33,21 +33,19 @@ def list(ctx):
 
 @config.command()
 @click.option('--config-file', '--config', '-c', is_flag=True, help=f'Reset the {PROJ_NAME}_config.yml file')
-@click.option('--env-file', '--env', '-e', is_flag=True, help='Reset the .env file')
 @click.option('--docker-file', '--docker', '-d', is_flag=True, help='Reset the docker-compose.yml file')
 @click.option('--logging-file', '--logging', '-l', is_flag=True, help='Reset the logging.yaml file for logging config')
-def reset(config_file, env_file, logging_file, docker_file):
+def reset(config_file, logging_file, docker_file):
     """Reset the configuration to defaults.
     If no flags were set, all files will be reset.
     Args:
         config_file: Reset the {PROJ_NAME}_config.yml file
-        env_file: Reset the .env file
         docker_file: Reset the docker-compose.yml file
         logging_file: Reset the logging.yaml file for logging config
     """
     # If no flags were set, set all to True
-    if not any([config_file, env_file, logging_file, docker_file]):
-        config_file = env_file = logging_file = docker_file = True
+    if not any([config_file, logging_file, docker_file]):
+        config_file = logging_file = docker_file = True
     
     def _reset_file(filename):
         package_dir = Path(importlib.resources.files(PROJ_NAME)).resolve().parents[0]
@@ -56,16 +54,11 @@ def reset(config_file, env_file, logging_file, docker_file):
         backup_file = CONFIG_PATH / f'{filename}.bak'
         if user_file.exists():
             shutil.copy(user_file, backup_file)
-        if filename not in ['.env', CONFIG_FILENAME]:
+        if filename != CONFIG_FILENAME:
             shutil.copy(default_file, user_file)
             
     if config_file:
         filename = CONFIG_FILENAME
-        click.echo(f"Resetting {filename} file...")
-        _reset_file(filename)
-
-    if env_file:
-        filename = '.env'
         click.echo(f"Resetting {filename} file...")
         _reset_file(filename)
 
@@ -86,7 +79,6 @@ def reset(config_file, env_file, logging_file, docker_file):
 @click.option('--cache-path', '--cache', type=click.Path(resolve_path=True), help='Set the cache path')
 @click.option('--logging-file-path', '--logging', 'logging_config_file_path', type=click.Path(resolve_path=True, exists=True), help='Set the logging config file path')
 @click.option('--docker-file-path', '--docker', 'docker_compose_file_path', type=click.Path(exists=True), help='Set the docker-compose.yml file path')
-@click.option('--env-file-path', '--env', 'env_file_path', type=click.Path(resolve_path=True, exists=True), help='Path to the .env file')
 @click.option('--custom-excepthook', '-e', type=bool, help='If True, log uncaught exceptions to file')
 @click.option('--debug', '-d', type=bool, help='If True, enable debug mode where logs at DEBUG level will be printed')
 def set(**kwargs):
@@ -102,22 +94,19 @@ def set(**kwargs):
 
 @config.command()
 @click.option('--config-file', '--config', '-c', is_flag=True, help=f'Open the {PROJ_NAME}_config.yml file')
-@click.option('--env-file', '--env', '-e', is_flag=True, help='Open the .env file')
 @click.option('--docker-file', '--docker', '-d', is_flag=True, help='Open the docker-compose.yml file')
 @click.option('--logging-file', '--logging', '-l', is_flag=True, help='Open the logging.yaml file for logging config')
 @click.option('--default-editor', '-E', is_flag=True, help='Use default editor')
-def open(config_file, env_file, logging_file, docker_file, default_editor):
-    """Opens the config files, e.g. logging.yml, docker-compose.yml, .env."""
+def open(config_file, logging_file, docker_file, default_editor):
+    """Opens the config files, e.g. logging.yml, docker-compose.yml."""
     from pfund.const.paths import CONFIG_FILE_PATH, CONFIG_PATH
 
-    if sum([config_file, env_file, logging_file, docker_file]) > 1:
+    if sum([config_file, logging_file, docker_file]) > 1:
         click.echo('Please specify only one file to open')
         return
     else:
         if config_file:
             file_path = CONFIG_FILE_PATH
-        elif env_file:
-            file_path = CONFIG_PATH / '.env'
         elif logging_file:
             file_path = CONFIG_PATH / 'logging.yml'
         elif docker_file:
