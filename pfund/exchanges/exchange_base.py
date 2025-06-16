@@ -10,7 +10,6 @@ if TYPE_CHECKING:
 import os
 import datetime
 import logging
-import asyncio
 import importlib
 from pathlib import Path
 from functools import reduce
@@ -51,8 +50,7 @@ class BaseExchange(ABC):
         # used for REST API to send back results in threads to engine
         self._zmq = None
         
-        if self._check_if_refetch_market_configs():
-            asyncio.run(self.fetch_market_configs())
+        self._check_if_refetch_market_configs()
     
     @property
     def adapter(self):
@@ -98,6 +96,11 @@ class BaseExchange(ABC):
         pass
     
     def _check_if_refetch_market_configs(self):
+        '''
+        Check if the market configs are outdated and need to be refetched.
+        If so, refetch the market configs and return True.
+        If not, return False.
+        '''
         from pfund.utils.utils import get_last_modified_time
         from pfund.engines.trade_engine import TradeEngine
         settings: TradeEngineSettings = TradeEngine._settings
@@ -113,19 +116,23 @@ class BaseExchange(ABC):
             < datetime.datetime.now(tz=datetime.timezone.utc)
         ))
 
+        is_refetching = False
+
         if force_refetching:
-            return True
+            is_refetching = True
         elif not is_exist:
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             self._logger.debug(f'{self.name} {filename} does not exist, fetching data...')
-            return True
+            is_refetching = True
         elif is_outdated:
             self._logger.info(f'{self.name} {filename} is outdated, refetching data...')
-            return True
-        else:
-            return False
+            is_refetching = True
+        
+        if is_refetching:
+            self.fetch_market_configs()
+        return is_refetching
     
-    async def fetch_market_configs(self):
+    def fetch_market_configs(self):
         '''
         Fetch market information from exchange, including:
         - Tick sizes (minimum price increments)
@@ -133,12 +140,11 @@ class BaseExchange(ABC):
         - Listed markets/trading pairs
         and then save them to the cache.
         '''
-        if markets := await self.get_markets():
-            from pfund.utils.utils import dump_yaml_file
-            file_path = self.get_file_path(self.MARKET_CONFIGS_FILENAME)
-            dump_yaml_file(file_path=file_path, data=markets)
-        else:
-            self._logger.warning('failed to fetch market configs')
+        from pfund.utils.utils import dump_yaml_file
+        markets: dict = self.get_markets()
+        market_configs_file_path = self.get_file_path(self.MARKET_CONFIGS_FILENAME)
+        dump_yaml_file(file_path=market_configs_file_path, data=markets)
+            # self._logger.warning('failed to fetch market configs')
 
     def create_product(self, basis: str, alias: str='', **specs) -> CryptoProduct:
         from pfund.products.product_base import ProductFactory

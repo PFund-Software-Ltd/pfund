@@ -145,6 +145,7 @@ class BaseRestApi(ABC):
         '''
         if self._env.is_simulated:
             assert account is None, f"Simulated environment {self._env} can only access public endpoints, account should NOT be provided"
+
         method, endpoint = self.get_endpoint(endpoint_name)
         request: Request = self._build_request(method=method, endpoint=endpoint, account=account, params=params, **kwargs)
         result: Result = {

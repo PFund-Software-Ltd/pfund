@@ -1,55 +1,33 @@
 from __future__ import annotations
-from typing import Literal
-
-from enum import StrEnum
 
 from pydantic import model_validator
 
 from pfund.enums import TradingVenue, CryptoExchange, CryptoAssetType, AssetTypeModifier
 from pfund.products.product_crypto import CryptoProduct
-
-
-# REVIEW
-SUPPORTED_ASSET_TYPES: list = [
-    CryptoAssetType.FUTURE,
-    CryptoAssetType.PERPETUAL,
-    CryptoAssetType.OPTION,
-    CryptoAssetType.CRYPTO,
-    CryptoAssetType.INDEX,
-    AssetTypeModifier.INVERSE + '-' + CryptoAssetType.FUTURE,
-    AssetTypeModifier.INVERSE + '-' + CryptoAssetType.PERPETUAL,
-]
-
-
-tPRODUCT_CATEGORY = Literal['LINEAR', 'INVERSE', 'SPOT', 'OPTION']
-class ProductCategory(StrEnum):
-    LINEAR = 'LINEAR'
-    INVERSE = 'INVERSE'
-    SPOT = 'SPOT'
-    OPTION = 'OPTION'
+from pfund.exchanges import Bybit
 
 
 class BybitProduct(CryptoProduct):
     trading_venue: TradingVenue = TradingVenue.BYBIT
     exchange: CryptoExchange = CryptoExchange.BYBIT
-    category: ProductCategory | None = None
+    category: Bybit.ProductCategory | None = None
 
     @model_validator(mode='after')
-    def _derive_product_category(self) -> ProductCategory:
+    def _derive_product_category(self) -> Bybit.ProductCategory:
         if self.asset_type == CryptoAssetType.CRYPTO:
-            category = ProductCategory.SPOT
+            category = Bybit.ProductCategory.SPOT
         elif self.is_inverse():
-            category = ProductCategory.INVERSE
+            category = Bybit.ProductCategory.INVERSE
         elif self.asset_type == CryptoAssetType.OPT:
-            category = ProductCategory.OPTION
+            category = Bybit.ProductCategory.OPTION
         else:
-            category = ProductCategory.LINEAR
+            category = Bybit.ProductCategory.LINEAR
         self.category = category
         return self
     
     @model_validator(mode='after')
     def _validate_asset_type(self):
-        if str(self.asset_type) not in SUPPORTED_ASSET_TYPES:
+        if str(self.asset_type) not in Bybit.SUPPORTED_ASSET_TYPES:
             raise ValueError(f"Invalid asset type: {self.asset_type}")
         return self
     

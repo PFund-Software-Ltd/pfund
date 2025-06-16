@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.products.product_bybit import tPRODUCT_CATEGORY
+    from pfund.exchanges.bybit.exchange import tPRODUCT_CATEGORY
     from pfund.accounts.account_crypto import CryptoAccount
     from httpx import Request
     from pfund.exchanges.rest_api_base import Result, RawResult
@@ -16,9 +16,8 @@ from decimal import Decimal
 import orjson as json
 
 from pfund.enums import Environment, CryptoExchange, CryptoAssetType, OptionType
-from pfund.exchanges.rest_api_base import BaseRestApi
-from pfund.products.product_bybit import ProductCategory
-from pfund.exchanges.rest_api_base import RequestMethod
+from pfund.exchanges.rest_api_base import BaseRestApi, RequestMethod
+from pfund.exchanges import Bybit
 
 
 # TODO complete the endpoints
@@ -126,9 +125,9 @@ class RestApi(BaseRestApi):
         '''Checks if the returned message means successful based on the exchange's standard'''
         return 'retCode' in msg and msg['retCode'] == 0
     
-    async def get_markets(self, category: ProductCategory | tPRODUCT_CATEGORY) -> Result | RawResult:
+    async def get_markets(self, category: Bybit.ProductCategory | tPRODUCT_CATEGORY) -> Result | RawResult:
         endpoint_name = inspect.currentframe().f_code.co_name
-        category = ProductCategory[category.upper()]
+        category = Bybit.ProductCategory[category.upper()]
         params = {'category': category.lower()}
         schema = {
             'result': ['result', 'list'],
@@ -155,11 +154,11 @@ class RestApi(BaseRestApi):
             'category': category,
         }
         if schema:
-            if category == ProductCategory.SPOT:
+            if category == Bybit.ProductCategory.SPOT:
                 schema['expiration'] = None
                 schema['asset_type'] = CryptoAssetType.CRYPTO
                 schema['lot_size'] = ['lotSizeFilter', 'basePrecision', str]
-            elif category == ProductCategory.OPTION:
+            elif category == Bybit.ProductCategory.OPTION:
                 schema['asset_type'] = CryptoAssetType.OPT
                 schema['option_type'] = ('optionsType', lambda option_type: OptionType[option_type.upper()])
                 schema['strike_price'] = ('symbol', lambda symbol: Decimal(symbol.split('-')[2]))

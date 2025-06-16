@@ -1,23 +1,42 @@
 from __future__ import annotations
-from typing import Callable, Any, TYPE_CHECKING
+from typing import Callable, Any, TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from websocket import WebSocket
+    from pfund.exchanges.rest_api_base import Result, RawResult
     from pfund.products.product_base import BaseProduct
     from pfund.products.product_bybit import tPRODUCT_CATEGORY
 
 import asyncio
 import datetime
+from enum import StrEnum
 from decimal import Decimal
 
-from pfund.enums import CryptoExchange
+from pfund.enums import CryptoExchange, CryptoAssetType, AssetTypeModifier
 from pfund.exchanges.exchange_base import BaseExchange
 from pfund.accounts.account_crypto import CryptoAccount
 from pfund.orders.order_crypto import CryptoOrder
-from pfund.products.product_bybit import ProductCategory
 
 
+tPRODUCT_CATEGORY = Literal['LINEAR', 'INVERSE', 'SPOT', 'OPTION']
+    
+    
 class Exchange(BaseExchange):
     name = CryptoExchange.BYBIT
+    class ProductCategory(StrEnum):
+        LINEAR = 'LINEAR'
+        INVERSE = 'INVERSE'
+        SPOT = 'SPOT'
+        OPTION = 'OPTION'
+    # REVIEW
+    SUPPORTED_ASSET_TYPES: list = [
+        CryptoAssetType.FUTURE,
+        CryptoAssetType.PERPETUAL,
+        CryptoAssetType.OPTION,
+        CryptoAssetType.CRYPTO,
+        CryptoAssetType.INDEX,
+        AssetTypeModifier.INVERSE + '-' + CryptoAssetType.FUTURE,
+        AssetTypeModifier.INVERSE + '-' + CryptoAssetType.PERPETUAL,
+    ]
 
     # TODO: may allow configure exchange behaviours such as use place_order over place_batch_orders for rate limit control
     # def configure(self, ...):
@@ -38,14 +57,15 @@ class Exchange(BaseExchange):
     Functions using REST API
     TODO EXTEND
     '''
-    async def aget_markets(self, category: tPRODUCT_CATEGORY='') -> dict:
-        categories = [ProductCategory[category.upper()]] if category else [category for category in ProductCategory]
-        markets: dict[ProductCategory, list[dict]] = {}
+    async def aget_markets(self, category: tPRODUCT_CATEGORY='') -> dict[ProductCategory, Result | RawResult]:
+        categories = [self.ProductCategory[category.upper()]] if category else [category for category in self.ProductCategory]
+        markets: dict[self.ProductCategory, Result | RawResult] = {}
         for category in categories:
-            markets[category] = await self._rest_api.get_markets(category=category)
+            result: Result | RawResult = await self._rest_api.get_markets(category=category)
+            markets[category] = result
         return markets
 
-    def get_markets(self, category: tPRODUCT_CATEGORY='') -> dict | None:
+    def get_markets(self, category: tPRODUCT_CATEGORY='') -> dict[ProductCategory, Result | RawResult]:
         return asyncio.run(self.aget_markets(category=category))
 
     def get_balances(self, account: CryptoAccount, ccy: str='', **kwargs) -> dict[str, dict]:

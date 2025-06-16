@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    from pfeed.typing import tStorage
     from pfund.typing import tEnvironment
     
 import os
@@ -11,7 +12,7 @@ import logging
 import shutil
 import importlib.resources
 from types import TracebackType
-from dataclasses import dataclass, asdict, MISSING
+from dataclasses import dataclass, asdict, field, MISSING
 
 import yaml
 # from rich.traceback import install
@@ -72,6 +73,9 @@ class Configuration:
     docker_compose_file_path: str = f'{CONFIG_PATH}/docker-compose.yml'
     custom_excepthook: bool = True
     debug: bool = False
+    storage: tStorage = 'LOCAL'
+    storage_options: dict = field(default_factory=dict)
+    use_deltalake: bool = False
 
     # NOTE: without type annotation, they will NOT be treated as dataclass fields but as class attributes
     _logging_config = {}
@@ -195,8 +199,15 @@ class Configuration:
         return f'{self.data_path}/artifacts'
     
     def __post_init__(self):
+        self._initialize()
+        
+    def _initialize(self):
         self._initialize_files()
-        self._initialize_configs()
+        self._initialize_file_paths()
+        if self.custom_excepthook and sys.excepthook is sys.__excepthook__:
+            sys.excepthook = _custom_excepthook
+        if self.debug:
+            self.enable_debug_mode()
         
     def _initialize_files(self):
         '''Creates .env and copy logging.yml and docker-compose.yml from package directory to the user config path'''
@@ -212,26 +223,19 @@ class Configuration:
             except Exception as e:
                 print(f'Error creating or copying {path.name}: {e}')
         
-    def _initialize_configs(self):
+    def _initialize_file_paths(self):
         for path in [
-            self.cache_path, self.log_path,
+            self.cache_path, self.log_path, self.data_path, self.backtest_path, 
             self.strategy_path, self.model_path, self.feature_path, self.indicator_path,
-            self.backtest_path, self.notebook_path, self.dashboard_path,
-            self.artifact_path,
+            self.notebook_path, self.dashboard_path, self.artifact_path,
         ]:
             if not os.path.exists(path):
                 os.makedirs(path)
                 if self._verbose:
-                    print(f'created {path}')
+                    print(f'{PROJ_NAME} created {path}')
             sys.path.append(path)
-            if path not in [self.backtest_path, self.cache_path, self.log_path]:
+            if path not in [self.backtest_path, self.cache_path, self.data_path, self.log_path]:
                 _dynamic_import(path)
-        
-        if self.custom_excepthook and sys.excepthook is sys.__excepthook__:
-            sys.excepthook = _custom_excepthook
-        
-        if self.debug:
-            self.enable_debug_mode()
     
     def enable_debug_mode(self):
         '''Enables debug mode by setting the log level to DEBUG for all stream handlers'''
@@ -251,11 +255,15 @@ class Configuration:
 def configure(
     data_path: str | None = None,
     log_path: str | None = None,
+    cache_path: str | None = None,
     logging_config_file_path: str | None = None,
     logging_config: dict | None = None,
     docker_compose_file_path: str | None = None,
     custom_excepthook: bool | None = None,
     debug: bool | None = None,
+    storage: tStorage | None = None,
+    storage_options: dict | None = None,
+    use_deltalake: bool | None = None,
     verbose: bool = False,
     write: bool = False,
 ):
@@ -281,7 +289,7 @@ def configure(
     if write:
         config.dump()
         
-    config._initialize_configs()
+    config._initialize()
     return config
 
 
