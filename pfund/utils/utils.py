@@ -101,7 +101,7 @@ def get_telegram_bot_updates(token):
     ret = requests.get(url)
     try:
         return ret.json()
-    except:
+    except Exception:
         return ret
 
 
@@ -112,9 +112,9 @@ def get_last_modified_time(file_path: str) -> datetime.datetime:
     return datetime.datetime.fromtimestamp(last_modified_time, tz=datetime.timezone.utc)
 
 
-def parse_message_with_schema(message: dict, schema: dict) -> list[dict]:
+def parse_raw_result(result: dict | list[dict], schema: dict) -> list[dict]:
     """
-    Parse API returned message according to schema definition.
+    Parse API returned raw result according to schema definition.
     
     The schema supports:
     1. Direct string values (hardcoded values)
@@ -125,16 +125,16 @@ def parse_message_with_schema(message: dict, schema: dict) -> list[dict]:
         List[dict]: Always returns a list of parsed dictionaries for consistency,
                    even if input contains only a single item
     """
-    # Get the message to parse based on 'result' path
-    # result_path is e.g. ['result', 'list'], meaning that the message to parse is under 'result' and 'list'
+    # Get the result to parse based on 'result' path
+    # result_path is e.g. ['result', 'list'], meaning that the result to parse is under 'result' and 'list'
     result_path = schema.get('result', [])
     
     for key in result_path:
-        message = message[key]
+        result = result[key]
     
     # Convert single dict to list[dict] for consistency
-    if isinstance(message, dict):
-        message = [message]
+    if isinstance(result, dict):
+        result = [result]
     
     # Remove 'result' from schema since it's just a path indicator
     parse_schema = {k: v for k, v in schema.items() if k != 'result'}
@@ -174,7 +174,7 @@ def parse_message_with_schema(message: dict, schema: dict) -> list[dict]:
         return output
     
     # Parse all items and always return a list
-    return [parse_single_item(item) for item in message]
+    return [parse_single_item(item) for item in result]
 
 
 def find_strategy_class(strat: str):

@@ -35,7 +35,7 @@ class Adapter:
         from pfund.const.paths import PROJ_PATH
         from pfund.enums import CryptoExchange
         tv_type = 'exchanges' if self._trading_venue in CryptoExchange.__members__ else 'brokers'
-        return PROJ_PATH / tv_type / self._trading_venue.value.lower() / self.FILENAME
+        return PROJ_PATH / tv_type / self._trading_venue.lower() / self.FILENAME
     
     def _load_config(self, file_path: Path):
         '''Loads adapter.yml'''

@@ -12,10 +12,12 @@ import logging
 import importlib
 from abc import ABC, abstractmethod
 from enum import StrEnum
+from pathlib import Path
 
 from httpx import AsyncClient
 
-from pfund.utils.utils import parse_message_with_schema
+from pfund.const.paths import CACHE_PATH
+from pfund.utils.utils import load_yaml_file, dump_yaml_file, parse_raw_result
 from pfund.enums import Environment, CryptoExchange
 
 
@@ -28,7 +30,7 @@ class ResultData(TypedDict):
     exchange: CryptoExchange
     account: str | None
     message: dict | None
-    
+
 
 class RequestData(TypedDict):
     endpoint_name: str
@@ -55,6 +57,7 @@ class RequestMethod(StrEnum):
 
 class BaseRestApi(ABC):
     name: ClassVar[CryptoExchange]
+    SAMPLES_FILENAME = 'rest_api_samples.yml'
 
     URLS: ClassVar[dict[Environment, str]] = {}
     PUBLIC_ENDPOINTS: ClassVar[dict[EndpointName, tuple[RequestMethod, EndpointPath]]] = {}
@@ -63,10 +66,19 @@ class BaseRestApi(ABC):
     def __init__(self, env: Environment | tEnvironment):
         self._env = Environment[env.upper()]
         self._logger = logging.getLogger(self.name.lower())
+        self._dev_mode = False
         Exchange: type[BaseExchange] = getattr(importlib.import_module(f'pfund.exchanges.{self.name.lower()}.exchange'), 'Exchange')
         self._adapter: Adapter = Exchange._adapter
         self._url: str | None = self.URLS.get(self._env, None)
         self._client = AsyncClient()
+        
+    def _enable_dev_mode(self):
+        '''If enabled, returns only raw messages for all endpoints and stores them automatically to a yaml file as samples in caches.'''
+        self._dev_mode = True
+        self._logger.warning(
+            "DEV mode is enabled. This mode is intended **only** for internal development of the pfund library. "
+            "It should never be used in production or by end users."
+        )
         
     @property
     def nonce():
@@ -105,10 +117,23 @@ class BaseRestApi(ABC):
             endpoint = self._url + endpoint_path
         return method, endpoint
     
+    @property
+    def sample_file_path(self) -> Path:
+        return CACHE_PATH / self.name / self.SAMPLES_FILENAME
+    
+    def _append_sample_return(self, endpoint_name: EndpointName, raw_result: RawResult):
+        existing_samples = load_yaml_file(self.sample_file_path) or {}
+        existing_samples[endpoint_name] = raw_result
+        dump_yaml_file(self.sample_file_path, existing_samples)
+    
+    def get_sample_return(self, endpoint_name: EndpointName) -> RawResult:
+        samples = load_yaml_file(self.sample_file_path)
+        return samples[endpoint_name]
+    
     async def _request(
         self,
         endpoint_name: EndpointName,
-        schema: dict | None=None,
+        schema: dict,
         account: CryptoAccount | None=None,
         # data: dict | None=None,  # FIXME
         params: dict | None=None,
@@ -142,15 +167,16 @@ class BaseRestApi(ABC):
         try:
             response: Response = await self._client.send(request)
             try:
+                raw_result: RawResult = response.raise_for_status().json()
+                if self._dev_mode:
+                    self._append_sample_return(endpoint_name, raw_result)
+                    return raw_result
                 result['request']['status_code'] = response.status_code
-                msg = response.raise_for_status().json()
-                if schema is None:
-                    return msg
-                result['is_success'] = response.is_success and self._is_success(msg)
-                if result['is_success']:
-                    result['data']['message'] = parse_message_with_schema(msg, schema)
-                else:
-                    result['data']['message'] = msg
+                is_success = response.is_success and self._is_success(raw_result)
+                result['is_success'] = is_success
+                result['data']['message'] = parse_raw_result(raw_result, schema) if is_success else raw_result
+                if not is_success:
+                    self._logger.warning(f'"{endpoint_name}" failed: {raw_result}')
             except Exception as exc:
                 from httpx import RequestError, HTTPStatusError
                 from json import JSONDecodeError
