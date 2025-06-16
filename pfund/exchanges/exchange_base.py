@@ -1,6 +1,7 @@
 from __future__ import annotations  
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, TypeAlias
 if TYPE_CHECKING:
+    from pfund.exchanges.rest_api_base import Result, RawResult
     from pfund.typing import tEnvironment, ProductKey, AccountName
     from pfund.products.product_crypto import CryptoProduct
     from pfund.accounts.account_crypto import CryptoAccount
@@ -19,6 +20,9 @@ from abc import ABC, abstractmethod
 from pfund.adapter import Adapter
 from pfund.managers.order_manager import OrderUpdateSource
 from pfund.enums import Environment, Broker, CryptoExchange, PublicDataChannel, PrivateDataChannel, DataChannelType
+
+
+ProductCategory: TypeAlias = str
 
 
 class BaseExchange(ABC):
@@ -138,13 +142,19 @@ class BaseExchange(ABC):
         - Tick sizes (minimum price increments)
         - Lot sizes (minimum quantity increments) 
         - Listed markets/trading pairs
-        and then save them to the cache.
+        and then append them to the existing market configs.
         '''
-        from pfund.utils.utils import dump_yaml_file
-        markets: dict = self.get_markets()
+        from pfund.utils.utils import load_yaml_file, dump_yaml_file
+        markets: dict[ProductCategory, Result | RawResult] = self.get_markets()
         market_configs_file_path = self.get_file_path(self.MARKET_CONFIGS_FILENAME)
-        dump_yaml_file(file_path=market_configs_file_path, data=markets)
-            # self._logger.warning('failed to fetch market configs')
+        existing_market_configs = load_yaml_file(market_configs_file_path) or {}
+        for category, result in markets.items():
+            is_success = result['is_success']
+            if not is_success:
+                self._logger.warning(f'failed to fetch market configs for {category}')
+                continue
+            existing_market_configs[category] = result
+        dump_yaml_file(market_configs_file_path, existing_market_configs)
 
     def create_product(self, basis: str, alias: str='', **specs) -> CryptoProduct:
         from pfund.products.product_base import ProductFactory
