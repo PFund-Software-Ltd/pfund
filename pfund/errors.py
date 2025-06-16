@@ -1,8 +1,7 @@
-# TODO
-class Error(Exception):
+class PFundError(Exception):
     pass
 
 
-class ExampleError(Error):
-    def __init__(self, msg):
-        self.msg = msg
+class ParseRawResultError(PFundError):
+    """Raised when parsing raw result from REST API or WebSocket API fails"""
+    pass

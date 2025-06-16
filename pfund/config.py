@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, Union
 if TYPE_CHECKING:
     from pfeed.typing import tStorage
     from pfund.typing import tEnvironment
@@ -14,10 +14,11 @@ import importlib.resources
 from types import TracebackType
 from dataclasses import dataclass, asdict, field, MISSING
 
-import yaml
 # from rich.traceback import install
 
+from pfeed.enums import DataStorage
 from pfund.enums import Environment
+from pfund.utils.utils import load_yaml_file, dump_yaml_file
 from pfund.const.paths import (
     PROJ_NAME, 
     LOG_PATH,
@@ -42,6 +43,8 @@ def _custom_excepthook(exception_class: type[BaseException], exception: BaseExce
     logging.getLogger(PROJ_NAME).exception('Uncaught exception:', exc_info=(exception_class, exception, traceback))
         
         
+# FIXME: should move this to pfund-hub
+# it enables dynamic import like this: from pfund.strategies import SomeStrategy
 def _dynamic_import(path: str):
     for item in os.listdir(path):
         item_path = os.path.join(path, item)
@@ -66,14 +69,14 @@ def _dynamic_import(path: str):
 
 @dataclass
 class Configuration:
-    data_path: str = str(DATA_PATH)
-    log_path: str = str(LOG_PATH)
-    cache_path: str = str(CACHE_PATH)
-    logging_config_file_path: str = f'{CONFIG_PATH}/logging.yml'
-    docker_compose_file_path: str = f'{CONFIG_PATH}/docker-compose.yml'
+    data_path: Path = DATA_PATH
+    log_path: Path = LOG_PATH
+    cache_path: Path = CACHE_PATH
+    logging_config_file_path: Path = CONFIG_PATH / 'logging.yml'
+    docker_compose_file_path: Path = CONFIG_PATH / 'docker-compose.yml'
     custom_excepthook: bool = True
     debug: bool = False
-    storage: tStorage = 'LOCAL'
+    storage: DataStorage = DataStorage.LOCAL
     storage_options: dict = field(default_factory=dict)
     use_deltalake: bool = False
 
@@ -81,6 +84,16 @@ class Configuration:
     _logging_config = {}
     _instance = None
     _verbose = False
+
+    # REVIEW: this won't be needed if we use pydantic.BaseModel instead of dataclass
+    def _enforce_types(self):
+        config_dict = asdict(self)
+        for k, v in config_dict.items():
+            _field = self.__dataclass_fields__[k]
+            if _field.type == 'Path' and isinstance(v, str):
+                setattr(self, k, Path(v))
+            elif _field.type == 'DataStorage' and isinstance(v, str):
+                setattr(self, k, DataStorage[v.upper()])
 
     @classmethod
     def get_instance(cls):
@@ -122,24 +135,23 @@ class Configuration:
                 
         needs_update = False
         if CONFIG_FILE_PATH.is_file():
-            with open(CONFIG_FILE_PATH, 'r') as f:
-                saved_config = yaml.safe_load(f) or {}
-                if cls._verbose:
-                    print(f"Loaded {CONFIG_FILE_PATH}")
-                # Check for new or removed fields
-                new_fields = set(default_config.keys()) - set(saved_config.keys())
-                removed_fields = set(saved_config.keys()) - set(default_config.keys())
-                needs_update = bool(new_fields or removed_fields)
-                
-                if cls._verbose and needs_update:
-                    if new_fields:
-                        print(f"New config fields detected: {new_fields}")
-                    if removed_fields:
-                        print(f"Removed config fields detected: {removed_fields}")
-                        
-                # Filter out removed fields and merge with defaults
-                saved_config = {k: v for k, v in saved_config.items() if k in default_config}
-                config = {**default_config, **saved_config}
+            current_config = load_yaml_file(CONFIG_FILE_PATH)
+            if cls._verbose:
+                print(f"Loaded {CONFIG_FILE_PATH}")
+            # Check for new or removed fields
+            new_fields = set(default_config.keys()) - set(current_config.keys())
+            removed_fields = set(current_config.keys()) - set(default_config.keys())
+            needs_update = bool(new_fields or removed_fields)
+            
+            if cls._verbose and needs_update:
+                if new_fields:
+                    print(f"New config fields detected: {new_fields}")
+                if removed_fields:
+                    print(f"Removed config fields detected: {removed_fields}")
+                    
+            # Filter out removed fields and merge with defaults
+            current_config = {k: v for k, v in current_config.items() if k in default_config}
+            config = {**default_config, **current_config}
         else:
             config = default_config
             needs_update = True
@@ -149,10 +161,9 @@ class Configuration:
         return config
     
     def dump(self):
-        with open(CONFIG_FILE_PATH, 'w') as f:
-            yaml.dump(asdict(self), f, default_flow_style=False)
-            if self._verbose:
-                print(f"Created {CONFIG_FILE_PATH}")
+        dump_yaml_file(CONFIG_FILE_PATH, asdict(self))
+        if self._verbose:
+            print(f"Created {CONFIG_FILE_PATH}")
     
     @property
     def logging_config(self):
@@ -162,46 +173,37 @@ class Configuration:
     def logging_config(self, value: dict):
         self._logging_config = value
     
-    @property
-    def file_path(self):
-        return CONFIG_FILE_PATH
-    
-    @property
-    def strategy_path(self):
-        return f'{self.data_path}/hub/strategies'
-    
-    @property
-    def model_path(self):
-        return f'{self.data_path}/hub/models'
-    
-    @property
-    def feature_path(self):
-        return f'{self.data_path}/hub/features'
-    
-    @property
-    def indicator_path(self):
-        return f'{self.data_path}/hub/indicators'
-    
-    @property
-    def backtest_path(self):
-        return f'{self.data_path}/backtests'
-    
-    @property
-    def notebook_path(self):
-        return f'{self.data_path}/templates/notebooks'
-    
-    @property
-    def dashboard_path(self):
-        return f'{self.data_path}/templates/dashboards'
-    
-    @property
-    def artifact_path(self):
-        return f'{self.data_path}/artifacts'
+    def get_path(
+        self, 
+        name: Union[
+            Literal['config', 'cache', 'log', 'data'],
+            Literal['backtest', 'hub', 'template'],
+            Literal['strategy', 'model', 'feature', 'indicator'],
+            Literal['notebook', 'dashboard'],
+        ]
+    ) -> Path:
+        if name == 'config':
+            return CONFIG_FILE_PATH
+        elif name in ['cache', 'log', 'data']:
+            return getattr(self, f'{name}_path')
+        elif name in ['backtest', 'template']:
+            return self.data_path / f'{name}s'
+        elif name == 'hub':
+            return self.data_path / 'hub'
+        elif name == 'strategy':
+            return self.data_path / 'hub' / 'strategies'
+        elif name in ['model', 'feature', 'indicator']:
+            return self.data_path / 'hub' / f'{name}s'
+        elif name in ['notebook', 'dashboard']:
+            return self.data_path / 'templates' / f'{name}s'
+        else:
+            raise ValueError(f'Invalid path name: {name}')
     
     def __post_init__(self):
         self._initialize()
         
     def _initialize(self):
+        self._enforce_types()
         self._initialize_files()
         self._initialize_file_paths()
         if self.custom_excepthook and sys.excepthook is sys.__excepthook__:
@@ -210,32 +212,25 @@ class Configuration:
             self.enable_debug_mode()
         
     def _initialize_files(self):
-        '''Creates .env and copy logging.yml and docker-compose.yml from package directory to the user config path'''
+        '''Copies logging.yml and docker-compose.yml from package directory to the user config path'''
         package_dir = Path(importlib.resources.files(PROJ_NAME)).resolve().parents[0]
         for path in [self.logging_config_file_path, self.docker_compose_file_path]:
-            path = Path(path)
+            if path.exists():
+                continue
             try:
-                if not path.exists():
-                    # copies the file from site-packages/pfund to the user config path
-                    filename = path.name
-                    shutil.copy(package_dir / filename, CONFIG_PATH)
-                    print(f'Created {filename} in {CONFIG_PATH}')
+                filename = path.name
+                # copies the file from site-packages/pfund to the user config path
+                shutil.copy(package_dir / filename, CONFIG_PATH)
+                print(f'Created {filename} in {CONFIG_PATH}')
             except Exception as e:
                 print(f'Error creating or copying {path.name}: {e}')
         
     def _initialize_file_paths(self):
-        for path in [
-            self.cache_path, self.log_path, self.data_path, self.backtest_path, 
-            self.strategy_path, self.model_path, self.feature_path, self.indicator_path,
-            self.notebook_path, self.dashboard_path, self.artifact_path,
-        ]:
+        for path in [self.cache_path, self.log_path, self.data_path]:
             if not os.path.exists(path):
                 os.makedirs(path)
                 if self._verbose:
                     print(f'{PROJ_NAME} created {path}')
-            sys.path.append(path)
-            if path not in [self.backtest_path, self.cache_path, self.data_path, self.log_path]:
-                _dynamic_import(path)
     
     def enable_debug_mode(self):
         '''Enables debug mode by setting the log level to DEBUG for all stream handlers'''
@@ -256,9 +251,11 @@ def configure(
     data_path: str | None = None,
     log_path: str | None = None,
     cache_path: str | None = None,
+    # TODO: when mtflow is ready
+    # artifact_path: str | None = None,  
     logging_config_file_path: str | None = None,
-    logging_config: dict | None = None,
     docker_compose_file_path: str | None = None,
+    logging_config: dict | None = None,
     custom_excepthook: bool | None = None,
     debug: bool | None = None,
     storage: tStorage | None = None,

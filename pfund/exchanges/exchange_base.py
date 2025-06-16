@@ -1,6 +1,7 @@
 from __future__ import annotations  
 from typing import TYPE_CHECKING, ClassVar, TypeAlias
 if TYPE_CHECKING:
+    from pathlib import Path
     from pfund.exchanges.rest_api_base import Result, RawResult
     from pfund.typing import tEnvironment, ProductKey, AccountName
     from pfund.products.product_crypto import CryptoProduct
@@ -12,7 +13,6 @@ import os
 import datetime
 import logging
 import importlib
-from pathlib import Path
 from functools import reduce
 from collections import defaultdict
 from abc import ABC, abstractmethod
@@ -77,7 +77,7 @@ class BaseExchange(ABC):
         from pfund.config import get_config
         config = get_config()
         file_paths = {
-            cls.MARKET_CONFIGS_FILENAME: Path(config.cache_path) / cls.name
+            cls.MARKET_CONFIGS_FILENAME: config.cache_path / cls.name
         }
         if filename in file_paths:
             return file_paths[filename] / filename
@@ -153,7 +153,7 @@ class BaseExchange(ABC):
             if not is_success:
                 self._logger.warning(f'failed to fetch market configs for {category}')
                 continue
-            existing_market_configs[category] = result
+            existing_market_configs[category.upper()] = result['data']['message']
         dump_yaml_file(market_configs_file_path, existing_market_configs)
 
     def create_product(self, basis: str, alias: str='', **specs) -> CryptoProduct:

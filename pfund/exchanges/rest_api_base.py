@@ -15,8 +15,10 @@ from enum import StrEnum
 from pathlib import Path
 
 from httpx import AsyncClient
+from httpx import RequestError, HTTPStatusError
+from json import JSONDecodeError
 
-from pfund.const.paths import CACHE_PATH
+from pfund.errors import ParseRawResultError
 from pfund.utils.utils import load_yaml_file, dump_yaml_file, parse_raw_result
 from pfund.enums import Environment, CryptoExchange
 
@@ -119,7 +121,9 @@ class BaseRestApi(ABC):
     
     @property
     def sample_file_path(self) -> Path:
-        return CACHE_PATH / self.name / self.SAMPLES_FILENAME
+        from pfund.config import get_config
+        config = get_config()
+        return Path(config.cache_path) / self.name / self.SAMPLES_FILENAME
     
     def _append_sample_return(self, endpoint_name: EndpointName, raw_result: RawResult):
         existing_samples = load_yaml_file(self.sample_file_path) or {}
@@ -167,23 +171,20 @@ class BaseRestApi(ABC):
         }
         try:
             response: Response = await self._client.send(request)
-            try:
-                raw_result: RawResult = response.raise_for_status().json()
-                if self._dev_mode:
-                    self._append_sample_return(endpoint_name, raw_result)
-                    return raw_result
-                result['request']['status_code'] = response.status_code
-                is_success = response.is_success and self._is_success(raw_result)
-                result['is_success'] = is_success
-                result['data']['message'] = parse_raw_result(raw_result, schema) if is_success else raw_result
-                if not is_success:
-                    self._logger.warning(f'"{endpoint_name}" failed: {raw_result}')
-            except Exception as exc:
-                from httpx import RequestError, HTTPStatusError
-                from json import JSONDecodeError
-                result['error'] = f'{type(exc).__name__}: {exc}'
-                if not isinstance(exc, (JSONDecodeError, RequestError, HTTPStatusError)):
-                    self._logger.exception(f'Unhandled response exception when calling {endpoint_name}:')
-        except Exception:
-            self._logger.exception(f'Unhandled exception when calling {endpoint_name}:')
+            raw_result: RawResult = response.raise_for_status().json()
+            if self._dev_mode:
+                self._append_sample_return(endpoint_name, raw_result)
+                return raw_result
+            result['request']['status_code'] = response.status_code
+            is_success = response.is_success and self._is_success(raw_result)
+            result['is_success'] = is_success
+            result['data']['message'] = parse_raw_result(raw_result, schema) if is_success else raw_result
+            if not is_success:
+                self._logger.warning(f'"{endpoint_name}" failed: {raw_result}')
+        except (ParseRawResultError, JSONDecodeError, RequestError, HTTPStatusError) as exc:
+            result['error'] = f'{type(exc).__name__}: {exc}'
+            self._logger.exception(f'REST API "{endpoint_name}" error:')
+        except Exception as exc:
+            result['error'] = f'{type(exc).__name__}: {exc}'
+            self._logger.exception(f'Unhandled REST API exception when calling "{endpoint_name}":')
         return result

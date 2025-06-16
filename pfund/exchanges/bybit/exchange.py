@@ -4,7 +4,6 @@ if TYPE_CHECKING:
     from websocket import WebSocket
     from pfund.exchanges.rest_api_base import Result, RawResult
     from pfund.products.product_base import BaseProduct
-    from pfund.products.product_bybit import tPRODUCT_CATEGORY
 
 import asyncio
 import datetime

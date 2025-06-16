@@ -143,7 +143,8 @@ class RestApi(BaseRestApi):
             'asset_type': [
                 'contractType',
                 lambda asset_type: self._adapter(asset_type, group='asset_type'),
-                lambda asset_type: CryptoAssetType[asset_type.upper()],
+                # NOTE: INVERSE-PERPETUAL cannot be converted to CryptoAssetType
+                lambda asset_type: CryptoAssetType[asset_type.upper()] if asset_type in CryptoAssetType.__members__ else asset_type,
             ],
             'tick_size': ['priceFilter', 'tickSize', str],
             'lot_size': ['lotSizeFilter', 'qtyStep', str],

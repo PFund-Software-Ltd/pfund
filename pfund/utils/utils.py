@@ -5,9 +5,25 @@ import importlib
 import inspect
 import datetime
 from pathlib import Path
+from enum import StrEnum
+from decimal import Decimal
 
-
+import yaml
 from pfund.enums import RunMode
+
+# HACK: need to add this to yaml so that StrEnum can be dumped to yaml
+yaml.SafeDumper.add_multi_representer(
+    StrEnum,
+    yaml.representer.SafeRepresenter.represent_str,
+)
+yaml.SafeDumper.add_multi_representer(
+    Decimal,
+    lambda dumper, data: dumper.represent_str(str(data))
+)
+yaml.SafeDumper.add_multi_representer(
+    Path,
+    lambda dumper, data: dumper.represent_str(str(data))
+)
 
 
 class Singleton:
@@ -76,7 +92,6 @@ def lowercase(func):
 
 
 def load_yaml_file(file_path) -> dict | list[dict] | None:
-    import yaml
     if not os.path.exists(file_path):
         return None
     with open(file_path, 'r') as f:
@@ -90,9 +105,8 @@ def load_yaml_file(file_path) -> dict | list[dict] | None:
 
 
 def dump_yaml_file(file_path: str, data: dict | list[dict]):
-    import yaml
     with open(file_path, 'w') as f:
-        yaml.dump(data, f)
+        yaml.safe_dump(data, f, default_flow_style=False)
 
 
 def get_telegram_bot_updates(token):
@@ -125,56 +139,60 @@ def parse_raw_result(result: dict | list[dict], schema: dict) -> list[dict]:
         List[dict]: Always returns a list of parsed dictionaries for consistency,
                    even if input contains only a single item
     """
-    # Get the result to parse based on 'result' path
-    # result_path is e.g. ['result', 'list'], meaning that the result to parse is under 'result' and 'list'
-    result_path = schema.get('result', [])
-    
-    for key in result_path:
-        result = result[key]
-    
-    # Convert single dict to list[dict] for consistency
-    if isinstance(result, dict):
-        result = [result]
-    
-    # Remove 'result' from schema since it's just a path indicator
-    parse_schema = {k: v for k, v in schema.items() if k != 'result'}
+    from pfund.errors import ParseRawResultError
+    try:
+        # Get the result to parse based on 'result' path
+        # result_path is e.g. ['result', 'list'], meaning that the result to parse is under 'result' and 'list'
+        result_path = schema.get('result', [])
+        
+        for key in result_path:
+            result = result[key]
+        
+        # Convert single dict to list[dict] for consistency
+        if isinstance(result, dict):
+            result = [result]
+        
+        # Remove 'result' from schema since it's just a path indicator
+        parse_schema = {k: v for k, v in schema.items() if k != 'result'}
 
-    def parse_single_item(item: dict) -> dict:
-        output = {}
-        for key, value_path in parse_schema.items():
-            # Case 1: Path with optional transformers
-            if isinstance(value_path, (list, tuple)):
-                current_value = item
-                for transformer in value_path:
-                    if isinstance(transformer, str):
-                        if transformer in current_value:
-                            current_value = current_value[transformer]
-                        else:
-                            current_value = None
-                            break
-                    else:
-                        # Apply function transformer
-                        current_value = transformer(current_value)
-                output[key] = current_value
-            # Case 2: Nested schema
-            elif isinstance(value_path, dict):
-                nested_output = {}
-                for nested_key, nested_value_path in value_path.items():
+        def parse_single_item(item: dict) -> dict:
+            output = {}
+            for key, value_path in parse_schema.items():
+                # Case 1: Path with optional transformers
+                if isinstance(value_path, (list, tuple)):
                     current_value = item
-                    for transformer in nested_value_path:
+                    for transformer in value_path:
                         if isinstance(transformer, str):
-                            current_value = current_value[transformer]
+                            if transformer in current_value:
+                                current_value = current_value[transformer]
+                            else:
+                                current_value = None
+                                break
                         else:
+                            # Apply function transformer
                             current_value = transformer(current_value)
-                    nested_output[nested_key] = current_value
-                output[key] = nested_output
-            # Case 3: Hardcoded value
-            else:
-                output[key] = value_path
-        return output
-    
-    # Parse all items and always return a list
-    return [parse_single_item(item) for item in result]
+                    output[key] = current_value
+                # Case 2: Nested schema
+                elif isinstance(value_path, dict):
+                    nested_output = {}
+                    for nested_key, nested_value_path in value_path.items():
+                        current_value = item
+                        for transformer in nested_value_path:
+                            if isinstance(transformer, str):
+                                current_value = current_value[transformer]
+                            else:
+                                current_value = transformer(current_value)
+                        nested_output[nested_key] = current_value
+                    output[key] = nested_output
+                # Case 3: Hardcoded value
+                else:
+                    output[key] = value_path
+            return output
+        
+        # Parse all items and always return a list
+        return [parse_single_item(item) for item in result]
+    except Exception as exc:
+        raise ParseRawResultError(f'Failed to parse raw result: {exc}')
 
 
 def find_strategy_class(strat: str):
