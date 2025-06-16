@@ -1,7 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.typing import tStorage
     from pfund.typing import tEnvironment
     
 import os
@@ -12,7 +11,7 @@ import logging
 import shutil
 import importlib.resources
 from types import TracebackType
-from dataclasses import dataclass, asdict, field, MISSING
+from dataclasses import dataclass, asdict, MISSING
 
 import yaml
 # from rich.traceback import install
@@ -73,9 +72,6 @@ class Configuration:
     docker_compose_file_path: str = f'{CONFIG_PATH}/docker-compose.yml'
     custom_excepthook: bool = True
     debug: bool = False
-    storage: tStorage = 'local'
-    storage_options: dict = field(default_factory=dict)
-    use_deltalake: bool = False
 
     # NOTE: without type annotation, they will NOT be treated as dataclass fields but as class attributes
     _logging_config = {}
@@ -260,9 +256,6 @@ def configure(
     docker_compose_file_path: str | None = None,
     custom_excepthook: bool | None = None,
     debug: bool | None = None,
-    storage: tStorage | None = None,
-    storage_options: dict | None = None,
-    use_deltalake: bool | None = None,
     verbose: bool = False,
     write: bool = False,
 ):

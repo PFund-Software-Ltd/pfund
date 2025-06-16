@@ -64,6 +64,7 @@ class BacktestMixin:
     # TODO
     @property
     def train_set(self: BaseStrategy | BaseModel) -> GenericFrame:
+        # FIXME: should use pfeed's config?
         storage_config = self._engine._storage_config
         return self.store.load_data_from_storage(
             storage=storage_config.storage,
