@@ -6,12 +6,14 @@ if TYPE_CHECKING:
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.datas.data_base import BaseData
     from pfund.typing import tCryptoExchange, tEnvironment
+    from pfund.enums import OrderSide
 
 import inspect
 import importlib
 from threading import Thread
 
 from pfund.enums import Environment, Broker
+from pfund.products.product_crypto import CryptoProduct
 from pfund.orders.order_crypto import CryptoOrder
 from pfund.positions.position_crypto import CryptoPosition
 from pfund.balances.balance_crypto import CryptoBalance
@@ -112,7 +114,7 @@ class CryptoBroker(TradeBroker):
     def get_product(self, exch: tCryptoExchange, basis: str, **specs) -> BaseProduct | None:
         from pfund.products.product_base import BaseProduct
         exch = CryptoExchange[exch.upper()]
-        product_key: str = BaseProduct._create_product_key(exch, basis, **specs)
+        product_key: str = BaseProduct._generate_key(exch, basis, **specs)
         return self._products[exch].get(product_key, None)
     
     def add_product(self, exch: tCryptoExchange, basis: str, alias: str='', **specs) -> BaseProduct:
@@ -234,8 +236,17 @@ class CryptoBroker(TradeBroker):
             account = self.get_account(exch, acc)
             return exchange.get_positions(account, pdt=pdt, **kwargs)
 
-    def create_order(self, account: CryptoAccount, product: BaseProduct, side: int, quantity: float, price=None, **kwargs):
-        return CryptoOrder(account, product, side, qty=quantity, px=price, **kwargs)
+    def create_order(
+        self, 
+        creator: str, 
+        account: CryptoAccount, 
+        product: CryptoProduct, 
+        side: OrderSide | Literal['BUY', 'SELL'] | Literal[1, -1],
+        quantity: float,
+        price=None, 
+        **kwargs
+    ):
+        return CryptoOrder(creator=creator, account=account, product=product, side=side, qty=quantity, px=price, **kwargs)
     
     def place_orders(self, account: CryptoAccount, product: BaseProduct, orders: list[BaseOrder]):
         exchange = self.get_exchange(account.exch)

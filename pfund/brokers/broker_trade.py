@@ -4,11 +4,14 @@ if TYPE_CHECKING:
     from pfeed.enums import DataSource
     from pfeed.typing import tDataSource
     from pfeed.feeds.market_feed import MarketFeed
+    from pfund.orders.order_base import BaseOrder
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.brokers.broker_crypto import CryptoBroker
     from pfund.brokers.ib.broker_ib import IBBroker
     from pfund.engines.trade_engine_settings import TradeEngineSettings
     from pfund.typing import tEnvironment
+
+from abc import abstractmethod
 
 from pfund.enums import Environment, PublicDataChannel, PrivateDataChannel, DataChannelType
 from pfund.brokers.broker_base import BaseBroker
@@ -98,3 +101,11 @@ class TradeBroker(BaseBroker):
         scheduler.add_job(self.reconcile_trades, 'interval', seconds=10)
         for manager in [self._connection_manager, self._order_manager, self._portfolio_manager]:
             manager.schedule_jobs(scheduler)
+            
+    @abstractmethod
+    def create_order(self, *args, **kwargs) -> BaseOrder:
+        pass
+    
+    @abstractmethod
+    def place_order(self, *args, **kwargs) -> BaseOrder:
+        pass

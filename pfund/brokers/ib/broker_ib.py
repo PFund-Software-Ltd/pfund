@@ -229,7 +229,7 @@ class IBBroker(TradeBroker):
         exch, acc, pdt = convert_to_uppercases(exch, acc, pdt)
         # FIXME, positions should be acc -> pdt -> exch? havan't decided yet
         if not acc:
-            acc = self.account.acc
+            acc = self.account.name
         positions = self.positions[acc]
         if not exch:
             if pdt:

@@ -1,32 +1,40 @@
 from __future__ import annotations
 
+from enum import StrEnum
+
 from pydantic import model_validator
 
 from pfund.enums import TradingVenue, CryptoExchange, CryptoAssetType, AssetTypeModifier
 from pfund.products.product_crypto import CryptoProduct
-from pfund.exchanges import Bybit
 
 
 class BybitProduct(CryptoProduct):
+    class ProductCategory(StrEnum):
+        LINEAR = 'LINEAR'
+        INVERSE = 'INVERSE'
+        SPOT = 'SPOT'
+        OPTION = 'OPTION'
+        
     trading_venue: TradingVenue = TradingVenue.BYBIT
     exchange: CryptoExchange = CryptoExchange.BYBIT
-    category: Bybit.ProductCategory | None = None
+    category: ProductCategory | None = None
 
     @model_validator(mode='after')
-    def _derive_product_category(self) -> Bybit.ProductCategory:
+    def _derive_product_category(self) -> ProductCategory:
         if self.asset_type == CryptoAssetType.CRYPTO:
-            category = Bybit.ProductCategory.SPOT
+            category = self.ProductCategory.SPOT
         elif self.is_inverse():
-            category = Bybit.ProductCategory.INVERSE
+            category = self.ProductCategory.INVERSE
         elif self.asset_type == CryptoAssetType.OPT:
-            category = Bybit.ProductCategory.OPTION
+            category = self.ProductCategory.OPTION
         else:
-            category = Bybit.ProductCategory.LINEAR
+            category = self.ProductCategory.LINEAR
         self.category = category
         return self
     
     @model_validator(mode='after')
     def _validate_asset_type(self):
+        from pfund.exchanges import Bybit
         if str(self.asset_type) not in Bybit.SUPPORTED_ASSET_TYPES:
             raise ValueError(f"Invalid asset type: {self.asset_type}")
         return self

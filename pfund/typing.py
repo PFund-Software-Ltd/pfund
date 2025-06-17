@@ -30,6 +30,7 @@ tTradingVenue = Literal['IB', 'BINANCE', 'BYBIT', 'OKX']
 tBroker = Literal['CRYPTO', 'DEFI', 'IB']
 tCryptoExchange = Literal['BINANCE', 'BYBIT', 'OKX']
 tDatabase = Literal['DUCKDB', 'POSTGRESQL', 'PGLITE', 'TIMESCALEDB']
+tOrderType = Literal['LIMIT', 'MARKET', 'STOP_MARKET', 'STOP_LIMIT']
 
 
 class DatasetSplitsDict(TypedDict, total=True):

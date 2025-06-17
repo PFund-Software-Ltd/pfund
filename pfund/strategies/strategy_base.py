@@ -9,6 +9,7 @@ if TYPE_CHECKING:
         AccountName,
         Currency,
     )
+    from pfund.enums import OrderSide
     from pfund.products.product_base import BaseProduct
     from pfund.positions.position_base import BasePosition
     from pfund.positions.position_crypto import CryptoPosition
@@ -179,18 +180,26 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
     def stop(self, reason: str=''):
         super().stop(reason=reason)
 
-    def create_order(self, account: BaseAccount, product: BaseProduct, side: int, quantity: float, price: float | None=None, **kwargs):
+    def create_order(
+        self, 
+        account: BaseAccount, 
+        product: BaseProduct, 
+        side: OrderSide | Literal['BUY', 'SELL'] | Literal[1, -1],
+        quantity: float, 
+        price: float | None=None, 
+        **kwargs
+    ):
         broker = self.get_broker(account.bkr)
-        return broker.create_order(account, product, side, quantity, price=price, **kwargs)
+        return broker.create_order(creator=self.name, account=account, product=product, side=side, quantity=quantity, price=price, **kwargs)
     
-    def place_orders(self, account: BaseAccount, product: BaseProduct, orders: list[BaseOrder]|BaseOrder):
+    def place_orders(self, account: BaseAccount, product: BaseProduct, orders: list[BaseOrder] | BaseOrder):
         if not isinstance(orders, list):
             orders = [orders]
         broker = self.get_broker(account.bkr)
         broker.place_orders(account, product, orders)
         return orders
 
-    def cancel_orders(self, account: BaseAccount, product: BaseProduct, orders: list[BaseOrder]|BaseOrder):
+    def cancel_orders(self, account: BaseAccount, product: BaseProduct, orders: list[BaseOrder] | BaseOrder):
         if not isinstance(orders, list):
             orders = [orders]
         broker = self.get_broker(account.bkr)

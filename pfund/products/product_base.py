@@ -10,29 +10,6 @@ from pfund.products.product_basis import ProductBasis, ProductAssetType
 from pfund.enums import Broker, CryptoExchange, TradingVenue
 
 
-def ProductFactory(trading_venue: TradingVenue | str, basis: str) -> type[BaseProduct]:
-    import importlib
-    from pfund.products.product_basis import ProductBasis
-    from pfund.enums import AllAssetType, AssetTypeModifier
-    trading_venue = TradingVenue[trading_venue.upper()]
-    if trading_venue == TradingVenue.IB:
-        tv_capitalized = trading_venue.value
-    else:
-        tv_capitalized = trading_venue.capitalize()
-    Product = getattr(importlib.import_module(f'pfund.products.product_{trading_venue.lower()}'), f'{tv_capitalized}Product')
-    asset_type = ProductBasis(basis=basis.upper()).asset_type
-    Mixins = []
-    for t in asset_type:
-        if t in AssetTypeModifier.__members__:
-            Mixins.append(AssetTypeModifier[t].Mixin)
-        elif t in AllAssetType.__members__:
-            Mixins.append(AllAssetType[t].Mixin)
-        else:
-            raise ValueError(f"Invalid asset type for ProductFactory: {t}")
-    name = f'{tv_capitalized}' + ''.join([m.__name__.replace('Mixin', '') for m in Mixins]) + 'Product'
-    return type(name, (Product, *Mixins), {"__module__": __name__})
-
-
 class BaseProduct(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra='forbid')
 
@@ -46,7 +23,7 @@ class BaseProduct(BaseModel):
     key: str | None=None
     # if symbol is not provided, will be derived from name for TradFi brokers (e.g. IB). e.g. AAPL_USD_STK -> AAPL.
     symbol: str | None=None
-    alias: str | None=None
+    alias: str=''
     tick_size: Decimal | None=None
     lot_size: Decimal | None=None
     
@@ -79,7 +56,19 @@ class BaseProduct(BaseModel):
         self.specs = self._create_specs()
         if hasattr(self, '_create_symbol'):
             self.symbol = self._create_symbol()
-        self.key = self._create_product_key(self.trading_venue, self.basis, **self.specs)
+        self.key = self._generate_key(self.trading_venue, self.basis, **self.specs)
+    
+    @property
+    def tv(self) -> TradingVenue:
+        return self.trading_venue
+    
+    @property
+    def bkr(self) -> Broker:
+        return self.broker
+    
+    @property
+    def exch(self) -> CryptoExchange | str:
+        return self.exchange
     
     @property
     def base_asset(self) -> str:
@@ -106,7 +95,7 @@ class BaseProduct(BaseModel):
         }
         
     @staticmethod
-    def _create_product_key(trading_venue: TradingVenue | str, basis: str, **specs) -> str:
+    def _generate_key(trading_venue: TradingVenue | str, basis: str, **specs) -> str:
         return ':'.join([
             TradingVenue[trading_venue.upper()],
             str(basis),

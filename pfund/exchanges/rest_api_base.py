@@ -39,7 +39,6 @@ class RequestData(TypedDict):
     endpoint: str
     status_code: int | None
     params: dict | None
-    kwargs: dict | None
 
 
 class Result(TypedDict):
@@ -86,14 +85,13 @@ class BaseRestApi(ABC):
     def nonce():
         return int(time.time() * 1000)
     
-    abstractmethod
+    @abstractmethod
     def _build_request(
         self, 
         method: RequestMethod, 
         endpoint: str, 
         account: CryptoAccount | None=None,
         params: dict | None=None, 
-        **kwargs
     ) -> Request:
         pass
     
@@ -141,7 +139,6 @@ class BaseRestApi(ABC):
         account: CryptoAccount | None=None,
         # data: dict | None=None,  # FIXME
         params: dict | None=None,
-        **kwargs
     ) -> Result | RawResult:
         '''
         Args:
@@ -151,7 +148,7 @@ class BaseRestApi(ABC):
             assert account is None, f"Simulated environment {self._env} can only access public endpoints, account should NOT be provided"
 
         method, endpoint = self.get_endpoint(endpoint_name)
-        request: Request = self._build_request(method=method, endpoint=endpoint, account=account, params=params, **kwargs)
+        request: Request = self._build_request(method=method, endpoint=endpoint, account=account, params=params)
         result: Result = {
             'is_success': False,
             'error': None,
@@ -161,7 +158,6 @@ class BaseRestApi(ABC):
                 'status_code': None,
                 # 'data': data,  # FIXME: add data to result?
                 'params': params,
-                'kwargs': kwargs,
             },
             'data': {
                 'exchange': self.name,

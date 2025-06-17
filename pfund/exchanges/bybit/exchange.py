@@ -7,25 +7,21 @@ if TYPE_CHECKING:
 
 import asyncio
 import datetime
-from enum import StrEnum
 from decimal import Decimal
 
+from pfund.products.product_bybit import BybitProduct
 from pfund.enums import CryptoExchange, CryptoAssetType, AssetTypeModifier
 from pfund.exchanges.exchange_base import BaseExchange
 from pfund.accounts.account_crypto import CryptoAccount
 from pfund.orders.order_crypto import CryptoOrder
 
 
-tPRODUCT_CATEGORY = Literal['LINEAR', 'INVERSE', 'SPOT', 'OPTION']
+ProductCategory = BybitProduct.ProductCategory
+tProductCategory = Literal['LINEAR', 'INVERSE', 'SPOT', 'OPTION']
     
     
 class Exchange(BaseExchange):
     name = CryptoExchange.BYBIT
-    class ProductCategory(StrEnum):
-        LINEAR = 'LINEAR'
-        INVERSE = 'INVERSE'
-        SPOT = 'SPOT'
-        OPTION = 'OPTION'
     # REVIEW
     SUPPORTED_ASSET_TYPES: list = [
         CryptoAssetType.FUTURE,
@@ -56,15 +52,15 @@ class Exchange(BaseExchange):
     Functions using REST API
     TODO EXTEND
     '''
-    async def aget_markets(self, category: tPRODUCT_CATEGORY='') -> dict[ProductCategory, Result | RawResult]:
-        categories = [self.ProductCategory[category.upper()]] if category else [category for category in self.ProductCategory]
-        markets: dict[self.ProductCategory, Result | RawResult] = {}
+    async def aget_markets(self, category: tProductCategory='') -> dict[ProductCategory, Result | RawResult]:
+        categories = [ProductCategory[category.upper()]] if category else [category for category in ProductCategory]
+        markets: dict[ProductCategory, Result | RawResult] = {}
         for category in categories:
             result: Result | RawResult = await self._rest_api.get_markets(category=category)
             markets[category] = result
         return markets
 
-    def get_markets(self, category: tPRODUCT_CATEGORY='') -> dict[ProductCategory, Result | RawResult]:
+    def get_markets(self, category: tProductCategory='') -> dict[ProductCategory, Result | RawResult]:
         return asyncio.run(self.aget_markets(category=category))
 
     def get_balances(self, account: CryptoAccount, ccy: str='', **kwargs) -> dict[str, dict]:
@@ -84,7 +80,7 @@ class Exchange(BaseExchange):
         }
         params = {'accountType': account.type}
         if ccy:
-            params['coin'] = self.adapter(ccy)
+            params['coin'] = self._adapter(ccy)
         if kwargs:
             params.update(kwargs)
         return super().get_balances(
@@ -93,7 +89,7 @@ class Exchange(BaseExchange):
             params=params,
         )
 
-    def get_positions(self, account: CryptoAccount, pdt: str='', category: tPRODUCT_CATEGORY='', **kwargs) -> dict | None:
+    def get_positions(self, account: CryptoAccount, pdt: str='', category: tProductCategory='', **kwargs) -> dict | None:
         schema = {
             'result': ['result', 'list'],
             'ts': 'time',
@@ -120,10 +116,10 @@ class Exchange(BaseExchange):
             for element in iterator:
                 params = {'category': category}
                 if pdt:
-                    epdt = self.adapter(element, group=category)
+                    epdt = self._adapter(element, group=category)
                     params['symbol'] = epdt
                 else:
-                    eqccy = self.adapter(element)
+                    eqccy = self._adapter(element)
                     params['settleCoin'] = eqccy
                 if kwargs:
                     params.update(kwargs)
@@ -141,7 +137,7 @@ class Exchange(BaseExchange):
                     positions = categorized_positions
         return positions
 
-    def get_orders(self, account: CryptoAccount, pdt: str='', category: tPRODUCT_CATEGORY='', **kwargs):
+    def get_orders(self, account: CryptoAccount, pdt: str='', category: tProductCategory='', **kwargs):
         schema = {
             'result': ['result', 'list'],
             'ts': 'time',
@@ -175,10 +171,10 @@ class Exchange(BaseExchange):
             for element in iterator:
                 params = {'category': category}
                 if pdt:
-                    epdt = self.adapter(element, group=category)
+                    epdt = self._adapter(element, group=category)
                     params['symbol'] = epdt
                 else:
-                    eqccy = self.adapter(element)
+                    eqccy = self._adapter(element)
                     params['settleCoin'] = eqccy
                 if kwargs:
                     params.update(kwargs)
@@ -197,7 +193,7 @@ class Exchange(BaseExchange):
                     orders = categorized_orders
         return orders
 
-    def get_trades(self, account: CryptoAccount, pdt: str='', category: tPRODUCT_CATEGORY='',
+    def get_trades(self, account: CryptoAccount, pdt: str='', category: tProductCategory='',
                    start_time: str|float=None, end_time: str|float=None,
                    is_funding_considered_as_trades=False, **kwargs):
         """
@@ -250,7 +246,7 @@ class Exchange(BaseExchange):
         for category in categories:
             params = {'category': category, 'startTime': start_time, 'endTime': end_time}
             if pdt:
-                epdt = self.adapter(pdt, group=category)
+                epdt = self._adapter(pdt, group=category)
                 params['symbol'] = epdt
             if kwargs:
                 params.update(kwargs)
@@ -281,11 +277,15 @@ class Exchange(BaseExchange):
                 trades = categorized_trades
         return trades
 
-    def place_order(self, account: CryptoAccount, product: BaseProduct, order: CryptoOrder):
+    def place_order(self, account: CryptoAccount, product: BaseProduct, order: CryptoOrder, expires_in: int=5000):
+        '''
+        Args:
+            expires_in: time in milliseconds, specify how long the HTTP request is valid.
+        '''
         schema = {
             'result': 'result',
             'ts': 'time',
-            'ts_adj': 1/10**3,  # since timestamp in bybit is in mts
+            'ts_adj': 1/10**3,  # convert bybit's milliseconds to seconds
             'data': {
                 'oid': ('orderLinkId', str),
                 'eoid': ('orderId', str),
@@ -293,9 +293,9 @@ class Exchange(BaseExchange):
         }
         params = {
             'category': product.category, 
-            'symbol': self.adapter(order.pdt, group=product.category),
-            'side': self.adapter(order.side, group='sides'),
-            'orderType': self.adapter(order.type),
+            'symbol': self._adapter(order.pdt, group=product.category),
+            'side': self._adapter(order.side, group='sides'),
+            'orderType': self._adapter(order.type),
             'qty': str(order.qty),
             'timeInForce': order.tif,
             'orderLinkId': order.oid,
@@ -318,7 +318,7 @@ class Exchange(BaseExchange):
         if hasattr(order, 'smpType'):
             params['smpType'] = order.smpType
 
-        update = super().place_order(account, schema, params=params)
+        update = super().place_order(account, schema, params=params, expires_in=expires_in)
         # bybit's return has no order status, create it manually
         update['status'] = 'O---'
         return update
@@ -335,7 +335,7 @@ class Exchange(BaseExchange):
         }
         params = {
             'category': product.category, 
-            'symbol': self.adapter(order.pdt, group=product.category),
+            'symbol': self._adapter(order.pdt, group=product.category),
             'orderLinkId': order.oid,
             'orderId': order.eoid,
         }

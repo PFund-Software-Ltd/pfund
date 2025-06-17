@@ -17,27 +17,27 @@ class BaseAccount:
     
     def __init__(self, env: tEnvironment, bkr: tBroker, name: str):
         self._env = Environment[env.upper()]
-        self._bkr = Broker[bkr.upper()]
+        self.broker = Broker[bkr.upper()]
         self.name = name or self._get_default_name()
         
     @property
     def bkr(self) -> Broker:
-        return self._bkr
+        return self.broker
     
     def __str__(self):
-        return f'Broker={self._bkr.value}|Account={self.name}'
+        return f'Broker={self.broker.value}|Account={self.name}'
 
     def __repr__(self):
-        return f'{self._bkr.value}:{self.name}'
+        return f'{self.broker.value}:{self.name}'
 
     def __eq__(self, other):
         if not isinstance(other, BaseAccount):
             return NotImplemented  # Allow other types to define equality with BaseProduct
         return (
             self._env == other._env
-            and self._bkr == other._bkr
-            and self.name == other._name
+            and self.broker == other.broker
+            and self.name == other.name
         )
         
     def __hash__(self):
-        return hash((self._env, self._bkr, self.name))
+        return hash((self._env, self.broker, self.name))

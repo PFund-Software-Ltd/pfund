@@ -157,13 +157,13 @@ class BaseExchange(ABC):
         dump_yaml_file(market_configs_file_path, existing_market_configs)
 
     def create_product(self, basis: str, alias: str='', **specs) -> CryptoProduct:
-        from pfund.products.product_base import ProductFactory
+        from pfund.products import ProductFactory
         Product = ProductFactory(trading_venue=self.name, basis=basis)
         return Product(basis=basis, adapter=self._adapter, alias=alias, **specs)
 
     def get_product(self, basis: str, **specs) -> CryptoProduct | None:
         from pfund.products.product_base import BaseProduct
-        product_key: str = BaseProduct._create_product_key(self.name, basis, **specs)
+        product_key: str = BaseProduct._generate_key(self.name, basis, **specs)
         return self._products.get(product_key, None)
 
     def add_product(self, product: CryptoProduct):
@@ -393,7 +393,7 @@ class BaseExchange(ABC):
             self._zmq.send(*zmq_msg, receiver='engine')
         return trades
     
-    def place_order(self, account: CryptoAccount, schema: dict, params=None, **kwargs):
+    def place_order(self, account: CryptoAccount, schema: dict, params=None, expires_in=5000):
         order = {'ts': None, 'data': {}, 'source': OrderUpdateSource.REST}
         ret = self._rest_api.place_order(account, params=params)
         res = self._parse_return(ret, schema['result'], default_result=False)

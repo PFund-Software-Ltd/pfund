@@ -10,10 +10,7 @@ from typing import Union
 from enum import Enum
 
 
-from pfund.orders.order_statuses import *
-from pfund.orders.order_crypto import CryptoOrder
-from pfund.orders.order_ib import IBOrder
-from pfund.enums import Event, RunMode
+from pfund.enums import Event, RunMode, MainOrderStatus, FillOrderStatus, CancelOrderStatus, AmendOrderStatus
 
 
 class OrderUpdateSource(Enum):

@@ -12,6 +12,7 @@ from pfund.products.mixins.derivative import DerivativeMixin
 from pfund.enums.option_type import OptionType
 
 
+# TODO: how to add Greeks? get from broker?
 class OptionMixin(DerivativeMixin):
     expiration: date
     strike_price: Decimal = Field(ge=0.0)
