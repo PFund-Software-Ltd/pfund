@@ -26,7 +26,7 @@ class SimulatedBroker:
         if self._env == Environment.BACKTEST:
             from pfund.engines.backtest_engine import BacktestEngine
             self._run_mode = BacktestEngine._run_mode
-            self._settings: BacktestEngineSettings = BacktestEngine.settings
+            self._settings: BacktestEngineSettings = BacktestEngine._settings
         self._initial_balances = defaultdict(dict)  # {trading_venue: {acc1: balances_dict, acc2: balances_dict} }
         # TODO
         # self._initial_positions = None

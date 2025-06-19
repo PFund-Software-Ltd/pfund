@@ -60,11 +60,11 @@ class DataBoy:
     def _add_data(self, product: BaseProduct, resolution: Resolution, data_config: DataConfig) -> TimeBasedData:
         from pfund.datas import QuoteData, TickData, BarData
         if resolution.is_quote():
-            data = QuoteData(data_config.data_source, data_config.data_origin, product, resolution, orderbook_depth=data_config.orderbook_depth, fast_orderbook=data_config.fast_orderbook)
+            data = QuoteData(product, resolution)
         elif resolution.is_tick():
-            data = TickData(data_config.data_source, data_config.data_origin, product, resolution)
+            data = TickData(product, resolution)
         else:
-            data = BarData(data_config.data_source, data_config.data_origin, product, resolution, shift=data_config.shift.get(resolution, 0), skip_first_bar=data_config.skip_first_bar.get(resolution, True))
+            data = BarData(product, resolution, shift=data_config.shift.get(resolution, 0), skip_first_bar=data_config.skip_first_bar.get(resolution, True))
             self._stale_bar_timeouts[data] = data_config.stale_bar_timeout[resolution]
         self.datas[product][resolution] = data
         return data
@@ -83,10 +83,11 @@ class DataBoy:
 
     def add_data(self, product: BaseProduct, data_source: tDataSource, data_origin: str, data_config: DataConfigDict | DataConfig | None) -> list[TimeBasedData]:
         if not isinstance(data_config, DataConfig):
+            data_config = data_config or {}
             data_config['primary_resolution'] = self._component._resolution
             data_config['data_source'] = data_source
             data_config['data_origin'] = data_origin
-            data_config = DataConfig(**(data_config or {}))
+            data_config = DataConfig(**data_config)
         supported_resolutions = self._get_supported_resolutions(product.bkr, product.exch)
         is_auto_resampled = data_config.auto_resample(supported_resolutions)
         if is_auto_resampled:
@@ -105,7 +106,7 @@ class DataBoy:
             data_resamplee.bind_resampler(data_resampler)
             self._logger.debug(f'{product} resolution={resampler_resolution} (resampler) added listener resolution={resamplee_resolution} (resamplee) data')
         
-        # TODO: need to do zeromq subscription
+        # TODO: need to do zeromq subscription, also need to subscribe to listeners' data
         # if self._component.is_remote():
         
         return datas

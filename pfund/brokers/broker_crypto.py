@@ -118,7 +118,7 @@ class CryptoBroker(TradeBroker):
     def add_product(self, exch: tCryptoExchange, basis: str, name: str='', **specs) -> CryptoProduct:
         exchange = self.add_exchange(exch)
         # create another product object to format a correct product name
-        product = exchange.create_product(basis, name=name, **specs)
+        product: CryptoProduct = exchange.create_product(basis, name=name, **specs)
         existing_product: CryptoProduct | None = self.get_product(exch, product.name)
         if not existing_product:
             exchange.add_product(product)

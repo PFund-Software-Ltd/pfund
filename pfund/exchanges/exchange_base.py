@@ -136,7 +136,7 @@ class BaseExchange(ABC):
         and then append them to the existing market configs.
         '''
         from pfund.utils.utils import load_yaml_file, dump_yaml_file
-        markets: dict[ProductCategory, Result | RawResult] = self.get_markets()
+        markets: dict[ProductCategory, Result] = self.get_markets()
         market_configs_file_path = self.get_file_path(self.MARKET_CONFIGS_FILENAME)
         existing_market_configs = load_yaml_file(market_configs_file_path) or {}
         for category, result in markets.items():
@@ -144,21 +144,28 @@ class BaseExchange(ABC):
             if not is_success:
                 self._logger.warning(f'failed to fetch market configs for {category}')
                 continue
-            existing_market_configs[category.upper()] = result['data']['message']
+            configs = {config['symbol']: config for config in result['data']['message']}
+            existing_market_configs[category.upper()] = configs
         dump_yaml_file(market_configs_file_path, existing_market_configs)
 
     @classmethod
-    def create_product(cls, basis: str, alias: str='', **specs) -> CryptoProduct:
+    def create_product(cls, basis: str, name: str='', **specs) -> CryptoProduct:
         from pfund.products import ProductFactory
         Product = ProductFactory(trading_venue=cls.name, basis=basis)
-        return Product(basis=basis, adapter=cls.adapter, alias=alias, **specs)
+        return Product(basis=basis, adapter=cls.adapter, name=name, **specs)
 
-    def get_product(self, symbol: str) -> CryptoProduct | None:
-        return self._products.get(symbol, None)
+    def get_product(self, name: str) -> CryptoProduct:
+        return self._products[name]
 
     def add_product(self, product: CryptoProduct):
+        market_configs = self.load_market_configs()
+        if product.symbol not in market_configs[product.category]:
+            raise ValueError(
+                f"The symbol '{product.symbol}' is not found in the market configurations. "
+                f"It might be delisted, or your market configurations could be outdated. "
+                f"Please set 'refetch_market_configs=True' in TradeEngine's settings to refetch the latest market configurations."
+            )
         self._products[product.name] = product
-        # TODO: check if the product is listed in the markets
         self._logger.debug(f'added product {product}')
 
     def get_account(self, name: str) -> CryptoAccount:

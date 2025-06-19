@@ -14,16 +14,6 @@ class DataConfig(BaseModel):
     data_origin: str=''
     primary_resolution: Resolution = Field(description='primary resolution used for trading, must be a bar resolution (e.g. "1s", "1m", "1h", "1d")')
     extra_resolutions: list[Resolution] = Field(default_factory=list, description='extra resolutions, e.g. "1t" for tick data, "1q" for quote data')
-    orderbook_depth: int = Field(
-        default=1, 
-        strict=True, 
-        gt=0,
-        description='the number of price levels tracked for both buy (bid) and sell (ask) orders in a market order book.'
-    )
-    fast_orderbook: bool = Field(
-        default=True,
-        description='use fast orderbook data structure written in C.'
-    )
     resample: dict[Annotated[Resolution, "ResampleeResolution"], Annotated[Resolution, "ResamplerResolution"]] = Field(
         default_factory=dict, 
         description='key is the resolution to resample to (resamplee), value is the resolution to resample from (resampler), e.g. {"1h": "1m"} means 1 hour bar is resampled by 1 minute bar.'
@@ -107,20 +97,20 @@ class DataConfig(BaseModel):
     def auto_resample(self, supported_resolutions: dict) -> bool:
         '''Resamples the resolutions automatically if not supported officially.
         Returns True if auto_resampling is needed.
-        '''            
+        '''
         def _convert_to_supported_resolution(_resolution: Resolution) -> Resolution | None:
             """Converts the resolution into an officially supported one
             Returns None if the resolution is not officially supported.
             """
-            period, timeframe = _resolution.period, repr(_resolution.timeframe)
-            if timeframe in supported_resolutions:
-                supported_periods = supported_resolutions.get(timeframe, [])
+            period, timeframe = _resolution.period, _resolution.timeframe
+            if timeframe.unit in supported_resolutions:
+                supported_periods = supported_resolutions.get(timeframe.unit, [])
                 if period in supported_periods:
                     return _resolution
                 else:
                     if divisors := [p for p in supported_periods if period % p == 0]:
                         smallest_period = min(divisors)
-                        return Resolution(str(smallest_period) + timeframe)
+                        return Resolution(str(smallest_period) + str(timeframe))
             # if resolution is already at tick level, no more higher resolution to try to convert to
             if _resolution.is_tick():
                 return None

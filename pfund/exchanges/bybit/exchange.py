@@ -41,15 +41,15 @@ class Exchange(BaseExchange):
     Functions using REST API
     TODO EXTEND
     '''
-    async def aget_markets(self, category: tProductCategory='') -> dict[ProductCategory, Result | RawResult]:
+    async def aget_markets(self, category: tProductCategory='') -> dict[ProductCategory, Result]:
         categories = [ProductCategory[category.upper()]] if category else [category for category in ProductCategory]
-        markets: dict[ProductCategory, Result | RawResult] = {}
+        markets: dict[ProductCategory, Result] = {}
         for category in categories:
-            result: Result | RawResult = await self._rest_api.get_markets(category=category)
+            result: Result = await self._rest_api.get_markets(category=category)
             markets[category] = result
         return markets
 
-    def get_markets(self, category: tProductCategory='') -> dict[ProductCategory, Result | RawResult]:
+    def get_markets(self, category: tProductCategory='') -> dict[ProductCategory, Result]:
         return asyncio.run(self.aget_markets(category=category))
 
     def get_balances(self, account: CryptoAccount, ccy: str='', **kwargs) -> dict[str, dict]:
@@ -345,38 +345,3 @@ class Exchange(BaseExchange):
     # TODO, come back to this if bybit supports more
     def cancel_batch_orders(self, account: CryptoAccount, product: BaseProduct, orders: list[CryptoOrder]):
         assert len(orders) <= self._MAX_NUM_OF_CANCEL_BATCH_ORDERS
-
-
-    '''
-    Functions using WS API
-    TODO EXTEND
-    '''
-    def orderbook_stream(self, pdts: list[str], callback: Callable[[WebSocket, str], Any], depth=None):
-        '''Connects to orderbook stream
-        Args:
-            callback: It is run after the default callback _on_message() in ws, 
-            and it won't receive the operational part thats used to handle connection and subscriptions
-        '''
-        for pdt in pdts:
-            product = self.create_product(pdt)
-            self.add_product(product)
-            self.add_channel(
-                'orderbook', 
-                'public', 
-                product=product,
-                orderbook_depth=depth or self._ws_api.DEFAULT_ORDERBOOK_DEPTH,
-            )
-        self._ws_api.set_msg_callback(callback)
-        self._ws_api.connect()
-        
-    def tradebook_stream(self, pdts: list[str], callback: Callable[[WebSocket, str], Any]):
-        for pdt in pdts:
-            product = self.create_product(pdt)
-            self.add_product(product)
-            self.add_channel(
-                'tradebook', 
-                'public', 
-                product=product,
-            )
-        self._ws_api.set_msg_callback(callback)
-        self._ws_api.connect()

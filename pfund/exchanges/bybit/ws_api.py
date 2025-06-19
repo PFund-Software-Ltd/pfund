@@ -51,8 +51,8 @@ class WebsocketApi(BaseWebsocketApi):
         TimeframeUnits.DAY: [1],
     }
     PUBLIC_CHANNEL_ARGS_LIMITS = {
-        'option': 2000,
-        'spot': 10
+        ProductCategory.OPTION: 2000,
+        ProductCategory.SPOT: 10
     }
 
     def _ping(self):

@@ -53,13 +53,12 @@ class BaseProduct(BaseModel):
         if hasattr(self, '__mixin_post_init__'):
             self.__mixin_post_init__()
         self.specs = self._create_specs()
-        if self.symbol is None:
-            # NOTE: _create_symbol is defined in mixins
-            if hasattr(self, '_create_symbol'):
-                self.symbol = self._create_symbol()
-            else:
-                self.symbol = str(self.basis)
-        self.name = self.name or self.symbol
+        if self.symbol is None and hasattr(self, '_create_symbol'):
+            self.symbol = self._create_symbol()
+        self.name = self.name or self._create_name()
+    
+    def _create_name(self) -> str:
+        return self.symbol or str(self.basis)
     
     @property
     def tv(self) -> TradingVenue:

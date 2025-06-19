@@ -67,3 +67,11 @@ class BybitProduct(CryptoProduct):
             strike_price = str(self.strike_price)
             symbol = '-'.join([ebase_asset, expiration, strike_price, option_type])
         return symbol
+
+    def _create_name(self) -> str:
+        # NOTE: for spot and perpetual, the symbol could be the same, e.g. BTCUSDT for both spot and perpetual
+        # use product basis as name for uniqueness
+        if self.is_perpetual() or self.is_spot():
+            return str(self.basis)
+        else:
+            return self.symbol

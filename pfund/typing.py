@@ -46,8 +46,6 @@ class DataRangeDict(TypedDict, total=False):
 
 class DataConfigDict(TypedDict, total=False):  # total=False makes fields optional
     extra_resolutions: list[Resolution]
-    orderbook_depth: int
-    fast_orderbook: bool
     resample: dict[Annotated[Resolution, "ResampleeResolution"], Annotated[Resolution, "ResamplerResolution"]]
     shift: dict[Resolution, int]
     skip_first_bar: dict[Resolution, bool]

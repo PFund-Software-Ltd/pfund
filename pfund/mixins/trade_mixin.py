@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from pfeed.typing import tDataSource
     from pfund.datas.databoy import DataBoy
     from pfund.typing import StrategyT, ModelT, IndicatorT, FeatureT, DataConfigDict
-    from pfund.typing import tTradingVenue, Component, ProductName
+    from pfund.typing import tTradingVenue, Component
     from pfund.datas.data_bar import Bar
     from pfund.datas.data_base import BaseData
     from pfund._logging.config import LoggingDictConfigurator
@@ -58,7 +58,7 @@ class TradeMixin:
         self.logger: logging.Logger | None = None
         self._logging_configurator: LoggingDictConfigurator | None = None
         self._engine: BaseEngine | EngineProxy | None = None
-        self._consumer: Component | ActorProxy | None = None
+        self._consumer: Component | None = None
         self._store: TradingStore | None = None
         self._databoy = DataBoy(self)
         # self._data_tool: BaseDataTool = self._create_data_tool()
@@ -265,11 +265,7 @@ class TradeMixin:
     def _set_run_mode(self: Component, run_mode: RunMode):
         self._run_mode = run_mode
 
-    @property
-    def consumer(self: Component) -> Component | None:
-        return self._consumer
-    
-    def _set_consumer(self: Component, consumer: BaseStrategy | BaseModel):
+    def _set_consumer(self: Component, consumer: Component | None):
         if not self._consumer:
             self._consumer = consumer
         else:
@@ -290,12 +286,12 @@ class TradeMixin:
     def is_running(self: Component):
         return self._is_running
     
-    def is_remote(self: Component, relative: bool=True) -> bool:
+    def is_remote(self: Component, direct_only: bool=True) -> bool:
         """
         Returns whether this component is running in a remote (Ray) process.
 
         Args:
-            relative (bool): 
+            direct_only (bool): 
                 - If True (default), only checks the component's own `_run_mode`.
                 This reflects whether the component *itself* is declared to be remote.
                 e.g. a model is running inside a strategy (ray actor), relatively the model is "local"
@@ -308,11 +304,10 @@ class TradeMixin:
             bool: True if the component (or any of its ancestors) is remote.
         """
         assert self._run_mode is not None, f"{self.name} has no run mode"
-        if relative:
+        if direct_only:
             return self._run_mode == RunMode.REMOTE
         else:
-            consumer: Component | ActorProxy | None
-            consumer = self._consumer
+            consumer: Component | None = self._consumer
             while consumer is not None:
                 if consumer.is_remote():
                     return True
@@ -370,7 +365,6 @@ class TradeMixin:
         data_origin: str='',
         data_config: DataConfigDict | DataConfig | None=None,
         **product_specs
-    # TODO: should return pfeed's MarketFeed?
     ) -> list[TimeBasedData]:
         '''
         Args:
@@ -397,6 +391,7 @@ class TradeMixin:
             **product_specs
         )
         self._add_product(product)
+        # TODO: should create pfeed's MarketFeed in databoy and return it?
         datas: list[TimeBasedData] = self._databoy.add_data(
             product=product,
             data_source=data_source,
@@ -405,15 +400,12 @@ class TradeMixin:
         )
         for data in datas:
             self._engine._register_market_data(self, data)
-            # if not remote, needs its consumer to pass data to itself
-            if not self.is_remote():
-                consumer: Component | ActorProxy | None
-                consumer = self._consumer
-                while consumer is not None:
-                    consumer.databoy._add_listener(self, data)
-                    consumer = consumer._consumer
-                    if consumer.is_remote():
-                        break
+            consumer: Component | None = self._consumer
+            component: Component = self
+            while consumer is not None:
+                consumer.databoy._add_listener(component, data)
+                component: Component = consumer
+                consumer = consumer._consumer
         return datas
     
     # TODO
@@ -523,6 +515,8 @@ class TradeMixin:
         
         components[component_name] = component
         self.logger.debug(f"added {component_name}")
+
+        print('component:', component, component.is_remote(direct_only=False))
         
         return component
     

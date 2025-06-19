@@ -28,27 +28,28 @@ class OrderBook:
     
 
 class QuoteData(TimeBasedData):
-    def __init__(self, product: BaseProduct, resolution: Resolution, orderbook_depth: int=1, fast_orderbook: bool=True):
+    def __init__(self, product: BaseProduct, resolution: Resolution):
         super().__init__(product, resolution)
         # TODO: merge orderbook_depth into resolution? e.g. 5q = quote data with depth 5
-        self._orderbook_depth = orderbook_depth
-        self._orderbook_level = resolution.orderbook_level
-        self._fast_orderbook = fast_orderbook
-        if fast_orderbook:
+        self._orderbook_depth: int = resolution.period
+        self._orderbook_level: int = resolution.orderbook_level
+        try:
             from order_book import OrderBook as FastOrderBook
             self._orderbook = FastOrderBook()
-        else:
+            self._is_fast_orderbook = True
+        except ImportError:
             self._orderbook = OrderBook()
+            self._is_fast_orderbook = False
         assert 0 < self.period <= 1, f'period {self.period} is not supported for QuoteData'
     
     def get_bid(self, level: int=0) -> tuple[Price, Size]:
-        if self._fast_orderbook:
+        if self._is_fast_orderbook:
             return self._orderbook.bids.index(level)
         else:
             return self._orderbook.get_bid(level)
     
     def get_ask(self, level: int=0) -> tuple[Price, Size]:
-        if self._fast_orderbook:
+        if self._is_fast_orderbook:
             return self._orderbook.asks.index(level)
         else:
             return self._orderbook.get_ask(level)

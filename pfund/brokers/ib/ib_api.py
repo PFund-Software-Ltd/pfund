@@ -11,6 +11,7 @@ from typing import Callable
 from pfund.brokers.ib.ib_client import IBClient
 from pfund.brokers.ib.ib_wrapper import *
 from pfund.enums import PublicDataChannel, PrivateDataChannel
+from pfund.datas.timeframe import TimeframeUnits
 
 
 class IBApi(IBClient, IBWrapper):
@@ -18,8 +19,8 @@ class IBApi(IBClient, IBWrapper):
     DEFAULT_ORDERBOOK_DEPTH = 5
     SUPPORTED_ORDERBOOK_LEVELS = [1, 2]
     SUPPORTED_RESOLUTIONS = {
-        't': [1],  # tick
-        's': [5],  # second
+        TimeframeUnits.TICK: [1],
+        TimeframeUnits.SECOND: [5],
     }
     # EXTEND
     PTYPES_WITHOUT_TICK_BY_TICK_DATA = ['OPT']

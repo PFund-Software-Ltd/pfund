@@ -107,5 +107,5 @@ class TradeBroker(BaseBroker):
         pass
     
     @abstractmethod
-    def place_order(self, *args, **kwargs) -> BaseOrder:
+    def place_orders(self, *args, **kwargs) -> list[BaseOrder]:
         pass

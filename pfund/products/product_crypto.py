@@ -23,6 +23,9 @@ class CryptoProduct(BaseProduct):
         # FIXME
         # self._load_config()
     
+    def is_spot(self) -> bool:
+        return self.is_crypto()
+    
     def _load_config(self):
         from pfund.config import get_config
         from pfund import print_warning
