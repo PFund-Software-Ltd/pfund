@@ -13,3 +13,5 @@ class PerpetualMixin(FutureMixin):
     # override FutureMixin._derive_contract_code
     def _derive_contract_code(self) -> None:
         return None
+    
+    

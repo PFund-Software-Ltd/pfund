@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, ClassVar, TypeAlias
 if TYPE_CHECKING:
     from pathlib import Path
     from pfund.exchanges.rest_api_base import Result, RawResult
-    from pfund.typing import tEnvironment, ProductKey, AccountName
+    from pfund.typing import tEnvironment, ProductName, AccountName
     from pfund.products.product_crypto import CryptoProduct
     from pfund.accounts.account_crypto import CryptoAccount
     from pfund.datas.data_base import BaseData
@@ -28,37 +28,38 @@ ProductCategory: TypeAlias = str
 class BaseExchange(ABC):
     bkr = Broker.CRYPTO
     name: ClassVar[CryptoExchange]
-    _adapter: ClassVar[Adapter]
+    adapter: ClassVar[Adapter]
     MARKET_CONFIGS_FILENAME = 'market_configs.yml'
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        cls._adapter = Adapter(cls.name)
+        cls.adapter = Adapter(cls.name)
             
-    def __init__(self, env: tEnvironment):
-
+    def __init__(self, env: Environment | tEnvironment):
+        from pfund.engines.trade_engine import TradeEngine
+        
         self._env = Environment[env.upper()]
         self._logger = logging.getLogger(self.name.lower())
-        self._products: dict[ProductKey, CryptoProduct] = {}
+        self._products: dict[ProductName, CryptoProduct] = {}
         self._accounts: dict[AccountName, CryptoAccount] = {}
+        self._settings: TradeEngineSettings | None = getattr(TradeEngine, "_settings", None)
 
         # APIs
         exchange_path = f'pfund.exchanges.{self.name.lower()}'
         RestApi = getattr(importlib.import_module(f'{exchange_path}.rest_api'), 'RestApi')
         self._rest_api = RestApi(self._env)
-        
-        # FIXME
-        # WebsocketApi = getattr(importlib.import_module(f'{exchange_path}.ws_api'), 'WebsocketApi')
-        # self._ws_api = WebsocketApi(self._env, self._adapter)
+        WebsocketApi = getattr(importlib.import_module(f'{exchange_path}.ws_api'), 'WebsocketApi')
+        self._ws_api = WebsocketApi(self._env)
 
         # used for REST API to send back results in threads to engine
         self._zmq = None
         
-        self._check_if_refetch_market_configs()
+        if self._settings:
+            self._check_if_refetch_market_configs()
     
     @property
-    def adapter(self):
-        return self._adapter
+    def broker(self) -> Broker:
+        return self.bkr
     
     @property
     def products(self):
@@ -91,14 +92,6 @@ class BaseExchange(ABC):
         market_configs: dict[str, dict] = load_yaml_file(market_configs_file_path)
         return market_configs
     
-    @abstractmethod
-    def add_all_product_mappings_to_adapter(self):
-        '''
-        Load all product mappings from market_configs.yml and add them to the adapter.
-        Useful when e.g. pfeed needs to download all products and hence needs to know all product mappings.
-        '''
-        pass
-    
     def _check_if_refetch_market_configs(self):
         '''
         Check if the market configs are outdated and need to be refetched.
@@ -106,17 +99,15 @@ class BaseExchange(ABC):
         If not, return False.
         '''
         from pfund.utils.utils import get_last_modified_time
-        from pfund.engines.trade_engine import TradeEngine
-        settings: TradeEngineSettings = TradeEngine._settings
 
         filename = self.MARKET_CONFIGS_FILENAME
         file_path = self.get_file_path(filename)
         
-        force_refetching = settings.refetch_market_configs
+        force_refetching = self._settings.refetch_market_configs
         is_exist = os.path.exists(file_path)
         is_outdated = (is_exist and (
             get_last_modified_time(file_path)
-            + datetime.timedelta(days=settings.renew_market_configs_every_x_days) 
+            + datetime.timedelta(days=self._settings.renew_market_configs_every_x_days) 
             < datetime.datetime.now(tz=datetime.timezone.utc)
         ))
 
@@ -156,19 +147,17 @@ class BaseExchange(ABC):
             existing_market_configs[category.upper()] = result['data']['message']
         dump_yaml_file(market_configs_file_path, existing_market_configs)
 
-    def create_product(self, basis: str, alias: str='', **specs) -> CryptoProduct:
+    @classmethod
+    def create_product(cls, basis: str, alias: str='', **specs) -> CryptoProduct:
         from pfund.products import ProductFactory
-        Product = ProductFactory(trading_venue=self.name, basis=basis)
-        return Product(basis=basis, adapter=self._adapter, alias=alias, **specs)
+        Product = ProductFactory(trading_venue=cls.name, basis=basis)
+        return Product(basis=basis, adapter=cls.adapter, alias=alias, **specs)
 
-    def get_product(self, basis: str, **specs) -> CryptoProduct | None:
-        from pfund.products.product_base import BaseProduct
-        product_key: str = BaseProduct._generate_key(self.name, basis, **specs)
-        return self._products.get(product_key, None)
+    def get_product(self, symbol: str) -> CryptoProduct | None:
+        return self._products.get(symbol, None)
 
     def add_product(self, product: CryptoProduct):
-        self._products[product.key] = product
-        self._adapter._add_mapping(product.category, product.key, product.symbol)
+        self._products[product.name] = product
         # TODO: check if the product is listed in the markets
         self._logger.debug(f'added product {product}')
 
@@ -282,11 +271,11 @@ class BaseExchange(ABC):
                 for order in res:
                     epdt = step_into(order, schema['pdt'])
                     category = params.get('category', '')
-                    pdt = self._adapter(epdt, group=category)
+                    pdt = self.adapter(epdt, group=category)
                     update = {}
                     for k, (ek, *sequence) in schema['data'].items():
                         group = k + 's' if k in ['tif', 'side'] else ''
-                        initial_value = self._adapter(step_into(order, ek), group=group)
+                        initial_value = self.adapter(step_into(order, ek), group=group)
                         v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
                         update[k] = v
                     orders['data'][pdt].append(update)
@@ -308,17 +297,17 @@ class BaseExchange(ABC):
                 balances['ts'] = float(step_into(ret, schema['ts'])) * schema['ts_adj']
             if res_type is dict:
                 for eccy, balance in res.items():
-                    ccy = self._adapter(eccy, group='asset')
+                    ccy = self.adapter(eccy, group='asset')
                     for k, (ek, *sequence) in schema['data'].items():
-                        initial_value = self._adapter(step_into(balance, ek))
+                        initial_value = self.adapter(step_into(balance, ek))
                         v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
                         balances['data'][ccy][k] = v
             elif res_type is list:
                 for balance in res:
                     eccy = step_into(balance, schema['ccy'])
-                    ccy = self._adapter(eccy, group='asset')
+                    ccy = self.adapter(eccy, group='asset')
                     for k, (ek, *sequence) in schema['data'].items():
-                        initial_value = self._adapter(step_into(balance, ek))
+                        initial_value = self.adapter(step_into(balance, ek))
                         v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
                         balances['data'][ccy][k] = v
             else:
@@ -342,19 +331,19 @@ class BaseExchange(ABC):
                 for position in res:
                     epdt = step_into(position, schema['pdt'])
                     category = params.get('category', '')
-                    pdt = self._adapter(epdt, group=category)
+                    pdt = self.adapter(epdt, group=category)
                     qty = float(step_into(position, schema['data']['qty'][0]))
                     if qty == 0 and pdt not in self._products:
                         continue
                     if 'side' in schema:
                         eside = step_into(position, schema['side'])
-                        side = self._adapter(eside, group='side')
+                        side = self.adapter(eside, group='side')
                     # e.g. BINANCE_USDT only returns position size (signed qty)
                     elif 'size' in schema:
                         side = sign(step_into(position, schema['size']))
                     positions['data'][pdt][side] = {}
                     for k, (ek, *sequence) in schema['data'].items():
-                        initial_value = self._adapter(step_into(position, ek))
+                        initial_value = self.adapter(step_into(position, ek))
                         v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
                         positions['data'][pdt][side][k] = v
             else:
@@ -376,11 +365,11 @@ class BaseExchange(ABC):
                 for trade in res:
                     epdt = step_into(trade, schema['pdt'])
                     category = params.get('category', '')
-                    pdt = self._adapter(epdt, group=category)
+                    pdt = self.adapter(epdt, group=category)
                     update = {}
                     for k, (ek, *sequence) in schema['data'].items():
                         group = k + 's' if k in ['tif', 'side'] else ''
-                        initial_value = self._adapter(step_into(trade, ek), group=group)
+                        initial_value = self.adapter(step_into(trade, ek), group=group)
                         v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
                         update[k] = v
                         if k == 'trade_ts':
@@ -404,7 +393,7 @@ class BaseExchange(ABC):
             if res_type is dict:
                 for k, (ek, *sequence) in schema['data'].items():
                     group = k + 's' if k in ['tif', 'side'] else ''
-                    initial_value = self._adapter(step_into(res, ek), group=group)
+                    initial_value = self.adapter(step_into(res, ek), group=group)
                     v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
                     order[k] = v
             else:
@@ -425,7 +414,7 @@ class BaseExchange(ABC):
             if res_type is dict:
                 for k, (ek, *sequence) in schema['data'].items():
                     group = k + 's' if k in ['tif', 'side'] else ''
-                    initial_value = self._adapter(step_into(res, ek), group=group)
+                    initial_value = self.adapter(step_into(res, ek), group=group)
                     v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
                     order[k] = v
             else:

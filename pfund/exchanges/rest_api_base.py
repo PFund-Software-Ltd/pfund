@@ -1,10 +1,10 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, TypedDict, Literal, ClassVar, TypeAlias
 if TYPE_CHECKING:
+    from pfund.typing import tEnvironment
     from pfund.adapter import Adapter
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.accounts.account_crypto import CryptoAccount
-    from pfund.typing import tEnvironment
     from httpx import Request, Response
 
 import time
@@ -69,10 +69,10 @@ class BaseRestApi(ABC):
         self._logger = logging.getLogger(self.name.lower())
         self._dev_mode = False
         Exchange: type[BaseExchange] = getattr(importlib.import_module(f'pfund.exchanges.{self.name.lower()}.exchange'), 'Exchange')
-        self._adapter: Adapter = Exchange._adapter
+        self._adapter: Adapter = Exchange.adapter
         self._url: str | None = self.URLS.get(self._env, None)
         self._client = AsyncClient()
-        
+    
     def _enable_dev_mode(self):
         '''If enabled, returns only raw messages for all endpoints and stores them automatically to a yaml file as samples in caches.'''
         self._dev_mode = True

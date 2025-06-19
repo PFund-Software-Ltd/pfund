@@ -30,6 +30,7 @@ class OrderBook:
 class QuoteData(TimeBasedData):
     def __init__(self, product: BaseProduct, resolution: Resolution, orderbook_depth: int=1, fast_orderbook: bool=True):
         super().__init__(product, resolution)
+        # TODO: merge orderbook_depth into resolution? e.g. 5q = quote data with depth 5
         self._orderbook_depth = orderbook_depth
         self._orderbook_level = resolution.orderbook_level
         self._fast_orderbook = fast_orderbook

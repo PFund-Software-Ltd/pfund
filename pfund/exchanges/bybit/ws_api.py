@@ -1,7 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.adapter import Adapter
     from pfund.datas.data_base import BaseData
 
 import time
@@ -15,37 +14,41 @@ from decimal import Decimal
 
 from pfund.enums import PublicDataChannel, PrivateDataChannel
 from pfund.exchanges.ws_api_base import BaseWebsocketApi
-from pfund.enums import Environment
+from pfund.enums import Environment, CryptoExchange
+from pfund.products.product_bybit import BybitProduct
+from pfund.datas.timeframe import TimeframeUnits
+
+
+ProductCategory = BybitProduct.ProductCategory
 
 
 class WebsocketApi(BaseWebsocketApi):
+    name = CryptoExchange.BYBIT
+
+    VERSION = 'v5'
     URLS = {
-        'PAPER': {
-            'public': 'wss://stream-testnet.bybit.com/v5/public',
-            'private': 'wss://stream-testnet.bybit.com/v5/private',
+        Environment.PAPER: {
+            'public': f'wss://stream-testnet.bybit.com/{VERSION}/public',
+            'private': f'wss://stream-testnet.bybit.com/{VERSION}/private',
         },
-        'LIVE': {
-            'public': 'wss://stream.bybit.com/v5/public',
-            'private': 'wss://stream.bybit.com/v5/private'
+        Environment.LIVE: {
+            'public': f'wss://stream.bybit.com/{VERSION}/public',
+            'private': f'wss://stream.bybit.com/{VERSION}/private'
         }
     }
     SUPPORTED_ORDERBOOK_LEVELS = [2]
     SUPPORTED_RESOLUTIONS = {
-        # normal definition of 'q' if not per category:
-        # 'q': [1, 50, 200, 500],  # quote
-
         # per category
-        'q': {
-            'linear': [1, 50, 200, 500],
-            'inverse': [1, 50, 200, 500],
-            'spot': [1, 50],
-            'option': [25, 100],
+        TimeframeUnits.QUOTE: {
+            # category: orderbook depth
+            ProductCategory.LINEAR: [1, 50, 200, 500],
+            ProductCategory.INVERSE: [1, 50, 200, 500],
+            ProductCategory.SPOT: [1, 50],
+            ProductCategory.OPTION: [25, 100],
         },
-        't': [1],  # tick
-        'm': [1, 3, 5, 15, 30, 60, 120, 240, 360, 720],  # minute
-        'd': [1],  # day
-        'w': [1],  # week
-        'M': [1],  # month
+        TimeframeUnits.TICK: [1],
+        TimeframeUnits.MINUTE: [1, 3, 5, 15, 30, 60, 120, 240, 360, 720],
+        TimeframeUnits.DAY: [1],
     }
     PUBLIC_CHANNEL_ARGS_LIMITS = {
         'option': 2000,
@@ -70,7 +73,7 @@ class WebsocketApi(BaseWebsocketApi):
         ).hexdigest()
         # param = f"api_key={account.key}&expires={expires}&signature={signature}"
         # private_url_extension = '?' + param
-        self.logger.debug(f'ws={account.name} authenticates')
+        self._logger.debug(f'ws={account.name} authenticates')
         msg = {'op': 'auth', 'args': [account.key, expires, signature]}
         self._send(ws, msg)
 
@@ -101,7 +104,7 @@ class WebsocketApi(BaseWebsocketApi):
                 if self._orderbook_depths[pdt] not in supported_periods:
                     # Find an integer in self.SUPPORTED_RESOLUTIONS['q'] that is the nearest to the intended orderbook_depth
                     nearest_depth = min(supported_periods, key=lambda supported_period: abs(supported_period - self._orderbook_depths[pdt]))
-                    self.logger.warning(f'orderbook_depth={self._orderbook_depths[pdt]} is not supported, using the nearest supported depth "{nearest_depth}". {supported_periods=}')
+                    self._logger.warning(f'orderbook_depth={self._orderbook_depths[pdt]} is not supported, using the nearest supported depth "{nearest_depth}". {supported_periods=}')
                     subscribed_orderbook_depth = nearest_depth
                 else:
                     subscribed_orderbook_depth = self._orderbook_depths[pdt]
@@ -147,7 +150,7 @@ class WebsocketApi(BaseWebsocketApi):
             self._sub_num += 1
             msg = {'op': 'subscribe', 'args': full_channels}
             self._send(ws, msg)
-            self.logger.debug(f'ws={ws.name} subscribes {full_channels}')
+            self._logger.debug(f'ws={ws.name} subscribes {full_channels}')
 
     def _unsubscribe(self, ws, full_channels: list[str]):
         num_full_channels = len(full_channels)
@@ -162,7 +165,7 @@ class WebsocketApi(BaseWebsocketApi):
             self._sub_num -= 1
             msg = {'op': 'unsubscribe', 'args': full_channels}
             self._send(ws, msg)
-            self.logger.debug(f'ws={ws.name} unsubscribes {full_channels}')
+            self._logger.debug(f'ws={ws.name} unsubscribes {full_channels}')
 
     # will receive msg=b'', ignore
     def _on_pong(self, ws, msg):
@@ -191,12 +194,12 @@ class WebsocketApi(BaseWebsocketApi):
         elif full_channel == 'execution':
             return self._process_trade_msg(ws_name, msg)
         else:
-            self.logger.warning(f'unhandled topic ws={ws_name} msg {msg}')
+            self._logger.warning(f'unhandled topic ws={ws_name} msg {msg}')
     
     def _on_message(self, ws, msg: bytes):
         ws_name = ws.name
         msg = json.loads(msg)
-        self.logger.debug(f'ws={ws_name} {msg=}')
+        self._logger.debug(f'ws={ws_name} {msg=}')
         try:
             if 'op' in msg:
                 op = msg['op']
@@ -209,18 +212,18 @@ class WebsocketApi(BaseWebsocketApi):
                     elif op == 'subscribe':
                         self._num_subscribed += 1
                     else:
-                        self.logger.warning(f'unhandled ws={ws_name} msg {msg}')
+                        self._logger.warning(f'unhandled ws={ws_name} msg {msg}')
                 else:
-                    self.logger.error(f'ws={ws_name} unsuccessful msg {msg}')
+                    self._logger.error(f'ws={ws_name} unsuccessful msg {msg}')
             elif 'topic' in msg:
                 if self._msg_callback is None:
                     self._process_message(ws, msg)
                 else:
                     self._msg_callback(ws, msg)
             else:
-                self.logger.warning(f'unhandled ws={ws_name} msg {msg}')
+                self._logger.warning(f'unhandled ws={ws_name} msg {msg}')
         except:
-            self.logger.exception(f'_on_message ws={ws_name} exception {msg}:')
+            self._logger.exception(f'_on_message ws={ws_name} exception {msg}:')
 
     def _process_orderbook_l2_msg(self, ws_name, full_channel, msg):
         quote = {'ts': None, 'data': {'bids': None, 'asks': None}, 'extra_data': {}}
@@ -232,7 +235,7 @@ class WebsocketApi(BaseWebsocketApi):
         update_id = int(data['u'])
         # not 100% sure what update_id means, make sure it is a snapshot
         if update_id == 1 and msg_type != 'snapshot':
-            self.logger.error('unexpected case: update_id=1 but it is not an orderbook snapshot')
+            self._logger.error('unexpected case: update_id=1 but it is not an orderbook snapshot')
         mts = int(msg['ts'])
         quote['ts'] = mts / 10**3
         if msg_type == 'snapshot':

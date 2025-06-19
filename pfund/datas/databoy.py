@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from pfeed.typing import tDataSource
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund.typing import LocalComponent, Component, ProductKey, ResolutionRepr, DataConfigDict
+    from pfund.typing import LocalComponent, Component, ProductName, ResolutionRepr, DataConfigDict
 
 import time
 import importlib
@@ -110,7 +110,7 @@ class DataBoy:
         
         return datas
 
-    def _update_quote(self, product: ProductKey, quote: dict):
+    def _update_quote(self, product: ProductName, quote: dict):
         ts = quote['ts']
         update = quote['data']
         extra_data = quote['extra_data']
@@ -119,7 +119,7 @@ class DataBoy:
         data.on_quote(bids, asks, ts, **extra_data)
         self._deliver(data, event=Event.quote, **extra_data)
 
-    def _update_tick(self, product: ProductKey, tick: dict):
+    def _update_tick(self, product: ProductName, tick: dict):
         update = tick['data']
         extra_data = tick['extra_data']
         px, qty, ts = update['px'], update['qty'], update['ts']
@@ -127,7 +127,7 @@ class DataBoy:
         data.on_tick(px, qty, ts, **extra_data)
         self._deliver(data, event=Event.tick, **extra_data)
 
-    def _update_bar(self, product: ProductKey, bar: dict, is_incremental: bool=True):
+    def _update_bar(self, product: ProductName, bar: dict, is_incremental: bool=True):
         '''
         Args:
             is_incremental: if True, the bar update is incremental, otherwise it is a full bar update

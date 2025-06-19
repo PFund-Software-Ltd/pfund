@@ -105,4 +105,3 @@ ALIASES = {
 
     'tv': 'trading_venue',
 }
-BIDIRECTIONAL_ALIASES = {**ALIASES, **{v: k for k, v in ALIASES.items()}}

@@ -1,11 +1,11 @@
 from __future__ import annotations
-from typing import Literal, TYPE_CHECKING, overload, TypeAlias
+from typing import Literal, TYPE_CHECKING, overload
 if TYPE_CHECKING:
     from pfund.typing import (
         StrategyT, 
         tTradingVenue, 
         tCryptoExchange,
-        ProductKey,
+        ProductName,
         AccountName,
         Currency,
     )
@@ -37,7 +37,7 @@ from pfund.proxies.actor_proxy import ActorProxy
 
 class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):    
     def __init__(self, *args, **kwargs):
-        self.positions: dict[AccountName, dict[ProductKey, BasePosition]] = {}
+        self.positions: dict[AccountName, dict[ProductName, BasePosition]] = {}
         self.balances: dict[AccountName, dict[Currency, BaseBalance]] = {}
         # NOTE: includes submitted orders and opened orders
         self.orders: dict[AccountName, list[BaseOrder]] = {}

@@ -2,18 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from pfund.enums import AssetTypeModifier, AllAssetType
-
-
-# EXTEND
-ASSET_TYPE_ALIASES: dict = {
-    "IPERP": f'{AssetTypeModifier.INVERSE}-{AllAssetType.PERPETUAL}',
-    "IPERPETUAL": f'{AssetTypeModifier.INVERSE}-{AllAssetType.PERPETUAL}',
-    "IFUT": f'{AssetTypeModifier.INVERSE}-{AllAssetType.FUTURE}',
-    "IFUTURE": f'{AssetTypeModifier.INVERSE}-{AllAssetType.FUTURE}',
-    # "IOPT": f'{AssetTypeModifier.INVERSE}-{AllAssetType.OPTION}',
-    # "IOPTION": f'{AssetTypeModifier.INVERSE}-{AllAssetType.OPTION}',
-}
+from pfund.enums.asset_type import AssetTypeModifier, AllAssetType, ASSET_TYPE_ALIASES
 
 
 class ProductAssetType(BaseModel):
@@ -63,12 +52,6 @@ class ProductAssetType(BaseModel):
     def __str__(self):
         return self.as_string
     
-    @property
-    def types(self) -> list[AllAssetType, ...]:
-        '''Returns asset types without modifiers'''
-        asset_types = [t for t in self.as_tuple if t in AllAssetType.__members__]
-        return asset_types
-
     def is_inverse(self) -> bool:
         return AssetTypeModifier.INVERSE in self.as_tuple
     

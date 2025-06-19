@@ -20,10 +20,9 @@ class BaseProduct(BaseModel):
     adapter: Adapter | None = None
     # specifications that make a product unique, e.g. for options, specs are strike_price, expiration_date, etc.
     specs: dict = Field(default_factory=dict)
-    key: str | None=None
     # if symbol is not provided, will be derived from name for TradFi brokers (e.g. IB). e.g. AAPL_USD_STK -> AAPL.
     symbol: str | None=None
-    alias: str=''
+    name: str=Field(default='', description='unique product name, if not provided, symbol will be used')
     tick_size: Decimal | None=None
     lot_size: Decimal | None=None
     
@@ -54,9 +53,13 @@ class BaseProduct(BaseModel):
         if hasattr(self, '__mixin_post_init__'):
             self.__mixin_post_init__()
         self.specs = self._create_specs()
-        if hasattr(self, '_create_symbol'):
-            self.symbol = self._create_symbol()
-        self.key = self._generate_key(self.trading_venue, self.basis, **self.specs)
+        if self.symbol is None:
+            # NOTE: _create_symbol is defined in mixins
+            if hasattr(self, '_create_symbol'):
+                self.symbol = self._create_symbol()
+            else:
+                self.symbol = str(self.basis)
+        self.name = self.name or self.symbol
     
     @property
     def tv(self) -> TradingVenue:
@@ -71,12 +74,24 @@ class BaseProduct(BaseModel):
         return self.exchange
     
     @property
+    def base(self) -> str:
+        return self.basis.base_asset
+    
+    @property
     def base_asset(self) -> str:
         return self.basis.base_asset
     
     @property
+    def quote(self) -> str:
+        return self.basis.quote_asset
+    
+    @property
     def quote_asset(self) -> str:
         return self.basis.quote_asset
+    
+    @property
+    def type(self) -> str:
+        return self.basis.asset_type
     
     @property
     def asset_type(self) -> ProductAssetType:
@@ -93,14 +108,6 @@ class BaseProduct(BaseModel):
             field_name for field_name, field in cls.model_fields.items()
             if field.is_required() and field_name not in BaseProduct.model_fields
         }
-        
-    @staticmethod
-    def _generate_key(trading_venue: TradingVenue | str, basis: str, **specs) -> str:
-        return ':'.join([
-            TradingVenue[trading_venue.upper()],
-            str(basis),
-            *[f'{k}={v}' for k, v in sorted(specs.items())]
-        ])
         
     def to_dict(self) -> dict:
         return self.model_dump()
@@ -165,7 +172,10 @@ class BaseProduct(BaseModel):
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, BaseProduct):
             return NotImplemented  # Allow other types to define equality with BaseProduct
-        return self.key == other.key
+        return (
+            self.trading_venue == other.trading_venue 
+            and self.name == other.name
+        )
         
     def __hash__(self) -> int:
-        return hash(self.key)
+        return hash((self.trading_venue, self.name))

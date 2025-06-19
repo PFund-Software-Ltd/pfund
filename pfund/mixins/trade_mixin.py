@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from pfeed.typing import tDataSource
     from pfund.datas.databoy import DataBoy
     from pfund.typing import StrategyT, ModelT, IndicatorT, FeatureT, DataConfigDict
-    from pfund.typing import tTradingVenue, Component, ProductKey
+    from pfund.typing import tTradingVenue, Component, ProductName
     from pfund.datas.data_bar import Bar
     from pfund.datas.data_base import BaseData
     from pfund._logging.config import LoggingDictConfigurator
@@ -319,20 +319,16 @@ class TradeMixin:
                 consumer = consumer._consumer
             return False
     
-    def _add_product(self: Component, product_key: ProductKey, product: BaseProduct) -> BaseProduct:
-        if product_key not in self.products:
-            self.products[product_key] = product
+    def _add_product(self: Component, product: BaseProduct) -> BaseProduct:
+        if product.name not in self.products:
+            self.products[product.name] = product
         else:
-            existing_product = self.products[product_key]
-            assert existing_product == product, f"key={product_key} is already used by {existing_product}, cannot use it for {product}"
-        return self.products[product_key]
+            existing_product = self.products[product.name]
+            assert existing_product == product, f"{product.name=} is already used by {existing_product}, cannot use it for {product}"
+        return self.products[product.name]
     
-    def get_product(self: Component, product_key: str) -> BaseProduct:
-        '''
-        Args:
-            product_key: product key is either product alias or product name
-        '''
-        return self.products[product_key]
+    def get_product(self: Component, name: str) -> BaseProduct:
+        return self.products[name]
     
     def get_data(self: Component, product: BaseProduct, resolution: str) -> TimeBasedData:
         data: TimeBasedData | None = self._databoy.get_data(product, resolution)
@@ -369,33 +365,38 @@ class TradeMixin:
         product: str,
         exchange: str='',
         symbol: str='',
-        product_alias: str='',
+        product_name: str='',
         data_source: tDataSource | None=None,
         data_origin: str='',
         data_config: DataConfigDict | DataConfig | None=None,
         **product_specs
+    # TODO: should return pfeed's MarketFeed?
     ) -> list[TimeBasedData]:
         '''
         Args:
             exchange: useful for TradFi brokers (e.g. IB), to specify the exchange (e.g. 'NASDAQ')
             symbol: useful for TradFi brokers (e.g. IB), to specify the symbol (e.g. 'AAPL')
             product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
-            product_alias: A short, user-defined identifier for the product.
-                If not provided, the full product name (e.g., 'BTC_USDT_PERP') will be used by default.
-                This is useful when the full product name is long and you prefer to reference the product using a shorter alias,
-                such as 'BTC' instead of 'BTC_USDT_PERP'.
+            product_name: A user-defined identifier for the product.
+                If not provided, the default product symbol (e.g. 'BTC_USDT_PERP', 'TSLA241213C00075000') will be used.
+                This is useful when you need to distinguish between similar instruments, such as options 
+                with different strike prices and expiration dates. Instead of using long identifiers like 
+                'BTC_USDT_OPTION_100000_20250620' and 'BTC_USDT_OPTION_101000_20250920', you can assign 
+                simpler names like 'BTC_OPT1' and 'BTC_OPT2'.
+                Note:
+                    It is the user's responsibility to manage and maintain these custom product names.
             product_specs: product specifications, e.g. expiration, strike_price etc.
         '''
         data_source = data_source or trading_venue.upper()
         product: BaseProduct = self._engine._register_product(
             trading_venue=trading_venue,
-            product_basis=product,
+            basis=product,
             exchange=exchange,
             symbol=symbol,
-            product_alias=product_alias,
+            name=product_name,
             **product_specs
         )
-        self._add_product(product_alias or product.key, product)
+        self._add_product(product)
         datas: list[TimeBasedData] = self._databoy.add_data(
             product=product,
             data_source=data_source,

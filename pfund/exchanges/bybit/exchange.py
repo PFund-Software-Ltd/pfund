@@ -37,17 +37,6 @@ class Exchange(BaseExchange):
     # def configure(self, ...):
     #     pass
 
-    def add_all_product_mappings_to_adapter(self):
-        '''
-        Load all product mappings from market configs and add them to the adapter.
-        Useful when e.g. pfeed needs to download all products and hence needs to know all product mappings.
-        '''
-        market_configs = self.load_market_configs()
-        for category in market_configs:
-            for product, product_configs in market_configs[category].items():
-                symbol = product_configs['symbol']
-                self._adapter._add_mapping(category.upper(), product, symbol)
-
     '''
     Functions using REST API
     TODO EXTEND
@@ -80,7 +69,7 @@ class Exchange(BaseExchange):
         }
         params = {'accountType': account.type}
         if ccy:
-            params['coin'] = self._adapter(ccy)
+            params['coin'] = self.adapter(ccy)
         if kwargs:
             params.update(kwargs)
         return super().get_balances(
@@ -116,10 +105,10 @@ class Exchange(BaseExchange):
             for element in iterator:
                 params = {'category': category}
                 if pdt:
-                    epdt = self._adapter(element, group=category)
+                    epdt = self.adapter(element, group=category)
                     params['symbol'] = epdt
                 else:
-                    eqccy = self._adapter(element)
+                    eqccy = self.adapter(element)
                     params['settleCoin'] = eqccy
                 if kwargs:
                     params.update(kwargs)
@@ -171,10 +160,10 @@ class Exchange(BaseExchange):
             for element in iterator:
                 params = {'category': category}
                 if pdt:
-                    epdt = self._adapter(element, group=category)
+                    epdt = self.adapter(element, group=category)
                     params['symbol'] = epdt
                 else:
-                    eqccy = self._adapter(element)
+                    eqccy = self.adapter(element)
                     params['settleCoin'] = eqccy
                 if kwargs:
                     params.update(kwargs)
@@ -246,7 +235,7 @@ class Exchange(BaseExchange):
         for category in categories:
             params = {'category': category, 'startTime': start_time, 'endTime': end_time}
             if pdt:
-                epdt = self._adapter(pdt, group=category)
+                epdt = self.adapter(pdt, group=category)
                 params['symbol'] = epdt
             if kwargs:
                 params.update(kwargs)
@@ -293,9 +282,9 @@ class Exchange(BaseExchange):
         }
         params = {
             'category': product.category, 
-            'symbol': self._adapter(order.pdt, group=product.category),
-            'side': self._adapter(order.side, group='sides'),
-            'orderType': self._adapter(order.type),
+            'symbol': self.adapter(order.pdt, group=product.category),
+            'side': self.adapter(order.side, group='sides'),
+            'orderType': self.adapter(order.type),
             'qty': str(order.qty),
             'timeInForce': order.tif,
             'orderLinkId': order.oid,
@@ -335,7 +324,7 @@ class Exchange(BaseExchange):
         }
         params = {
             'category': product.category, 
-            'symbol': self._adapter(order.pdt, group=product.category),
+            'symbol': self.adapter(order.pdt, group=product.category),
             'orderLinkId': order.oid,
             'orderId': order.eoid,
         }

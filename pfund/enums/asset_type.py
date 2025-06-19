@@ -47,7 +47,7 @@ class TraditionalAssetType(StrEnum):
     STOCK = STK = AllAssetType.STOCK
     FUTURE = FUT = AllAssetType.FUTURE
     OPTION = OPT = AllAssetType.OPTION
-    FOREX = FX = AllAssetType.FOREX
+    FOREX = FX = SPOT = AllAssetType.FOREX
     CRYPTO = AllAssetType.CRYPTO
     COMMODITY = CMDTY = AllAssetType.COMMODITY
     ETF = AllAssetType.ETF
@@ -60,10 +60,21 @@ class CryptoAssetType(StrEnum):
     FUTURE = FUT = AllAssetType.FUTURE
     PERPETUAL = PERP = AllAssetType.PERPETUAL
     OPTION = OPT = AllAssetType.OPTION
-    CRYPTO = AllAssetType.CRYPTO
+    CRYPTO = SPOT = AllAssetType.CRYPTO
     INDEX = AllAssetType.INDEX
 
 
 # TODO: add DeFi asset types
 class DappAssetType(StrEnum):
     INDEX = AllAssetType.INDEX
+
+
+# EXTEND
+ASSET_TYPE_ALIASES: dict[str, str] = {
+    "IPERP": f'{AssetTypeModifier.INVERSE}-{AllAssetType.PERPETUAL}',
+    "IPERPETUAL": f'{AssetTypeModifier.INVERSE}-{AllAssetType.PERPETUAL}',
+    "IFUT": f'{AssetTypeModifier.INVERSE}-{AllAssetType.FUTURE}',
+    "IFUTURE": f'{AssetTypeModifier.INVERSE}-{AllAssetType.FUTURE}',
+    # "IOPT": f'{AssetTypeModifier.INVERSE}-{AllAssetType.OPTION}',
+    # "IOPTION": f'{AssetTypeModifier.INVERSE}-{AllAssetType.OPTION}',
+}

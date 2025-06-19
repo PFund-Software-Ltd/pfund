@@ -87,14 +87,14 @@ def __getattr__(name: str):
         from pfund.brokers.broker_dapp import DappBroker
         return DappBroker
     elif name == "Bybit":
-        from pfund.exchanges.bybit.exchange import Exchange
-        return Exchange
+        from pfund.exchanges import Bybit
+        return Bybit
     elif name == "Binance":
-        from pfund.exchanges.binance.exchange import Exchange
-        return Exchange
-    elif name == "Okx":
-        from pfund.exchanges.okx.exchange import Exchange
-        return Exchange
+        from pfund.exchanges import Binance
+        return Binance
+    elif name.upper() == 'OKX':
+        from pfund.exchanges import OKX
+        return OKX
 
 
 print_error = lambda msg: print(f'\033[91m{msg}\033[0m')
@@ -127,6 +127,8 @@ __all__ = (
     'CryptoBroker',
     'DappBroker',
     'Bybit',
+    'Binance',
+    'OKX',
 )
 def __dir__():
     return sorted(__all__)

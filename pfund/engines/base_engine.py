@@ -306,18 +306,18 @@ class BaseEngine(metaclass=MetaEngine):
     def _register_product(
         self,
         trading_venue: tTradingVenue, 
-        product_basis: str,
+        basis: str,
         exchange: str='', 
         symbol: str='', 
-        product_alias: str='',
-        **product_specs
+        name: str='',
+        **specs
     ) -> BaseProduct:
         broker: BaseBroker = self._add_broker(trading_venue)
         if broker.name == Broker.CRYPTO:
             exch = trading_venue
-            product: BaseProduct = broker.add_product(exch, product_basis, product_alias=product_alias, **product_specs)
+            product: BaseProduct = broker.add_product(exch, basis, name=name, **specs)
         elif broker.name == Broker.IB:
-            product: BaseProduct = broker.add_product(product_basis, exchange=exchange, symbol=symbol, product_alias=product_alias, **product_specs)
+            product: BaseProduct = broker.add_product(basis, exchange=exchange, symbol=symbol, name=name, **specs)
         else:
             raise NotImplementedError(f"Broker {broker.name} is not supported")
         return product

@@ -32,6 +32,7 @@ class BybitProduct(CryptoProduct):
         self.category = category
         return self
     
+    # TODO: move to BaseProduct and add back SUPPORTED_ASSET_TYPES to BaseExchange?
     @model_validator(mode='after')
     def _validate_asset_type(self):
         from pfund.exchanges import Bybit

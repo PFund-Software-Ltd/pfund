@@ -1,80 +1,104 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Literal, ClassVar
 if TYPE_CHECKING:
+    from pfund.typing import tEnvironment
+    from pfund.adapter import Adapter
+    from pfund.exchanges.exchange_base import BaseExchange
     from pfund.products.product_base import BaseProduct
     from pfund.datas.data_base import BaseData
 
 import os
 import time
-try:
-    import orjson as json
-except ImportError:
-    import json
 import logging
+import importlib
 from abc import ABC, abstractmethod
 from contextlib import suppress
 from threading import Thread
 from collections import defaultdict
 from functools import reduce
 
-from typing import Callable, Literal
-
+try:
+    import orjson as json
+except ImportError:
+    import json
 from numpy import sign
-from websocket import WebSocketApp, WebSocketConnectionClosedException
+from websockets.asyncio.client import connect
+from websockets.exceptions import ConnectionClosedError
+
 
 from pfund.managers.order_manager import OrderUpdateSource
-from pfund.adapter import Adapter
 from pfund.enums import Environment, Broker, CryptoExchange, PublicDataChannel, PrivateDataChannel, DataChannelType
 
 
 class BaseWebsocketApi(ABC):
-    URLS = {}
+    name: ClassVar[CryptoExchange]
+    SAMPLES_FILENAME = 'ws_api_samples.yml'
+
+    URLS: ClassVar[dict[Environment, str | dict[Literal['public', 'private'], str]]] = {}
     SUPPORTED_ORDERBOOK_LEVELS = []
     SUPPORTED_RESOLUTIONS = {}
 
-    def __init__(self, env: Environment, name: CryptoExchange, adapter: Adapter):
-        self.env = env
-        self.bkr = Broker.CRYPTO
-        self.name = self.exch = name.upper()
-        self.logger = logging.getLogger(self.exch.lower() + '_' + 'ws')
-        self._adapter = adapter
-        self._urls: dict|str = self.URLS.get(self.env.value, '')
-        self._use_separate_private_ws_url = self._check_if_use_separate_private_ws_url()
+    def __init__(self, env: Environment | tEnvironment):
+        self._env = Environment[env.upper()]
+        self._bkr = Broker.CRYPTO
+        self._logger = logging.getLogger(self.name.lower() + '_' + 'ws')
+        self._dev_mode = False
+        Exchange: type[BaseExchange] = getattr(importlib.import_module(f'pfund.exchanges.{self.name.lower()}.exchange'), 'Exchange')
+        self._adapter: Adapter = Exchange.adapter
+        self._urls: str | dict[Literal['public', 'private'], str] | None = self.URLS.get(self._env, None)
         
-        # REVIEW: is it necessary to have self.exch as a default server?
-        self._servers = [self.exch]  
+        # TODO
+        # self._use_separate_private_ws_url = self._check_if_use_separate_private_ws_url()
         
-        self._full_channels = {'public': [], 'private': []}
-        self._products = {}  # {pdt1: product1, pdt2: product2}
-        self._accounts = {}
-        self._zmqs = {}
-        self._ws_threads = {}
-        self._websockets = {}
-
-        self._sub_num = self._num_subscribed = 0
-
-        self._background_thread = None
-        self._ping_timeout = 10  # in seconds
-        self._ping_freq = 20  # in seconds
-        self._last_ping_ts = time.time()
-
-        self._check_connection_freq = 10
-        self._last_check_connection_ts = time.time()
-
-        self._is_connected = defaultdict(bool)
-        self._is_authenticating = defaultdict(bool) 
-        self._is_authenticated = defaultdict(bool)
-        self._is_reconnecting = False
+        # # REVIEW: is it necessary to have self.exch as a default server?
+        # self._servers = [self.exch]  
         
-        self._orderbook_levels = {}
-        self._orderbook_depths = {}
-        self._is_snapshots_ready = defaultdict(bool)
-        self._bids_l2 = defaultdict(dict)
-        self._asks_l2 = defaultdict(dict)
-        self._last_quote_nums = defaultdict(int)
+        # self._full_channels = {'public': [], 'private': []}
+        # self._products = {}  # {pdt1: product1, pdt2: product2}
+        # self._accounts = {}
+        # self._zmqs = {}
+        # self._ws_threads = {}
+        # self._websockets = {}
 
-        # callback function if defined by user
-        self._msg_callback = None
+        # self._sub_num = self._num_subscribed = 0
+
+        # self._background_thread = None
+        # self._ping_timeout = 10  # in seconds
+        # self._ping_freq = 20  # in seconds
+        # self._last_ping_ts = time.time()
+
+        # self._check_connection_freq = 10
+        # self._last_check_connection_ts = time.time()
+
+        # self._is_connected = defaultdict(bool)
+        # self._is_authenticating = defaultdict(bool) 
+        # self._is_authenticated = defaultdict(bool)
+        # self._is_reconnecting = False
+        
+        # self._orderbook_levels = {}
+        # self._orderbook_depths = {}
+        # self._is_snapshots_ready = defaultdict(bool)
+        # self._bids_l2 = defaultdict(dict)
+        # self._asks_l2 = defaultdict(dict)
+        # self._last_quote_nums = defaultdict(int)
+
+        # # callback function if defined by user
+        # self._msg_callback = None
+    
+    # TEMP
+    async def test(self, callback):
+        url = self._urls['public']
+        async with connect(url) as websocket:
+            message = await websocket.recv()
+            print(message)
+    
+    def _enable_dev_mode(self):
+        '''If enabled, returns only raw messages for all endpoints and stores them automatically to a yaml file as samples in caches.'''
+        self._dev_mode = True
+        self._logger.warning(
+            "DEV mode is enabled. This mode is intended **only** for internal development of the pfund library. "
+            "It should never be used in production or by end users."
+        )
 
     def _clean_up(self):
         self._zmqs = {}
@@ -127,7 +151,7 @@ class BaseWebsocketApi(ABC):
         ws_name = self._servers[0]
         zmq = self._get_zmq(ws_name)
         if zmq:
-            zmq_msg = (4, 0, (self.bkr, self.exch, 'pong'))
+            zmq_msg = (4, 0, (self._bkr, self.exch, 'pong'))
             zmq.send(*zmq_msg, receiver='engine')
 
     def get_zmqs(self) -> list:
@@ -149,7 +173,7 @@ class BaseWebsocketApi(ABC):
                     continue
             self._zmqs[ws_name] = ZeroMQ(ws_name)
             self._zmqs[ws_name].start(
-                logger=self.logger,
+                logger=self._logger,
                 send_port=port,
                 recv_ports=[zmq_ports['engine']]
             )
@@ -157,7 +181,7 @@ class BaseWebsocketApi(ABC):
         ws_name = self._servers[0]
         zmq = self._get_zmq(ws_name)
         if zmq:
-            zmq_msg = (4, 1, (self.bkr, self.exch, os.getpid()))
+            zmq_msg = (4, 1, (self._bkr, self.exch, os.getpid()))
             zmq.send(*zmq_msg, receiver='engine')
 
     def stop_zmqs(self):
@@ -170,7 +194,7 @@ class BaseWebsocketApi(ABC):
     def add_server(self, category: str):
         if category not in self._servers:
             self._servers.append(category)
-            self.logger.debug(f'added server "{category}"')
+            self._logger.debug(f'added server "{category}"')
             # FIXME: remove the default server
             if self.exch in self._servers:
                 self._servers.remove(self.exch)
@@ -178,7 +202,7 @@ class BaseWebsocketApi(ABC):
     def add_account(self, account):
         assert account.name != self.exch, f'account name "{self.exch}" is reserved'
         self._accounts[account.name] = account
-        self.logger.debug(f'added account {account.name}')
+        self._logger.debug(f'added account {account.name}')
 
     def add_product(self, product: BaseProduct):
         if str(product) in self._products:
@@ -186,12 +210,12 @@ class BaseWebsocketApi(ABC):
         if product.category:
             self.add_server(product.category)
         self._products[str(product)] = product
-        self.logger.debug(f'added product {str(product)}')
+        self._logger.debug(f'added product {str(product)}')
     
     def remove_product(self, product: BaseProduct):
         if str(product) in self._products:
             del self._products[str(product)]
-            self.logger.debug(f'removed product {str(product)}')
+            self._logger.debug(f'removed product {str(product)}')
         # TODO: remove server
 
     def add_channel(
@@ -206,7 +230,7 @@ class BaseWebsocketApi(ABC):
         channel_type = channel_type.value.lower()
         if full_channel not in self._full_channels[channel_type]:
             self._full_channels[channel_type].append(full_channel)
-            self.logger.debug(f'added channel={full_channel}')
+            self._logger.debug(f'added channel={full_channel}')
     
     def _create_full_channel(
         self, 
@@ -231,7 +255,7 @@ class BaseWebsocketApi(ABC):
         channel_type = channel_type.value.lower()
         if full_channel in self._full_channels[channel_type]:
             self._full_channels[channel_type].remove(full_channel)
-            self.logger.debug(f'removed channel={full_channel}')
+            self._logger.debug(f'removed channel={full_channel}')
 
     # send msg to engine->connection manager to indicate it is connected 
     # to connection manager, a successful connection = connected + authenticated + subscribed + other stuff (e.g. snapshots ready)
@@ -239,30 +263,30 @@ class BaseWebsocketApi(ABC):
         ws_name = self._servers[0]
         zmq = self._get_zmq(ws_name)
         if zmq:
-            zmq_msg = (4, 2, (self.bkr, self.exch, 'connected'),)
+            zmq_msg = (4, 2, (self._bkr, self.exch, 'connected'),)
             zmq.send(*zmq_msg, receiver='engine')
 
     def _on_all_disconnected(self):
         ws_name = self._servers[0]
         zmq = self._get_zmq(ws_name)
         if zmq:
-            zmq_msg = (4, 3, (self.bkr, self.exch, 'disconnected'))
+            zmq_msg = (4, 3, (self._bkr, self.exch, 'disconnected'))
             zmq.send(*zmq_msg, receiver='engine')
 
     def _on_connected(self, ws_name: str):
         if not self._is_connected[ws_name]:
             self._is_connected[ws_name] = True
-            self.logger.debug(f'ws={ws_name} is connected')
+            self._logger.debug(f'ws={ws_name} is connected')
         else:
-            self.logger.warning(f'ws={ws_name} is already connected')
+            self._logger.warning(f'ws={ws_name} is already connected')
 
     def _on_disconnected(self, ws_name: str):
         if self._is_connected[ws_name]:
             self._is_connected[ws_name] = False
             self._is_authenticated[ws_name] = False
-            self.logger.debug(f'ws={ws_name} is disconnected')
+            self._logger.debug(f'ws={ws_name} is disconnected')
         else:
-            self.logger.warning(f'ws={ws_name} is already disconnected')
+            self._logger.warning(f'ws={ws_name} is already disconnected')
 
     # connected = ws is connected
     def is_connected(self, ws_name):
@@ -311,13 +335,13 @@ class BaseWebsocketApi(ABC):
     def reconnect(self, ws_names: str|list[str]|None=None, reason: str=''):
         ws_names = self._adjust_input_ws_names(ws_names)
         if not self._is_reconnecting:
-            self.logger.warning(f'{ws_names} is reconnecting, {reason=}')
+            self._logger.warning(f'{ws_names} is reconnecting, {reason=}')
             self._is_reconnecting = True
             self.disconnect(ws_names, reason='reconnection')
             self.connect(ws_names)
             self._is_reconnecting = False
         else:
-            self.logger.debug(f'{ws_names} is already reconnecting, do not reconnect again due to {reason=}')
+            self._logger.debug(f'{ws_names} is already reconnecting, do not reconnect again due to {reason=}')
     
     def connect(self, ws_names: str|list[str]|None=None) -> bool:
         ws_names = self._adjust_input_ws_names(ws_names)
@@ -327,7 +351,7 @@ class BaseWebsocketApi(ABC):
             if is_private_ws and not self._use_separate_private_ws_url:
                 continue
             ws_url = self._create_ws_url(ws_name)
-            self.logger.debug(f'ws={ws_name} is connecting to {ws_url}')
+            self._logger.debug(f'ws={ws_name} is connecting to {ws_url}')
             ws = self._create_ws_app(ws_name, ws_url)
             self._websockets[ws_name] = ws
             self._ws_threads[ws_name] = self._create_ws_thread(ws)
@@ -335,7 +359,7 @@ class BaseWebsocketApi(ABC):
         # start running the ws apps
         for thd in self._ws_threads.values():
             thd.start()
-            self.logger.debug(f'thread {thd.name} started')
+            self._logger.debug(f'thread {thd.name} started')
         
         if self._wait(lambda: self._is_all_connected(ws_names), reason='connection'):
             if self._wait(lambda: self._is_all_authenticated(ws_names), reason='authentication'):
@@ -348,7 +372,7 @@ class BaseWebsocketApi(ABC):
                 if self._wait(self._is_all_subscribed, reason='subscription'):
                     if hasattr(self, '_get_initial_snapshots'):
                         Thread(target=self._get_initial_snapshots, daemon=True).start()
-                        self.logger.debug(f'_get_initial_snapshots thread started')
+                        self._logger.debug(f'_get_initial_snapshots thread started')
                     pdts = list(self._orderbook_levels) if self._orderbook_levels else list(self._products)
                     # set all snapshots to be ready if orderbook is level 1
                     for pdt in pdts:
@@ -357,7 +381,7 @@ class BaseWebsocketApi(ABC):
                     if self._wait(self._is_all_snapshots_ready, reason='snapshots'):
                         self._background_thread = Thread(target=self._run_background_tasks, daemon=True)
                         self._background_thread.start()
-                        self.logger.debug(f'background thread started')
+                        self._logger.debug(f'background thread started')
                         self._on_all_connected()
                         return
         self.disconnect(reason='connection failed')
@@ -366,23 +390,23 @@ class BaseWebsocketApi(ABC):
         ws_names = self._adjust_input_ws_names(ws_names)
         for ws_name in ws_names:
             ws = self._websockets[ws_name]
-            self.logger.warning(f'ws={ws_name} is disconnecting, {reason=}')
+            self._logger.warning(f'ws={ws_name} is disconnecting, {reason=}')
             del self._websockets[ws_name]
-            self.logger.warning(f'ws={ws_name} is closing')
+            self._logger.warning(f'ws={ws_name} is closing')
             ws.close()
             thd = self._ws_threads[ws_name]
             while thd.is_alive():
-                self.logger.debug(f'waiting for thread {thd.name} to finish')
+                self._logger.debug(f'waiting for thread {thd.name} to finish')
                 time.sleep(1)
             else:
-                self.logger.debug(f'thread {thd.name} is finished')
+                self._logger.debug(f'thread {thd.name} is finished')
                 del self._ws_threads[ws_name]
         while self._background_thread and self._background_thread.is_alive():
-            self.logger.debug(f'waiting for background thread to finish')
+            self._logger.debug(f'waiting for background thread to finish')
             time.sleep(1)
         else:
             self._background_thread = None
-            self.logger.debug(f'background thread is finished')
+            self._logger.debug(f'background thread is finished')
         self._clean_up()
         self._on_all_disconnected()
 
@@ -391,10 +415,10 @@ class BaseWebsocketApi(ABC):
             with suppress(WebSocketConnectionClosedException):
                 ws.send(json.dumps(msg))
         except:
-            self.logger.exception(f'ws={ws.name} exception:')
+            self._logger.exception(f'ws={ws.name} exception:')
 
     def _on_pong(self, ws, msg):
-        self.logger.warning(f'unhandled ws={ws.name} pong {msg=}')
+        self._logger.warning(f'unhandled ws={ws.name} pong {msg=}')
 
     def _on_open(self, ws):
         self._on_connected(ws.name)
@@ -411,7 +435,7 @@ class BaseWebsocketApi(ABC):
             else:
                 if ws.name in self._accounts:
                     self._authenticate(ws.name)
-        self.logger.debug(f'ws={ws.name} is opened')
+        self._logger.debug(f'ws={ws.name} is opened')
 
     @abstractmethod
     def _on_message(self, ws, msg):
@@ -419,16 +443,16 @@ class BaseWebsocketApi(ABC):
 
     def _on_error(self, ws, error):
         self._on_disconnected(ws.name)
-        self.logger.error(f'ws={ws.name} error {error}')
+        self._logger.error(f'ws={ws.name} error {error}')
 
     def _on_close(self, ws, status_code, reason):
         self._on_disconnected(ws.name)
-        self.logger.warning(f'ws={ws.name} is closed, status_code={status_code} reason={reason}')
+        self._logger.warning(f'ws={ws.name} is closed, status_code={status_code} reason={reason}')
     
     def _wait(self, condition_func: Callable, reason: str='', timeout: int=10):
         while timeout:
             if condition_func():
-                self.logger.debug(f'{reason} is successful')
+                self._logger.debug(f'{reason} is successful')
                 return True
             timeout -= 1
             time.sleep(1)
@@ -441,9 +465,9 @@ class BaseWebsocketApi(ABC):
                 log_msg += f' {self._sub_num=} {self._num_subscribed=}'
             elif reason == 'snapshots':
                 log_msg += f' _is_snapshots_ready: {self._is_snapshots_ready}'
-            self.logger.info(log_msg)
+            self._logger.info(log_msg)
         else:
-            self.logger.warning(f'failed {log_msg}')
+            self._logger.warning(f'failed {log_msg}')
             return False
 
     def _validate_sequence_num(self, ws_name: str, pdt: str, seq_num: int, type_: Literal['quote', 'position']='quote') -> bool:
@@ -453,7 +477,7 @@ class BaseWebsocketApi(ABC):
             raise NotImplementedError(f'sequence number {type_=} is not supported')
 
         if seq_num <= last_seq_num:
-            self.logger.error(f'{pdt} {type_=} {seq_num=} <= {last_seq_num=}')
+            self._logger.error(f'{pdt} {type_=} {seq_num=} <= {last_seq_num=}')
             self.disconnect(ws_name, reason=f'wrong {type_}_num')
             return False
         else:           
@@ -486,10 +510,10 @@ class BaseWebsocketApi(ABC):
         zmq = self._get_zmq(ws_name)
         if zmq:
             for tick in ticks:
-                zmq_msg = (1, 2, (self.bkr, self.exch, pdt, tick))
+                zmq_msg = (1, 2, (self._bkr, self.exch, pdt, tick))
                 zmq.send(*zmq_msg)
         else:
-            data = {'bkr': self.bkr, 'exch': self.exch, 'pdt': pdt, 'channel': 'tradebook', 'data': ticks}
+            data = {'bkr': self._bkr, 'exch': self.exch, 'pdt': pdt, 'channel': 'tradebook', 'data': ticks}
             return data
 
     def _process_kline_msg(self, ws_name, msg, resolution: str, pdt, schema):
@@ -517,10 +541,10 @@ class BaseWebsocketApi(ABC):
         zmq = self._get_zmq(ws_name)
         if zmq:
             for bar in bars:
-                zmq_msg = (1, 3, (self.bkr, self.exch, pdt, bar))
+                zmq_msg = (1, 3, (self._bkr, self.exch, pdt, bar))
                 zmq.send(*zmq_msg)
         else:
-            data = {'bkr': self.bkr, 'exch': self.exch, 'pdt': pdt, 'channel': f'kline.{resolution}', 'data': bars}
+            data = {'bkr': self._bkr, 'exch': self.exch, 'pdt': pdt, 'channel': f'kline.{resolution}', 'data': bars}
             return data
 
     def _process_position_msg(self, ws_name, msg, schema) -> dict:
@@ -553,10 +577,10 @@ class BaseWebsocketApi(ABC):
             raise Exception(f'{self.exch} unhandled {res_type=}')
         zmq = self._get_zmq(ws_name)
         if zmq:
-            zmq_msg = (3, 2, (self.bkr, self.exch, acc, positions))
+            zmq_msg = (3, 2, (self._bkr, self.exch, acc, positions))
             zmq.send(*zmq_msg)
         else:
-            data = {'bkr': self.bkr, 'exch': self.exch, 'acc': acc, 'channel': 'position', 'data': positions}
+            data = {'bkr': self._bkr, 'exch': self.exch, 'acc': acc, 'channel': 'position', 'data': positions}
             return data
 
     def _process_balance_msg(self, ws_name, msg, schema):
@@ -578,10 +602,10 @@ class BaseWebsocketApi(ABC):
             raise Exception(f'{self.exch} unhandled {res_type=}')
         zmq = self._get_zmq(ws_name)
         if zmq:
-            zmq_msg = (3, 1, (self.bkr, self.exch, acc, balances))
+            zmq_msg = (3, 1, (self._bkr, self.exch, acc, balances))
             zmq.send(*zmq_msg)
         else:
-            data = {'bkr': self.bkr, 'exch': self.exch, 'acc': acc, 'channel': 'balance', 'data': balances}
+            data = {'bkr': self._bkr, 'exch': self.exch, 'acc': acc, 'channel': 'balance', 'data': balances}
             return data
 
     def _process_order_msg(self, ws_name, msg, schema):
@@ -607,10 +631,10 @@ class BaseWebsocketApi(ABC):
             raise Exception(f'{self.exch} unhandled {res_type=}')
         zmq = self._get_zmq(ws_name)
         if zmq:
-            zmq_msg = (2, 1, (self.bkr, self.exch, acc, orders))
+            zmq_msg = (2, 1, (self._bkr, self.exch, acc, orders))
             zmq.send(*zmq_msg)
         else:
-            data = {'bkr': self.bkr, 'exch': self.exch, 'acc': acc, 'channel': 'order', 'data': orders}
+            data = {'bkr': self._bkr, 'exch': self.exch, 'acc': acc, 'channel': 'order', 'data': orders}
             return data
 
     def _process_trade_msg(self, ws_name, msg, schema):
@@ -636,10 +660,10 @@ class BaseWebsocketApi(ABC):
             raise Exception(f'{self.exch} unhandled {res_type=}')
         zmq = self._get_zmq(ws_name)
         if zmq:
-            zmq_msg = (2, 1, (self.bkr, self.exch, acc, trades))
+            zmq_msg = (2, 1, (self._bkr, self.exch, acc, trades))
             zmq.send(*zmq_msg)
         else:
-            data = {'bkr': self.bkr, 'exch': self.exch, 'acc': acc, 'channel': 'trade', 'data': trades}
+            data = {'bkr': self._bkr, 'exch': self.exch, 'acc': acc, 'channel': 'trade', 'data': trades}
             return data
 
     @abstractmethod

@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfund.products.product_base import BaseProduct
+    from pfund.products.product_base import CryptoProduct
     from pfund.orders.order_base import BaseOrder
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.datas.data_base import BaseData
@@ -111,20 +111,18 @@ class CryptoBroker(TradeBroker):
             raise ValueError(f'{account=} has already been added')
         return account
     
-    def get_product(self, exch: tCryptoExchange, basis: str, **specs) -> BaseProduct | None:
-        from pfund.products.product_base import BaseProduct
+    def get_product(self, exch: tCryptoExchange, name: str) -> CryptoProduct | None:
         exch = CryptoExchange[exch.upper()]
-        product_key: str = BaseProduct._generate_key(exch, basis, **specs)
-        return self._products[exch].get(product_key, None)
+        return self._products[exch].get(name, None)
     
-    def add_product(self, exch: tCryptoExchange, basis: str, alias: str='', **specs) -> BaseProduct:
+    def add_product(self, exch: tCryptoExchange, basis: str, name: str='', **specs) -> CryptoProduct:
         exchange = self.add_exchange(exch)
         # create another product object to format a correct product name
-        product = exchange.create_product(basis, alias=alias, **specs)
-        existing_product = self.get_product(exch, basis, )
+        product = exchange.create_product(basis, name=name, **specs)
+        existing_product: CryptoProduct | None = self.get_product(exch, product.name)
         if not existing_product:
             exchange.add_product(product)
-            self._products[exchange.name][product.key] = product
+            self._products[exchange.name][product.name] = product
             self._logger.debug(f'added {product}')
         else:
             product = existing_product
@@ -248,7 +246,7 @@ class CryptoBroker(TradeBroker):
     ):
         return CryptoOrder(creator=creator, account=account, product=product, side=side, qty=quantity, px=price, **kwargs)
     
-    def place_orders(self, account: CryptoAccount, product: BaseProduct, orders: list[BaseOrder]):
+    def place_orders(self, account: CryptoAccount, product: CryptoProduct, orders: list[BaseOrder]):
         exchange = self.get_exchange(account.exch)
         # TODO
         # self.rm checks risk
@@ -277,7 +275,7 @@ class CryptoBroker(TradeBroker):
                 if ws_msg is not None:
                     self._zmq.send(ws_msg)
 
-    def cancel_orders(self, account: CryptoAccount, product: BaseProduct, orders: list[BaseOrder]):
+    def cancel_orders(self, account: CryptoAccount, product: CryptoProduct, orders: list[BaseOrder]):
         exchange = self.get_exchange(account.exch)
 
         num_orders = 0
@@ -309,7 +307,7 @@ class CryptoBroker(TradeBroker):
         pass
 
     # TODO
-    def amend_orders(self, account: CryptoAccount, product: BaseProduct, orders: list[BaseOrder]):
+    def amend_orders(self, account: CryptoAccount, product: CryptoProduct, orders: list[BaseOrder]):
         # TODO, self.rm checks risk
         # if failed risk check, reset amend_px and amend_qty
 

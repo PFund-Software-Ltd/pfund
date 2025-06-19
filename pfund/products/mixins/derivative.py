@@ -24,3 +24,4 @@ class DerivativeMixin:
     @property
     def multiplier(self) -> Decimal:
         return self.contract_size
+    
