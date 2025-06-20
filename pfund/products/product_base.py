@@ -18,11 +18,16 @@ class BaseProduct(BaseModel):
     exchange: CryptoExchange | str = ''
     basis: ProductBasis
     adapter: Adapter | None = None
-    # specifications that make a product unique, e.g. for options, specs are strike_price, expiration_date, etc.
-    specs: dict = Field(default_factory=dict)
-    # if symbol is not provided, will be derived from name for TradFi brokers (e.g. IB). e.g. AAPL_USD_STK -> AAPL.
-    symbol: str | None=None
-    name: str=Field(default='', description='unique product name, if not provided, symbol will be used')
+    specs: dict = Field(default_factory=dict, description='specifications that make a product unique, e.g. for options, specs are strike_price, expiration_date, etc.')
+    symbol: str = Field(
+        default='', 
+        description='''
+            product symbol used by the trading venue.
+            If not provided, it will be derived automatically based on conventions e.g. AAPL_USD_STK -> AAPL.
+            Note that the derived symbol might not be correct, it would be better to provide it manually when it is wrong.
+        '''
+    )
+    name: str = Field(default='', description='unique product name, if not provided, symbol will be used')
     tick_size: Decimal | None=None
     lot_size: Decimal | None=None
     
@@ -53,12 +58,11 @@ class BaseProduct(BaseModel):
         if hasattr(self, '__mixin_post_init__'):
             self.__mixin_post_init__()
         self.specs = self._create_specs()
-        if self.symbol is None and hasattr(self, '_create_symbol'):
-            self.symbol = self._create_symbol()
+        self.symbol = self.symbol or self._create_symbol()
         self.name = self.name or self._create_name()
     
     def _create_name(self) -> str:
-        return self.symbol or str(self.basis)
+        return self.symbol
     
     @property
     def tv(self) -> TradingVenue:
@@ -73,28 +77,19 @@ class BaseProduct(BaseModel):
         return self.exchange
     
     @property
-    def base(self) -> str:
-        return self.basis.base_asset
-    
-    @property
     def base_asset(self) -> str:
         return self.basis.base_asset
-    
-    @property
-    def quote(self) -> str:
-        return self.basis.quote_asset
+    base = base_asset
     
     @property
     def quote_asset(self) -> str:
         return self.basis.quote_asset
-    
-    @property
-    def type(self) -> str:
-        return self.basis.asset_type
+    quote = quote_asset
     
     @property
     def asset_type(self) -> ProductAssetType:
         return self.basis.asset_type
+    type = asset_type
     
     @property
     def asset_pair(self) -> str:

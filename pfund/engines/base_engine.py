@@ -161,12 +161,14 @@ class BaseEngine(metaclass=MetaEngine):
         
 
         self.name = name or self._get_default_name()
+        # TODO: until mtflow supports running multiple trade engines remotely, it is always LOCAL for now
         self._run_mode = RunMode.LOCAL
         
         self._logging_configurator = self._setup_logging()
         self._logger = logging.getLogger('pfund')
 
         self._store = MTStore(env=cls._env, data_tool=cls._data_tool)
+        # TODO: add pfeed's data engine to trade kernel?
         self._kernel = TradeKernel(cls._database, cls._ray_init_kwargs, cls._external_listeners)
         # FIXME: engine should use zmq when there are remote components, not depending on its run mode
         self._messenger = Messenger(self._run_mode)
@@ -345,12 +347,10 @@ class BaseEngine(metaclass=MetaEngine):
         self._store.register_component(consumer_name, component_name, component_metadata)
     
     def _register_market_data(self, component: Component, data: TimeBasedData):
-        # FIXME
-        is_data_source_a_trading_venue = data.data_source in TradingVenue.__members__
         product = data.product
         if not data.is_resamplee():
             broker: BaseBroker = self.get_broker(product.bkr)
-            broker.add_channel(product.exchange, data)
+            broker._add_data_channel(data)
         self._store.register_market_data(
             consumer=component.name,
             data_source=data.data_source,

@@ -60,11 +60,28 @@ class DataBoy:
     def _add_data(self, product: BaseProduct, resolution: Resolution, data_config: DataConfig) -> TimeBasedData:
         from pfund.datas import QuoteData, TickData, BarData
         if resolution.is_quote():
-            data = QuoteData(product, resolution)
+            data = QuoteData(
+                data_source=data_config.data_source, 
+                data_origin=data_config.data_origin, 
+                product=product, 
+                resolution=resolution
+            )
         elif resolution.is_tick():
-            data = TickData(product, resolution)
+            data = TickData(
+                data_source=data_config.data_source, 
+                data_origin=data_config.data_origin, 
+                product=product, 
+                resolution=resolution
+            )
         else:
-            data = BarData(product, resolution, shift=data_config.shift.get(resolution, 0), skip_first_bar=data_config.skip_first_bar.get(resolution, True))
+            data = BarData(
+                data_source=data_config.data_source, 
+                data_origin=data_config.data_origin, 
+                product=product, 
+                resolution=resolution, 
+                shift=data_config.shift.get(resolution, 0), 
+                skip_first_bar=data_config.skip_first_bar.get(resolution, True)
+            )
             self._stale_bar_timeouts[data] = data_config.stale_bar_timeout[resolution]
         self.datas[product][resolution] = data
         return data
@@ -73,14 +90,6 @@ class DataBoy:
         resolution = Resolution(resolution)
         return self.datas[product].get(resolution, None)
     
-    def remove_data(self, product: BaseProduct, resolution: ResolutionRepr | Resolution) -> TimeBasedData:
-        if data := self.get_data(product, resolution):
-            del self.datas[product][data.resolution]
-            self._logger.debug(f'removed {product} {data.resolution} data')
-            return data
-        else:
-            raise ValueError(f'{product} {resolution} data not found')
-
     def add_data(self, product: BaseProduct, data_source: tDataSource, data_origin: str, data_config: DataConfigDict | DataConfig | None) -> list[TimeBasedData]:
         if not isinstance(data_config, DataConfig):
             data_config = data_config or {}

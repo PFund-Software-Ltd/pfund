@@ -1,10 +1,11 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    from pfund.typing import tEnvironment
     from pfund.datas.data_base import BaseData
+    from pfund.datas import QuoteData, TickData, BarData
 
 import time
-from pathlib import Path
 try:
     import orjson as json
 except ImportError:
@@ -12,7 +13,7 @@ except ImportError:
 import hmac
 from decimal import Decimal
 
-from pfund.enums import PublicDataChannel, PrivateDataChannel
+from pfund.enums import PublicDataChannel
 from pfund.exchanges.ws_api_base import BaseWebsocketApi
 from pfund.enums import Environment, CryptoExchange
 from pfund.products.product_bybit import BybitProduct
@@ -36,9 +37,14 @@ class WebsocketApi(BaseWebsocketApi):
             'private': f'wss://stream.bybit.com/{VERSION}/private'
         }
     }
-    SUPPORTED_ORDERBOOK_LEVELS = [2]
+    SUPPORTED_ORDERBOOK_LEVELS = {
+        # category: supported orderbook levels
+        ProductCategory.LINEAR: [1, 2],
+        ProductCategory.INVERSE: [1, 2],
+        ProductCategory.SPOT: [1, 2],
+        ProductCategory.OPTION: [2],
+    }
     SUPPORTED_RESOLUTIONS = {
-        # per category
         TimeframeUnits.QUOTE: {
             # category: orderbook depth
             ProductCategory.LINEAR: [1, 50, 200, 500],
@@ -55,6 +61,18 @@ class WebsocketApi(BaseWebsocketApi):
         ProductCategory.SPOT: 10
     }
 
+    def __init__(self, env: Environment | tEnvironment):
+        super().__init__(env=env)
+        # TODO: create self._servers?
+
+    def _add_server(self, category: str):
+        if category not in self._servers:
+            self._servers.append(category)
+            self._logger.debug(f'added server "{category}"')
+            # FIXME: remove the default server
+            if self.exch in self._servers:
+                self._servers.remove(self.exch)
+                
     def _ping(self):
         msg = {"op": "ping"}
         websockets = list(self._websockets.values())
@@ -86,51 +104,32 @@ class WebsocketApi(BaseWebsocketApi):
             ws_url = self._urls['private']
         return ws_url
 
-    def _create_public_channel(self, channel: PublicDataChannel | str, data: BaseData | None=None):
-        if channel in PublicDataChannel:
-            product = data.product
-            pdt = str(product)
-            epdt = self._adapter(pdt, group=product.category)
-            echannel = self._adapter(channel, group='channel')
-            if channel == PublicDataChannel.orderbook:
-                self._orderbook_levels[pdt] = data.orderbook_level
-                if self._orderbook_levels[pdt] not in self.SUPPORTED_ORDERBOOK_LEVELS:
-                    raise NotImplementedError(f'{pdt} orderbook_level={self._orderbook_levels[pdt]} is not supported')
-                self._orderbook_depths[pdt] = data.orderbook_depth
-                if product.category:
-                    supported_periods = self.SUPPORTED_RESOLUTIONS['q'][product.category]
-                else:
-                    supported_periods = self.SUPPORTED_RESOLUTIONS['q']
-                if self._orderbook_depths[pdt] not in supported_periods:
-                    # Find an integer in self.SUPPORTED_RESOLUTIONS['q'] that is the nearest to the intended orderbook_depth
-                    nearest_depth = min(supported_periods, key=lambda supported_period: abs(supported_period - self._orderbook_depths[pdt]))
-                    self._logger.warning(f'orderbook_depth={self._orderbook_depths[pdt]} is not supported, using the nearest supported depth "{nearest_depth}". {supported_periods=}')
-                    subscribed_orderbook_depth = nearest_depth
-                else:
-                    subscribed_orderbook_depth = self._orderbook_depths[pdt]
-                self._orderbook_depths[pdt] = min(self._orderbook_depths[pdt], subscribed_orderbook_depth)
-                full_channel = '.'.join([echannel, str(subscribed_orderbook_depth), epdt])
-            elif channel == PublicDataChannel.tradebook:
-                full_channel = '.'.join([echannel, epdt])
-            elif channel == PublicDataChannel.candlestick:
-                period, timeframe = data.period, repr(data.timeframe)
-                if timeframe not in self.SUPPORTED_RESOLUTIONS.keys():
-                    raise NotImplementedError(f'({channel}.{pdt}) {timeframe=} for kline is not supported, only timeframes in {list(self.SUPPORTED_RESOLUTIONS)} are supported')
-                resolution = str(period) + timeframe
-                eresolution = self._adapter(resolution, group='resolution')
-                full_channel = '.'.join([echannel, eresolution, epdt])
-            else:
-                raise NotImplementedError(f'{channel=} is not supported')
-        else:  # channels like 'tickers.{symbol}', 'liquidation.{symbol}'
-            epdt = product.symbol
-            full_channel = '.'.join([echannel, epdt])
+    def _create_public_channel(self, data: BaseData):
+        channel, product = data.channel, data.product
+        echannel = self._adapter(channel.value, group='channel')
+        if channel == PublicDataChannel.orderbook:
+            data: QuoteData
+            supported_orderbook_levels = self.SUPPORTED_ORDERBOOK_LEVELS[product.category]
+            supported_orderbook_depths = self.SUPPORTED_RESOLUTIONS[TimeframeUnits.QUOTE][product.category]
+            if data.level not in supported_orderbook_levels:
+                raise NotImplementedError(f"{self.name} ({channel}.{product.symbol}) orderbook_level={data.level} is not supported, supported levels: {supported_orderbook_levels}")
+            if data.depth not in supported_orderbook_depths:
+                raise NotImplementedError(f"{self.name} ({channel}.{product.symbol}) orderbook_depth={data.depth} is not supported, supported depths: {supported_orderbook_depths}")
+            full_channel = '.'.join([echannel, str(data.depth), product.symbol])
+        elif channel == PublicDataChannel.tradebook:
+            data: TickData
+            full_channel = '.'.join([echannel, product.symbol])
+        elif channel == PublicDataChannel.candlestick:
+            data: BarData
+            resolution, timeframe = data.resolution, data.timeframe
+            if timeframe.unit not in self.SUPPORTED_RESOLUTIONS:
+                raise NotImplementedError(f'{self.name} ({channel}.{product.symbol}) timeframe={str(timeframe)} is not supported, supported timeframes {list(self.SUPPORTED_RESOLUTIONS)}')
+            eresolution = self._adapter(repr(resolution), group='resolution')
+            full_channel = '.'.join([echannel, eresolution, product.symbol])
+        else:
+            raise NotImplementedError(f'{channel=} is not supported')
         return full_channel
-
-    def _create_private_channel(self, channel: PrivateDataChannel | str):
-        echannel = self._adapter(channel, group='channel')
-        full_channel = echannel
-        return full_channel
-
+    
     def _check_if_exceeds_public_channel_args_limits(self, ws, num_full_channels):
         is_public_channel = (ws.name in self._servers)
         if is_public_channel and ws.name in self.PUBLIC_CHANNEL_ARGS_LIMITS and num_full_channels > self.PUBLIC_CHANNEL_ARGS_LIMITS[ws.name]:

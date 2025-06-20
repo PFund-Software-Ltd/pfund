@@ -4,6 +4,8 @@ import re
 
 
 class Resolution:
+    DEFAULT_ORDERBOOK_LEVEL = 1
+    
     def __init__(self, resolution: str | Resolution):
         '''
         Args:
@@ -30,17 +32,16 @@ class Resolution:
         self._resolution = self._standardize(resolution)
 
         # split resolution (e.g. '1m') into period (e.g. '1') and timeframe (e.g. 'm')
-        self.period, timeframe = re.split('(\d+)', self._resolution.strip())[1:]
-        self.period = int(self.period)
+        period, timeframe = re.split('(\d+)', self._resolution.strip())[1:]
+        self.period = int(period)
         assert self.period > 0
         self.timeframe = Timeframe(timeframe)
         if self.is_quote():
             if orderbook_level:
                 self.orderbook_level = int(orderbook_level[0][-1])
             else:
-                default_orderbook_level = 1
-                self.orderbook_level = default_orderbook_level
-                print("\033[1m" + f"Warning: {self._resolution=} is missing orderbook level, defaulting to L{default_orderbook_level}" + "\033[0m")
+                self.orderbook_level = self.DEFAULT_ORDERBOOK_LEVEL
+                print("\033[1m" + f"Warning: {self._resolution=} is missing orderbook level, defaulting to L{self.DEFAULT_ORDERBOOK_LEVEL}" + "\033[0m")
         else:
             self.orderbook_level = None
 

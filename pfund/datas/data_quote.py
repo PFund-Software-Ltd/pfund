@@ -1,11 +1,13 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, TypeAlias
 if TYPE_CHECKING:
+    from pfeed.enums import DataSource
     from pfund.datas.resolution import Resolution
     from pfund.products.product_base import BaseProduct
 
 from dataclasses import dataclass, field
 
+from pfund.enums import PublicDataChannel
 from pfund.datas.data_time_based import TimeBasedData
 
 
@@ -28,11 +30,17 @@ class OrderBook:
     
 
 class QuoteData(TimeBasedData):
-    def __init__(self, product: BaseProduct, resolution: Resolution):
-        super().__init__(product, resolution)
-        # TODO: merge orderbook_depth into resolution? e.g. 5q = quote data with depth 5
+    def __init__(
+        self,
+        data_source: DataSource,
+        data_origin: str,
+        product: BaseProduct,
+        resolution: Resolution
+    ):
+        super().__init__(data_source, data_origin, product, resolution)
         self._orderbook_depth: int = resolution.period
         self._orderbook_level: int = resolution.orderbook_level
+        assert self._orderbook_level in [1, 2, 3]
         try:
             from order_book import OrderBook as FastOrderBook
             self._orderbook = FastOrderBook()
@@ -40,7 +48,18 @@ class QuoteData(TimeBasedData):
         except ImportError:
             self._orderbook = OrderBook()
             self._is_fast_orderbook = False
-        assert 0 < self.period <= 1, f'period {self.period} is not supported for QuoteData'
+
+    @property
+    def channel(self) -> PublicDataChannel:
+        return PublicDataChannel.orderbook
+    
+    @property
+    def level(self) -> int:
+        return self._orderbook_level
+    
+    @property
+    def depth(self) -> int:
+        return self._orderbook_depth
     
     def get_bid(self, level: int=0) -> tuple[Price, Size]:
         if self._is_fast_orderbook:
@@ -81,11 +100,3 @@ class QuoteData(TimeBasedData):
         
         for resamplee in self._resamplees:
             resamplee.on_quote(bids, asks, ts)
-    
-    @property
-    def orderbook_level(self):
-        return self._orderbook_level
-    
-    @property
-    def orderbook_depth(self):
-        return self._orderbook_depth

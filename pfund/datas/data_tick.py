@@ -1,23 +1,35 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    from pfeed.enums import DataSource
     from pfund.datas.resolution import Resolution
     from pfund.products.product_base import BaseProduct
 
 import time
 from collections import deque
 
+from pfund.enums import PublicDataChannel
 from pfund.datas.data_time_based import TimeBasedData
 
 
 class TickData(TimeBasedData):
-    def __init__(self, product: BaseProduct, resolution: Resolution):
-        super().__init__(product, resolution)
+    def __init__(
+        self,
+        data_source: DataSource,
+        data_origin: str,
+        product: BaseProduct,
+        resolution: Resolution
+    ):
+        super().__init__(data_source, data_origin, product, resolution)
         self._price = self._quantity = 0.0
         assert 0 < self.period <= 1, f'period {self.period} is not supported for TickData'
         # TODO: support period > 1?
         # self._is_appended = (self.period > 1)
         # self.ticks = deque(maxlen=self.period)
+    
+    @property
+    def channel(self) -> PublicDataChannel:
+        return PublicDataChannel.tradebook
     
     @property
     def price(self):

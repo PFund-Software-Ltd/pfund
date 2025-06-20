@@ -15,7 +15,6 @@ class TimeframeUnits(IntEnum):
 class Timeframe:
     def __init__(self, timeframe: Literal['q', 't', 's', 'm', 'h', 'd']):
         self.unit = TimeframeUnits[timeframe]
-        self._timeframe: str = timeframe
     
     def higher(self):
         """Rotate to the next higher timeframe. e.g. HOUR is higher than MINUTE."""
@@ -40,28 +39,28 @@ class Timeframe:
         return self  # Already at the lowest unit
     
     def is_quote(self):
-        return self._timeframe == 'q'
+        return self.unit == TimeframeUnits.QUOTE
 
     def is_tick(self):
-        return self._timeframe == 't'
+        return self.unit == TimeframeUnits.TICK
 
     def is_second(self):
-        return self._timeframe == 's'
+        return self.unit == TimeframeUnits.SECOND
 
     def is_minute(self):
-        return self._timeframe == 'm'
+        return self.unit == TimeframeUnits.MINUTE
 
     def is_hour(self):
-        return self._timeframe == 'h'
+        return self.unit == TimeframeUnits.HOUR
 
     def is_day(self):
-        return self._timeframe == 'd'
+        return self.unit == TimeframeUnits.DAY
     
     def __str__(self):
         return str(self.unit.name)
 
     def __repr__(self):
-        return self._timeframe
+        return self.unit.name.lower()[0] if self.unit.name != 'MONTH' else 'M'
 
     def __hash__(self):
         return self.unit.value

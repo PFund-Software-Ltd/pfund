@@ -155,31 +155,45 @@ class BaseExchange(ABC):
         return Product(basis=basis, adapter=cls.adapter, name=name, **specs)
 
     def get_product(self, name: str) -> CryptoProduct:
+        '''
+        Args:
+            name: product name (product.name)
+        '''
         return self._products[name]
 
-    def add_product(self, product: CryptoProduct):
-        market_configs = self.load_market_configs()
-        if product.symbol not in market_configs[product.category]:
-            raise ValueError(
-                f"The symbol '{product.symbol}' is not found in the market configurations. "
-                f"It might be delisted, or your market configurations could be outdated. "
-                f"Please set 'refetch_market_configs=True' in TradeEngine's settings to refetch the latest market configurations."
-            )
-        self._products[product.name] = product
-        self._logger.debug(f'added product {product}')
+    def add_product(self, product: CryptoProduct) -> CryptoProduct:
+        if product.name not in self._products:
+            market_configs = self.load_market_configs()
+            if product.symbol not in market_configs[product.category]:
+                raise ValueError(
+                    f"The symbol '{product.symbol}' is not found in the market configurations. "
+                    f"It might be delisted, or your market configurations could be outdated. "
+                    f"Please set 'refetch_market_configs=True' in TradeEngine's settings to refetch the latest market configurations."
+                )
+            self._products[product.name] = product
+            # REVIEW: maybe use asset_type instead of category for more generic grouping?
+            self.adapter._add_mapping(product.category, product.name, product.symbol)
+            self._logger.debug(f'added {product=}')
+        else:
+            existing_product: CryptoProduct = self.get_product(product.name)
+            # assert products are the same with the same name
+            if existing_product == product:
+                product = existing_product
+            else:
+                raise ValueError(f'product name {product.name} has already been used for {existing_product}')
+        return product
 
     def get_account(self, name: str) -> CryptoAccount:
         return self._accounts[name]
     
-    def add_account(self, account: CryptoAccount):
-        self._accounts[account.name] = account
-        self._ws_api.add_account(account)
-        self._logger.debug(f'added account {account.name}')
-    
-    def _add_default_private_channels(self):
-        for channel in self.SUPPORTED_PRIVATE_CHANNELS:
-            channel = PrivateDataChannel[channel.lower()]
-            self.add_channel(channel, channel_type=DataChannelType.private)
+    def add_account(self, account: CryptoAccount) -> CryptoAccount:
+        if account.name not in self._accounts:
+            self._accounts[account.name] = account
+            self._ws_api._add_account(account)
+            self._logger.debug(f'added {account=}')
+        else:
+            raise ValueError(f'account name {account.name} has already been added')
+        return account
             
     def add_channel(
         self,
@@ -187,16 +201,9 @@ class BaseExchange(ABC):
         channel_type: DataChannelType,
         data: BaseData | None=None
     ):
-        self._ws_api.add_channel(channel, channel_type, data=data)
+        self._ws_api._add_channel(channel, channel_type, data=data)
         
-    def remove_channel(
-        self, 
-        channel: PublicDataChannel | PrivateDataChannel | str,
-        channel_type: DataChannelType,
-        data: BaseData | None=None
-    ):
-        self._ws_api.remove_channel(channel, channel_type, data=data)
-
+    # FIXME
     def use_separate_private_ws_url(self) -> bool:
         return self._ws_api._use_separate_private_ws_url
     

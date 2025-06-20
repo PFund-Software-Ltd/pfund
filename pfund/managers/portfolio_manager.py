@@ -66,14 +66,6 @@ class PortfolioManager:
         else:
             self.positions[acc][pdt][exch] = position
 
-    def remove_position(self, position):
-        exch, acc, pdt = position.exch, position.acc, position.pdt
-        if self._broker.name == Broker.CRYPTO:
-            del self.positions[exch][acc][pdt]
-        else:
-            del self.positions[acc][pdt][exch]
-        self._logger.debug(f'removed {position=}')
-
     def update_balances(self, trading_venue, acc, balances):
         ts = balances['ts']
         data = balances['data']

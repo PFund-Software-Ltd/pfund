@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 from abc import abstractmethod
 
-from pfund.enums import Environment, PublicDataChannel, PrivateDataChannel, DataChannelType
+from pfund.enums import Environment, PrivateDataChannel, DataChannelType
 from pfund.brokers.broker_base import BaseBroker
 
 
@@ -38,9 +38,14 @@ class TradeBroker(BaseBroker):
         #     self._data_feed: MarketFeed = get_market_feed(data_source=data_source)
         # else:
         #     self._data_feed = None
+    
+    def _add_default_private_channels(self):
+        for channel in PrivateDataChannel:
+            self.add_channel(channel, DataChannelType.private)
         
     def start(self, zmq=None):
         self._zmq = zmq
+        self._add_default_private_channels()
         self._connection_manager.connect()
         if self._settings.cancel_all_at['start']:
             self.cancel_all_orders(reason='start')
@@ -57,29 +62,6 @@ class TradeBroker(BaseBroker):
     def cancel_all_orders(self, reason=None):
         print(f'broker cancel_all_orders, reason={reason}')
 
-    def _create_public_data_channel(self, data: TimeBasedData) -> PublicDataChannel:
-        if data.is_quote():
-            channel = PublicDataChannel.orderbook
-        elif data.is_tick():
-            channel = PublicDataChannel.tradebook
-        elif data.is_bar():
-            channel = PublicDataChannel.candlestick
-        else:
-            raise ValueError(f'unknown data type: {data}')
-        return channel
-    
-    def _create_data_channel_type(
-        self, 
-        channel: PublicDataChannel | PrivateDataChannel | str,
-        channel_type: Literal['public', 'private']=''
-    ) -> DataChannelType:
-        if channel in PublicDataChannel or channel in PrivateDataChannel:
-            channel_type = DataChannelType.public if channel in PublicDataChannel else DataChannelType.private
-        else:
-            assert channel_type, 'channel_type "public" or "private" must be provided'
-            channel_type = DataChannelType[channel_type.upper()]
-        return channel_type
-    
     # FIXME
     def distribute_msgs(self, channel, topic, info):
         if channel == 1:

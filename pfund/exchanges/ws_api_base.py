@@ -1,10 +1,11 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Callable, Literal, ClassVar
 if TYPE_CHECKING:
-    from pfund.typing import tEnvironment
+    from pfund.typing import tEnvironment, ProductName, AccountName
     from pfund.adapter import Adapter
+    from pfund.accounts.account_crypto import CryptoAccount
     from pfund.exchanges.exchange_base import BaseExchange
-    from pfund.products.product_base import BaseProduct
+    from pfund.products.product_crypto import CryptoProduct
     from pfund.datas.data_base import BaseData
 
 import os
@@ -25,7 +26,6 @@ from numpy import sign
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosedError
 
-
 from pfund.managers.order_manager import OrderUpdateSource
 from pfund.enums import Environment, Broker, CryptoExchange, PublicDataChannel, PrivateDataChannel, DataChannelType
 
@@ -35,7 +35,7 @@ class BaseWebsocketApi(ABC):
     SAMPLES_FILENAME = 'ws_api_samples.yml'
 
     URLS: ClassVar[dict[Environment, str | dict[Literal['public', 'private'], str]]] = {}
-    SUPPORTED_ORDERBOOK_LEVELS = []
+    SUPPORTED_ORDERBOOK_LEVELS = {}
     SUPPORTED_RESOLUTIONS = {}
 
     def __init__(self, env: Environment | tEnvironment):
@@ -46,16 +46,20 @@ class BaseWebsocketApi(ABC):
         Exchange: type[BaseExchange] = getattr(importlib.import_module(f'pfund.exchanges.{self.name.lower()}.exchange'), 'Exchange')
         self._adapter: Adapter = Exchange.adapter
         self._urls: str | dict[Literal['public', 'private'], str] | None = self.URLS.get(self._env, None)
-        
-        # TODO
-        # self._use_separate_private_ws_url = self._check_if_use_separate_private_ws_url()
+
+        self._datas: dict[ProductName, dict[PublicDataChannel, BaseData]] = {}
+        self._products: dict[ProductName, CryptoProduct] = {}
+        self._accounts: dict[AccountName, CryptoAccount] = {}
+        self._actual_channels: dict[DataChannelType, list[str]] = {
+            DataChannelType.public: [], 
+            DataChannelType.private: []
+        }
         
         # # REVIEW: is it necessary to have self.exch as a default server?
         # self._servers = [self.exch]  
         
-        # self._full_channels = {'public': [], 'private': []}
-        # self._products = {}  # {pdt1: product1, pdt2: product2}
-        # self._accounts = {}
+        # self._use_separate_private_ws_url = self._check_if_use_separate_private_ws_url()
+        
         # self._zmqs = {}
         # self._ws_threads = {}
         # self._websockets = {}
@@ -75,8 +79,6 @@ class BaseWebsocketApi(ABC):
         # self._is_authenticated = defaultdict(bool)
         # self._is_reconnecting = False
         
-        # self._orderbook_levels = {}
-        # self._orderbook_depths = {}
         # self._is_snapshots_ready = defaultdict(bool)
         # self._bids_l2 = defaultdict(dict)
         # self._asks_l2 = defaultdict(dict)
@@ -189,74 +191,64 @@ class BaseWebsocketApi(ABC):
             zmq.stop()
         self._zmqs = {}
 
-    # exchanges like bybit v5 will have one server for each category 
-    # e.g. bybit has ['linear', 'inverse', 'spot', 'option']
-    def add_server(self, category: str):
-        if category not in self._servers:
-            self._servers.append(category)
-            self._logger.debug(f'added server "{category}"')
-            # FIXME: remove the default server
-            if self.exch in self._servers:
-                self._servers.remove(self.exch)
+    def _add_account(self, account: CryptoAccount) -> CryptoAccount:
+        if account.name not in self._accounts:
+            self._accounts[account.name] = account
+            self._logger.debug(f'added {account=}')
+        else:
+            raise ValueError(f'account name {account.name} has already been added')
+        return account
 
-    def add_account(self, account):
-        assert account.name != self.exch, f'account name "{self.exch}" is reserved'
-        self._accounts[account.name] = account
-        self._logger.debug(f'added account {account.name}')
-
-    def add_product(self, product: BaseProduct):
-        if str(product) in self._products:
-            return
-        if product.category:
-            self.add_server(product.category)
-        self._products[str(product)] = product
-        self._logger.debug(f'added product {str(product)}')
+    def _add_product(self, product: CryptoProduct) -> CryptoProduct:
+        if product.name not in self._products:
+            self._products[product.name] = product
+            self._logger.debug(f'added {product=}')
+        else:
+            existing_product = self._products[product.name]
+            if existing_product != product:
+                raise ValueError(f'product name {product.name} has already been used for {existing_product}')
+        return product
+        
+    def _add_data(self, data: BaseData) -> BaseData:
+        product = self._add_product(data.product)
+        if product.name not in self._datas:
+            self._datas[product.name] = {}
+        if data.channel not in self._datas[product.name]:
+            self._datas[product.name][data.channel] = data
+            self._logger.debug(f'added {product.name} {data.channel} data')
+        return data
     
-    def remove_product(self, product: BaseProduct):
-        if str(product) in self._products:
-            del self._products[str(product)]
-            self._logger.debug(f'removed product {str(product)}')
-        # TODO: remove server
-
-    def add_channel(
+    def _add_channel(
         self,
         channel: PublicDataChannel | PrivateDataChannel | str,
         channel_type: DataChannelType,
         data: BaseData | None=None
     ):
         if channel in PublicDataChannel:
-            self.add_product(data.product)
-        full_channel = self._create_full_channel(channel, channel_type, data)
-        channel_type = channel_type.value.lower()
-        if full_channel not in self._full_channels[channel_type]:
-            self._full_channels[channel_type].append(full_channel)
-            self._logger.debug(f'added channel={full_channel}')
+            assert data, f'data is required for public channel {channel}'
+            self._add_data(data)
+        actual_channel = self._create_actual_channel(channel, channel_type, data=data)
+        if actual_channel not in self._actual_channels[channel_type]:
+            self._actual_channels[channel_type].append(actual_channel)
+            self._logger.debug(f'added channel {actual_channel}')
     
-    def _create_full_channel(
+    def _create_actual_channel(
         self, 
         channel: PublicDataChannel | PrivateDataChannel | str, 
         channel_type: DataChannelType, 
         data: BaseData | None=None
     ) -> str:
-        if channel_type == DataChannelType.public:
-            return self._create_public_channel(channel, data=data)
-        elif channel_type == DataChannelType.private:
-            return self._create_private_channel(channel)
+        # when channel is a string, it must be a full channel
+        if channel not in PublicDataChannel and channel not in PrivateDataChannel:
+            return channel
+        else:
+            if channel_type == DataChannelType.public:
+                return self._create_public_channel(data)
+            elif channel_type == DataChannelType.private:
+                return self._create_private_channel(channel)
+            else:
+                raise ValueError(f'{channel_type=} is not supported')
     
-    def remove_channel(
-        self, 
-        channel: PublicDataChannel | PrivateDataChannel | str,
-        channel_type: DataChannelType,
-        data: BaseData | None=None
-    ):
-        if channel in PublicDataChannel:
-            self.remove_product(data.product)
-        full_channel = self._create_full_channel(channel, channel_type, data)
-        channel_type = channel_type.value.lower()
-        if full_channel in self._full_channels[channel_type]:
-            self._full_channels[channel_type].remove(full_channel)
-            self._logger.debug(f'removed channel={full_channel}')
-
     # send msg to engine->connection manager to indicate it is connected 
     # to connection manager, a successful connection = connected + authenticated + subscribed + other stuff (e.g. snapshots ready)
     def _on_all_connected(self):
@@ -364,7 +356,7 @@ class BaseWebsocketApi(ABC):
         if self._wait(lambda: self._is_all_connected(ws_names), reason='connection'):
             if self._wait(lambda: self._is_all_authenticated(ws_names), reason='authentication'):
                 for ws_name in ws_names:
-                    if full_channels := self._full_channels['public' if ws_name in self._servers else 'private']:
+                    if full_channels := self._actual_channels['public' if ws_name in self._servers else 'private']:
                         ws = self._websockets[ws_name]
                         self._subscribe(ws, full_channels)
                 if self._sub_num == 0:
@@ -675,12 +667,11 @@ class BaseWebsocketApi(ABC):
         pass
     
     @abstractmethod
-    def _create_public_channel(self, channel, product, **kwargs):
+    def _create_public_channel(self, data: BaseData):
         pass
 
-    @abstractmethod
-    def _create_private_channel(self, channel, **kwargs):
-        pass
+    def _create_private_channel(self, channel: PrivateDataChannel):
+        return self._adapter(channel.value, group='channel')
 
     @abstractmethod
     def _subscribe(self, ws, full_channels: list[str]):

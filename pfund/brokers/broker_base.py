@@ -11,10 +11,10 @@ from collections import defaultdict
 
 from pfund.managers.order_manager import OrderManager
 from pfund.managers.portfolio_manager import PortfolioManager
-from pfund.enums import Environment, Broker, TradingVenue
+from pfund.enums import Environment, Broker, TradingVenue, CryptoExchange
 
 
-ExchangeName: TypeAlias = str
+ExchangeName: TypeAlias = CryptoExchange | str
 
 
 class BaseBroker(ABC):

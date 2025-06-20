@@ -2,23 +2,30 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import datetime
+    from pfund.datas.timeframe import Timeframe
+    from pfeed.enums import DataSource
     from pfund.products.product_base import BaseProduct
+    from pfund.datas.resolution import Resolution
 
 import time
 
 from pfund.datas.data_base import BaseData
-from pfund.datas.resolution import Resolution
 
 
 class TimeBasedData(BaseData):
-    def __init__(self, product: BaseProduct, resolution: Resolution):
-        super().__init__(product)
+    def __init__(
+        self,
+        data_source: DataSource,
+        data_origin: str,
+        product: BaseProduct,
+        resolution: Resolution
+    ):
+        super().__init__(data_source, data_origin, product)
         self._ts = 0.0
         self._latency = None
-        self.resolution = resolution
-        self.resol = repr(resolution)
-        self.period = resolution.period
-        self.timeframe = resolution.timeframe
+        self.resolution: Resolution = resolution
+        self.period: int = resolution.period
+        self.timeframe: Timeframe = resolution.timeframe
         self._resamplers = set()  # data used to be resampled into another data
         self._resamplees = set()  # opposite of resampler
         self._extra_data = {}
@@ -50,7 +57,7 @@ class TimeBasedData(BaseData):
         return self._extra_data
     
     @property
-    def dt(self) -> datetime | None:
+    def dt(self) -> datetime.datetime | None:
         from pfund.utils.utils import convert_ts_to_dt
         return convert_ts_to_dt(self._ts) if self._ts else None
     

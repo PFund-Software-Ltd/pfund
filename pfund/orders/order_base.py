@@ -89,28 +89,19 @@ class BaseOrder(BaseModel):
         return uuid4()
     
     @property
-    def tv(self) -> TradingVenue:
-        return self.trading_venue
-    
-    @property
     def trading_venue(self) -> TradingVenue:
         return self.product.trading_venue
-    
-    @property
-    def bkr(self) -> Broker:
-        return self.broker
+    tv = trading_venue
     
     @property
     def broker(self) -> Broker:
         return self.product.broker
-    
-    @property
-    def exch(self) -> CryptoExchange | str:
-        return self.exchange
+    bkr = broker
     
     @property
     def exchange(self) -> CryptoExchange | str:
         return self.product.exchange
+    exch = exchange
 
     @property
     def adapter(self):

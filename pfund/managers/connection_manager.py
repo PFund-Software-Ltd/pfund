@@ -74,11 +74,6 @@ class ConnectionManager:
         self._apis[api.name] = api
         self._logger.debug(f'added {api.name} api')
 
-    def remove_api(self, api):
-        if api.name in self._apis:
-            del self._apis[api.name]
-            self._logger.debug(f'removed {api.name} api')
-
     def _set_pid(self, trading_venue: str, pid: int):
         prev_pid = self._pids[trading_venue]
         self._pids[trading_venue] = pid

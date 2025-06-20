@@ -4,6 +4,7 @@ if TYPE_CHECKING:
     from pfund.orders.order_base import BaseOrder
     from pfund.products.product_base import BaseProduct
 
+import importlib
 from enum import StrEnum
 
 
@@ -13,7 +14,6 @@ class TradingVenue(StrEnum):
 
     @property
     def order_class(self) -> type[BaseOrder]:
-        import importlib
         if self == TradingVenue.IB:
             class_name = f'{self}Order'
         else:
@@ -23,7 +23,6 @@ class TradingVenue(StrEnum):
     
     @property
     def product_class(self) -> type[BaseProduct]:
-        import importlib
         if self == TradingVenue.IB:
             class_name = f'{self}Product'
         else:

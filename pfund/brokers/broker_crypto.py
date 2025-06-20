@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfund.products.product_base import CryptoProduct
+    from pfund.products.product_crypto import CryptoProduct
     from pfund.orders.order_base import BaseOrder
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.datas.data_base import BaseData
@@ -9,17 +9,15 @@ if TYPE_CHECKING:
     from pfund.enums import OrderSide
 
 import inspect
-import importlib
 from threading import Thread
 
 from pfund.enums import Environment, Broker
-from pfund.products.product_crypto import CryptoProduct
 from pfund.orders.order_crypto import CryptoOrder
 from pfund.positions.position_crypto import CryptoPosition
 from pfund.balances.balance_crypto import CryptoBalance
 from pfund.accounts.account_crypto import CryptoAccount
 from pfund.utils.utils import convert_to_uppercases
-from pfund.enums import CryptoExchange, PublicDataChannel, PrivateDataChannel, DataChannelType
+from pfund.enums import CryptoExchange, PrivateDataChannel, DataChannelType
 from pfund.brokers.broker_trade import TradeBroker
 
 
@@ -56,95 +54,83 @@ class CryptoBroker(TradeBroker):
         super().stop()
         for exchange in self.exchanges.values():
             exchange.stop()
-
-    def add_channel(
-        self, 
-        exch: tCryptoExchange, 
-        channel: PublicDataChannel | PrivateDataChannel | str,
-        channel_type: Literal['public', 'private']='',
-        data: BaseData | None=None
-    ):
+    
+    def _add_data_channel(self, data: BaseData):
+        '''Adds a public channel for a data object'''
+        exchange = self.get_exchange(data.exch)
+        exchange.add_channel(data.channel, DataChannelType.public, data=data)
+    
+    def _add_default_private_channels(self):
+        for exchange in self.exchanges.values():
+            for channel in PrivateDataChannel:
+                exchange.add_channel(channel, DataChannelType.private)
+        
+    def add_channel(self, exch: tCryptoExchange, channel: str, channel_type: Literal['public', 'private']):
         '''
+        Allows users to add public or private channels manually
         Args:
             exch: exchange name, e.g. 'BYBIT'
-            channel: PublicDataChannel, PrivateDataChannel, or exchange-specific string
-                If PublicDataChannel: ORDERBOOK, TRADEBOOK, or KLINE
-                If PrivateDataChannel: BALANCE, POSITION, ORDER, or TRADE
-                If string: exchange-specific channel name, e.g. 'tickers.{symbol}' for Bybit
-            channel_type: only required if channel is an exchange-specific string
-                'public' for public data channels
-                'private' for private data channels
-            data: BaseData object, required for public channels
-                Contains product and resolution information needed for subscription
+            channel: exchange-specific channel name, e.g. 'tickers.{symbol}' for Bybit
+            channel_type: 'public' for public data channels, 'private' for private data channels
         '''
-        # TODO:
-        # channel: PublicDataChannel = self._create_public_data_channel(data)
-        exchange = self.exchanges[exch]
-        if channel in PublicDataChannel:
-            assert data, f'data must be provided for {channel=}'
-        channel_type: DataChannelType = self._create_data_channel_type(channel, channel_type=channel_type)
-        exchange.add_channel(channel, channel_type, data=data)
+        exchange = self.get_exchange(exch)
+        exchange.add_channel(channel, DataChannelType[channel_type.lower()])
     
-    # useful when user wants to remove a private channel, since all private channels are added by default
-    def remove_channel(
-        self, 
-        exch: tCryptoExchange, 
-        channel: PublicDataChannel | PrivateDataChannel | str,
-        channel_type: Literal['public', 'private']='',
-        data: BaseData | None=None
-    ):
-        exchange = self.exchanges[exch]
-        channel_type: DataChannelType = self._create_data_channel_type(channel, channel_type=channel_type)
-        exchange.remove_channel(channel, channel_type, data=data)
-            
-    def get_account(self, exch: tCryptoExchange, name: str) -> CryptoAccount | None:
-        return self._accounts[CryptoExchange[exch]].get(name.upper(), None)
+    def get_account(self, exch: tCryptoExchange, name: str) -> CryptoAccount:
+        return self._accounts[CryptoExchange[exch.upper()]][name]
     
     def add_account(self, exch: tCryptoExchange, name: str='', key: str='', secret: str='') -> CryptoAccount:
-        if not (account := self.get_account(exch, name)):
-            exchange = self.add_exchange(exch)
-            account = CryptoAccount(env=self._env, exch=exch, name=name, key=key, secret=secret)
+        exchange = self.add_exchange(exch)
+        if name not in self._accounts[exchange.name]:
+            account = CryptoAccount(env=self._env, exchange=exch, name=name, key=key, secret=secret)
             exchange.add_account(account)
-            self._accounts[exch][account.name] = account
+            self._accounts[exchange.name][account.name] = account
             self._logger.debug(f'added {account=}')
         else:
-            raise ValueError(f'{account=} has already been added')
+            raise ValueError(f'account name {name} has already been added')
         return account
     
-    def get_product(self, exch: tCryptoExchange, name: str) -> CryptoProduct | None:
-        exch = CryptoExchange[exch.upper()]
-        return self._products[exch].get(name, None)
+    def get_product(self, exch: tCryptoExchange, name: str) -> CryptoProduct:
+        '''
+        Args:
+            name: product name (product.name)
+        '''
+        return self._products[CryptoExchange[exch.upper()]][name]
     
     def add_product(self, exch: tCryptoExchange, basis: str, name: str='', **specs) -> CryptoProduct:
+        '''
+        Args:
+            name: product name (product.name)
+        '''
         exchange = self.add_exchange(exch)
-        # create another product object to format a correct product name
+        # create another product object to get a correct product name
         product: CryptoProduct = exchange.create_product(basis, name=name, **specs)
-        existing_product: CryptoProduct | None = self.get_product(exch, product.name)
-        if not existing_product:
+        if product.name not in self._products[exchange.name]:
             exchange.add_product(product)
             self._products[exchange.name][product.name] = product
-            self._logger.debug(f'added {product}')
+            self._logger.debug(f'added {product=}')
         else:
-            product = existing_product
+            existing_product: CryptoProduct = self.get_product(exch, product.name)
+            # assert products are the same with the same name
+            if existing_product == product:
+                product = existing_product
+            else:
+                raise ValueError(f'product name {name} has already been used for {existing_product}')
         return product
     
-    def get_exchange(self, exch: tCryptoExchange) -> BaseExchange | None:
-        return self.exchanges.get(exch.upper(), None)
+    def get_exchange(self, exch: tCryptoExchange) -> BaseExchange:
+        return self.exchanges[CryptoExchange[exch.upper()]]
 
     def add_exchange(self, exch: tCryptoExchange) -> BaseExchange:
         exch = CryptoExchange[exch.upper()]
-        if not (exchange := self.get_exchange(exch)):
-            Exchange = getattr(importlib.import_module(f'pfund.exchanges.{exch.lower()}.exchange'), 'Exchange')
-            exchange = Exchange(self._env.value)
+        if exch not in self.exchanges:
+            Exchange: type[BaseExchange] = exch.exchange_class
+            exchange: BaseExchange = Exchange(env=self._env)
             self.exchanges[exch] = exchange
             self._logger.debug(f'added {exch}')
+        else:
+            exchange: BaseExchange = self.get_exchange(exch)
         return exchange
-    
-    def remove_exchange(self, exch: tCryptoExchange):
-        exch = CryptoExchange[exch.upper()]
-        if exch in self.exchanges:
-            del self.exchanges[exch]
-            self._logger.debug(f'removed {exch}')
     
     def add_balance(self, exch: tCryptoExchange, acc: str, ccy: str) -> CryptoBalance:
         exch, acc, ccy = convert_to_uppercases(exch, acc, ccy)

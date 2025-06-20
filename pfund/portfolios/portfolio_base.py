@@ -89,19 +89,6 @@ class BasePortfolio:
     def has_balance(self, balance: BaseBalance) -> bool:
         return balance.account in self._currencies and balance.ccy in self._currencies[balance.account]
     
-    def remove_position(self, position: BasePosition):
-        assets: dict = self._get_assets(position.ptype)
-        if self.has_position(position):
-            del assets[position.account][position.pdt]
-        else:
-            raise ValueError(f'{position} not in {assets}')
-    
-    def remove_balance(self, balance: BaseBalance):
-        if self.has_balance(balance):
-            del self._currencies[balance.account][balance.ccy]
-        else:
-            raise ValueError(f'{balance} not in {self._currencies}')
-    
      # TODO: add more functionalities, e.g.
     # - get_total_exposure(unit='USD') (rmb to include balances)
     # - get_positions_by_exposure()

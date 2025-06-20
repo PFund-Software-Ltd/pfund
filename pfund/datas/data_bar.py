@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import datetime
+    from pfeed.enums import DataSource
     from pfund.datas.resolution import Resolution
     from pfund.datas.timeframe import Timeframe
     from pfund.products.product_base import BaseProduct
@@ -9,6 +10,7 @@ if TYPE_CHECKING:
 import sys
 import time
 
+from pfund.enums import PublicDataChannel
 from pfund.datas.resolution import Resolution
 from pfund.datas.data_time_based import TimeBasedData
 from pfund.utils.utils import convert_ts_to_dt
@@ -139,8 +141,16 @@ class Bar:
 
 
 class BarData(TimeBasedData):
-    def __init__(self, product: BaseProduct, resolution: Resolution, shift: int=0, skip_first_bar: bool=True):
-        super().__init__(product, resolution)
+    def __init__(
+        self,
+        data_source: DataSource,
+        data_origin: str,
+        product: BaseProduct, 
+        resolution: Resolution, 
+        shift: int=0, 
+        skip_first_bar: bool=True
+    ):
+        super().__init__(data_source, data_origin, product, resolution)
         self._bar = Bar(resolution, shift=shift)
         self._skip_first_bar = skip_first_bar
 
@@ -149,6 +159,10 @@ class BarData(TimeBasedData):
             return getattr(self._bar, attr)
         else:
             raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{attr}'")
+    
+    @property
+    def channel(self) -> PublicDataChannel:
+        return PublicDataChannel.candlestick
     
     @property
     def bar(self):

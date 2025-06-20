@@ -1,7 +1,9 @@
 from typing import ClassVar
 
-from pfund.enums import Environment, Broker
-from pfund.typing import tEnvironment, tBroker
+import os
+
+from pfund.enums import Environment, TradingVenue
+from pfund.typing import tEnvironment, tTradingVenue
 
 
 class BaseAccount:
@@ -15,29 +17,39 @@ class BaseAccount:
     def _get_default_name(self):
         return f"{self.__class__.__name__}-{self._next_account_id()}"
     
-    def __init__(self, env: tEnvironment, bkr: tBroker, name: str):
+    def __init__(
+        self, 
+        env: tEnvironment, 
+        trading_venue: tTradingVenue, 
+        name: str='',
+        key: str='',
+        secret: str='',
+    ):
         self._env = Environment[env.upper()]
-        self.broker = Broker[bkr.upper()]
+        self.trading_venue = TradingVenue[trading_venue.upper()]
         self.name = name or self._get_default_name()
+        assert self.name != self.trading_venue, f'account name cannot be the same as the trading venue name "{self.trading_venue}"'
+        self._key = key or os.getenv(f'{self.tv}_API_KEY', '')
+        self._secret = secret or os.getenv(f'{self.tv}_API_SECRET', '')
         
     @property
-    def bkr(self) -> Broker:
-        return self.broker
+    def tv(self) -> TradingVenue:
+        return self.trading_venue
     
     def __str__(self):
-        return f'Broker={self.broker.value}|Account={self.name}'
+        return f'TradingVenue={self.trading_venue}|Account={self.name}'
 
     def __repr__(self):
-        return f'{self.broker.value}:{self.name}'
+        return f'{self.trading_venue}:{self.name}'
 
     def __eq__(self, other):
         if not isinstance(other, BaseAccount):
             return NotImplemented  # Allow other types to define equality with BaseProduct
         return (
             self._env == other._env
-            and self.broker == other.broker
+            and self.trading_venue == other.trading_venue
             and self.name == other.name
         )
         
     def __hash__(self):
-        return hash((self._env, self.broker, self.name))
+        return hash((self._env, self.trading_venue, self.name))

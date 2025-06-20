@@ -7,6 +7,7 @@ from typing import Literal, TYPE_CHECKING
 from pfund.config import Configuration
 if TYPE_CHECKING:
     from pfund.typing import tEnvironment
+    from pfund.datas.data_base import BaseData
     from pfund.datas.data_config import DataConfig
     from pfund.datas.data_time_based import TimeBasedData
 
@@ -19,7 +20,7 @@ from pfund.balances.balance_ib import IBBalance
 from pfund.utils.utils import convert_to_uppercases
 from pfund.brokers.broker_trade import TradeBroker
 from pfund.brokers.ib.ib_api import IBApi
-from pfund.enums import PublicDataChannel, PrivateDataChannel
+from pfund.enums import PublicDataChannel, PrivateDataChannel, DataChannelType
 
 
 class IBBroker(TradeBroker):
@@ -66,7 +67,13 @@ class IBBroker(TradeBroker):
             ptype = 'OPT'
         return ptype
 
-    def add_channel(self, channel: PublicDataChannel | PrivateDataChannel, type_, **kwargs):
+    def add_channel(
+        self, 
+        channel: PublicDataChannel | PrivateDataChannel | str, 
+        channel_type: DataChannelType,
+        data: BaseData | None=None,
+        **kwargs
+    ):
         if type_.lower() == 'public':
             assert 'product' in kwargs, 'Keyword argument "product" is missing'
             if channel == PublicDataChannel.candlestick:

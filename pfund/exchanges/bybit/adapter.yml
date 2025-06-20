@@ -54,15 +54,14 @@ price_direction: {
 # websocket channels
 channel: {
   # public channels:
-  # 'orderbook': 'orderbook',
+  'orderbook': 'orderbook',
   'tradebook': 'publicTrade',
-  # 'kline': 'kline',
   'candlestick': 'kline',
   # private channels:
-  'trade': 'execution',
   'balance': 'wallet',
-  # 'position': 'position',
-  # 'order': 'order',
+  'position': 'position',
+  'order': 'order',
+  'trade': 'execution',
 }
 resolution: {
   '1m': '1',
