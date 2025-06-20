@@ -59,17 +59,17 @@ def reset(config_file, logging_file, docker_file):
             
     if config_file:
         filename = CONFIG_FILENAME
-        click.echo(f"Resetting {filename} file...")
+        click.echo(f"Resetting {PROJ_NAME} {filename} file...")
         _reset_file(filename)
 
     if docker_file:
         filename = 'docker-compose.yml'
-        click.echo(f"Resetting {filename} file...")
+        click.echo(f"Resetting {PROJ_NAME} {filename} file...")
         _reset_file(filename)
 
     if logging_file:
         filename = 'logging.yml'
-        click.echo(f"Resetting {filename} file...")
+        click.echo(f"Resetting {PROJ_NAME} {filename} file...")
         _reset_file(filename)
 
 
