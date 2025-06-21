@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from pfund.typing import tEnvironment, ProductName, AccountName
     from pfund.products.product_crypto import CryptoProduct
     from pfund.accounts.account_crypto import CryptoAccount
-    from pfund.datas.data_base import BaseData
+    from pfund.datas import QuoteData, TickData, BarData
     from pfund.engines.trade_engine_settings import TradeEngineSettings
 
 import os
@@ -189,7 +189,7 @@ class BaseExchange(ABC):
     def add_account(self, account: CryptoAccount) -> CryptoAccount:
         if account.name not in self._accounts:
             self._accounts[account.name] = account
-            self._ws_api._add_account(account)
+            self._ws_api.add_account(account)
             self._logger.debug(f'added {account=}')
         else:
             raise ValueError(f'account name {account.name} has already been added')
@@ -199,9 +199,9 @@ class BaseExchange(ABC):
         self,
         channel: PublicDataChannel | PrivateDataChannel | str,
         channel_type: DataChannelType,
-        data: BaseData | None=None
+        data: QuoteData | TickData | BarData | None=None
     ):
-        self._ws_api._add_channel(channel, channel_type, data=data)
+        self._ws_api.add_channel(channel, channel_type, data=data)
         
     # FIXME
     def use_separate_private_ws_url(self) -> bool:

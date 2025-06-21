@@ -32,6 +32,7 @@ class BacktestEngine(BaseEngine):
         self,
         mode: Literal['vectorized', 'event_driven']='vectorized',
         name: str='',
+        # FIXME: should use ray on both dataset and component?
         use_ray_on: Literal['dataset', 'component'] | None='dataset',
         data_tool: tDataTool='polars',
         data_range: str | DataRangeDict | Literal['ytd']='1d',

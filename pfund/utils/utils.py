@@ -40,7 +40,7 @@ class Singleton:
             del cls._instances[cls]
 
 
-def derive_run_mode(ray_kwargs: dict) -> RunMode:
+def derive_run_mode(ray_kwargs: dict | None=None) -> RunMode:
     from mtflow.utils.utils import is_wasm
     if is_wasm():
         run_mode = RunMode.WASM

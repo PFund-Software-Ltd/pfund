@@ -19,10 +19,10 @@ import os
 from abc import ABC, abstractmethod
 
 from pfund.models.model_meta import MetaModel
-from pfund.mixins.trade_mixin import TradeMixin
+from pfund.mixins.component_mixin import ComponentMixin
 
 
-class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
+class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
     def __init__(self, model: MachineLearningModel, *args, **kwargs):
         from collections import defaultdict
         self.model = model  # user-defined machine learning model
@@ -32,7 +32,7 @@ class BaseModel(TradeMixin, ABC, metaclass=MetaModel):
         self._num_data = defaultdict(int)  # {data: int}
         self._group_data = True
         
-        self.__mixin_post_init__(model, *args, **kwargs)  # calls TradeMixin.__mixin_post_init__()
+        self.__mixin_post_init__(model, *args, **kwargs)  # calls ComponentMixin.__mixin_post_init__()
     
     @abstractmethod
     def predict(self, X: GenericFrame, *args, **kwargs) -> Tensor | ndarray:

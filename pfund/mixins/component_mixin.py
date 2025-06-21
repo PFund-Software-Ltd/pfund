@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from pfund.datas.databoy import DataBoy
     from pfund.typing import StrategyT, ModelT, IndicatorT, FeatureT, DataConfigDict
     from pfund.typing import tTradingVenue, Component
+    from pfund.engines.base_engine_settings import BaseEngineSettings
     from pfund.datas.data_bar import Bar
     from pfund.datas.data_base import BaseData
     from pfund._logging.config import LoggingDictConfigurator
@@ -35,14 +36,14 @@ from pfund.utils.utils import load_yaml_file
 from pfund.enums import ComponentType, RunMode
 
 
-class TradeMixin:
+class ComponentMixin:
     config = {}
     params = {}
 
     # custom post init for-common attributes of strategy and model
     def __mixin_post_init__(self: Component, *args, **kwargs):
         from pfund.datas.databoy import DataBoy
-        
+
         self.__pfund_args__ = args
         self.__pfund_kwargs__ = kwargs
         
@@ -138,6 +139,9 @@ class TradeMixin:
     def databoy(self: Component) -> DataBoy:
         return self._databoy
     
+    def get_databoy(self: Component) -> DataBoy:
+        return self._databoy
+    
     @property
     def datas(self: Component) -> dict[BaseProduct, dict[Resolution, TimeBasedData]]:
         return self._databoy.datas
@@ -152,6 +156,14 @@ class TradeMixin:
         if self.is_strategy():
             components.extend([*self.strategies.values()])
         return components
+    
+    @property
+    def remote_components(self: Component, direct_only: bool=True) -> list[ActorProxy]:
+        return [component for component in self.components if component.is_remote(direct_only=direct_only)]
+    
+    @property
+    def local_components(self: Component, direct_only: bool=True) -> list[Component]:
+        return [component for component in self.components if not component.is_remote(direct_only=direct_only)]
     
     @property
     def component_type(self) -> ComponentType:
@@ -239,8 +251,10 @@ class TradeMixin:
     def get_delay(ts: float) -> float:
         return time.time() - ts
     
-    def _set_engine(self, engine: BaseEngine | None):
-        self._engine = EngineProxy(self._databoy) if engine is None else engine
+    def _set_engine(self, engine: BaseEngine | None, engine_settings: BaseEngineSettings | None):
+        self._engine = EngineProxy(self._databoy, settings=engine_settings) if engine is None else engine
+        if self.is_remote():
+            self._databoy._setup_messaging(self._engine.settings)
     
     def _set_trading_store(self: Component, trading_store: TradingStore):
         self._store = trading_store
@@ -363,6 +377,7 @@ class TradeMixin:
         product_name: str='',
         data_source: tDataSource | None=None,
         data_origin: str='',
+        # TODO: add data_groups in data_config? used to set ws product groups in pfeed
         data_config: DataConfigDict | DataConfig | None=None,
         **product_specs
     ) -> list[TimeBasedData]:
@@ -391,6 +406,7 @@ class TradeMixin:
             **product_specs
         )
         self._add_product(product)
+        # TODO: add num_cpus somewhere to indicate using ray actor to run the public websocket?
         # TODO: should create pfeed's MarketFeed in databoy and return it?
         datas: list[TimeBasedData] = self._databoy.add_data(
             product=product,
@@ -461,7 +477,7 @@ class TradeMixin:
                 will be passed to ray actor like this: Actor.options(**ray_options).remote(**ray_kwargs)
         '''
         from pfund.utils.utils import derive_run_mode
-        
+
         Component = component.__class__
         ComponentName = Component.__name__
         component_type = component.component_type
@@ -500,7 +516,7 @@ class TradeMixin:
         # # logging_configurator can't be serialized, so we need to pass in the original config instead in REMOTE mode
         component._setup_logging(self._logging_configurator._pfund_config if is_remote else self._logging_configurator)
         component._set_consumer(None if is_remote else self)
-        component._set_engine(None if is_remote else self._engine)
+        component._set_engine(engine=None if is_remote else self._engine, engine_settings=self._engine.settings)
 
         if signal_cols:
             component._set_signal_cols(signal_cols)
@@ -516,8 +532,6 @@ class TradeMixin:
         components[component_name] = component
         self.logger.debug(f"added {component_name}")
 
-        print('component:', component, component.is_remote(direct_only=False))
-        
         return component
     
     def add_model(
@@ -637,6 +651,8 @@ class TradeMixin:
             component_name=self.name,
             component_metadata=self.to_dict(),
         )
+        if self.is_remote():
+            self._databoy.start_zmq()
         if not self.is_running():
             self.add_datas()
             self._add_datas_from_consumer_if_none()
@@ -646,9 +662,9 @@ class TradeMixin:
             self._prepare_df()
             self.on_start()
             self._is_running = True
-            self.logger.info(f"strategy '{self.name}' has started")
+            self.logger.info("started")
         else:
-            self.logger.warning(f'strategy {self.name} has already started')
+            self.logger.warning('already started')
     
     def stop(self, reason: str=''):
         if self.is_running():

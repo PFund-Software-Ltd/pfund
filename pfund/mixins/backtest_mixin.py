@@ -55,7 +55,7 @@ class BacktestMixin:
         self._is_signal_df_required = self._check_if_signal_df_required()
         self._is_append_to_df = self._check_if_append_to_df()
 
-        # TODO: need to call super().__post_init__() to trigger TradeMixin.__post_init__()?
+        # TODO: need to call super().__post_init__() to trigger ComponentMixin.__post_init__()?
     
     @property
     def dataset_periods(self: BacktestMixin | BaseStrategy | BaseModel) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:

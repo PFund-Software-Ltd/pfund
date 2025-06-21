@@ -62,16 +62,15 @@ class BaseEngine(metaclass=MetaEngine):
     _num: ClassVar[int] = 0
     _initialized: ClassVar[bool]
     _env: ClassVar[Environment]
+    _run_mode: ClassVar[RunMode]
     _data_tool: ClassVar[DataTool]
     _data_start: ClassVar[datetime.date]
     _data_end: ClassVar[datetime.date]
     _database: ClassVar[tDatabase | None]
     _settings: ClassVar[BaseEngineSettings]
     _external_listeners: ClassVar[ExternalListenersDict | None]
-    _ray_init_kwargs: ClassVar[str]
     
     name: str
-    _run_mode: RunMode
     _logger: logging.Logger
     _logging_configurator: LoggingDictConfigurator
     _store: MTStore
@@ -96,7 +95,6 @@ class BaseEngine(metaclass=MetaEngine):
         data_range: str | DataRangeDict | Literal['ytd'],
         database: tDatabase | None,
         settings: BaseEngineSettings,
-        ray_init_kwargs: dict | None=None,
         external_listeners: ExternalListenersDict | None,
     ):
         '''
@@ -118,23 +116,25 @@ class BaseEngine(metaclass=MetaEngine):
                         the DataRecorder will handle writing data to the database.
                     if `recorder` in `external_listeners` is set to False,
                         the engine itself will write to the database,
-                        which will introduce latency and slow down engine performance.
+                        which will introduce latency and slow down engine's performance.
                 If None, no data will be written.
         '''
         from mtflow.kernel import TradeKernel
         from mtflow.stores.mtstore import MTStore
-        from mtflow.messaging.messenger import Messenger
         from pfeed.feeds.time_based_feed import TimeBasedFeed
         from pfund.external_listeners import ExternalListeners
+        from pfund.utils.utils import derive_run_mode
         
         cls = self.__class__
         env = Environment[env.upper()]
         if not hasattr(cls, "_initialized"):
             cls._env = env
+            cls._run_mode = derive_run_mode()
             cls._data_tool = DataTool[data_tool.lower()]
             cls._database = Database[database.upper()] if database else None
             cls._settings = settings
-            cls._ray_init_kwargs = ray_init_kwargs or {}
+            if cls._run_mode == RunMode.WASM:
+                assert not external_listeners, 'External listeners are not supported in WASM mode'
             cls._external_listeners = ExternalListeners(**(external_listeners or {}))
             if cls._external_listeners.recorder is False and cls._database is not None:
                 cprint(
@@ -161,17 +161,19 @@ class BaseEngine(metaclass=MetaEngine):
         
 
         self.name = name or self._get_default_name()
-        # TODO: until mtflow supports running multiple trade engines remotely, it is always LOCAL for now
-        self._run_mode = RunMode.LOCAL
         
         self._logging_configurator = self._setup_logging()
         self._logger = logging.getLogger('pfund')
 
         self._store = MTStore(env=cls._env, data_tool=cls._data_tool)
-        # TODO: add pfeed's data engine to trade kernel?
-        self._kernel = TradeKernel(cls._database, cls._ray_init_kwargs, cls._external_listeners)
-        # FIXME: engine should use zmq when there are remote components, not depending on its run mode
-        self._messenger = Messenger(self._run_mode)
+        self._kernel = TradeKernel(
+            engine_name=self.name,
+            run_mode=cls._run_mode, 
+            data_tool=cls._data_tool, 
+            database=cls._database, 
+            external_listeners=cls._external_listeners,
+            settings=cls._settings,
+        )
 
         self.trading_venues: list[TradingVenue] = []
         self.brokers: dict[Broker, BaseBroker] = {}
@@ -227,7 +229,7 @@ class BaseEngine(metaclass=MetaEngine):
             # TODO:
             # strategy.start()
         if local_strategies:
-            data = self._messenger.recv()
+            data = self._kernel.messenger.recv()
             for strategy in local_strategies:
                 strategy.databoy._collect(data)
         
@@ -269,7 +271,7 @@ class BaseEngine(metaclass=MetaEngine):
         strategy._set_resolution(resolution)
         # logging_configurator can't be serialized, so we need to pass in the original config instead in REMOTE mode
         strategy._setup_logging(self._logging_configurator._pfund_config if is_remote else self._logging_configurator)
-        strategy._set_engine(None if is_remote else self)
+        strategy._set_engine(engine=None if is_remote else self, engine_settings=self.settings)
 
         self.strategies[strat] = strategy
         self._logger.debug(f"added '{strat}'")

@@ -30,12 +30,12 @@ from collections import deque
 from abc import ABC, abstractmethod
 
 from pfund.strategies.strategy_meta import MetaStrategy
-from pfund.mixins.trade_mixin import TradeMixin
+from pfund.mixins.component_mixin import ComponentMixin
 from pfund.enums import TradingVenue, RunMode
 from pfund.proxies.actor_proxy import ActorProxy
 
 
-class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):    
+class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):    
     def __init__(self, *args, **kwargs):
         self.positions: dict[AccountName, dict[ProductName, BasePosition]] = {}
         self.balances: dict[AccountName, dict[Currency, BaseBalance]] = {}
@@ -46,7 +46,7 @@ class BaseStrategy(TradeMixin, ABC, metaclass=MetaStrategy):
         
         self.strategies: dict[str, BaseStrategy] = {}
 
-        self.__mixin_post_init__(*args, **kwargs)  # calls TradeMixin.__mixin_post_init__()
+        self.__mixin_post_init__(*args, **kwargs)  # calls ComponentMixin.__mixin_post_init__()
     
     @abstractmethod
     def backtest(self, df: data_tool_backtest.BacktestDataFrame):

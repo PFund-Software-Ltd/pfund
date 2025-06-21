@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from pfund.datas.timeframe import Timeframe
     from pfeed.enums import DataSource
     from pfund.products.product_base import BaseProduct
+    from pfund.datas import QuoteData, TickData, BarData
     from pfund.datas.resolution import Resolution
 
 import time
@@ -31,7 +32,7 @@ class TimeBasedData(BaseData):
         self._extra_data = {}
 
     def __repr__(self):
-        return f'{repr(self.product)}:{repr(self.resolution)}'
+        return f'{self.product.tv}:{self.product.name}:{repr(self.resolution)}'
 
     def __str__(self):
         return f'{self.product}|Data={self.resolution}'
@@ -43,6 +44,10 @@ class TimeBasedData(BaseData):
     
     def __hash__(self):
         return hash((self.product, self.resolution))
+    
+    @property
+    def zmq_channel(self: QuoteData | TickData | BarData) -> str:
+        return f'{self.product.tv}:{self.channel}:{repr(self.resolution)}:{self.product.name}:'
     
     @property
     def ts(self):

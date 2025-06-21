@@ -2,6 +2,7 @@ from enum import StrEnum
 
 
 class MainOrderStatus(StrEnum):
+    BLOCKED = B = 'BLOCKED'  # blocked by internal checking, e.g. risk management
     SUBMITTED = S = 'SUBMITTED'
     OPENED = O = 'OPENED'
     CLOSED = C = 'CLOSED'

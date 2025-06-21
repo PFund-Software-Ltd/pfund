@@ -21,7 +21,8 @@ from pfund.engines.base_engine import BaseEngine
 class TradeEngine(BaseEngine):
     def __init__(
         self,
-        env: Literal['SANDBOX', 'PAPER', 'LIVE']='SANDBOX',
+        *,
+        env: Literal['SANDBOX', 'PAPER', 'LIVE'],
         name: str='',
         data_tool: tDataTool='polars',
         data_range: str | DataRangeDict='ytd',

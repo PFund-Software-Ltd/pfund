@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Callable, Literal, ClassVar
 if TYPE_CHECKING:
     from pfund.typing import tEnvironment, ProductName, AccountName
     from pfund.adapter import Adapter
+    from pfund.datas import QuoteData, TickData, BarData
     from pfund.accounts.account_crypto import CryptoAccount
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.products.product_crypto import CryptoProduct
@@ -47,10 +48,10 @@ class BaseWebsocketApi(ABC):
         self._adapter: Adapter = Exchange.adapter
         self._urls: str | dict[Literal['public', 'private'], str] | None = self.URLS.get(self._env, None)
 
-        self._datas: dict[ProductName, dict[PublicDataChannel, BaseData]] = {}
+        self._datas: dict[ProductName, dict[PublicDataChannel, QuoteData | TickData | BarData]] = {}
         self._products: dict[ProductName, CryptoProduct] = {}
         self._accounts: dict[AccountName, CryptoAccount] = {}
-        self._actual_channels: dict[DataChannelType, list[str]] = {
+        self._channels: dict[DataChannelType, list[str]] = {
             DataChannelType.public: [], 
             DataChannelType.private: []
         }
@@ -191,7 +192,7 @@ class BaseWebsocketApi(ABC):
             zmq.stop()
         self._zmqs = {}
 
-    def _add_account(self, account: CryptoAccount) -> CryptoAccount:
+    def add_account(self, account: CryptoAccount) -> CryptoAccount:
         if account.name not in self._accounts:
             self._accounts[account.name] = account
             self._logger.debug(f'added {account=}')
@@ -209,7 +210,7 @@ class BaseWebsocketApi(ABC):
                 raise ValueError(f'product name {product.name} has already been used for {existing_product}')
         return product
         
-    def _add_data(self, data: BaseData) -> BaseData:
+    def _add_data(self, data: QuoteData | TickData | BarData) -> QuoteData | TickData | BarData:
         product = self._add_product(data.product)
         if product.name not in self._datas:
             self._datas[product.name] = {}
@@ -218,31 +219,30 @@ class BaseWebsocketApi(ABC):
             self._logger.debug(f'added {product.name} {data.channel} data')
         return data
     
-    def _add_channel(
+    def add_channel(
         self,
         channel: PublicDataChannel | PrivateDataChannel | str,
         channel_type: DataChannelType,
-        data: BaseData | None=None
+        data: QuoteData | TickData | BarData | None=None
     ):
-        if channel in PublicDataChannel:
-            assert data, f'data is required for public channel {channel}'
-            self._add_data(data)
-        actual_channel = self._create_actual_channel(channel, channel_type, data=data)
-        if actual_channel not in self._actual_channels[channel_type]:
-            self._actual_channels[channel_type].append(actual_channel)
-            self._logger.debug(f'added channel {actual_channel}')
+        channel = self._create_channel(channel, channel_type, data=data)
+        if channel not in self._channels[channel_type]:
+            self._channels[channel_type].append(channel)
+            self._logger.debug(f'added channel {channel}')
     
-    def _create_actual_channel(
+    def _create_channel(
         self, 
         channel: PublicDataChannel | PrivateDataChannel | str, 
         channel_type: DataChannelType, 
-        data: BaseData | None=None
+        data: QuoteData | TickData | BarData | None=None
     ) -> str:
         # when channel is a string, it must be a full channel
         if channel not in PublicDataChannel and channel not in PrivateDataChannel:
             return channel
         else:
             if channel_type == DataChannelType.public:
+                assert data, f'data is required for public channel {channel}'
+                self._add_data(data)
                 return self._create_public_channel(data)
             elif channel_type == DataChannelType.private:
                 return self._create_private_channel(channel)
@@ -356,7 +356,7 @@ class BaseWebsocketApi(ABC):
         if self._wait(lambda: self._is_all_connected(ws_names), reason='connection'):
             if self._wait(lambda: self._is_all_authenticated(ws_names), reason='authentication'):
                 for ws_name in ws_names:
-                    if full_channels := self._actual_channels['public' if ws_name in self._servers else 'private']:
+                    if full_channels := self._channels['public' if ws_name in self._servers else 'private']:
                         ws = self._websockets[ws_name]
                         self._subscribe(ws, full_channels)
                 if self._sub_num == 0:
@@ -667,7 +667,7 @@ class BaseWebsocketApi(ABC):
         pass
     
     @abstractmethod
-    def _create_public_channel(self, data: BaseData):
+    def _create_public_channel(self, data: QuoteData | TickData | BarData):
         pass
 
     def _create_private_channel(self, channel: PrivateDataChannel):

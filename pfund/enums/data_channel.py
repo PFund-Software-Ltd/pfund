@@ -21,3 +21,5 @@ class DataChannelType(StrEnum):
 
 class PFundDataChannel(StrEnum):
     signal = 'signal'
+    # ping = 'ping'
+    # pong = 'pong'

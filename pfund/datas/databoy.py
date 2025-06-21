@@ -6,6 +6,7 @@ if TYPE_CHECKING:
     from pfeed.typing import tDataSource
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
+    from pfund.engines.base_engine_settings import BaseEngineSettings
     from pfund.typing import LocalComponent, Component, ProductName, ResolutionRepr, DataConfigDict
 
 import time
@@ -13,10 +14,14 @@ import importlib
 from collections import defaultdict
 from pprint import pformat
 
+from pfund.datas import QuoteData, TickData, BarData
 from pfund.products.product_base import BaseProduct
 from pfund.datas.data_config import DataConfig
 from pfund.datas.resolution import Resolution
 from pfund.enums import Event, Broker, CryptoExchange
+
+
+MarketData = QuoteData | TickData | BarData
 
 
 # NOTE: conceptually it's similar to the messenger in engine.
@@ -24,11 +29,11 @@ class DataBoy:
     def __init__(self, component: Component):
         self._component = component
         self._logger: Logger | None = None
-        self.datas: dict[BaseProduct, dict[Resolution, TimeBasedData]] = defaultdict(dict)
-        self._listeners: dict[BaseData, list[LocalComponent]] = defaultdict(list)
-        self._stale_bar_timeouts: dict[TimeBasedData, int] = {}
-        self._engine_mq: ZeroMQ | None = None
-        self._component_mq: ZeroMQ | None = None
+        self.datas: dict[BaseProduct, dict[Resolution, MarketData]] = defaultdict(dict)
+        self._listeners: dict[MarketData, list[LocalComponent]] = defaultdict(list)
+        self._stale_bar_timeouts: dict[BarData, int] = {}
+        self._data_zmq: ZeroMQ | None = None
+        self._signals_zmq: ZeroMQ | None = None
         # TODO: save data signatures properly, data_signatures should be a set
         # TODO: add data_config (dict form) to data_signatures
         # TODO: rename data_signatures to data_inputs?
@@ -37,11 +42,11 @@ class DataBoy:
     def _set_logger(self, logger: Logger):
         self._logger = logger
     
-    def _add_listener(self, listener: LocalComponent, data: BaseData):
+    def _add_listener(self, listener: LocalComponent, data: MarketData):
         if listener not in self._listeners[data]:
             self._listeners[data].append(listener)
 
-    def _remove_listener(self, listener: LocalComponent, data: BaseData):
+    def _remove_listener(self, listener: LocalComponent, data: MarketData):
         if listener in self._listeners[data]:
             self._listeners[data].remove(listener)
     
@@ -58,7 +63,6 @@ class DataBoy:
         return supported_resolutions
     
     def _add_data(self, product: BaseProduct, resolution: Resolution, data_config: DataConfig) -> TimeBasedData:
-        from pfund.datas import QuoteData, TickData, BarData
         if resolution.is_quote():
             data = QuoteData(
                 data_source=data_config.data_source, 
@@ -86,11 +90,11 @@ class DataBoy:
         self.datas[product][resolution] = data
         return data
     
-    def get_data(self, product: BaseProduct, resolution: ResolutionRepr | Resolution) -> TimeBasedData | None:
+    def get_data(self, product: BaseProduct, resolution: ResolutionRepr | Resolution) -> MarketData | None:
         resolution = Resolution(resolution)
         return self.datas[product].get(resolution, None)
     
-    def add_data(self, product: BaseProduct, data_source: tDataSource, data_origin: str, data_config: DataConfigDict | DataConfig | None) -> list[TimeBasedData]:
+    def add_data(self, product: BaseProduct, data_source: tDataSource, data_origin: str, data_config: DataConfigDict | DataConfig | None) -> list[MarketData]:
         if not isinstance(data_config, DataConfig):
             data_config = data_config or {}
             data_config['primary_resolution'] = self._component._resolution
@@ -102,7 +106,7 @@ class DataBoy:
         if is_auto_resampled:
             self._logger.warning(f'{product} resolution={data_config.primary_resolution} extra_resolutions={data_config.extra_resolutions} data is auto-resampled to:\n{pformat(data_config.resample)}')
         
-        datas: list[TimeBasedData] = []
+        datas: list[MarketData] = []
         for resolution in data_config.resolutions:
             if not (data := self.get_data(product, resolution)):
                 data = self._add_data(product, resolution, data_config)
@@ -114,9 +118,6 @@ class DataBoy:
             data_resampler = self.get_data(product, resampler_resolution)
             data_resamplee.bind_resampler(data_resampler)
             self._logger.debug(f'{product} resolution={resampler_resolution} (resampler) added listener resolution={resamplee_resolution} (resamplee) data')
-        
-        # TODO: need to do zeromq subscription, also need to subscribe to listeners' data
-        # if self._component.is_remote():
         
         return datas
 
@@ -164,42 +165,66 @@ class DataBoy:
         for data, timeout in self._stale_bar_timeouts.items():
             scheduler.add_job(lambda: self._flush_stale_bar(data), 'interval', seconds=timeout)
     
-    def _setup_messaging(self):
+    @property
+    def subscribed_data(self) -> list[MarketData]:
+        '''Returns all data that are subscribed to by this component and its listeners.'''
+        datas = [data for datas_per_resolution in self.datas.values() for data in datas_per_resolution.values()]
+        return datas + [data for data in self._listeners if data not in datas]
+    
+    def _setup_messaging(self, engine_settings: BaseEngineSettings):
         import zmq
         from mtflow.messaging import ZeroMQ
-        zmq_urls = self._engine.settings.zmq_urls
-        self._engine_mq = ZeroMQ(
-            url=zmq_urls.get(self._component.name, ZeroMQ.DEFAULT_URL),
+        
+        zmq_url = engine_settings.zmq_urls.get(self._component.name, ZeroMQ.DEFAULT_URL)
+        data_zmq_name = self._component.name+'_data'
+        self._data_zmq = ZeroMQ(
+            name=data_zmq_name,
+            url=zmq_url,
+            port=engine_settings.zmq_ports.get(data_zmq_name, None),
             receiver_socket_type=zmq.SUB,  # receive data from engine
             sender_socket_type=zmq.PUSH,  # send e.g. orders to engine
         )
-        # TODO: subscribe to selected topics, e.g. b'BYBIT:orderbook:BTCUSDT'
-        self._engine_mq.setsockopt(zmq.SUBSCRIBE, b'')
-        self._component_mq = ZeroMQ(
-            url=zmq_urls.get(self._component.name, ZeroMQ.DEFAULT_URL),
+        # subscribe to engine's data proxied from trading venues (e.g. bybit's websocket)
+        engine_proxy_port = engine_settings.zmq_ports['proxy']
+        for product in self.datas:
+            for data in self.datas[product].values():
+                # TODO: also need to subscribe to listeners' data
+                self._data_zmq.subscribe(data.zmq_channel, engine_proxy_port)
+                self._logger.debug(f'subscribed to {data.zmq_channel}')
+        
+        self._signals_zmq = ZeroMQ(
+            name=self._component.name,
+            url=zmq_url,
+            port=engine_settings.zmq_ports.get(self._component.name, None),
             receiver_socket_type=zmq.SUB,  # subscribe to signals from other components
             sender_socket_type=zmq.PUB,  # publish signals to other components
         )
-        # TODO: subscribe to selected signals
-        self._component_mq.setsockopt(zmq.SUBSCRIBE, b'')
     
+    def _create_zmq_channel_for_signals(self) -> str:
+        '''Creates a ZMQ channel used for publishing signals to other components'''
+        return self._component.name
+    
+    def get_zmq_ports_in_use(self) -> dict[str, int | None]:
+        data_zmq, signals_zmq = self._data_zmq, self._signals_zmq
+        return {
+            data_zmq.name: data_zmq.port if data_zmq is not None else None,
+            signals_zmq.name: signals_zmq.port if signals_zmq is not None else None,
+        }
+        
     # FIXME
     def pong(self):
         """Pongs back to Engine's ping to show that it is alive"""
         zmq_msg = (0, 0, (self.strat,))
         self._zmq.send(*zmq_msg, receiver='engine')
 
-    # FIXME: to be removed
     def start_zmq(self):
-        zmq_ports = self._engine.zmq_ports
-        self._zmq = ZeroMQ(self.name)
-        self._zmq.start(
-            logger=self.logger,
-            send_port=zmq_ports[self.name],
-            recv_ports=[zmq_ports['engine']]
-        )
-        zmq_msg = (0, 1, (self.strat, os.getpid(),))
-        self._zmq.send(*zmq_msg, receiver='engine')
+        for component in self._component.remote_components:
+            component_databoy = component.get_databoy()
+            component_channel = component_databoy._create_zmq_channel_for_signals()
+            component_port = component_databoy._get_zmq_ports_in_use()[component.name]
+            self._signals_zmq.subscribe(component_channel, component_port)
+        self._data_zmq.start()
+        self._signals_zmq.start()
 
     def stop_zmq(self):
         self._zmq.stop()
@@ -207,11 +232,11 @@ class DataBoy:
         
     def _collect(self, local_data=None):
         if self._component.is_remote():
-            channel, msg_key, data, pub_ts = self._engine_mq.recv()
+            channel, msg_key, data, pub_ts = self._data_zmq.recv()
             print('recv:', channel, msg_key, data, pub_ts)
             # TODO: e.g. if component is a model:
             # output = self._component.predict(...)
-            # self._component_mq.send(output)
+            # self._signals_zmq.send(output)
         else:
             # TODO: listener.databoy._collect()
             if topic == 1:  # quote data

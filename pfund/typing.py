@@ -29,7 +29,7 @@ tEnvironment = Literal['BACKTEST', 'SANDBOX', 'PAPER', 'LIVE']
 tTradingVenue = Literal['IB', 'BINANCE', 'BYBIT', 'OKX']
 tBroker = Literal['CRYPTO', 'DEFI', 'IB']
 tCryptoExchange = Literal['BINANCE', 'BYBIT', 'OKX']
-tDatabase = Literal['DUCKDB', 'POSTGRESQL', 'PGLITE', 'TIMESCALEDB']
+tDatabase = Literal['DUCKDB', 'POSTGRESQL']
 tOrderType = Literal['LIMIT', 'MARKET', 'STOP_MARKET', 'STOP_LIMIT']
 
 

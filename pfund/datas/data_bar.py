@@ -167,14 +167,8 @@ class BarData(TimeBasedData):
     @property
     def bar(self):
         return self._bar
-    
-    @property
-    def kline(self):
-        return self._bar
-    
-    @property
-    def candlestick(self):
-        return self._bar
+    kline = bar
+    candlestick = bar
     
     def skip_first_bar(self) -> bool:
         if self._skip_first_bar:

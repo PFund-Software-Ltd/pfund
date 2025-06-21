@@ -2,7 +2,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.typing import tEnvironment
-    from pfund.datas.data_base import BaseData
     from pfund.datas import QuoteData, TickData, BarData
 
 import time
@@ -13,9 +12,8 @@ except ImportError:
 import hmac
 from decimal import Decimal
 
-from pfund.enums import PublicDataChannel
 from pfund.exchanges.ws_api_base import BaseWebsocketApi
-from pfund.enums import Environment, CryptoExchange
+from pfund.enums import Environment, CryptoExchange, PublicDataChannel, PrivateDataChannel, DataChannelType
 from pfund.products.product_bybit import BybitProduct
 from pfund.datas.timeframe import TimeframeUnits
 
@@ -63,6 +61,15 @@ class WebsocketApi(BaseWebsocketApi):
 
     def __init__(self, env: Environment | tEnvironment):
         super().__init__(env=env)
+        self._channels: dict[DataChannelType, dict[ProductCategory, list[str]] | list[str]] = {
+            DataChannelType.public: {
+                ProductCategory.LINEAR: [],
+                ProductCategory.INVERSE: [],
+                ProductCategory.SPOT: [],
+                ProductCategory.OPTION: [],
+            },
+            DataChannelType.private: [], 
+        }
         # TODO: create self._servers?
 
     def _add_server(self, category: str):
@@ -103,12 +110,29 @@ class WebsocketApi(BaseWebsocketApi):
             # set self._is_authenticating[ws_name] = True
             ws_url = self._urls['private']
         return ws_url
+    
+    def add_channel(
+        self,
+        channel: PublicDataChannel | PrivateDataChannel | str,
+        channel_type: DataChannelType,
+        data: QuoteData | TickData | BarData | None=None
+    ):
+        channel = super()._create_channel(channel, channel_type, data=data)
+        if channel_type == DataChannelType.public:
+            product: BybitProduct = data.product
+            if channel not in self._channels[channel_type][product.category]:
+                self._channels[channel_type][product.category].append(channel)
+                self._logger.debug(f'added channel {channel}')
+        else:
+            if channel not in self._channels[channel_type]:
+                self._channels[channel_type].append(channel)
+                self._logger.debug(f'added channel {channel}')
 
-    def _create_public_channel(self, data: BaseData):
-        channel, product = data.channel, data.product
+    def _create_public_channel(self, data: QuoteData | TickData | BarData):
+        channel = data.channel
+        product: BybitProduct = data.product
         echannel = self._adapter(channel.value, group='channel')
         if channel == PublicDataChannel.orderbook:
-            data: QuoteData
             supported_orderbook_levels = self.SUPPORTED_ORDERBOOK_LEVELS[product.category]
             supported_orderbook_depths = self.SUPPORTED_RESOLUTIONS[TimeframeUnits.QUOTE][product.category]
             if data.level not in supported_orderbook_levels:
@@ -117,10 +141,8 @@ class WebsocketApi(BaseWebsocketApi):
                 raise NotImplementedError(f"{self.name} ({channel}.{product.symbol}) orderbook_depth={data.depth} is not supported, supported depths: {supported_orderbook_depths}")
             full_channel = '.'.join([echannel, str(data.depth), product.symbol])
         elif channel == PublicDataChannel.tradebook:
-            data: TickData
             full_channel = '.'.join([echannel, product.symbol])
         elif channel == PublicDataChannel.candlestick:
-            data: BarData
             resolution, timeframe = data.resolution, data.timeframe
             if timeframe.unit not in self.SUPPORTED_RESOLUTIONS:
                 raise NotImplementedError(f'{self.name} ({channel}.{product.symbol}) timeframe={str(timeframe)} is not supported, supported timeframes {list(self.SUPPORTED_RESOLUTIONS)}')
