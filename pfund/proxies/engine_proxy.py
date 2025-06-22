@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.engines.base_engine_settings import BaseEngineSettings
     from pfund.datas.databoy import DataBoy
-    from pfund.enums import tTradingVenue
+    from pfund.enums import TradingVenue
     from pfund.brokers.broker_base import BaseBroker
 
 
@@ -19,5 +19,9 @@ class EngineProxy:
     def settings(self) -> BaseEngineSettings:
         return self._settings
     
-    def add_broker(self, trading_venue: tTradingVenue) -> BaseBroker:
+    def add_broker(self, trading_venue: TradingVenue) -> BaseBroker:
         pass
+
+    # TODO: send back zmq ports in use to engine, and get the latest updated settings from engine
+    # databoy.get_zmq_ports_in_use()
+    

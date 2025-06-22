@@ -4,10 +4,11 @@ if TYPE_CHECKING:
     from logging import Logger
     from mtflow.messaging.zeromq import ZeroMQ
     from pfeed.typing import tDataSource
+    from pfund.proxies.actor_proxy import ActorProxy
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.engines.base_engine_settings import BaseEngineSettings
-    from pfund.typing import LocalComponent, Component, ProductName, ResolutionRepr, DataConfigDict
+    from pfund.typing import ComponentName, Component, ProductName, ResolutionRepr, DataConfigDict
 
 import time
 import importlib
@@ -27,10 +28,15 @@ MarketData = QuoteData | TickData | BarData
 # NOTE: conceptually it's similar to the messenger in engine.
 class DataBoy:
     def __init__(self, component: Component):
-        self._component = component
-        self._logger: Logger | None = None
+        '''
+        Args:
+            datas: datas directly used by the component, added via add_data()
+            _subscribed_data: all data in `datas` + data subscribed on behalf of local components
+        '''
+        self._component: Component = component
+        self._logger: Logger = component.logger
         self.datas: dict[BaseProduct, dict[Resolution, MarketData]] = defaultdict(dict)
-        self._listeners: dict[MarketData, list[LocalComponent]] = defaultdict(list)
+        self._subscribed_data: dict[MarketData, list[Component]] = defaultdict(list)
         self._stale_bar_timeouts: dict[BarData, int] = {}
         self._data_zmq: ZeroMQ | None = None
         self._signals_zmq: ZeroMQ | None = None
@@ -39,17 +45,9 @@ class DataBoy:
         # TODO: rename data_signatures to data_inputs?
         self._data_signatures = []
         
-    def _set_logger(self, logger: Logger):
-        self._logger = logger
-    
-    def _add_listener(self, listener: LocalComponent, data: MarketData):
-        if listener not in self._listeners[data]:
-            self._listeners[data].append(listener)
-
-    def _remove_listener(self, listener: LocalComponent, data: MarketData):
-        if listener in self._listeners[data]:
-            self._listeners[data].remove(listener)
-    
+    def _subscribe_to_data(self, component: Component, data: MarketData):
+        self._subscribed_data[data].append(component)
+        
     @staticmethod
     def _get_supported_resolutions(bkr: Broker, exch: CryptoExchange | str) -> dict:
         if bkr == Broker.CRYPTO:
@@ -94,7 +92,13 @@ class DataBoy:
         resolution = Resolution(resolution)
         return self.datas[product].get(resolution, None)
     
-    def add_data(self, product: BaseProduct, data_source: tDataSource, data_origin: str, data_config: DataConfigDict | DataConfig | None) -> list[MarketData]:
+    def add_data(
+        self, 
+        product: BaseProduct, 
+        data_source: tDataSource, 
+        data_origin: str, 
+        data_config: DataConfigDict | DataConfig | None
+    ) -> list[MarketData]:
         if not isinstance(data_config, DataConfig):
             data_config = data_config or {}
             data_config['primary_resolution'] = self._component._resolution
@@ -165,46 +169,46 @@ class DataBoy:
         for data, timeout in self._stale_bar_timeouts.items():
             scheduler.add_job(lambda: self._flush_stale_bar(data), 'interval', seconds=timeout)
     
-    @property
-    def subscribed_data(self) -> list[MarketData]:
-        '''Returns all data that are subscribed to by this component and its listeners.'''
-        datas = [data for datas_per_resolution in self.datas.values() for data in datas_per_resolution.values()]
-        return datas + [data for data in self._listeners if data not in datas]
-    
     def _setup_messaging(self, engine_settings: BaseEngineSettings):
         import zmq
         from mtflow.messaging import ZeroMQ
         
         zmq_url = engine_settings.zmq_urls.get(self._component.name, ZeroMQ.DEFAULT_URL)
-        data_zmq_name = self._component.name+'_data'
-        self._data_zmq = ZeroMQ(
-            name=data_zmq_name,
-            url=zmq_url,
-            port=engine_settings.zmq_ports.get(data_zmq_name, None),
-            receiver_socket_type=zmq.SUB,  # receive data from engine
-            sender_socket_type=zmq.PUSH,  # send e.g. orders to engine
-        )
-        # subscribe to engine's data proxied from trading venues (e.g. bybit's websocket)
-        engine_proxy_port = engine_settings.zmq_ports['proxy']
-        for product in self.datas:
-            for data in self.datas[product].values():
-                # TODO: also need to subscribe to listeners' data
+
+        if self._component.is_remote():
+            data_zmq_name = self._component.name+'_data'
+            self._data_zmq = ZeroMQ(
+                name=data_zmq_name,
+                url=zmq_url,
+                port=engine_settings.zmq_ports.get(data_zmq_name, None),
+                receiver_socket_type=zmq.SUB,  # receive data from engine
+                sender_socket_type=zmq.PUSH,  # send e.g. orders to engine
+            )
+            # subscribe to engine's data proxied from trading venues (e.g. bybit's websocket)
+            engine_proxy_port = engine_settings.zmq_ports['proxy']
+            for data in self._subscribed_data:
                 self._data_zmq.subscribe(data.zmq_channel, engine_proxy_port)
                 self._logger.debug(f'subscribed to {data.zmq_channel}')
         
-        self._signals_zmq = ZeroMQ(
-            name=self._component.name,
-            url=zmq_url,
-            port=engine_settings.zmq_ports.get(self._component.name, None),
-            receiver_socket_type=zmq.SUB,  # subscribe to signals from other components
-            sender_socket_type=zmq.PUB,  # publish signals to other components
-        )
+        requires_pub = self._component.is_remote() and bool(self._component.get_remote_consumers())
+        remote_components: list[ActorProxy] = self._component.get_remote_components()
+        requires_sub = bool(remote_components)
+        if requires_pub or requires_sub:
+            self._signals_zmq = ZeroMQ(
+                name=self._component.name,
+                url=zmq_url,
+                port=engine_settings.zmq_ports.get(self._component.name, None),
+                receiver_socket_type=zmq.SUB,  # subscribe to signals from other remote components
+                sender_socket_type=zmq.PUB,  # publish signals to other remote consumers
+            )
+            for component in remote_components:
+                self._signals_zmq.subscribe(
+                    channel=component.name,  # NOTE: component.name is used as the channel name
+                    # FIXME: sends back the ports to engine for record
+                    port=component._get_zmq_ports_in_use()[component.name]
+                )
     
-    def _create_zmq_channel_for_signals(self) -> str:
-        '''Creates a ZMQ channel used for publishing signals to other components'''
-        return self._component.name
-    
-    def get_zmq_ports_in_use(self) -> dict[str, int | None]:
+    def _get_zmq_ports_in_use(self) -> dict[str, int | None]:
         data_zmq, signals_zmq = self._data_zmq, self._signals_zmq
         return {
             data_zmq.name: data_zmq.port if data_zmq is not None else None,
@@ -218,11 +222,6 @@ class DataBoy:
         self._zmq.send(*zmq_msg, receiver='engine')
 
     def start_zmq(self):
-        for component in self._component.remote_components:
-            component_databoy = component.get_databoy()
-            component_channel = component_databoy._create_zmq_channel_for_signals()
-            component_port = component_databoy._get_zmq_ports_in_use()[component.name]
-            self._signals_zmq.subscribe(component_channel, component_port)
         self._data_zmq.start()
         self._signals_zmq.start()
 

@@ -19,7 +19,6 @@ if TYPE_CHECKING:
         Component,
         ComponentName,
     )
-    from pfund._logging.config import LoggingDictConfigurator
     from pfund.brokers.broker_base import BaseBroker
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.engines.base_engine_settings import BaseEngineSettings
@@ -72,7 +71,7 @@ class BaseEngine(metaclass=MetaEngine):
     
     name: str
     _logger: logging.Logger
-    _logging_configurator: LoggingDictConfigurator
+    _logging_config: dict
     _store: MTStore
     _kernel: TradeKernel
     brokers: dict[str, BaseBroker]
@@ -124,6 +123,7 @@ class BaseEngine(metaclass=MetaEngine):
         from pfeed.feeds.time_based_feed import TimeBasedFeed
         from pfund.external_listeners import ExternalListeners
         from pfund.utils.utils import derive_run_mode
+        from pfund import get_config
         
         cls = self.__class__
         env = Environment[env.upper()]
@@ -162,7 +162,9 @@ class BaseEngine(metaclass=MetaEngine):
 
         self.name = name or self._get_default_name()
         
-        self._logging_configurator = self._setup_logging()
+        config = get_config()
+        config._load_env_file(self._env)
+        self._logging_config = self._setup_logging()
         self._logger = logging.getLogger('pfund')
 
         self._store = MTStore(env=cls._env, data_tool=cls._data_tool)
@@ -199,12 +201,11 @@ class BaseEngine(metaclass=MetaEngine):
     def data_end(self) -> datetime.date:
         return self._data_end
     
-    def _setup_logging(self) -> LoggingDictConfigurator:
+    def _setup_logging(self) -> dict:
+        from pfund import get_config
         from pfund._logging import setup_logging_config
         from pfund._logging.config import LoggingDictConfigurator
-        from pfund import get_config
         config = get_config()
-        config._load_env_file(self._env)
         log_path = f'{config.log_path}/{self._env}'
         user_logging_config = config.logging_config
         logging_config_file_path = config.logging_config_file_path
@@ -212,7 +213,7 @@ class BaseEngine(metaclass=MetaEngine):
         # ≈ logging.config.dictConfig(logging_config) with a custom configurator
         logging_configurator = LoggingDictConfigurator(logging_config)
         logging_configurator.configure()
-        return logging_configurator
+        return logging_configurator._pfund_config
     
     def run(self):
         self._store._freeze()
@@ -266,11 +267,11 @@ class BaseEngine(metaclass=MetaEngine):
         run_mode: RunMode = derive_run_mode(ray_kwargs)
         if is_remote := (run_mode == RunMode.REMOTE):
             strategy = ActorProxy(strategy, name=name, ray_actor_options=ray_actor_options, **ray_kwargs)
+            strategy._set_proxy(strategy)
         strategy._set_name(strat)
         strategy._set_run_mode(run_mode)
         strategy._set_resolution(resolution)
-        # logging_configurator can't be serialized, so we need to pass in the original config instead in REMOTE mode
-        strategy._setup_logging(self._logging_configurator._pfund_config if is_remote else self._logging_configurator)
+        strategy._setup_logging(self._logging_config)
         strategy._set_engine(engine=None if is_remote else self, engine_settings=self.settings)
 
         self.strategies[strat] = strategy

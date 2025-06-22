@@ -53,14 +53,9 @@ class ActorProxy:
                 except TypeError as err:
                     # NOTE: catch TypeError when trying to pickle and return a component
                     # e.g. model = strategy.add_model(...), where strategy is a ray actor but model is not, so model can't be serialized and returned correctly
-                    if 'cannot pickle' in str(err):
-                        # REVIEW: not sure if this error only happens when trying to return a component
-                        # to be safe, we only print warning for these methods and print error for others
-                        if name in ['add_strategy', 'add_model', 'add_feature', 'add_indicator', 'add_agent']:
-                            print_warning(f'Ray Actor "{self.name}" returns None for "{name}"')
-                        else:
-                            print_error(f'Ray Actor "{self.name}" error when calling "{name}": {err}')
-                        return None
-                    else:
-                        raise err
+                    # if 'cannot pickle' in str(err):
+                    #     print_error(f'Ray Actor "{self.name}" error when calling "{name}": {err}')
+                    #     return None
+                    # else:
+                    raise err
             return remote_method

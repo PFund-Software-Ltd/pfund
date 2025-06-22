@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
     from pfund.risk_guard import RiskGuard
     from pfund.data_tools import data_tool_backtest
+    from pfund._logging.config import LoggingDictConfigurator
 
 from collections import deque
 from abc import ABC, abstractmethod
@@ -36,7 +37,8 @@ from pfund.proxies.actor_proxy import ActorProxy
 
 
 class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):    
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):       
+        # TODO: if its a sub-strategy, it should not have positions, balances, orders, etc.
         self.positions: dict[AccountName, dict[ProductName, BasePosition]] = {}
         self.balances: dict[AccountName, dict[Currency, BaseBalance]] = {}
         # NOTE: includes submitted orders and opened orders
@@ -56,9 +58,6 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def add_risk_guard(self, risk_guard: RiskGuard):
         self._assert_not_frozen()
         raise NotImplementedError("RiskGuard is not implemented yet")
-    
-    def is_sub_strategy(self) -> bool:
-        return bool(self._consumer)
     
     def get_strategy(self, name: str) -> BaseStrategy | ActorProxy:
         return self.strategies[name]
@@ -121,6 +120,8 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         self.logger.debug(f'added {trading_venue} account "{account.name}"')
         return account
     
+    # FIXME: update, refer to or reuse _add_component() in component_mixin.py
+    # TODO: _setup_logging, _set_engine etc.
     def add_strategy(self, strategy: StrategyT, name: str='') -> StrategyT:
         self._assert_not_frozen()
         assert isinstance(strategy, BaseStrategy), \

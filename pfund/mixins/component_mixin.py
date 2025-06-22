@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from pfund.engines.base_engine_settings import BaseEngineSettings
     from pfund.datas.data_bar import Bar
     from pfund.datas.data_base import BaseData
-    from pfund._logging.config import LoggingDictConfigurator
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.products.product_base import BaseProduct
     from pfund.data_tools.data_tool_base import BaseDataTool
@@ -56,10 +55,11 @@ class ComponentMixin:
         self._run_mode: RunMode | None = None
         self._resolution: Resolution | None = None
         
-        self.logger: logging.Logger | None = None
-        self._logging_configurator: LoggingDictConfigurator | None = None
+        self.logger: logging.Logger = logging.getLogger('pfund')
+        self._logging_config: dict | None = None
+        self._proxy: ActorProxy | None = None
         self._engine: BaseEngine | EngineProxy | None = None
-        self._consumer: Component | None = None
+        self._consumers: list[Component | ActorProxy] = []
         self._store: TradingStore | None = None
         self._databoy = DataBoy(self)
         # self._data_tool: BaseDataTool = self._create_data_tool()
@@ -84,6 +84,9 @@ class ComponentMixin:
     # TODO: also check on_bar, on_tick, on_quote etc.
     def _assert_functions_signatures(self):
         pass
+    
+    def _set_proxy(self, proxy: ActorProxy):
+        self._proxy = proxy
 
     @classmethod
     def load_config(cls, config: dict | None=None, file_path: str=''):
@@ -122,7 +125,7 @@ class ComponentMixin:
         if self.is_model():
             metadata['model'] = self.model
         return metadata
-
+    
     @property
     def data_tool(self: Component) -> BaseDataTool:
         return self._data_tool
@@ -139,8 +142,12 @@ class ComponentMixin:
     def databoy(self: Component) -> DataBoy:
         return self._databoy
     
-    def get_databoy(self: Component) -> DataBoy:
-        return self._databoy
+    def get_zmq_ports_in_use(self: Component) -> dict[str, int | None]:
+        data_zmq, signals_zmq = self.databoy._data_zmq, self.databoy._signals_zmq
+        return {
+            data_zmq.name: data_zmq.port if data_zmq is not None else None,
+            signals_zmq.name: signals_zmq.port if signals_zmq is not None else None,
+        }
     
     @property
     def datas(self: Component) -> dict[BaseProduct, dict[Resolution, TimeBasedData]]:
@@ -158,11 +165,19 @@ class ComponentMixin:
         return components
     
     @property
-    def remote_components(self: Component, direct_only: bool=True) -> list[ActorProxy]:
+    def consumers(self: Component) -> list[Component]:
+        return self._consumers
+    
+    def get_remote_consumers(self: Component, direct_only: bool=True) -> list[ActorProxy]:
+        return [consumer for consumer in self._consumers if consumer.is_remote(direct_only=direct_only)]
+    
+    def get_local_consumers(self: Component, direct_only: bool=True) -> list[Component]:
+        return [consumer for consumer in self._consumers if not consumer.is_remote(direct_only=direct_only)]
+    
+    def get_remote_components(self: Component, direct_only: bool=True) -> list[ActorProxy]:
         return [component for component in self.components if component.is_remote(direct_only=direct_only)]
     
-    @property
-    def local_components(self: Component, direct_only: bool=True) -> list[Component]:
+    def get_local_components(self: Component, direct_only: bool=True) -> list[Component]:
         return [component for component in self.components if not component.is_remote(direct_only=direct_only)]
     
     @property
@@ -179,30 +194,27 @@ class ComponentMixin:
             return ComponentType.feature
         elif isinstance(self, BaseModel):
             return ComponentType.model
-        
-    def _setup_logging(self: Component, logging_configurator_or_config: LoggingDictConfigurator | dict):
-        """Creates logger dynamically for component (e.g. strategy/model) using component's name.
-        
-        Args:
-            logging_configurator_or_config: if run_mode == RunMode.REMOTE, LoggingDictConfigurator is passed in, otherwise logging_config (dict) is passed in
-        """
+    
+    def _setup_logging(self: Component, logging_config: dict):
         if self.is_remote():
             from pfund._logging.config import LoggingDictConfigurator
-            # set up component's own logging when running in remote mode
-            logging_config: dict = logging_configurator_or_config
+            from zmq.log.handlers import PUBHandler
+
             logging_configurator = LoggingDictConfigurator(logging_config)
             logging_configurator.configure()
+            
+            self._logging_config = logging_configurator._pfund_config
+            
+            for handler in self.logger.handlers[:]:
+                self.logger.removeHandler(handler)
+                handler.close()
+            
+            # TODO:
+            # zmq_handler = PUBHandler('tcp://127.0.0.1:5555')
+            # self.logger.addHandler(zmq_handler)
+            # print('strategy logger:', self.logger, self.logger.handlers)
         else:
-            # reuse the same logging configurator as the one in the engine
-            logging_configurator: LoggingDictConfigurator = logging_configurator_or_config
-        logging_config = logging_configurator._pfund_config
-        loggers_config = logging_config['loggers']
-        default_logger_config = loggers_config[f'_{self.component_type}']
-        logger_config = loggers_config.get(self.name, default_logger_config)
-        logging_configurator.configure_logger(self.name, logger_config)
-        self.logger = logging.getLogger(self.name)
-        self._logging_configurator = logging_configurator
-        self._databoy._set_logger(self.logger)
+            self._logging_config = logging_config
     
     def get_df(
         self: Component, 
@@ -253,8 +265,6 @@ class ComponentMixin:
     
     def _set_engine(self, engine: BaseEngine | None, engine_settings: BaseEngineSettings | None):
         self._engine = EngineProxy(self._databoy, settings=engine_settings) if engine is None else engine
-        if self.is_remote():
-            self._databoy._setup_messaging(self._engine.settings)
     
     def _set_trading_store(self: Component, trading_store: TradingStore):
         self._store = trading_store
@@ -278,15 +288,21 @@ class ComponentMixin:
     
     def _set_run_mode(self: Component, run_mode: RunMode):
         self._run_mode = run_mode
-
-    def _set_consumer(self: Component, consumer: Component | None):
-        if not self._consumer:
-            self._consumer = consumer
+    
+    def _add_consumer(self: Component, consumer: Component | ActorProxy):
+        if consumer not in self._consumers:
+            self._consumers.append(consumer)
         else:
-            raise ValueError(f"{self.name} already has a consumer {self._consumer.name}")
+            raise ValueError(f"{self.name} already has a consumer {consumer}")
     
     def is_strategy(self: Component) -> bool:
         return self.component_type == ComponentType.strategy
+    
+    def is_sub_strategy(self) -> bool:
+        return self.is_strategy() and bool(self._consumers)
+    
+    def is_top_strategy(self) -> bool:
+        return self.is_strategy() and not bool(self._consumers)
     
     def is_model(self: Component) -> bool:
         return self.component_type == ComponentType.model
@@ -318,15 +334,14 @@ class ComponentMixin:
             bool: True if the component (or any of its ancestors) is remote.
         """
         assert self._run_mode is not None, f"{self.name} has no run mode"
-        if direct_only:
-            return self._run_mode == RunMode.REMOTE
-        else:
-            consumer: Component | None = self._consumer
-            while consumer is not None:
-                if consumer.is_remote():
-                    return True
-                consumer = consumer._consumer
-            return False
+        is_remote = self._run_mode == RunMode.REMOTE
+        if is_remote or direct_only:
+            return is_remote
+        # if not remote, walk up the consumer chain to check if any of the ancestors is remote
+        for consumer in self._consumers:
+            if consumer.is_remote(direct_only=direct_only):
+                return True
+        return False
     
     def _add_product(self: Component, product: BaseProduct) -> BaseProduct:
         if product.name not in self.products:
@@ -416,13 +431,16 @@ class ComponentMixin:
         )
         for data in datas:
             self._engine._register_market_data(self, data)
-            consumer: Component | None = self._consumer
-            component: Component = self
-            while consumer is not None:
-                consumer.databoy._add_listener(component, data)
-                component: Component = consumer
-                consumer = consumer._consumer
+            self._subscribe_to_data(data)
         return datas
+    
+    def _subscribe_to_data(self: Component, data: TimeBasedData):
+        if self.is_remote():
+            self._databoy._subscribe_to_data(self, data)
+        else:
+            for consumer in self._consumers:
+                consumer: Component  # NOTE: when it's not remote, consumer must be a Component, not ActorProxy
+                consumer._subscribe_to_data(consumer, data)
     
     # TODO
     def add_custom_data(self: Component):
@@ -447,8 +465,8 @@ class ComponentMixin:
     
     def _add_component(
         self: Component, 
-        component: StrategyT | ModelT | FeatureT | IndicatorT,
-        name: str='',
+        component: StrategyT | ModelT | FeatureT | IndicatorT | ActorProxy,
+        name: str='', 
         min_data: int | None=None,
         max_data: int | None=None,
         group_data: bool=True,
@@ -480,7 +498,6 @@ class ComponentMixin:
 
         Component = component.__class__
         ComponentName = Component.__name__
-        component_type = component.component_type
         if component.is_strategy():
             assert self.component_type == ComponentType.strategy, \
                 f"cannot add strategy '{ComponentName}' to {self.component_type} '{self.name}'"
@@ -499,44 +516,52 @@ class ComponentMixin:
             components = self.indicators
             BaseClass = BaseIndicator
         else:
-            raise ValueError(f"{component_type} '{ComponentName}' is not a model, feature, or indicator")
-        assert isinstance(component, BaseClass), \
-            f"{component_type} '{ComponentName}' is not an instance of {BaseClass.__name__}. Please create your {component_type} using 'class {ComponentName}(pf.{component_type.capitalize()})'"
-        
-        component_name = name or component.name
-        if component_name in components:
-            raise ValueError(f"{component_name} already exists")
-        
-        run_mode: RunMode = derive_run_mode(ray_kwargs)
-        if is_remote := (run_mode == RunMode.REMOTE):
-            component = ActorProxy(component, name=component_name, ray_actor_options=ray_actor_options, **ray_kwargs)
-        component._set_name(component_name)
-        component._set_run_mode(run_mode)
-        component._set_resolution(self._resolution)
-        # # logging_configurator can't be serialized, so we need to pass in the original config instead in REMOTE mode
-        component._setup_logging(self._logging_configurator._pfund_config if is_remote else self._logging_configurator)
-        component._set_consumer(None if is_remote else self)
-        component._set_engine(engine=None if is_remote else self._engine, engine_settings=self._engine.settings)
+            raise ValueError(f"{component.component_type} '{ComponentName}' is not a model, feature, or indicator")
 
-        if signal_cols:
-            component._set_signal_cols(signal_cols)
+        if not isinstance(component, ActorProxy):
+            component_type = component.component_type
+            assert isinstance(component, BaseClass), \
+                f"{component_type} '{ComponentName}' is not an instance of {BaseClass.__name__}. Please create your {component_type} using 'class {ComponentName}(pf.{component_type.capitalize()})'"
+            component_name = name or component.name
+            if component_name in components:
+                raise ValueError(f"{component_name} already exists")
+            
+            run_mode: RunMode = derive_run_mode(ray_kwargs)
+            if is_remote := (run_mode == RunMode.REMOTE):
+                assert self.is_remote(), f"cannot add remote component '{ComponentName}' to local component '{self.name}'"
+                component = ActorProxy(component, name=component_name, ray_actor_options=ray_actor_options, **ray_kwargs)
+                component._set_proxy(component)
+            component._set_name(component_name)
+            component._set_run_mode(run_mode)
+            component._set_resolution(self._resolution)
+            component._setup_logging(self._logging_config)
+            component._set_engine(engine=None if is_remote else self._engine, engine_settings=self._engine.settings)
 
-        # FIXME: check if min_data, max_data and group_data are needed when component_type is strategy
-        if not component.is_strategy():
-            if min_data:
-                component._set_min_data(min_data)
-            if max_data:
-                component._set_max_data(max_data)
-            component._set_group_data(group_data)
-        
-        components[component_name] = component
-        self.logger.debug(f"added {component_name}")
+            if signal_cols:
+                component._set_signal_cols(signal_cols)
 
-        return component
+            # FIXME: check if min_data, max_data and group_data are needed when component_type is strategy
+            if not component.is_strategy():
+                if min_data:
+                    component._set_min_data(min_data)
+                if max_data:
+                    component._set_max_data(max_data)
+                component._set_group_data(group_data)
+        else:
+            is_remote = True
+        component._add_consumer(self._proxy if is_remote else self)
+        components[component.name] = component
+        self.logger.debug(f"added {component.name}")
+    
+        if self.is_remote() and not is_remote:
+            # NOTE: returns None when adding a local component to a remote component to avoid returning a serialized (copied) object
+            return None
+        else:
+            return component
     
     def add_model(
         self: Component, 
-        model: ModelT, 
+        model: ModelT | ActorProxy,
         name: str='',
         min_data: int | None=None,
         max_data: int | None=None,
@@ -561,7 +586,7 @@ class ComponentMixin:
     
     def add_feature(
         self: Component, 
-        feature: FeatureT, 
+        feature: FeatureT | ActorProxy, 
         name: str='',
         min_data: int | None=None,
         max_data: int | None=None,
@@ -586,7 +611,7 @@ class ComponentMixin:
     
     def add_indicator(
         self: Component, 
-        indicator: IndicatorT, 
+        indicator: IndicatorT | ActorProxy,
         name: str='',
         min_data: int | None=None,
         max_data: int | None=None,
@@ -644,21 +669,21 @@ class ComponentMixin:
                 self.predictions[col] = pred_y[i]
     
     def start(self: Component):
+        self._databoy._setup_messaging(self._engine.settings)
         self._store._freeze()
         self._store._materialize()
         self._engine._register_component(
-            consumer_name=self._consumer.name if self._consumer else None,
+            consumer_name=self.get_consumer_name(),
             component_name=self.name,
             component_metadata=self.to_dict(),
         )
-        if self.is_remote():
-            self._databoy.start_zmq()
         if not self.is_running():
             self.add_datas()
             self._add_datas_from_consumer_if_none()
             self.add_models()
             self.add_features()
             self.add_indicators()
+            self._databoy.start_zmq()
             self._prepare_df()
             self.on_start()
             self._is_running = True
