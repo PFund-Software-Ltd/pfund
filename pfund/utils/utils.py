@@ -40,6 +40,14 @@ class Singleton:
             del cls._instances[cls]
 
 
+def get_free_port() -> int:
+    """Get a free port by binding to port 0 and letting the OS assign one."""
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('127.0.0.1', 0))
+        return s.getsockname()[1]
+    
+
 def derive_run_mode(ray_kwargs: dict | None=None) -> RunMode:
     from mtflow.utils.utils import is_wasm
     if is_wasm():

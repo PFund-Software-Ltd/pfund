@@ -11,14 +11,9 @@ class EngineProxy:
     '''
     Proxy of BaseEngine when running in remote mode, since BaseEngine is not serializable by Ray.
     '''
-    def __init__(self, databoy: DataBoy, settings: BaseEngineSettings):
+    def __init__(self, databoy: DataBoy):
         self._databoy = databoy
-        self._settings = settings
         
-    @property
-    def settings(self) -> BaseEngineSettings:
-        return self._settings
-    
     def add_broker(self, trading_venue: TradingVenue) -> BaseBroker:
         pass
 

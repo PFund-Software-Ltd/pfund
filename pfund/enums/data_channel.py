@@ -20,6 +20,11 @@ class DataChannelType(StrEnum):
 
 
 class PFundDataChannel(StrEnum):
+    internal = 'internal'
     signal = 'signal'
     # ping = 'ping'
     # pong = 'pong'
+    
+
+class InternalTopic(StrEnum):
+    pass

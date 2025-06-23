@@ -27,7 +27,7 @@ import logging
 import datetime
 
 from pfeed.enums import DataTool
-from pfund import cprint
+from pfund import cprint, get_config
 from pfund.engines.meta_engine import MetaEngine
 from pfund.proxies.actor_proxy import ActorProxy
 from pfund.enums import (
@@ -68,10 +68,10 @@ class BaseEngine(metaclass=MetaEngine):
     _database: ClassVar[tDatabase | None]
     _settings: ClassVar[BaseEngineSettings]
     _external_listeners: ClassVar[ExternalListenersDict | None]
+    _logging_config: ClassVar[dict]
     
     name: str
     _logger: logging.Logger
-    _logging_config: dict
     _store: MTStore
     _kernel: TradeKernel
     brokers: dict[str, BaseBroker]
@@ -120,15 +120,30 @@ class BaseEngine(metaclass=MetaEngine):
         '''
         from mtflow.kernel import TradeKernel
         from mtflow.stores.mtstore import MTStore
-        from pfeed.feeds.time_based_feed import TimeBasedFeed
-        from pfund.external_listeners import ExternalListeners
-        from pfund.utils.utils import derive_run_mode
-        from pfund import get_config
         
         cls = self.__class__
-        env = Environment[env.upper()]
         if not hasattr(cls, "_initialized"):
+            from pfeed.feeds.time_based_feed import TimeBasedFeed
+            from pfund.external_listeners import ExternalListeners
+            from pfund.utils.utils import derive_run_mode
+            from pfund._logging import setup_logging_config
+            from pfund._logging.config import LoggingDictConfigurator
+
+            env = Environment[env.upper()]
             cls._env = env
+            config = get_config()
+            config._load_env_file(env)
+            
+            # set up logging for the engine
+            log_path = f'{config.log_path}/{self._env}'
+            user_logging_config = config.logging_config
+            logging_config_file_path = config.logging_config_file_path
+            logging_config = setup_logging_config(log_path, logging_config_file_path, user_logging_config=user_logging_config)
+            # ≈ logging.config.dictConfig(logging_config) with a custom configurator
+            logging_configurator = LoggingDictConfigurator(logging_config)
+            logging_configurator.configure()
+            cls._logging_config = logging_configurator._pfund_config
+            
             cls._run_mode = derive_run_mode()
             cls._data_tool = DataTool[data_tool.lower()]
             cls._database = Database[database.upper()] if database else None
@@ -157,26 +172,17 @@ class BaseEngine(metaclass=MetaEngine):
 
         
         # FIXME: do NOT allow LIVE env for now
-        assert env != Environment.LIVE, f"{env=} is not allowed for now"
-        
+        assert cls._env != Environment.LIVE, f"{cls._env=} is not allowed for now"
 
+        
         self.name = name or self._get_default_name()
-        
-        config = get_config()
-        config._load_env_file(self._env)
-        self._logging_config = self._setup_logging()
-        self._logger = logging.getLogger('pfund')
-
+        self._logger: logging.Logger = logging.getLogger('pfund')
         self._store = MTStore(env=cls._env, data_tool=cls._data_tool)
         self._kernel = TradeKernel(
-            engine_name=self.name,
-            run_mode=cls._run_mode, 
-            data_tool=cls._data_tool, 
-            database=cls._database, 
+            data_tool=cls._data_tool,
+            database=cls._database,
             external_listeners=cls._external_listeners,
-            settings=cls._settings,
         )
-
         self.trading_venues: list[TradingVenue] = []
         self.brokers: dict[Broker, BaseBroker] = {}
         self.strategies: dict[str, BaseStrategy | ActorProxy] = {}
@@ -201,34 +207,52 @@ class BaseEngine(metaclass=MetaEngine):
     def data_end(self) -> datetime.date:
         return self._data_end
     
-    def _setup_logging(self) -> dict:
-        from pfund import get_config
-        from pfund._logging import setup_logging_config
-        from pfund._logging.config import LoggingDictConfigurator
-        config = get_config()
-        log_path = f'{config.log_path}/{self._env}'
-        user_logging_config = config.logging_config
-        logging_config_file_path = config.logging_config_file_path
-        logging_config = setup_logging_config(log_path, logging_config_file_path, user_logging_config=user_logging_config)
-        # ≈ logging.config.dictConfig(logging_config) with a custom configurator
-        logging_configurator = LoggingDictConfigurator(logging_config)
-        logging_configurator.configure()
-        return logging_configurator._pfund_config
+    def _setup_logging(self):
+        cls = self.__class__
+        for strategy in self.strategies.values():
+            if strategy.is_remote():
+                zmq_ports_in_use = strategy._setup_logging(cls._settings.zmq_urls, cls._logging_config)
+                cls._settings.zmq_ports.update(zmq_ports_in_use)
+        
+    def _setup_messaging(self):
+        cls = self.__class__
+        zmq_ports_in_use: dict[str, int] = self._kernel.messenger._setup_messaging(self.name, cls._settings.zmq_urls, cls._settings.zmq_ports)
+        cls._settings.zmq_ports.update(zmq_ports_in_use)
+        for strategy in self.strategies.values():
+            zmq_ports_in_use = strategy._setup_messaging(cls._settings.zmq_urls, cls._settings.zmq_ports)
+            cls._settings.zmq_ports.update(zmq_ports_in_use)
+    
+    def _setup_subscriptions(self):
+        '''Sets up ZeroMQ subscriptions'''
+        self._kernel.messenger._setup_subscriptions(self._settings.zmq_ports)
+        for strategy in self.strategies.values():
+            strategy._setup_subscriptions(self._settings.zmq_ports)
     
     def run(self):
         self._store._freeze()
-        local_strategies = []
+        self._setup_logging()
+        # use ZeroMQ as long as not in WASM mode
+        if self._run_mode != RunMode.WASM:
+            self._setup_messaging()
+            self._setup_subscriptions()
+        self._kernel.run()
+        # TEMP
+        return
+
+        local_strategies: list[BaseStrategy] = []
         for strat, strategy in self.strategies.items():
+            strategy: BaseStrategy | ActorProxy
             trading_store: TradingStore = self._store.get_trading_store(strat)
             strategy._set_trading_store(trading_store)
-            # NOTE: if strategy is remote, trading store will be copied to it and
-            # the one inside the engine is just a reference and should be frozen
             if strategy.is_remote():
+                # NOTE: if strategy is remote, trading store will be copied to it and
+                # the one inside the engine is just a reference and should be frozen to avoid confusion
                 trading_store.freeze()
             else:
                 local_strategies.append(strategy)
-            # TODO:
-            # strategy.start()
+            strategy.start()
+        
+        
         if local_strategies:
             data = self._kernel.messenger.recv()
             for strategy in local_strategies:
@@ -266,13 +290,15 @@ class BaseEngine(metaclass=MetaEngine):
 
         run_mode: RunMode = derive_run_mode(ray_kwargs)
         if is_remote := (run_mode == RunMode.REMOTE):
+            from pfund._logging.temporary_logger import TemporaryLogger
             strategy = ActorProxy(strategy, name=name, ray_actor_options=ray_actor_options, **ray_kwargs)
             strategy._set_proxy(strategy)
+            strategy._set_logger(TemporaryLogger(strat))
+        
         strategy._set_name(strat)
         strategy._set_run_mode(run_mode)
         strategy._set_resolution(resolution)
-        strategy._setup_logging(self._logging_config)
-        strategy._set_engine(engine=None if is_remote else self, engine_settings=self.settings)
+        strategy._set_engine(engine=None if is_remote else self)
 
         self.strategies[strat] = strategy
         self._logger.debug(f"added '{strat}'")

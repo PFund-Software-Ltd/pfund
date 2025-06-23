@@ -56,7 +56,7 @@ class TradeEngine(BaseEngine):
     
     def run(self):
         super().run()
-        self._kernel.run()
+        # self._kernel.run()
 
         # for broker in self.brokers.values():
         #     broker.start(zmq=self._zmq)

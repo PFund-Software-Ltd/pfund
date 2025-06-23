@@ -1,5 +1,5 @@
 from typing_extensions import TypedDict, Annotated
-from typing import TypeVar, Literal, TypeAlias
+from typing import TypeVar, Literal, TypeAlias, Union
 
 from pfund.datas.resolution import Resolution
 from pfund.strategies.strategy_base import BaseStrategy
@@ -32,6 +32,24 @@ tDatabase = Literal['DUCKDB', 'POSTGRESQL']
 tOrderType = Literal['LIMIT', 'MARKET', 'STOP_MARKET', 'STOP_LIMIT']
 
 
+ComponentNameWithData: TypeAlias = ComponentName
+ComponentNameWithLogger: TypeAlias = ComponentName
+ZeroMQName = Union[
+    Literal[
+        "proxy",  # ZeroMQ xsub-xpub proxy for messaging from trading venues -> engine -> components
+        "router",  # ZeroMQ router-pull for pulling messages from components (e.g. strategies/models) -> engine -> trading venues
+        "publisher",  # ZeroMQ publisher for broadcasting internal states to external apps
+    ],
+    tTradingVenue,
+    # each component has TWO ZeroMQ ports:
+    # ComponentName is used for component's signals_zmq
+    # ComponentNameWithData is used for component's data_zmq
+    ComponentName,
+    ComponentNameWithData,  # {component_name}_data
+    ComponentNameWithLogger,  # {component_name}_logger
+]
+
+
 class DatasetSplitsDict(TypedDict, total=True):
     train: float
     val: float
@@ -53,16 +71,7 @@ class DataConfigDict(TypedDict, total=False):  # total=False makes fields option
 
 class BaseEngineSettingsDict(TypedDict, total=False):
     zmq_urls: dict[EngineName | tTradingVenue | ComponentName, str]
-    zmq_ports: dict[
-        Literal[
-            "proxy",  # ZeroMQ xsub-xpub proxy for messaging from trading venues -> engine -> components
-            "router",  # ZeroMQ router-pull for pulling messages from components (e.g. strategies/models) -> engine -> trading venues
-            "publisher",  # ZeroMQ publisher for broadcasting internal states to external apps
-        ] 
-        | tTradingVenue 
-        | ComponentName,
-        int
-    ]
+    zmq_ports: dict[ZeroMQName, int]
 
 
 class TradeEngineSettingsDict(BaseEngineSettingsDict, total=False):

@@ -49,6 +49,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         self.strategies: dict[str, BaseStrategy] = {}
 
         self.__mixin_post_init__(*args, **kwargs)  # calls ComponentMixin.__mixin_post_init__()
+        self.add_strategies()
     
     @abstractmethod
     def backtest(self, df: data_tool_backtest.BacktestDataFrame):
@@ -170,13 +171,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def start(self):
         # TODO: check if e.g. exchange balances and positions are ready, if backfilling is finished
         super().start()
-        self.add_strategies()
         # TODO: start components
-        # for strategy in self.strategies.values():
-        #     strategy.start()
-        if self._run_mode == RunMode.REMOTE:
-            self._databoy._setup_messaging()
-            self._databoy._collect()
         
     def stop(self, reason: str=''):
         super().stop(reason=reason)
