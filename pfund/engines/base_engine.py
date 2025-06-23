@@ -236,6 +236,7 @@ class BaseEngine(metaclass=MetaEngine):
             self._setup_messaging()
             self._setup_subscriptions()
         self._kernel.run()
+
         # TEMP
         return
 
