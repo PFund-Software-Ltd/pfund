@@ -8,7 +8,6 @@ DEFAULT_CANCEL_ALL_AT: dict[str, bool] = {
 }
 
 
-# TODO: add private channels
 class TradeEngineSettings(BaseEngineSettings):
     cancel_all_at: dict[str, bool] = Field(default_factory=dict)
     # force refetching market configs

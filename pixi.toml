@@ -44,6 +44,7 @@ test-py313 = ["py313", "test"]
 # [feature.core.pypi-dependencies]
 # mtflow = { version = ">=0.0.1.dev2", extras = ["core"] }
 # pfolio = { version = ">=0.0.2", extras = ["core"] }
+# pyzmq = ">=26.4.0"
 # order-book = ">=0.6.1"
 # python-telegram-bot = ">=22.1"
 

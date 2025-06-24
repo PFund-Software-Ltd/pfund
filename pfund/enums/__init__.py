@@ -19,5 +19,5 @@ from pfund.enums.data_channel import (
     PrivateDataChannel, 
     DataChannelType, 
     PFundDataChannel,
-    InternalTopic,
+    PFundDataTopic,
 )

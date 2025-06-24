@@ -4,6 +4,7 @@ if TYPE_CHECKING:
     from mtflow.stores.mtstore import MTStore
     from mtflow.kernel import TradeKernel
     from mtflow.stores.trading_store import TradingStore
+    from pfund.messenger import Messenger
     from pfeed.typing import tDataTool
     from pfund.products.product_base import BaseProduct
     from pfund.accounts.account_base import BaseAccount
@@ -16,13 +17,13 @@ if TYPE_CHECKING:
         tTradingVenue,
         DataRangeDict, 
         ExternalListenersDict, 
-        Component,
         ComponentName,
     )
     from pfund.brokers.broker_base import BaseBroker
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.engines.base_engine_settings import BaseEngineSettings
 
+import time
 import logging
 import datetime
 
@@ -30,6 +31,7 @@ from pfeed.enums import DataTool
 from pfund import cprint, get_config
 from pfund.engines.meta_engine import MetaEngine
 from pfund.proxies.actor_proxy import ActorProxy
+from pfund._logging.buffer import LogBuffer
 from pfund.enums import (
     Environment, 
     Broker, 
@@ -74,6 +76,8 @@ class BaseEngine(metaclass=MetaEngine):
     _logger: logging.Logger
     _store: MTStore
     _kernel: TradeKernel
+    _is_running: bool
+    _messenger: Messenger | None
     brokers: dict[str, BaseBroker]
     strategies: dict[str, BaseStrategy]
     
@@ -121,29 +125,18 @@ class BaseEngine(metaclass=MetaEngine):
         from mtflow.kernel import TradeKernel
         from mtflow.stores.mtstore import MTStore
         
+        config = get_config()
         cls = self.__class__
         if not hasattr(cls, "_initialized"):
             from pfeed.feeds.time_based_feed import TimeBasedFeed
             from pfund.external_listeners import ExternalListeners
             from pfund.utils.utils import derive_run_mode
-            from pfund._logging import setup_logging_config
-            from pfund._logging.config import LoggingDictConfigurator
 
             env = Environment[env.upper()]
-            cls._env = env
-            config = get_config()
             config._load_env_file(env)
             
-            # set up logging for the engine
-            log_path = f'{config.log_path}/{self._env}'
-            user_logging_config = config.logging_config
-            logging_config_file_path = config.logging_config_file_path
-            logging_config = setup_logging_config(log_path, logging_config_file_path, user_logging_config=user_logging_config)
-            # ≈ logging.config.dictConfig(logging_config) with a custom configurator
-            logging_configurator = LoggingDictConfigurator(logging_config)
-            logging_configurator.configure()
-            cls._logging_config = logging_configurator._pfund_config
-            
+            cls._env = env
+            cls._logging_config = cls._setup_logging()
             cls._run_mode = derive_run_mode()
             cls._data_tool = DataTool[data_tool.lower()]
             cls._database = Database[database.upper()] if database else None
@@ -176,16 +169,27 @@ class BaseEngine(metaclass=MetaEngine):
 
         
         self.name = name or self._get_default_name()
+        if 'engine' not in self.name.lower():
+            self.name += '_engine'
         self._logger: logging.Logger = logging.getLogger('pfund')
         self._store = MTStore(env=cls._env, data_tool=cls._data_tool)
         self._kernel = TradeKernel(
-            data_tool=cls._data_tool,
             database=cls._database,
+            data_tool=cls._data_tool,
+            use_deltalake=config.use_deltalake,
             external_listeners=cls._external_listeners,
         )
-        self.trading_venues: list[TradingVenue] = []
+        if not self._is_wasm():
+            from pfund.messenger import Messenger
+            self._messenger = Messenger(
+                zmq_url=cls._settings.zmq_urls.get(self.name, ''), 
+                zmq_ports=cls._settings.zmq_ports,
+            )
+        else:
+            self._messenger = None
         self.brokers: dict[Broker, BaseBroker] = {}
         self.strategies: dict[str, BaseStrategy | ActorProxy] = {}
+        self._is_running: bool = False
     
     @property
     def env(self) -> Environment:
@@ -207,61 +211,100 @@ class BaseEngine(metaclass=MetaEngine):
     def data_end(self) -> datetime.date:
         return self._data_end
     
-    def _setup_logging(self):
-        cls = self.__class__
-        for strategy in self.strategies.values():
-            if strategy.is_remote():
-                zmq_ports_in_use = strategy._setup_logging(cls._settings.zmq_urls, cls._logging_config)
-                cls._settings.zmq_ports.update(zmq_ports_in_use)
-        
-    def _setup_messaging(self):
-        cls = self.__class__
-        zmq_ports_in_use: dict[str, int] = self._kernel.messenger._setup_messaging(self.name, cls._settings.zmq_urls, cls._settings.zmq_ports)
-        cls._settings.zmq_ports.update(zmq_ports_in_use)
-        for strategy in self.strategies.values():
-            zmq_ports_in_use = strategy._setup_messaging(cls._settings.zmq_urls, cls._settings.zmq_ports)
-            cls._settings.zmq_ports.update(zmq_ports_in_use)
+    def _is_wasm(self):
+        return self._run_mode == RunMode.WASM
     
-    def _setup_subscriptions(self):
-        '''Sets up ZeroMQ subscriptions'''
-        self._kernel.messenger._setup_subscriptions(self._settings.zmq_ports)
-        for strategy in self.strategies.values():
-            strategy._setup_subscriptions(self._settings.zmq_ports)
+    @classmethod
+    def _setup_logging(cls) -> dict:
+        from pfund._logging import setup_logging_config
+        from pfund._logging.config import LoggingDictConfigurator
+        config = get_config()
+        log_path = f'{config.log_path}/{cls._env}'
+        user_logging_config = config.logging_config
+        logging_config_file_path = config.logging_config_file_path
+        logging_config = setup_logging_config(log_path, logging_config_file_path, user_logging_config=user_logging_config)
+        # ≈ logging.config.dictConfig(logging_config) with a custom configurator
+        logging_configurator = LoggingDictConfigurator(logging_config)
+        logging_configurator.configure()
+        return logging_config
+    
+    def _gather(self):
+        '''
+        Sets up everything before run.
+        - setup logging for remote strategies
+        - setup ZMQ messaging and subscriptions
+        - makes sure everything runs in the correct order
+        '''
+        cls = self.__class__
+        for strat, strategy in self.strategies.items():
+            # TODO: create trading store inside strategy?
+            # trading_store: TradingStore = self._store.get_trading_store(strat)
+            # strategy._set_trading_store(trading_store)
+            strategy._gather()
+            cls._settings.zmq_ports.update(strategy._get_zmq_ports_in_use())
+
+            # TEMP
+            metadata = strategy.to_dict(stringify=False)
+            from pprint import pprint
+            pprint(metadata)
+            exit()
+
+            # TODO: register datas to engine
+            # for product, (resolution, data) in self.datas.items():
+            #     self._register_product(
+            #         trading_venue=product.trading_venue,
+            #         basis=product.basis,
+            #         name=product.name,
+            #         symbol=product.symbol
+            #     )
+            #     self._register_market_data(self, data)
+            # self._register_component(
+            #     consumer_name=self.get_consumer_name(),
+            #     component_name=self.name,
+            #     component_metadata=self.to_dict()
+            # )
+        # all components are gathered/added, no more changes, now freeze the store
+        self._store._freeze()
     
     def run(self):
-        self._store._freeze()
-        self._setup_logging()
-        # use ZeroMQ as long as not in WASM mode
-        if self._run_mode != RunMode.WASM:
-            self._setup_messaging()
-            self._setup_subscriptions()
-        self._kernel.run()
+        if not self.is_running():
+            self._is_running = True
+            self._gather()
+            self._kernel.run()
+            for strategy in self.strategies.values():
+                strategy.start()
 
-        # TEMP
-        return
-
-        local_strategies: list[BaseStrategy] = []
-        for strat, strategy in self.strategies.items():
-            strategy: BaseStrategy | ActorProxy
-            trading_store: TradingStore = self._store.get_trading_store(strat)
-            strategy._set_trading_store(trading_store)
-            if strategy.is_remote():
-                # NOTE: if strategy is remote, trading store will be copied to it and
-                # the one inside the engine is just a reference and should be frozen to avoid confusion
-                trading_store.freeze()
+            # use ZeroMQ as long as not in WASM mode
+            if not self._is_wasm():
+                self._messenger.subscribe()
+                self._messenger.start()
+                while self.is_running():
+                    # TODO: should update positions, balances, orders etc. using proxy
+                    if msg := self._messenger._proxy.recv():
+                        channel, topic, data, pub_ts = msg
+                        self._logger.debug(f'{channel} {topic} {data} {pub_ts}')
+                    if msg := self._messenger._router.recv():
+                        channel, topic, data, pub_ts = msg
+                        self._logger.debug(f'{channel} {topic} {data} {pub_ts}')
+                    if msg := self._messenger._publisher.recv():
+                        channel, topic, data, pub_ts = msg
+                        self._logger.debug(f'{channel} {topic} {data} {pub_ts}')
+                    time.sleep(0.0001)
             else:
-                local_strategies.append(strategy)
-            strategy.start()
+                # TODO: get msg from data engine
+                msg = ...
+                for strategy in self.strategies.values():
+                    strategy.databoy._collect(msg)
+        else:
+            raise RuntimeError('Engine is already running')
+    
+    # TODO:
+    def end(self):
+        self._is_running = False
+        self._kernel.end()
         
-        
-        if local_strategies:
-            data = self._kernel.messenger.recv()
-            for strategy in local_strategies:
-                strategy.databoy._collect(data)
-        
-    # FIXME
     def is_running(self) -> bool:
-        return self._kernel._is_running
+        return self._is_running
     
     def add_strategy(
         self, 
@@ -291,15 +334,18 @@ class BaseEngine(metaclass=MetaEngine):
 
         run_mode: RunMode = derive_run_mode(ray_kwargs)
         if is_remote := (run_mode == RunMode.REMOTE):
-            from pfund._logging.temporary_logger import TemporaryLogger
             strategy = ActorProxy(strategy, name=name, ray_actor_options=ray_actor_options, **ray_kwargs)
             strategy._set_proxy(strategy)
-            strategy._set_logger(TemporaryLogger(strat))
-        
-        strategy._set_name(strat)
-        strategy._set_run_mode(run_mode)
-        strategy._set_resolution(resolution)
-        strategy._set_engine(engine=None if is_remote else self)
+        strategy._hydrate(
+            env=self._env,
+            name=strat,
+            run_mode=run_mode,
+            resolution=resolution,
+            engine=None if is_remote else self,
+            settings=self._settings,
+            logging_config=self._logging_config,
+        )
+        strategy._set_top_strategy(True)
 
         self.strategies[strat] = strategy
         self._logger.debug(f"added '{strat}'")
@@ -308,26 +354,15 @@ class BaseEngine(metaclass=MetaEngine):
     def get_strategy(self, name: str) -> BaseStrategy | ActorProxy:
         return self.strategies[name]
     
-    def _create_broker(self, bkr: tBroker) -> BaseBroker:
-        if self._env in [Environment.BACKTEST, Environment.SANDBOX]:
-            from pfund.brokers.broker_simulated import SimulatedBrokerFactory
-            SimulatedBroker = SimulatedBrokerFactory(bkr)
-            broker = SimulatedBroker(self._env)
-        else:
-            BrokerClass = Broker[bkr.upper()].broker_class
-            broker = BrokerClass(self._env)
-        return broker
-
     def _add_broker(self, trading_venue: tTradingVenue) -> BaseBroker:
+        from pfund.brokers import create_broker
         trading_venue = TradingVenue[trading_venue.upper()]
-        if trading_venue not in self.trading_venues:
-            self.trading_venues.append(trading_venue)
-        if trading_venue in CryptoExchange.__members__:
+        if trading_venue.upper() in CryptoExchange.__members__:
             bkr = Broker.CRYPTO
         else:
             bkr = Broker[trading_venue]
         if bkr not in self.brokers:
-            broker = self._create_broker(bkr)
+            broker = create_broker(env=self._env, bkr=bkr)
             self.brokers[bkr] = broker
             self._logger.debug(f'added broker {bkr}')
         return self.brokers[bkr]
@@ -355,10 +390,6 @@ class BaseEngine(metaclass=MetaEngine):
         return product
     
     def _register_account(self, trading_venue: tTradingVenue, name: str='', **kwargs) -> BaseAccount:
-        from pfund.accounts.account_simulated import SimulatedAccount
-        if 'initial_balances' in kwargs or 'initial_positions' in kwargs:
-            assert self._env == Environment.SANDBOX, \
-                f"initial balances and positions can only be set in {Environment.SANDBOX} environment"
         broker: BaseBroker = self._add_broker(trading_venue)
         if broker.name == Broker.CRYPTO:
             exch = trading_venue
@@ -367,8 +398,6 @@ class BaseEngine(metaclass=MetaEngine):
             account = broker.add_account(name=name or self.name, **kwargs)
         else:
             raise NotImplementedError(f"Broker {broker.name} is not supported")
-        if self._env == Environment.SANDBOX:
-            assert isinstance(account, SimulatedAccount)
         return account
     
     def _register_component(self, consumer_name: ComponentName | None, component_name: ComponentName, component_metadata: dict):
@@ -376,13 +405,13 @@ class BaseEngine(metaclass=MetaEngine):
             self._kernel.add_ray_actor(component_name)
         self._store.register_component(consumer_name, component_name, component_metadata)
     
-    def _register_market_data(self, component: Component, data: TimeBasedData):
+    def _register_market_data(self, component_name: ComponentName, data: TimeBasedData):
         product = data.product
         if not data.is_resamplee():
             broker: BaseBroker = self.get_broker(product.bkr)
             broker._add_data_channel(data)
         self._store.register_market_data(
-            consumer=component.name,
+            consumer=component_name,
             data_source=data.data_source,
             data_origin=data.data_origin,
             product=product,

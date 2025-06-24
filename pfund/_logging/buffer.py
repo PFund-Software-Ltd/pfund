@@ -1,7 +1,7 @@
 import time
 
 
-class TemporaryLogger:
+class LogBuffer:
     """
     A temporary logger that buffers log messages until the real logger is ready.
     Used for remote components where ZMQ PUBHandler might not be set up yet.

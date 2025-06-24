@@ -16,32 +16,31 @@ if TYPE_CHECKING:
         DataConfigDict, 
         tTradingVenue, 
         Component, 
-        ZeroMQName, 
-        EngineName, 
-        ComponentName
+        ComponentName,
     )
     from pfund.datas.data_bar import Bar
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.products.product_base import BaseProduct
-    from pfund.data_tools.data_tool_base import BaseDataTool
     from pfund.datas import QuoteData, TickData, BarData
     from pfund.engines.base_engine import BaseEngine
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.models.model_base import BaseModel
     from pfund.features.feature_base import BaseFeature
     from pfund.indicators.indicator_base import BaseIndicator
+    from pfund.brokers.broker_base import BaseBroker
+    from pfund.engines.base_engine_settings import BaseEngineSettings
 
 import time
 import logging
 import datetime
 
+from pfund._logging.buffer import LogBuffer
 from pfund.datas.resolution import Resolution
 from pfund.datas.data_config import DataConfig
-from pfund.proxies.engine_proxy import EngineProxy
 from pfund.proxies.actor_proxy import ActorProxy
 from pfund.utils.utils import load_yaml_file
-from pfund.enums import ComponentType, RunMode
+from pfund.enums import ComponentType, RunMode, CryptoExchange, Environment, Broker, TradingVenue
 
     
 class ComponentMixin:
@@ -60,17 +59,19 @@ class ComponentMixin:
         cls.load_config()
         cls.load_params()
         
+        self._env: Environment | None = None
         self.name = self._get_default_name()
         self._run_mode: RunMode | None = None
         self._resolution: Resolution | None = None
         
-        self._logger: logging.Logger | None = logging.getLogger('pfund')
+        self.logger: logging.Logger | None = logging.getLogger('pfund')
         self._proxy: ActorProxy | None = None
-        self._engine: BaseEngine | EngineProxy | None = None
+        self._engine: BaseEngine | None = None
+        self._settings: BaseEngineSettings | None = None
+        self._logging_config: dict | None = None
         self._consumers: list[Component | ActorProxy] = []
         self._store: TradingStore | None = None
         self._databoy = DataBoy(self)
-        # self._data_tool: BaseDataTool = self._create_data_tool()
 
         self.products: dict[str, BaseProduct] = {}
         self.models: dict[str, BaseModel | ActorProxy] = {}
@@ -87,73 +88,83 @@ class ComponentMixin:
         # FIXME
         # self._is_ready = defaultdict(bool)  # {data: bool}
         self._is_running = False
+        self._is_gathered = False
         self._assert_functions_signatures()
-        self.add_datas()
-        self.add_models()
-        self.add_features()
-        self.add_indicators()
     
     # TODO: also check on_bar, on_tick, on_quote etc.
     def _assert_functions_signatures(self):
         pass
 
-    def _setup_logging(
-        self: Component, 
-        zmq_urls: dict[EngineName | tTradingVenue | ComponentName, str], 
-        logging_config: dict
-    ) -> dict[str, int]:
+    def _hydrate(
+        self: Component,
+        env: Environment | str,
+        name: ComponentName,
+        run_mode: RunMode,
+        resolution: Resolution | str,
+        engine: BaseEngine | None,
+        settings: BaseEngineSettings,
+        logging_config: dict,
+    ):
+        """
+        Hydrates the component with necessary attributes after initialization.
+        
+        This method sets up essential properties like name, run mode, resolution, engine, and settings
+        which are not predefined in the constructor to improve developer experience (DX) for users
+        creating custom component classes (strategies, models, features, etc.).
+        
+        Args:
+            name (ComponentName): The name to assign to this component.
+            run_mode (RunMode): The mode in which the component will run (e.g., local or remote).
+            resolution (Resolution | str): The data resolution used by this component.
+            engine (BaseEngine | None): The engine instance associated with this component. It is None if the component is running in a remote process.
+            settings (BaseEngineSettings): Configuration settings for the engine and component.
+            logging_config (dict): Configuration for logging.
+        """
+        self._env = Environment[env.upper()]
+        self._set_name(name)
+        self._set_resolution(resolution)
+        self._run_mode = run_mode
+        self._engine = engine
+        self._settings = settings
+        if self.is_remote():
+            self._setup_logging(logging_config)
+        if self._run_mode != RunMode.WASM:
+            self.databoy._setup_messaging()
+
+    def _setup_logging(self: Component, logging_config: dict) -> dict[str, int]:
         '''Sets up logging for component running in remote process, uses zmq's PUBHandler to send logs to engine'''
         from zmq.log.handlers import PUBHandler
-        from mtflow.messaging import ZeroMQ
+        from pfund.zeromq import ZeroMQ
         from pfund._logging.config import LoggingDictConfigurator
         from pfund.utils.utils import get_free_port
-
-        zmq_url = zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL)
 
         # configure logging based on pfund's logging config, e.g. log_level, log_file, log_format, etc.
         logging_configurator = LoggingDictConfigurator(logging_config)
         logging_configurator.configure()
-        logging_config = logging_configurator._pfund_config
-        self._set_logger(logging.getLogger('pfund'))
+        self._logging_config = logging_config
+        self.logger = logging.getLogger('pfund')
         
         # remove existing handlers
         for handler in self.logger.handlers[:]:
             self.logger.removeHandler(handler)
             handler.close()
             
+        # TODO: create a subclass of PUBHandler that can standardize the msg and support log buffer
         # add zmq PUBhandler
+        zmq_url = self._settings.zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL)
         zmq_port = get_free_port()
         zmq_handler = PUBHandler(f'{zmq_url}:{zmq_port}')
         self.logger.addHandler(zmq_handler)
-        zmq_ports_in_use = { f'{self.name}_logger': zmq_port }
-
-        # set up logging for remote components
-        for component in self.components:
-            if component.is_remote():
-                zmq_ports_in_use.update(component._setup_logging(zmq_urls, logging_config))
-        return zmq_ports_in_use
+        self.databoy._update_zmq_ports_in_use(
+            {self.name+'_logger': zmq_port}
+        )
     
-    def _setup_messaging(
-        self, 
-        zmq_urls: dict[EngineName | tTradingVenue | ComponentName, str], 
-        zmq_ports: dict[ZeroMQName, int]
-    ) -> dict[str, int]:
-        zmq_ports_in_use: dict[str, int] = self.databoy._setup_messaging(zmq_urls, zmq_ports)
-        for component in self.components:
-            zmq_ports_in_use.update(component._setup_messaging(zmq_urls, zmq_ports))
-        return zmq_ports_in_use
-    
-    def _setup_subscriptions(self, zmq_ports: dict[ZeroMQName, int]):
-        self.databoy._setup_subscriptions(zmq_ports)
-        for component in self.components:
-            component._setup_subscriptions(zmq_ports)
+    def _get_zmq_ports_in_use(self) -> dict[str, int]:
+        return self.databoy._get_zmq_ports_in_use()
     
     def _set_proxy(self, proxy: ActorProxy):
         self._proxy = proxy
     
-    def _set_logger(self, logger: logging.Logger | None):
-        self._logger = logger
-
     @classmethod
     def load_config(cls, config: dict | None=None, file_path: str=''):
         if config:
@@ -170,43 +181,41 @@ class ComponentMixin:
             if params := load_yaml_file(file_path):
                 cls.params = params
     
-    @property
-    def logger(self) -> logging.Logger:
-        return self._logger
-        
     # TODO: add versioning, run_id etc.
-    def to_dict(self: Component) -> dict:
+    def to_dict(self: Component, stringify: bool=True) -> dict:
+        '''
+        Args:
+            stringify: if True, serializes the data to a string, otherwise returns the data object
+        '''
         metadata = {
             'class': self.__class__.__name__,
             'name': self.name,
-            'component_type': self.component_type,
-            'run_mode': self._run_mode,
+            'component_type': self.component_type.value,
+            'run_mode': self._run_mode.value,
             'config': self.config,
             'params': self.params,
-            'datas': [repr(data) for data in self._databoy.datas.values()],
-            'models': [model.to_dict() for model in self.models.values()],
-            'features': [feature.to_dict() for feature in self.features.values()],
-            'indicators': [indicator.to_dict() for indicator in self.indicators.values()],
+            'datas': [repr(data) if stringify else data for data in self.databoy.get_datas()],
+            'models': [model.to_dict(stringify=stringify) for model in self.models.values()],
+            'features': [feature.to_dict(stringify=stringify) for feature in self.features.values()],
+            'indicators': [indicator.to_dict(stringify=stringify) for indicator in self.indicators.values()],
             'signature': (self.__pfund_args__, self.__pfund_kwargs__),
-            'data_signatures': self._databoy._data_signatures,
+            'data_signatures': self.databoy._data_signatures,
         }
         if self.is_strategy():
-            metadata['strategies'] = [strategy.to_dict() for strategy in self.strategies.values()]
-        if self.is_model():
-            metadata['model'] = self.model
+            metadata['strategies'] = [strategy.to_dict(stringify=stringify) for strategy in self.strategies.values()]
+            metadata['accounts'] = [repr(account) if stringify else account for account in self.accounts.values()]
+        elif self.is_model():
+            metadata['model'] = self.model.__class__.__name__
+        if not stringify:
+            for data in metadata['datas']:
+                # removes non-serializable attributes
+                if data.is_quote():
+                    data._orderbook = None
         return metadata
     
     @property
-    def data_tool(self: Component) -> BaseDataTool:
-        return self._data_tool
-    dtl = data_tool
-    
-    def _create_data_tool(self: Component) -> BaseDataTool:
-        import importlib
-        from pfund.engines.trade_engine import TradeEngine
-        data_tool = TradeEngine.data_tool
-        DataTool: type[BaseDataTool] = getattr(importlib.import_module(f'pfund.data_tools.data_tool_{data_tool}'), f'{data_tool.value.capitalize()}DataTool')
-        return DataTool()
+    def env(self: Component) -> Environment:
+        return self._env
     
     @property
     def databoy(self: Component) -> DataBoy:
@@ -293,9 +302,6 @@ class ComponentMixin:
     def get_delay(ts: float) -> float:
         return time.time() - ts
     
-    def _set_engine(self, engine: BaseEngine | None):
-        self._engine = EngineProxy(self._databoy) if engine is None else engine
-    
     def _set_trading_store(self: Component, trading_store: TradingStore):
         self._store = trading_store
 
@@ -303,7 +309,7 @@ class ComponentMixin:
     def resolution(self: Component) -> Resolution | None:
         return self._resolution
     
-    def _set_resolution(self, resolution: str):
+    def _set_resolution(self, resolution: Resolution | str):
         if self._resolution:
             raise ValueError(f"{self.name} already has a resolution {self._resolution}, cannot set to {resolution}")
         self._resolution = Resolution(resolution)
@@ -312,11 +318,8 @@ class ComponentMixin:
         if not name:
             return
         self.name = name
-        if self.component_type not in self.name:
+        if self.component_type not in self.name.lower():
             self.name += f"_{self.component_type}"
-    
-    def _set_run_mode(self: Component, run_mode: RunMode):
-        self._run_mode = run_mode
     
     def _add_consumer(self: Component, consumer: Component | ActorProxy):
         if consumer not in self._consumers:
@@ -326,12 +329,6 @@ class ComponentMixin:
     
     def is_strategy(self: Component) -> bool:
         return self.component_type == ComponentType.strategy
-    
-    def is_sub_strategy(self) -> bool:
-        return self.is_strategy() and bool(self._consumers)
-    
-    def is_top_strategy(self) -> bool:
-        return self.is_strategy() and not bool(self._consumers)
     
     def is_model(self: Component) -> bool:
         return self.component_type == ComponentType.model
@@ -372,6 +369,34 @@ class ComponentMixin:
                 return True
         return False
     
+    def _create_broker(self: Component, trading_venue: tTradingVenue) -> BaseBroker:
+        from pfund.brokers import create_broker
+        trading_venue = TradingVenue[trading_venue.upper()]
+        if trading_venue.upper() in CryptoExchange.__members__:
+            bkr = Broker.CRYPTO
+        else:
+            bkr = Broker[trading_venue]
+        return create_broker(env=self._env, bkr=bkr)
+    
+    def _create_product(
+        self,
+        trading_venue: tTradingVenue,
+        basis: str,
+        exchange: str='',
+        symbol: str='',
+        name: str='',
+        **specs
+    ) -> BaseProduct:
+        broker = self._create_broker(trading_venue)
+        if broker.name == Broker.CRYPTO:
+            exch = trading_venue
+            product = broker.add_product(exch=exch, basis=basis, name=name, symbol=symbol, **specs)
+        elif broker.name == Broker.IB:
+            product = broker.add_product(basis=basis,  exchange=exchange, name=name, symbol=symbol, **specs)
+        else:
+            raise NotImplementedError(f"Broker {broker.name} is not supported")
+        return product
+    
     def _add_product(self: Component, product: BaseProduct) -> BaseProduct:
         if product.name not in self.products:
             self.products[product.name] = product
@@ -384,7 +409,7 @@ class ComponentMixin:
         return self.products[name]
     
     def get_data(self: Component, product: BaseProduct, resolution: str) -> TimeBasedData:
-        data: TimeBasedData | None = self._databoy.get_data(product, resolution)
+        data: TimeBasedData | None = self.databoy.get_data(product, resolution)
         if data is None:
             raise ValueError(f"data for {product} {resolution} not found")
         return data
@@ -441,7 +466,7 @@ class ComponentMixin:
             product_specs: product specifications, e.g. expiration, strike_price etc.
         '''
         data_source = data_source or trading_venue.upper()
-        product: BaseProduct = self._engine._register_product(
+        product: BaseProduct = self._create_product(
             trading_venue=trading_venue,
             basis=product,
             exchange=exchange,
@@ -452,20 +477,19 @@ class ComponentMixin:
         self._add_product(product)
         # TODO: add num_cpus somewhere to indicate using ray actor to run the public websocket?
         # TODO: should create pfeed's MarketFeed in databoy and return it?
-        datas: list[TimeBasedData] = self._databoy.add_data(
+        datas: list[TimeBasedData] = self.databoy.add_data(
             product=product,
             data_source=data_source,
             data_origin=data_origin,
             data_config=data_config
         )
         for data in datas:
-            self._engine._register_market_data(self, data)
             self._subscribe_to_data(data)
         return datas
     
     def _subscribe_to_data(self: Component, data: TimeBasedData):
         if self.is_remote():
-            self._databoy._subscribe_to_data(self, data)
+            self.databoy._subscribe_to_data(self, data)
         else:
             for consumer in self._consumers:
                 consumer: Component  # NOTE: when it's not remote, consumer must be a Component, not ActorProxy
@@ -558,15 +582,18 @@ class ComponentMixin:
             
             run_mode: RunMode = derive_run_mode(ray_kwargs)
             if is_remote := (run_mode == RunMode.REMOTE):
-                from pfund._logging.temporary_logger import TemporaryLogger
                 component = ActorProxy(component, name=component_name, ray_actor_options=ray_actor_options, **ray_kwargs)
                 component._set_proxy(component)
-                component._set_logger(TemporaryLogger(component_name))
-            component._set_name(component_name)
-            component._set_run_mode(run_mode)
-            component._set_resolution(self._resolution)
-            component._set_engine(engine=None if is_remote else self._engine)
-
+            component._hydrate(
+                env=self._env,
+                name=component_name,
+                run_mode=run_mode,
+                resolution=self._resolution,
+                engine=self._engine,
+                settings=self._settings,
+                logging_config=self._logging_config,
+            )
+            
             if signal_cols:
                 component._set_signal_cols(signal_cols)
 
@@ -698,38 +725,53 @@ class ComponentMixin:
             for i, col in enumerate(signal_cols):
                 self.predictions[col] = pred_y[i]
     
+    def _gather(self: Component):
+        '''Sets up everything before start'''
+        # NOTE: use is_gathered to avoid a component being gathered multiple times when it's a shared component
+        if not self._is_gathered:
+            self._is_gathered = True
+            self.add_datas()
+            if self.is_strategy():
+                self.add_strategies()
+            self.add_models()
+            self.add_features()
+            self.add_indicators()
+            # all components are gathered/added, all zmq ports relevant to this component are finalized, can subscribe now
+            self.databoy.subscribe()
+            # TODO:
+            # self._add_datas_from_consumer_if_none()
+            # TODO:
+            # self._store._freeze()
+            # self._store._materialize()
+            # self._prepare_df()
+            for component in self.components:
+                component._gather()
+            self.logger.info(f"'{self.name}' has gathered")
+        else:
+            self.logger.info(f"'{self.name}' has already gathered")
+    
     def start(self: Component):
         if not self.is_running():
-            self._store._freeze()
-            self._store._materialize()
-            self._engine._register_component(
-                consumer_name=self.get_consumer_name(),
-                component_name=self.name,
-                component_metadata=self.to_dict(),
-            )
-            self._add_datas_from_consumer_if_none()
-            self._databoy.start_zmq()
-            self._prepare_df()
-            self.on_start()
             self._is_running = True
-            self.logger.info("started")
-            # TODO:
-            # while self.is_running():
-            #     self._databoy._collect()
-            #     time.sleep(0.0001)
+            self.on_start()
+            self.databoy.start()
+            for component in self.components:
+                component.start()
+            self.logger.info(f"'{self.name}' has started")
         else:
-            self.logger.warning('already started')
+            self.logger.info(f"'{self.name}' has already started")
     
     def stop(self, reason: str=''):
+        '''Stops the component, keep the internal states'''
         if self.is_running():
             self._is_running = False
             self.on_stop()
-            if self._engine._use_ray:
-                pass
-            # TODO: stop components
-            self.logger.info(f"strategy '{self.name}' has stopped, ({reason=})")
+            self.databoy.stop()
+            for component in self.components:
+                component.stop()
+            self.logger.info(f"'{self.name}' has stopped, ({reason=})")
         else:
-            self.logger.warning(f'strategy {self.name} has already stopped')
+            self.logger.info(f"'{self.name}' has already stopped")
 
     
     '''

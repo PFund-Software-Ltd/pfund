@@ -46,7 +46,7 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             if not args or args[0] != 'X':
                 raise Exception(f'{self.name} predict() must have "X" as its first arg, i.e. predict(self, X, *args, **kwargs)')
         _assert_predict_function()
-
+    
     def featurize(self) -> GenericFrame:
         from pfund import cprint
         cprint(

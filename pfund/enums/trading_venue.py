@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    from pfund.accounts.account_base import BaseAccount
     from pfund.orders.order_base import BaseOrder
     from pfund.products.product_base import BaseProduct
 
@@ -30,3 +31,15 @@ class TradingVenue(StrEnum):
         Product = getattr(importlib.import_module(f'pfund.products.product_{self.lower()}'), class_name)
         return Product
         
+    @property
+    def account_class(self) -> type[BaseAccount]:
+        from pfund.enums import CryptoExchange
+        if self == TradingVenue.IB:
+            class_name = f'{self}Account'
+        elif self.value in CryptoExchange.__members__:
+            class_name = 'CryptoAccount'
+            return getattr(importlib.import_module('pfund.accounts.account_crypto'), class_name)
+        else:
+            class_name = f'{self.capitalize()}Account'
+        Account = getattr(importlib.import_module(f'pfund.accounts.account_{self.lower()}'), class_name)
+        return Account

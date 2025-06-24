@@ -25,7 +25,9 @@ class LoggingDictConfigurator(DictConfigurator):
     ]
     
     def __init__(self, config: dict):
-        self._pfund_config: dict = copy.deepcopy(config)
+        self._config: dict = config
+        # copy config to avoid modifying the original config
+        config = copy.deepcopy(config)
         
         # remove handlers that are manually configured
         handlers: list[str] = list(config.get('handlers', {}))
@@ -33,12 +35,6 @@ class LoggingDictConfigurator(DictConfigurator):
             if handler_name in self.MANUALLY_CONFIGURED_HANDLERS:
                 del config['handlers'][handler_name]
                 
-        # remove loggers that are manually configured, e.g. _strategy/_model
-        loggers: list[str] = list(config.get('loggers', {}))
-        for logger_name in loggers:
-            if logger_name.startswith('_'):
-                del config['loggers'][logger_name]
-
         super().__init__(config)
     
     def add_handlers(self, logger, handlers):
@@ -64,7 +60,7 @@ class LoggingDictConfigurator(DictConfigurator):
                 raise ValueError('Unable to add handler %r' % h) from e
 
     def _configure_file_handler(self, logger_name: str, handler_name: str) -> logging.FileHandler:
-        logging_config: dict = self._pfund_config
+        logging_config: dict = self._config
         handler_config: dict = logging_config['handlers'][handler_name]
         formatter_name = handler_config.get('formatter', 'file')
         formatter = self.configure_formatter(logging_config['formatters'][formatter_name])

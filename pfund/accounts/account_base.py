@@ -28,7 +28,8 @@ class BaseAccount:
         self._env = Environment[env.upper()]
         self.trading_venue = TradingVenue[trading_venue.upper()]
         self.name = name or self._get_default_name()
-        assert self.name != self.trading_venue, f'account name cannot be the same as the trading venue name "{self.trading_venue}"'
+        if 'account' not in self.name.lower():
+            self.name += "_account"
         self._key = key or os.getenv(f'{self.tv}_API_KEY', '')
         self._secret = secret or os.getenv(f'{self.tv}_API_SECRET', '')
         

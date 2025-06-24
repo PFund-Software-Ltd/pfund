@@ -43,6 +43,7 @@ dependencies = [
 core = [
     "mtflow[core]>=0.0.1.dev2",
     "pfolio[core]>=0.0.2",
+    "pyzmq>=26.4.0",
     "order-book>=0.6.1",
     "python-telegram-bot>=22.1",
 ]

@@ -30,7 +30,7 @@ class BacktestEngine(BaseEngine):
     
     def __init__(
         self,
-        mode: Literal['vectorized', 'event_driven']='vectorized',
+        mode: Literal['vectorized', 'hybrid', 'event_driven']='vectorized',
         name: str='',
         # FIXME: should use ray on both dataset and component?
         use_ray_on: Literal['dataset', 'component'] | None='dataset',
@@ -408,9 +408,6 @@ class BacktestEngine(BaseEngine):
                 }
                 data_manager._update_bar(product, bar, is_incremental=False)
     
-    # NOTE: end() vs stop()
-    # end() means everything is done and NO state will be kept, can't be restarted
-    # stop() means the process is stopped but the state is still kept, can be restarted
     def end(self, reason: str=''):
         for strat in list(self.strategies):
             self.strategy_manager.stop(strat, reason=reason or 'finished backtesting')

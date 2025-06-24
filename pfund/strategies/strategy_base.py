@@ -25,19 +25,24 @@ if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
     from pfund.risk_guard import RiskGuard
     from pfund.data_tools import data_tool_backtest
-    from pfund._logging.config import LoggingDictConfigurator
 
 from collections import deque
 from abc import ABC, abstractmethod
 
 from pfund.strategies.strategy_meta import MetaStrategy
 from pfund.mixins.component_mixin import ComponentMixin
-from pfund.enums import TradingVenue, RunMode
+from pfund.enums import TradingVenue, CryptoExchange, Broker
 from pfund.proxies.actor_proxy import ActorProxy
 
 
 class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):    
     def __init__(self, *args, **kwargs):       
+        self.accounts: dict[AccountName, BaseAccount] = {}
+        self.strategies: dict[str, BaseStrategy] = {}
+        self._is_top_strategy = False
+
+        
+        # FIXME: move positions, balances, orders, all to account object!
         # TODO: if its a sub-strategy, it should not have positions, balances, orders, etc.
         self.positions: dict[AccountName, dict[ProductName, BasePosition]] = {}
         self.balances: dict[AccountName, dict[Currency, BaseBalance]] = {}
@@ -46,14 +51,21 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         # TODO: create Trade object, BaseTrade?
         # self.trades: dict[AccountName, list[BaseTrade]] = {}
         
-        self.strategies: dict[str, BaseStrategy] = {}
 
         self.__mixin_post_init__(*args, **kwargs)  # calls ComponentMixin.__mixin_post_init__()
-        self.add_strategies()
     
     @abstractmethod
     def backtest(self, df: data_tool_backtest.BacktestDataFrame):
         pass
+
+    def _set_top_strategy(self, is_top_strategy: bool):
+        self._is_top_strategy = is_top_strategy
+    
+    def is_top_strategy(self) -> bool:
+        return self._is_top_strategy
+    
+    def is_sub_strategy(self) -> bool:
+        return not self._is_top_strategy
     
     # TODO:
     def add_risk_guard(self, risk_guard: RiskGuard):
@@ -108,11 +120,24 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         initial_balances: dict[str, float] | None=None, 
         initial_positions: dict[BaseProduct, float] | None=None,
     ) -> SimulatedAccount: ...
+
+    def _create_account(self, trading_venue: tTradingVenue, name: str='', **kwargs) -> BaseAccount:
+        broker = self._create_broker(trading_venue)
+        if broker.name == Broker.CRYPTO:
+            exch = trading_venue
+            account =  broker.add_account(exch=exch, name=name or self.name, **kwargs)
+        elif broker.name == Broker.IB:
+            account = broker.add_account(name=name or self.name, **kwargs)
+        else:
+            raise NotImplementedError(f"Broker {broker.name} is not supported")
+        return account
     
     def add_account(self, trading_venue: tTradingVenue, name: str='', **kwargs) -> BaseAccount:
+        if self.is_sub_strategy():
+            raise ValueError(f"Sub-strategy '{self.name}' cannot add accounts")
         self._assert_not_frozen()
         trading_venue = TradingVenue[trading_venue.upper()]
-        account: BaseAccount = self._engine._register_account(trading_venue, name=name, **kwargs)
+        account: BaseAccount = self._create_account(trading_venue, name=name, **kwargs)
         self.positions[account.name] = {}
         self.balances[account.name] = {}
         self.orders[account.name] = []
@@ -124,6 +149,8 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     # FIXME: update, refer to or reuse _add_component() in component_mixin.py
     # TODO: _setup_logging, _set_engine etc.
     def add_strategy(self, strategy: StrategyT, name: str='') -> StrategyT:
+        if strategy.is_top_strategy():
+            raise ValueError(f"Top strategy '{strategy.name}' cannot be added as a sub-strategy")
         self._assert_not_frozen()
         assert isinstance(strategy, BaseStrategy), \
             f"strategy '{strategy.__class__.__name__}' is not an instance of BaseStrategy. Please create your strategy using 'class {strategy.__class__.__name__}(pf.Strategy)'"
@@ -168,14 +195,10 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         # pred_y = self.predict(X)
         pass
     
-    def start(self):
-        # TODO: check if e.g. exchange balances and positions are ready, if backfilling is finished
-        super().start()
-        # TODO: start components
+    def _gather(self):
+        # TODO: check if e.g. exchange balances and positions are ready, if backfilling is finished?
+        super()._gather()
         
-    def stop(self, reason: str=''):
-        super().stop(reason=reason)
-
     def create_order(
         self, 
         account: BaseAccount, 

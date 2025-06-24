@@ -26,5 +26,5 @@ class PFundDataChannel(StrEnum):
     # pong = 'pong'
     
 
-class InternalTopic(StrEnum):
+class PFundDataTopic(StrEnum):
     pass

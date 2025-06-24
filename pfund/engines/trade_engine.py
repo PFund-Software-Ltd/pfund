@@ -74,16 +74,6 @@ class TradeEngine(BaseEngine):
         #     else:
         #         time.sleep(0.001)  # avoid busy-waiting
     
-    # TODO: implement pause(), resume(), restart()?
-    # def pause(self):
-    #     """Pause execution but keep the state."""
-
-    # def resume(self):
-    #     """Resume from where it was paused."""
-
-    # def restart(self):
-    #     """Stop and restart (soft reset), Resets only part of the state."""
-        
     def end(self):
         """Stop and clear all state (hard stop)."""
         for strat in list(self.strategies):

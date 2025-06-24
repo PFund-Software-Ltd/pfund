@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from logging import Logger
-    from mtflow.messaging.zeromq import ZeroMQ
+    from pfund.zeromq import ZeroMQ
     from pfeed.typing import tDataSource
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
@@ -13,20 +13,19 @@ if TYPE_CHECKING:
         ResolutionRepr, 
         ZeroMQName, 
         DataConfigDict,
-        EngineName, 
-        tTradingVenue,
     )
 
 import time
 import importlib
-from collections import defaultdict
 from pprint import pformat
+from threading import Thread
+from collections import defaultdict
 
 from pfund.datas import QuoteData, TickData, BarData
 from pfund.products.product_base import BaseProduct
 from pfund.datas.data_config import DataConfig
 from pfund.datas.resolution import Resolution
-from pfund.enums import Event, Broker, CryptoExchange, PFundDataChannel, InternalTopic
+from pfund.enums import Event, Broker, CryptoExchange, PFundDataChannel, PFundDataTopic
 
 
 MarketData = QuoteData | TickData | BarData
@@ -37,11 +36,11 @@ class DataBoy:
     def __init__(self, component: Component):
         '''
         Args:
-            datas: datas directly used by the component, added via add_data()
+            _datas: datas directly used by the component, added via add_data()
             _subscribed_data: all data in `datas` + data subscribed on behalf of local components
         '''
         self._component: Component = component
-        self.datas: dict[BaseProduct, dict[Resolution, MarketData]] = defaultdict(dict)
+        self._datas: dict[BaseProduct, dict[Resolution, MarketData]] = defaultdict(dict)
         self._subscribed_data: dict[MarketData, list[Component]] = defaultdict(list)
         self._stale_bar_timeouts: dict[BarData, int] = {}
         self._data_zmq: ZeroMQ | None = None
@@ -50,7 +49,12 @@ class DataBoy:
         # TODO: add data_config (dict form) to data_signatures
         # TODO: rename data_signatures to data_inputs?
         self._data_signatures = []
-    
+        # REVIEW: currently all non-WASM components use ZeroMQ and a thread to run _collect()
+        # including even the local ones. if theres any performance issue, 
+        # consider disabling using ZeroMQ for local components
+        self._zmq_thread: Thread | None = None
+        self._zmq_ports_in_use: dict[ZeroMQName, int] = {}
+
     @property
     def name(self) -> ComponentName:
         return self._component.name
@@ -62,10 +66,20 @@ class DataBoy:
     @property
     def consumers(self) -> list[Component]:
         return self._component.consumers
+
+    @property
+    def datas(self) -> dict[BaseProduct, dict[Resolution, MarketData]]:
+        return self._datas
+    
+    def get_datas(self) -> list[MarketData]:
+        return [data for product in self.datas for data in self.datas[product].values()]
     
     @property
     def logger(self) -> Logger:
         return self._component.logger
+    
+    def _update_zmq_ports_in_use(self, zmq_ports: dict[ZeroMQName, int]):
+        self._zmq_ports_in_use.update(zmq_ports)
     
     def is_remote(self) -> bool:
         return self._component.is_remote()
@@ -113,9 +127,9 @@ class DataBoy:
         self.datas[product][resolution] = data
         return data
     
-    def get_data(self, product: BaseProduct, resolution: ResolutionRepr | Resolution) -> MarketData | None:
+    def get_data(self, product: BaseProduct, resolution: ResolutionRepr | Resolution) -> MarketData:
         resolution = Resolution(resolution)
-        return self.datas[product].get(resolution, None)
+        return self.datas[product][resolution]
     
     def add_data(
         self, 
@@ -137,8 +151,10 @@ class DataBoy:
         
         datas: list[MarketData] = []
         for resolution in data_config.resolutions:
-            if not (data := self.get_data(product, resolution)):
+            if resolution not in self.datas[product]:
                 data = self._add_data(product, resolution, data_config)
+            else:
+                data = self.get_data(product, resolution)
             datas.append(data)
         
         # mutually bind data_resampler and data_resamplee
@@ -194,17 +210,16 @@ class DataBoy:
         for data, timeout in self._stale_bar_timeouts.items():
             scheduler.add_job(lambda: self._flush_stale_bar(data), 'interval', seconds=timeout)
     
-    def _setup_messaging(
-        self, 
-        zmq_urls: dict[EngineName | tTradingVenue | ComponentName, str], 
-        zmq_ports: dict[ZeroMQName, int]
-    ) -> dict[str, int]:
+    def _setup_messaging(self) -> dict[str, int]:
         '''
         Returns:
             zmq_ports_in_use: dict[str, int] of zmq ports in use by the component
         '''
         import zmq
-        from mtflow.messaging import ZeroMQ
+        from pfund.zeromq import ZeroMQ
+        
+        zmq_urls = self._component._settings.zmq_urls
+        zmq_ports = self._component._settings.zmq_ports
         
         zmq_url = zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL)
         
@@ -226,10 +241,18 @@ class DataBoy:
             sender_socket_type=zmq.PUB,  # publish signals to other consumers
         )
         
-        zmq_ports_in_use = {q.name: q.port for q in [self._data_zmq, self._signals_zmq]}
-        return zmq_ports_in_use
+        self._update_zmq_ports_in_use(
+            {q.name: q.port for q in [self._data_zmq, self._signals_zmq]}
+        )
     
-    def _setup_subscriptions(self, zmq_ports: dict[ZeroMQName, int]):
+    def _get_zmq_ports_in_use(self) -> dict[ZeroMQName, int]:
+        '''Gets ALL zmq ports in use even the ones used in components'''
+        for component in self.components:
+            self._zmq_ports_in_use.update(component._get_zmq_ports_in_use())
+        return self._zmq_ports_in_use
+    
+    def subscribe(self):
+        zmq_ports = self._get_zmq_ports_in_use()
         # subscribe to engine's data proxied from trading venues (e.g. bybit's websocket)
         engine_proxy_port = zmq_ports['proxy']
         for data in self._subscribed_data:
@@ -247,40 +270,66 @@ class DataBoy:
         zmq_msg = (0, 0, (self.strat,))
         self._zmq.send(*zmq_msg, receiver='engine')
 
-    def start_zmq(self):
+    def start(self):
         if self._data_zmq:
             self._data_zmq.start()
         if self._signals_zmq:
             self._signals_zmq.start()
+        if self._data_zmq or self._signals_zmq:
+            self._zmq_thread = Thread(target=self._collect, daemon=True)
+            self._zmq_thread.start()
 
-    def stop_zmq(self):
-        self._zmq.stop()
-        self._zmq = None
-        
-    def _collect(self, local_data=None):
+    def stop(self):
         if self._data_zmq:
-            channel, topic, data, pub_ts = self._data_zmq.recv()
-            print(f'{self.name} recv:', channel, topic, data, pub_ts)
-            # TODO: e.g. if component is a model:
-            # output = self._component.predict(...)
-            # self._signals_zmq.send(output)
-        else:
-            # TODO: listener.databoy._collect()
-            if topic == 1:  # quote data
-                bkr, exch, pdt, quote = msg
-                product = self._component.get_product(exch=exch, pdt=pdt)
-                data = self.get_data(product, '1q')
-                self._component._on_quote(data)
-            elif topic == 2:  # tick data
-                bkr, exch, pdt, tick = msg
-                product = self._component.get_product(exch=exch, pdt=pdt)
-                data = self.get_data(product, '1t')
-                self._component._on_tick(data)
-            elif topic == 3:  # bar data
-                bkr, exch, pdt, bar = msg
-                product = self._component.get_product(exch=exch, pdt=pdt)
-                data = self.get_data(product, ...)
-                self._component._on_bar(data, now=time.time())
+            self._data_zmq.stop()
+        if self._signals_zmq:
+            self._signals_zmq.stop()
+        if self._zmq_thread and self._zmq_thread.is_alive():
+            self.logger.debug(f"{self.name} waiting for data thread to finish")
+            self._zmq_thread.join()  # Blocks until thread finishes
+            self.logger.debug(f"{self.name} data thread finished")
+        
+    def _collect(self, msg=None):
+        '''
+        Args:
+            msg: message will only be passed in in WASM mode (i.e. data_zmq is None)
+        '''
+        while self._component.is_running():
+            # TEMP
+            self.logger.info('test_logging!!!')
+            import psutil
+            print('strategy pid:', psutil.Process().pid)
+            time.sleep(3)
+            continue
+            
+            if self._data_zmq:
+                channel, topic, data, pub_ts = self._data_zmq.recv()
+                print(f'{self.name} recv:', channel, topic, data, pub_ts)
+                # TODO: e.g. if component is a model:
+                # output = self._component.predict(...)
+                # self._signals_zmq.send(output)
+                # time.sleep(0.0001)
+            # TODO:
+            # if self._signals_zmq:
+                # time.sleep(0.0001)
+            else:
+                # TODO: listener.databoy._collect()
+                if topic == 1:  # quote data
+                    bkr, exch, pdt, quote = msg
+                    product = self._component.get_product(exch=exch, pdt=pdt)
+                    data = self.get_data(product, '1q')
+                    self._component._on_quote(data)
+                elif topic == 2:  # tick data
+                    bkr, exch, pdt, tick = msg
+                    product = self._component.get_product(exch=exch, pdt=pdt)
+                    data = self.get_data(product, '1t')
+                    self._component._on_tick(data)
+                elif topic == 3:  # bar data
+                    bkr, exch, pdt, bar = msg
+                    product = self._component.get_product(exch=exch, pdt=pdt)
+                    data = self.get_data(product, ...)
+                    self._component._on_bar(data, now=time.time())
+                break
     
     def _deliver(self, data: BaseData, event: Event, **extra_data):
         # TODO

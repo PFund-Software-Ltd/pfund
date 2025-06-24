@@ -45,6 +45,7 @@ class SimulatedBroker:
         self._logger.debug(f'broker {self._name} stopped')
     
     def _create_account(self: SimulatedBroker | TradeBroker, name: str, **kwargs):
+        # TODO: add initial_balances, initial_positions to SimulatedAccount, should not be broker's attributes
         return SimulatedAccount(env=self._env, bkr=self._name, name=name)
     
     def add_account(
