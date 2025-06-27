@@ -31,16 +31,21 @@ from abc import ABC, abstractmethod
 
 from pfund.strategies.strategy_meta import MetaStrategy
 from pfund.mixins.component_mixin import ComponentMixin
-from pfund.enums import TradingVenue, CryptoExchange, Broker
+from pfund.enums import TradingVenue, Broker
 from pfund.proxies.actor_proxy import ActorProxy
 
 
 class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):    
     def __init__(self, *args, **kwargs):       
+        # TODO: also include sub-strategies' accounts
         self.accounts: dict[AccountName, BaseAccount] = {}
         self.strategies: dict[str, BaseStrategy] = {}
-        self._is_top_strategy = False
-
+        # TODO: Portfolio (from pfolio?) at this level?
+        # self._portfolio: Portfolio = ...
+        # TODO: aggregate sub-strategies' portfolios
+        # self._aggregated_portfolio: Portfolio = ...
+        # self._risk_guards: list[RiskGuard] = []
+        self._is_top_strategy: bool = False
         
         # FIXME: move positions, balances, orders, all to account object!
         # TODO: if its a sub-strategy, it should not have positions, balances, orders, etc.
@@ -51,13 +56,17 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         # TODO: create Trade object, BaseTrade?
         # self.trades: dict[AccountName, list[BaseTrade]] = {}
         
-
         self.__mixin_post_init__(*args, **kwargs)  # calls ComponentMixin.__mixin_post_init__()
     
     @abstractmethod
     def backtest(self, df: data_tool_backtest.BacktestDataFrame):
         pass
-
+    
+    # TODO: warning if sub-strategy adds risk guard
+    def add_risk_guard(self, risk_guard: RiskGuard):
+        self._assert_not_frozen()
+        raise NotImplementedError("RiskGuard is not implemented yet")
+    
     def _set_top_strategy(self, is_top_strategy: bool):
         self._is_top_strategy = is_top_strategy
     
@@ -66,11 +75,6 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     
     def is_sub_strategy(self) -> bool:
         return not self._is_top_strategy
-    
-    # TODO:
-    def add_risk_guard(self, risk_guard: RiskGuard):
-        self._assert_not_frozen()
-        raise NotImplementedError("RiskGuard is not implemented yet")
     
     def get_strategy(self, name: str) -> BaseStrategy | ActorProxy:
         return self.strategies[name]
@@ -122,7 +126,9 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     ) -> SimulatedAccount: ...
 
     def _create_account(self, trading_venue: tTradingVenue, name: str='', **kwargs) -> BaseAccount:
-        broker = self._create_broker(trading_venue)
+        from pfund.brokers import create_broker
+        # NOTE: broker is only used to create account but nothing else
+        broker = create_broker(env=self._env, bkr=TradingVenue[trading_venue.upper()].broker)
         if broker.name == Broker.CRYPTO:
             exch = trading_venue
             account =  broker.add_account(exch=exch, name=name or self.name, **kwargs)
@@ -150,7 +156,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     # TODO: _setup_logging, _set_engine etc.
     def add_strategy(self, strategy: StrategyT, name: str='') -> StrategyT:
         if strategy.is_top_strategy():
-            raise ValueError(f"Top strategy '{strategy.name}' cannot be added as a sub-strategy")
+            raise ValueError(f"Top strategy '{self.name}' cannot be added as a sub-strategy")
         self._assert_not_frozen()
         assert isinstance(strategy, BaseStrategy), \
             f"strategy '{strategy.__class__.__name__}' is not an instance of BaseStrategy. Please create your strategy using 'class {strategy.__class__.__name__}(pf.Strategy)'"
@@ -197,6 +203,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     
     def _gather(self):
         # TODO: check if e.g. exchange balances and positions are ready, if backfilling is finished?
+        # TODO: top strategy must have an account
         super()._gather()
         
     def create_order(

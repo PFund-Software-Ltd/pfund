@@ -35,6 +35,7 @@ class OrderManager:
         self._broker = broker
         self._logger = broker._logger
         # { trading_venue: { acc: OrderedDict(order_id: OrderObject) } }
+        # TODO: remove OrderedDict, just use dict
         self.submitted_orders = defaultdict(lambda: defaultdict(OrderedDict))
         self.opened_orders = defaultdict(lambda: defaultdict(OrderedDict))
         self.closed_orders = defaultdict(lambda: defaultdict(OrderedDict))

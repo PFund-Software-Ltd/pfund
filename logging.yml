@@ -21,10 +21,6 @@ loggers:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
-  bybit_ws:
-    level: 'DEBUG'
-    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
-    propagate: False
   ib:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']

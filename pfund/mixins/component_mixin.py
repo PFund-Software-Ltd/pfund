@@ -40,7 +40,7 @@ from pfund.datas.resolution import Resolution
 from pfund.datas.data_config import DataConfig
 from pfund.proxies.actor_proxy import ActorProxy
 from pfund.utils.utils import load_yaml_file
-from pfund.enums import ComponentType, RunMode, CryptoExchange, Environment, Broker, TradingVenue
+from pfund.enums import ComponentType, RunMode, Environment, Broker, TradingVenue
 
     
 class ComponentMixin:
@@ -128,7 +128,7 @@ class ComponentMixin:
         self._settings = settings
         if self.is_remote():
             self._setup_logging(logging_config)
-        if self._run_mode != RunMode.WASM:
+        if not self.is_wasm():
             self.databoy._setup_messaging()
 
     def _setup_logging(self: Component, logging_config: dict) -> dict[str, int]:
@@ -369,30 +369,26 @@ class ComponentMixin:
                 return True
         return False
     
-    def _create_broker(self: Component, trading_venue: tTradingVenue) -> BaseBroker:
-        from pfund.brokers import create_broker
-        trading_venue = TradingVenue[trading_venue.upper()]
-        if trading_venue.upper() in CryptoExchange.__members__:
-            bkr = Broker.CRYPTO
-        else:
-            bkr = Broker[trading_venue]
-        return create_broker(env=self._env, bkr=bkr)
+    def is_wasm(self: Component) -> bool:
+        return self._run_mode == RunMode.WASM
     
     def _create_product(
         self,
         trading_venue: tTradingVenue,
         basis: str,
-        exchange: str='',
+        exch: str='',
         symbol: str='',
         name: str='',
         **specs
     ) -> BaseProduct:
-        broker = self._create_broker(trading_venue)
+        from pfund.brokers import create_broker
+        # NOTE: broker is only used to create product but nothing else
+        broker = create_broker(env=self._env, bkr=TradingVenue[trading_venue.upper()].broker)
         if broker.name == Broker.CRYPTO:
             exch = trading_venue
             product = broker.add_product(exch=exch, basis=basis, name=name, symbol=symbol, **specs)
         elif broker.name == Broker.IB:
-            product = broker.add_product(basis=basis,  exchange=exchange, name=name, symbol=symbol, **specs)
+            product = broker.add_product(exch=exch, basis=basis, name=name, symbol=symbol, **specs)
         else:
             raise NotImplementedError(f"Broker {broker.name} is not supported")
         return product
@@ -446,7 +442,6 @@ class ComponentMixin:
         product_name: str='',
         data_source: tDataSource | None=None,
         data_origin: str='',
-        # TODO: add data_groups in data_config? used to set ws product groups in pfeed
         data_config: DataConfigDict | DataConfig | None=None,
         **product_specs
     ) -> list[TimeBasedData]:
@@ -465,35 +460,22 @@ class ComponentMixin:
                     It is the user's responsibility to manage and maintain these custom product names.
             product_specs: product specifications, e.g. expiration, strike_price etc.
         '''
-        data_source = data_source or trading_venue.upper()
         product: BaseProduct = self._create_product(
             trading_venue=trading_venue,
             basis=product,
-            exchange=exchange,
+            exch=exchange,
             symbol=symbol,
             name=product_name,
             **product_specs
         )
         self._add_product(product)
-        # TODO: add num_cpus somewhere to indicate using ray actor to run the public websocket?
-        # TODO: should create pfeed's MarketFeed in databoy and return it?
         datas: list[TimeBasedData] = self.databoy.add_data(
             product=product,
-            data_source=data_source,
+            data_source=data_source or trading_venue,
             data_origin=data_origin,
             data_config=data_config
         )
-        for data in datas:
-            self._subscribe_to_data(data)
         return datas
-    
-    def _subscribe_to_data(self: Component, data: TimeBasedData):
-        if self.is_remote():
-            self.databoy._subscribe_to_data(self, data)
-        else:
-            for consumer in self._consumers:
-                consumer: Component  # NOTE: when it's not remote, consumer must be a Component, not ActorProxy
-                consumer._subscribe_to_data(consumer, data)
     
     # TODO
     def add_custom_data(self: Component):

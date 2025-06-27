@@ -41,7 +41,6 @@ class DataBoy:
         '''
         self._component: Component = component
         self._datas: dict[BaseProduct, dict[Resolution, MarketData]] = defaultdict(dict)
-        self._subscribed_data: dict[MarketData, list[Component]] = defaultdict(list)
         self._stale_bar_timeouts: dict[BarData, int] = {}
         self._data_zmq: ZeroMQ | None = None
         self._signals_zmq: ZeroMQ | None = None
@@ -83,9 +82,6 @@ class DataBoy:
     
     def is_remote(self) -> bool:
         return self._component.is_remote()
-        
-    def _subscribe_to_data(self, component: Component, data: MarketData):
-        self._subscribed_data[data].append(component)
         
     @staticmethod
     def _get_supported_resolutions(bkr: Broker, exch: CryptoExchange | str) -> dict:
@@ -255,7 +251,7 @@ class DataBoy:
         zmq_ports = self._get_zmq_ports_in_use()
         # subscribe to engine's data proxied from trading venues (e.g. bybit's websocket)
         engine_proxy_port = zmq_ports['proxy']
-        for data in self._subscribed_data:
+        for data in self.get_datas():
             self._data_zmq.subscribe(engine_proxy_port, channel=data.zmq_channel)
             self.logger.debug(f'{self.name} subscribed to {data.zmq_channel} on port {engine_proxy_port}')
 

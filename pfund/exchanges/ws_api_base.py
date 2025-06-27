@@ -42,7 +42,7 @@ class BaseWebsocketApi(ABC):
     def __init__(self, env: Environment | tEnvironment):
         self._env = Environment[env.upper()]
         self._bkr = Broker.CRYPTO
-        self._logger = logging.getLogger(self.name.lower() + '_' + 'ws')
+        self._logger = logging.getLogger(self.name.lower())
         self._dev_mode = False
         Exchange: type[BaseExchange] = getattr(importlib.import_module(f'pfund.exchanges.{self.name.lower()}.exchange'), 'Exchange')
         self._adapter: Adapter = Exchange.adapter

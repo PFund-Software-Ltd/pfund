@@ -149,10 +149,10 @@ class BaseExchange(ABC):
         dump_yaml_file(market_configs_file_path, existing_market_configs)
 
     @classmethod
-    def create_product(cls, basis: str, name: str='', **specs) -> CryptoProduct:
+    def create_product(cls, basis: str, name: str='', symbol: str='', **specs) -> CryptoProduct:
         from pfund.products import ProductFactory
         Product = ProductFactory(trading_venue=cls.name, basis=basis)
-        return Product(basis=basis, adapter=cls.adapter, name=name, **specs)
+        return Product(basis=basis, adapter=cls.adapter, name=name, symbol=symbol, **specs)
 
     def get_product(self, name: str) -> CryptoProduct:
         '''
@@ -173,7 +173,6 @@ class BaseExchange(ABC):
             self._products[product.name] = product
             # REVIEW: maybe use asset_type instead of category for more generic grouping?
             self.adapter._add_mapping(product.category, product.name, product.symbol)
-            self._logger.debug(f'added {product=}')
         else:
             existing_product: CryptoProduct = self.get_product(product.name)
             # assert products are the same with the same name
@@ -190,7 +189,6 @@ class BaseExchange(ABC):
         if account.name not in self._accounts:
             self._accounts[account.name] = account
             self._ws_api.add_account(account)
-            self._logger.debug(f'added {account=}')
         else:
             raise ValueError(f'account name {account.name} has already been added')
         return account

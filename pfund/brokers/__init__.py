@@ -11,9 +11,9 @@ def create_broker(env: Environment | str, bkr: Broker | tBroker) -> BaseBroker:
     env = Environment[env.upper()]
     if env in [Environment.BACKTEST, Environment.SANDBOX]:
         from pfund.brokers.broker_simulated import SimulatedBrokerFactory
-        SimulatedBroker = SimulatedBrokerFactory(bkr)
-        broker = SimulatedBroker(env)
+        SimulatedBrokerClass: type[BaseBroker] = SimulatedBrokerFactory(bkr)
+        broker = SimulatedBrokerClass(env)
     else:
-        BrokerClass = Broker[bkr.upper()].broker_class
+        BrokerClass: type[BaseBroker] = Broker[bkr.upper()].broker_class
         broker = BrokerClass(env)
     return broker

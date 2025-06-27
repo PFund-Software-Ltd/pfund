@@ -4,6 +4,7 @@ if TYPE_CHECKING:
     from pfund.typing import tEnvironment, ProductName, AccountName
     from pfund.products.product_base import BaseProduct
     from pfund.accounts.account_base import BaseAccount
+    from pfund.engines.base_engine_settings import BaseEngineSettings
 
 import logging
 from abc import ABC, abstractmethod
@@ -20,9 +21,10 @@ ExchangeName: TypeAlias = CryptoExchange | str
 class BaseBroker(ABC):
     name: ClassVar[Broker]
 
-    def __init__(self, env: Environment | tEnvironment):
+    def __init__(self, env: Environment | tEnvironment, settings: BaseEngineSettings | None=None):
         self._env = Environment[env.upper()]
         self._logger = logging.getLogger('pfund')
+        self._settings: BaseEngineSettings | None = settings
         
         self._products: defaultdict[ExchangeName, dict[ProductName, BaseProduct]] = defaultdict(dict)
         self._accounts: defaultdict[TradingVenue, dict[AccountName, BaseAccount]] = defaultdict(dict)

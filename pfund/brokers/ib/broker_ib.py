@@ -106,14 +106,13 @@ class IBBroker(TradeBroker):
         exch = exch or self._derive_exch(pdt)
         return self._products[exch.upper()].get(pdt.upper(), None)
 
-    def add_product(self, product_basis: str, exchange: str='', symbol: str='', **product_specs) -> IBProduct:
-        product_basis = product_basis.upper()
-        exchange = exchange or self._derive_exch(product_basis)
-        if not (product := self.get_product(exchange=exchange, pdt=product_basis)):
-            product = self.create_product(exchange, product_basis, symbol=symbol, **product_specs)
-            self._products[exchange][str(product)] = product
-            self._api.add_product(product, **product_specs)
-            self._logger.debug(f'added product {str(product)}')
+    def add_product(self, basis: str, exch: str='', name: str='', symbol: str='', **specs) -> IBProduct:
+        basis = basis.upper()
+        exch = exch or self._derive_exch(basis)
+        if not (product := self.get_product(exch=exch, pdt=basis)):
+            product = self.create_product(exch, basis, symbol=symbol, **specs)
+            self._products[exch][str(product)] = product
+            self._api.add_product(product, **specs)
         return product
 
     def get_account(self, acc: str) -> IBAccount | None:

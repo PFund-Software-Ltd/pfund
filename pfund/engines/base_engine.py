@@ -179,7 +179,7 @@ class BaseEngine(metaclass=MetaEngine):
             use_deltalake=config.use_deltalake,
             external_listeners=cls._external_listeners,
         )
-        if not self._is_wasm():
+        if not self.is_wasm():
             from pfund.messenger import Messenger
             self._messenger = Messenger(
                 zmq_url=cls._settings.zmq_urls.get(self.name, ''), 
@@ -190,6 +190,7 @@ class BaseEngine(metaclass=MetaEngine):
         self.brokers: dict[Broker, BaseBroker] = {}
         self.strategies: dict[str, BaseStrategy | ActorProxy] = {}
         self._is_running: bool = False
+        self._is_gathered: bool = False
     
     @property
     def env(self) -> Environment:
@@ -211,7 +212,7 @@ class BaseEngine(metaclass=MetaEngine):
     def data_end(self) -> datetime.date:
         return self._data_end
     
-    def _is_wasm(self):
+    def is_wasm(self):
         return self._run_mode == RunMode.WASM
     
     @classmethod
@@ -228,54 +229,67 @@ class BaseEngine(metaclass=MetaEngine):
         logging_configurator.configure()
         return logging_config
     
-    def _gather(self):
+    def gather(self):
         '''
         Sets up everything before run.
-        - setup logging for remote strategies
-        - setup ZMQ messaging and subscriptions
-        - makes sure everything runs in the correct order
+        - updates zmq ports in settings
+        - registers components, data to mtstore
+        - freezes mtstore.
+        This method can be called by user before run to do some custom setup,
+        e.g. get pfeed's dataflows and add custom transformations to them by calling:
+        # TODO:
+        engine.gather()
+        dataflow = engine.get_dataflow(...)
+        dataflow.add_transformation(...)
+        engine.run()
         '''
-        cls = self.__class__
-        for strat, strategy in self.strategies.items():
-            # TODO: create trading store inside strategy?
-            # trading_store: TradingStore = self._store.get_trading_store(strat)
-            # strategy._set_trading_store(trading_store)
-            strategy._gather()
-            cls._settings.zmq_ports.update(strategy._get_zmq_ports_in_use())
+        if not self._is_gathered:
+            cls = self.__class__
+            for strat, strategy in self.strategies.items():
+                # TODO: create trading store inside strategy?
+                # trading_store: TradingStore = self._store.get_trading_store(strat)
+                # strategy._set_trading_store(trading_store)
+                strategy._gather()
+                cls._settings.zmq_ports.update(strategy._get_zmq_ports_in_use())
 
-            # TEMP
-            metadata = strategy.to_dict(stringify=False)
-            from pprint import pprint
-            pprint(metadata)
-            exit()
+                # TEMP
+                metadata = strategy.to_dict(stringify=False)
+                from pprint import pprint
+                pprint(metadata)
+                exit()
 
-            # TODO: register datas to engine
-            # for product, (resolution, data) in self.datas.items():
-            #     self._register_product(
-            #         trading_venue=product.trading_venue,
-            #         basis=product.basis,
-            #         name=product.name,
-            #         symbol=product.symbol
-            #     )
-            #     self._register_market_data(self, data)
-            # self._register_component(
-            #     consumer_name=self.get_consumer_name(),
-            #     component_name=self.name,
-            #     component_metadata=self.to_dict()
-            # )
-        # all components are gathered/added, no more changes, now freeze the store
-        self._store._freeze()
+                # TODO: register datas to engine
+                # TODO: pfeed's dataflows should be created in data engine at this level
+                # TODO: ws_groups in engine settings? used to set ws product groups in pfeed
+                # for product, (resolution, data) in self.datas.items():
+                #     self._register_product(
+                #         trading_venue=product.trading_venue,
+                #         basis=product.basis,
+                #         name=product.name,
+                #         symbol=product.symbol
+                #     )
+                #     self._register_market_data(self, data)
+                # self._register_component(
+                #     consumer_name=self.get_consumer_name(),
+                #     component_name=self.name,
+                #     component_metadata=self.to_dict()
+                # )
+            # all components are gathered/added, no more changes, now freeze the store
+            self._store._freeze()
+            self._is_gathered = True
+        else:
+            self._logger.debug(f'{self.name} is already gathered')
     
     def run(self):
         if not self.is_running():
             self._is_running = True
-            self._gather()
+            self.gather()
             self._kernel.run()
             for strategy in self.strategies.values():
                 strategy.start()
 
             # use ZeroMQ as long as not in WASM mode
-            if not self._is_wasm():
+            if not self.is_wasm():
                 self._messenger.subscribe()
                 self._messenger.start()
                 while self.is_running():
@@ -356,11 +370,7 @@ class BaseEngine(metaclass=MetaEngine):
     
     def _add_broker(self, trading_venue: tTradingVenue) -> BaseBroker:
         from pfund.brokers import create_broker
-        trading_venue = TradingVenue[trading_venue.upper()]
-        if trading_venue.upper() in CryptoExchange.__members__:
-            bkr = Broker.CRYPTO
-        else:
-            bkr = Broker[trading_venue]
+        bkr: Broker = TradingVenue[trading_venue.upper()].broker
         if bkr not in self.brokers:
             broker = create_broker(env=self._env, bkr=bkr)
             self.brokers[bkr] = broker
@@ -374,7 +384,7 @@ class BaseEngine(metaclass=MetaEngine):
         self,
         trading_venue: tTradingVenue, 
         basis: str,
-        exchange: str='', 
+        exch: str='', 
         symbol: str='', 
         name: str='',
         **specs
@@ -382,11 +392,12 @@ class BaseEngine(metaclass=MetaEngine):
         broker: BaseBroker = self._add_broker(trading_venue)
         if broker.name == Broker.CRYPTO:
             exch = trading_venue
-            product: BaseProduct = broker.add_product(exch, basis, name=name, **specs)
+            product: BaseProduct = broker.add_product(exch=exch, basis=basis, name=name, symbol=symbol, **specs)
         elif broker.name == Broker.IB:
-            product: BaseProduct = broker.add_product(basis, exchange=exchange, symbol=symbol, name=name, **specs)
+            product: BaseProduct = broker.add_product(exch=exch, basis=basis, name=name, symbol=symbol, **specs)
         else:
             raise NotImplementedError(f"Broker {broker.name} is not supported")
+        self._logger.debug(f'added product={product}')
         return product
     
     def _register_account(self, trading_venue: tTradingVenue, name: str='', **kwargs) -> BaseAccount:
@@ -398,6 +409,7 @@ class BaseEngine(metaclass=MetaEngine):
             account = broker.add_account(name=name or self.name, **kwargs)
         else:
             raise NotImplementedError(f"Broker {broker.name} is not supported")
+        self._logger.debug(f'added account={account}')
         return account
     
     def _register_component(self, consumer_name: ComponentName | None, component_name: ComponentName, component_metadata: dict):

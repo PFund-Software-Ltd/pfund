@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
+    from pfund.engines.base_engine_settings import BaseEngineSettings
     from pfeed.enums import DataSource
     from pfeed.typing import tDataSource
     from pfeed.feeds.market_feed import MarketFeed
@@ -18,14 +19,14 @@ from pfund.brokers.broker_base import BaseBroker
 
 
 class TradeBroker(BaseBroker):
-    def __init__(self, env: Environment | tEnvironment=Environment.SANDBOX):
+    def __init__(
+        self, 
+        env: Environment | tEnvironment=Environment.SANDBOX,
+        settings: BaseEngineSettings | None=None,
+    ):
         from pfund.managers.connection_manager import ConnectionManager
-        from pfund.engines.trade_engine import TradeEngine
 
-        super().__init__(env=env)
-        
-        self._settings: TradeEngineSettings = TradeEngine._settings
-        self._is_ws_first: bool = self._settings.websocket_first
+        super().__init__(env=env, settings=settings)
         
         # FIXME: still keep connection manager?
         # self._connection_manager = ConnectionManager(self)

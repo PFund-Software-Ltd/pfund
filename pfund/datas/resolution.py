@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 
+# TODO use total_ordering from functools
 class Resolution:
     DEFAULT_ORDERBOOK_LEVEL = 1
     

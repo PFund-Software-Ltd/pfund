@@ -4,6 +4,7 @@ if TYPE_CHECKING:
     from pfund.accounts.account_base import BaseAccount
     from pfund.orders.order_base import BaseOrder
     from pfund.products.product_base import BaseProduct
+    from pfund.enums import Broker
 
 import importlib
 from enum import StrEnum
@@ -12,6 +13,16 @@ from enum import StrEnum
 class TradingVenue(StrEnum):
     IB = 'IB'
     BYBIT = 'BYBIT'
+    
+    @property
+    def broker(self) -> Broker:
+        from pfund.enums import Broker, CryptoExchange
+        if self.value in CryptoExchange.__members__:
+            return Broker.CRYPTO
+        elif self.value in Broker.__members__:
+            return Broker[self.value]
+        else:
+            raise ValueError(f"No matching Broker for trading venue: {self.value}")
 
     @property
     def order_class(self) -> type[BaseOrder]:

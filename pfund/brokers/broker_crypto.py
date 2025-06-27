@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
+    from pfund.engines.base_engine_settings import BaseEngineSettings
     from pfund.products.product_crypto import CryptoProduct
     from pfund.orders.order_base import BaseOrder
     from pfund.exchanges.exchange_base import BaseExchange
@@ -24,7 +25,10 @@ from pfund.brokers.broker_trade import TradeBroker
 class CryptoBroker(TradeBroker):
     name = Broker.CRYPTO
     
-    def __init__(self, env: Environment | tEnvironment=Environment.SANDBOX):
+    def __init__(
+        self, env: Environment | tEnvironment=Environment.SANDBOX,
+        settings: BaseEngineSettings | None=None,
+    ):
         '''
         Args:
             fetch_market_configs: 
@@ -32,7 +36,7 @@ class CryptoBroker(TradeBroker):
                 even if the config files exist.
                 if False, markets will be automatically refetched on a weekly basis
         '''
-        super().__init__(env=env)
+        super().__init__(env=env, settings=settings)
         self.exchanges: dict[CryptoExchange, BaseExchange] = {}
     
     def start(self, zmq=None):
@@ -85,7 +89,6 @@ class CryptoBroker(TradeBroker):
             account = CryptoAccount(env=self._env, exchange=exch, name=name, key=key, secret=secret)
             exchange.add_account(account)
             self._accounts[exchange.name][account.name] = account
-            self._logger.debug(f'added {account=}')
         else:
             raise ValueError(f'account name {name} has already been added')
         return account
@@ -97,18 +100,17 @@ class CryptoBroker(TradeBroker):
         '''
         return self._products[CryptoExchange[exch.upper()]][name]
     
-    def add_product(self, exch: tCryptoExchange, basis: str, name: str='', **specs) -> CryptoProduct:
+    def add_product(self, exch: tCryptoExchange, basis: str, name: str='', symbol: str='', **specs) -> CryptoProduct:
         '''
         Args:
             name: product name (product.name)
         '''
         exchange = self.add_exchange(exch)
         # create another product object to get a correct product name
-        product: CryptoProduct = exchange.create_product(basis, name=name, **specs)
+        product: CryptoProduct = exchange.create_product(basis, name=name, symbol=symbol, **specs)
         if product.name not in self._products[exchange.name]:
             exchange.add_product(product)
             self._products[exchange.name][product.name] = product
-            self._logger.debug(f'added {product=}')
         else:
             existing_product: CryptoProduct = self.get_product(exch, product.name)
             # assert products are the same with the same name
@@ -127,7 +129,7 @@ class CryptoBroker(TradeBroker):
             Exchange: type[BaseExchange] = exch.exchange_class
             exchange: BaseExchange = Exchange(env=self._env)
             self.exchanges[exch] = exchange
-            self._logger.debug(f'added {exch}')
+            self._logger.debug(f'{self.name} added {exch}')
         else:
             exchange: BaseExchange = self.get_exchange(exch)
         return exchange
@@ -139,7 +141,7 @@ class CryptoBroker(TradeBroker):
             account = self.get_account(exch, acc)
             balance = CryptoBalance(account, ccy)
             self._portfolio_manager.add_balance(balance)
-            self._logger.debug(f'added {balance=}')
+            self._logger.debug(f'{self.name} added {balance}')
         return balance
 
     def add_position(self, exch: tCryptoExchange, acc: str, pdt: str) -> CryptoPosition:
@@ -149,7 +151,7 @@ class CryptoBroker(TradeBroker):
             product = self.add_product(exch, pdt=pdt)
             position = CryptoPosition(account, product)
             self._portfolio_manager.add_position(position)
-            self._logger.debug(f'added {position=}')
+            self._logger.debug(f'{self.name} added {position}')
         return position
 
     def reconcile_orders(self):
