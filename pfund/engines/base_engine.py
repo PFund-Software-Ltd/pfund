@@ -124,6 +124,7 @@ class BaseEngine(metaclass=MetaEngine):
         '''
         from mtflow.kernel import TradeKernel
         from mtflow.stores.mtstore import MTStore
+        from pfund.messenger import Messenger
         
         config = get_config()
         cls = self.__class__
@@ -180,7 +181,6 @@ class BaseEngine(metaclass=MetaEngine):
             external_listeners=cls._external_listeners,
         )
         if not self.is_wasm():
-            from pfund.messenger import Messenger
             self._messenger = Messenger(
                 zmq_url=cls._settings.zmq_urls.get(self.name, ''), 
                 zmq_ports=cls._settings.zmq_ports,

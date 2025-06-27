@@ -70,8 +70,8 @@ class ComponentMixin:
         self._settings: BaseEngineSettings | None = None
         self._logging_config: dict | None = None
         self._consumers: list[Component | ActorProxy] = []
-        self._store: TradingStore | None = None
-        self._databoy = DataBoy(self)
+        self.store: TradingStore | None = None
+        self.databoy = DataBoy(self)
 
         self.products: dict[str, BaseProduct] = {}
         self.models: dict[str, BaseModel | ActorProxy] = {}
@@ -126,6 +126,7 @@ class ComponentMixin:
         self._run_mode = run_mode
         self._engine = engine
         self._settings = settings
+        self.databoy._update_zmq_ports_in_use(settings.zmq_ports)
         if self.is_remote():
             self._setup_logging(logging_config)
         if not self.is_wasm():
@@ -218,16 +219,8 @@ class ComponentMixin:
         return self._env
     
     @property
-    def databoy(self: Component) -> DataBoy:
-        return self._databoy
-    
-    @property
     def datas(self: Component) -> dict[BaseProduct, dict[Resolution, TimeBasedData]]:
-        return self._databoy.datas
-    
-    @property
-    def store(self: Component) -> TradingStore:
-        return self._store
+        return self.databoy.datas
     
     @property
     def components(self: Component) -> list[Component | ActorProxy]:
@@ -303,7 +296,7 @@ class ComponentMixin:
         return time.time() - ts
     
     def _set_trading_store(self: Component, trading_store: TradingStore):
-        self._store = trading_store
+        self.store = trading_store
 
     @property
     def resolution(self: Component) -> Resolution | None:
@@ -680,7 +673,7 @@ class ComponentMixin:
         for component in local_components:
             component._on_quote(data, **extra_data)
             self._update_outputs(data, component)
-        # TODO: add to trading store, self._store
+        # TODO: add to trading store, self.store
         self._append_to_df(data, **extra_data)
         self.on_quote(product, bids, asks, ts, **extra_data)
 
@@ -718,13 +711,13 @@ class ComponentMixin:
             self.add_models()
             self.add_features()
             self.add_indicators()
-            # all components are gathered/added, all zmq ports relevant to this component are finalized, can subscribe now
-            self.databoy.subscribe()
+            if not self.is_wasm():
+                self.databoy.subscribe()
             # TODO:
             # self._add_datas_from_consumer_if_none()
             # TODO:
-            # self._store._freeze()
-            # self._store._materialize()
+            # self.store._freeze()
+            # self.store._materialize()
             # self._prepare_df()
             for component in self.components:
                 component._gather()
@@ -736,7 +729,8 @@ class ComponentMixin:
         if not self.is_running():
             self._is_running = True
             self.on_start()
-            self.databoy.start()
+            if not self.is_wasm():
+                self.databoy.start()
             for component in self.components:
                 component.start()
             self.logger.info(f"'{self.name}' has started")

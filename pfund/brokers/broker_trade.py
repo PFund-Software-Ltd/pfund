@@ -25,8 +25,10 @@ class TradeBroker(BaseBroker):
         settings: BaseEngineSettings | None=None,
     ):
         from pfund.managers.connection_manager import ConnectionManager
+        from pfund.engines.trade_engine import TradeEngine
 
-        super().__init__(env=env, settings=settings)
+        super().__init__(env=env)
+        self._settings: TradeEngineSettings | None = getattr(TradeEngine, "_settings", None)
         
         # FIXME: still keep connection manager?
         # self._connection_manager = ConnectionManager(self)

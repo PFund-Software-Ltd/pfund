@@ -25,10 +25,7 @@ from pfund.brokers.broker_trade import TradeBroker
 class CryptoBroker(TradeBroker):
     name = Broker.CRYPTO
     
-    def __init__(
-        self, env: Environment | tEnvironment=Environment.SANDBOX,
-        settings: BaseEngineSettings | None=None,
-    ):
+    def __init__(self, env: Environment | tEnvironment=Environment.SANDBOX):
         '''
         Args:
             fetch_market_configs: 
@@ -36,7 +33,7 @@ class CryptoBroker(TradeBroker):
                 even if the config files exist.
                 if False, markets will be automatically refetched on a weekly basis
         '''
-        super().__init__(env=env, settings=settings)
+        super().__init__(env=env)
         self.exchanges: dict[CryptoExchange, BaseExchange] = {}
     
     def start(self, zmq=None):

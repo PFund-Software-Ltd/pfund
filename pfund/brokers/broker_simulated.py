@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfund.engines.base_engine_settings import BaseEngineSettings
+    from pfund.engines.backtest_engine_settings import BacktestEngineSettings
     from pfund.products.product_base import BaseProduct
     from pfund.brokers.broker_trade import TradeBroker
 
@@ -21,18 +21,11 @@ def SimulatedBrokerFactory(broker: str) -> type[TradeBroker]:
 class SimulatedBroker:
     DEFAULT_INITIAL_BALANCES = {'BTC': 10, 'ETH': 100, 'USD': 1_000_000}
     
-    def __init__(
-        self: SimulatedBroker | TradeBroker, 
-        env: Environment.BACKTEST | Environment.SANDBOX | Literal['BACKTEST', 'SANDBOX']=Environment.BACKTEST,
-        settings: BaseEngineSettings | None=None,
-    ):
-        super().__init__(env=env, settings=settings)
+    def __init__(self: SimulatedBroker | TradeBroker, env: Environment.BACKTEST | Environment.SANDBOX | Literal['BACKTEST', 'SANDBOX']=Environment.BACKTEST):
+        super().__init__(env=env)
         if self._env == Environment.BACKTEST:
-            from pfund.engines.backtest_engine_settings import BacktestEngineSettings
-            self._settings: BacktestEngineSettings
-        elif self._env == Environment.SANDBOX:
-            from pfund.engines.trade_engine_settings import TradeEngineSettings
-            self._settings: TradeEngineSettings
+            from pfund.engines.backtest_engine import BacktestEngine
+            self._settings: BacktestEngineSettings | None = getattr(BacktestEngine, "_settings", None)
         self._initial_balances = defaultdict(dict)  # {trading_venue: {acc1: balances_dict, acc2: balances_dict} }
         # TODO
         # self._initial_positions = None

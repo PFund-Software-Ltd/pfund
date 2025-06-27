@@ -77,23 +77,17 @@ class Messenger:
                 self._logger.debug(f'{self._router.name} subscribed to {zmq_name} on port {zmq_port}')
     
     def start(self):
-        if self._proxy:
-            self._proxy.start()
-            # TODO: create thread for proxy
-            # FIXME: zmq.proxy(...)
-            # self._proxy.run_proxy()
-        if self._router:
-            self._router.start()
-        if self._publisher:
-            self._publisher.start()
+        self._proxy.start()
+        # TODO: create thread for proxy
+        # FIXME: zmq.proxy(...)
+        # self._proxy.run_proxy()
+        self._router.start()
+        self._publisher.start()
 
     def stop(self):
-        if self._proxy:
-            self._proxy.stop()
-        if self._router:
-            self._router.stop()
-        if self._publisher:
-            self._publisher.stop()
+        self._proxy.stop()
+        self._router.stop()
+        self._publisher.stop()
 
     # TODO:
     def _ping_processes(self):
