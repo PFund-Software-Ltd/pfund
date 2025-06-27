@@ -3,6 +3,8 @@ from typing import TYPE_CHECKING, Literal, ClassVar
 if TYPE_CHECKING:
     from mtflow.stores.mtstore import MTStore
     from mtflow.kernel import TradeKernel
+    from pfund.accounts.account_crypto import CryptoAccount
+    from pfund.accounts.account_ib import IBAccount
     from mtflow.stores.trading_store import TradingStore
     from pfund.messenger import Messenger
     from pfeed.typing import tDataTool
@@ -37,7 +39,6 @@ from pfund.enums import (
     Broker, 
     RunMode, 
     Database, 
-    CryptoExchange, 
     TradingVenue, 
 )
 
@@ -51,6 +52,7 @@ ENV_COLORS = {
     Environment.PAPER: 'bold red on #ffe0e0',
     Environment.LIVE: 'bold green on #e0ffe0',
 }
+config = get_config()
 
 
 class BaseEngine(metaclass=MetaEngine):
@@ -74,7 +76,6 @@ class BaseEngine(metaclass=MetaEngine):
     
     name: str
     _logger: logging.Logger
-    _store: MTStore
     _kernel: TradeKernel
     _is_running: bool
     _messenger: Messenger | None
@@ -123,10 +124,8 @@ class BaseEngine(metaclass=MetaEngine):
                 If None, no data will be written.
         '''
         from mtflow.kernel import TradeKernel
-        from mtflow.stores.mtstore import MTStore
         from pfund.messenger import Messenger
         
-        config = get_config()
         cls = self.__class__
         if not hasattr(cls, "_initialized"):
             from pfeed.feeds.time_based_feed import TimeBasedFeed
@@ -173,7 +172,6 @@ class BaseEngine(metaclass=MetaEngine):
         if 'engine' not in self.name.lower():
             self.name += '_engine'
         self._logger: logging.Logger = logging.getLogger('pfund')
-        self._store = MTStore(env=cls._env, data_tool=cls._data_tool)
         self._kernel = TradeKernel(
             database=cls._database,
             data_tool=cls._data_tool,
@@ -245,37 +243,14 @@ class BaseEngine(metaclass=MetaEngine):
         '''
         if not self._is_gathered:
             cls = self.__class__
-            for strat, strategy in self.strategies.items():
-                # TODO: create trading store inside strategy?
-                # trading_store: TradingStore = self._store.get_trading_store(strat)
-                # strategy._set_trading_store(trading_store)
+            # TODO: pfeed's dataflows should be created in data engine at this level
+            # TODO: ws_groups in engine settings? used to set ws product groups in pfeed
+            for strategy in self.strategies.values():
+                strategy: BaseStrategy | ActorProxy
                 strategy._gather()
                 cls._settings.zmq_ports.update(strategy._get_zmq_ports_in_use())
-
-                # TEMP
                 metadata = strategy.to_dict(stringify=False)
-                from pprint import pprint
-                pprint(metadata)
-                exit()
-
-                # TODO: register datas to engine
-                # TODO: pfeed's dataflows should be created in data engine at this level
-                # TODO: ws_groups in engine settings? used to set ws product groups in pfeed
-                # for product, (resolution, data) in self.datas.items():
-                #     self._register_product(
-                #         trading_venue=product.trading_venue,
-                #         basis=product.basis,
-                #         name=product.name,
-                #         symbol=product.symbol
-                #     )
-                #     self._register_market_data(self, data)
-                # self._register_component(
-                #     consumer_name=self.get_consumer_name(),
-                #     component_name=self.name,
-                #     component_metadata=self.to_dict()
-                # )
-            # all components are gathered/added, no more changes, now freeze the store
-            self._store._freeze()
+                self._register_component(metadata)
             self._is_gathered = True
         else:
             self._logger.debug(f'{self.name} is already gathered')
@@ -358,6 +333,10 @@ class BaseEngine(metaclass=MetaEngine):
             engine=None if is_remote else self,
             settings=self._settings,
             logging_config=self._logging_config,
+            data_tool=self._data_tool,
+            storage=config.storage,
+            storage_options=config.storage_options,
+            use_deltalake=config.use_deltalake,
         )
         strategy._set_top_strategy(True)
 
@@ -368,7 +347,7 @@ class BaseEngine(metaclass=MetaEngine):
     def get_strategy(self, name: str) -> BaseStrategy | ActorProxy:
         return self.strategies[name]
     
-    def _add_broker(self, trading_venue: tTradingVenue) -> BaseBroker:
+    def _add_broker(self, trading_venue: TradingVenue | tTradingVenue) -> BaseBroker:
         from pfund.brokers import create_broker
         bkr: Broker = TradingVenue[trading_venue.upper()].broker
         if bkr not in self.brokers:
@@ -380,54 +359,47 @@ class BaseEngine(metaclass=MetaEngine):
     def get_broker(self, bkr: tBroker) -> BaseBroker:
         return self.brokers[bkr.upper()]
     
-    def _register_product(
-        self,
-        trading_venue: tTradingVenue, 
-        basis: str,
-        exch: str='', 
-        symbol: str='', 
-        name: str='',
-        **specs
-    ) -> BaseProduct:
-        broker: BaseBroker = self._add_broker(trading_venue)
+    def _register_component(self, component_metadata: dict):
+        component_name = component_metadata['name']
+        consumer_names = component_metadata['consumers']
+        self._kernel.register_component(consumer_names, component_name, component_metadata)
+        datas: list[TimeBasedData] = component_metadata['datas']
+        for data in datas:
+            if not data.is_resamplee():
+                broker: BaseBroker = self.get_broker(data.product.bkr)
+                broker._add_data_channel(data)
+            self._register_product(data.product)
+        for account in component_metadata.get('accounts', []):
+            self._register_account(account)
+        # register sub-components (nested components)
+        strategies: list[dict] = component_metadata.get('strategies', [])
+        models: list[dict] = component_metadata.get('models', [])
+        features: list[dict] = component_metadata.get('features', [])
+        indicators: list[dict] = component_metadata.get('indicators', [])
+        components: list[dict] = strategies + models + features + indicators
+        for component_metadata in components:
+            self._register_component(component_metadata)
+        
+    def _register_product(self, product: BaseProduct):
+        broker: BaseBroker = self._add_broker(product.trading_venue)
         if broker.name == Broker.CRYPTO:
-            exch = trading_venue
-            product: BaseProduct = broker.add_product(exch=exch, basis=basis, name=name, symbol=symbol, **specs)
+            broker.add_product(exch=product.exch, basis=str(product.basis), name=product.name, symbol=product.symbol, **product.specs)
         elif broker.name == Broker.IB:
-            product: BaseProduct = broker.add_product(exch=exch, basis=basis, name=name, symbol=symbol, **specs)
+            broker.add_product(exch=product.exch, basis=str(product.basis), name=product.name, symbol=product.symbol, **product.specs)
         else:
             raise NotImplementedError(f"Broker {broker.name} is not supported")
-        self._logger.debug(f'added product={product}')
-        return product
+        self._logger.debug(f'added product {product.symbol}')
     
-    def _register_account(self, trading_venue: tTradingVenue, name: str='', **kwargs) -> BaseAccount:
-        broker: BaseBroker = self._add_broker(trading_venue)
+    def _register_account(self, account: BaseAccount) -> BaseAccount:
+        broker: BaseBroker = self._add_broker(account.trading_venue)
         if broker.name == Broker.CRYPTO:
-            exch = trading_venue
-            account =  broker.add_account(exch=exch, name=name or self.name, **kwargs)
+            account: CryptoAccount
+            account = broker.add_account(exch=account.trading_venue, name=account.name, key=account._key, secret=account._secret)
         elif broker.name == Broker.IB:
-            account = broker.add_account(name=name or self.name, **kwargs)
+            account: IBAccount
+            account = broker.add_account(name=account.name, host=account._host, port=account._port, client_id=account._client_id)
         else:
             raise NotImplementedError(f"Broker {broker.name} is not supported")
-        self._logger.debug(f'added account={account}')
+        self._logger.debug(f'added account {account}')
         return account
     
-    def _register_component(self, consumer_name: ComponentName | None, component_name: ComponentName, component_metadata: dict):
-        if component_metadata['run_mode'] == RunMode.REMOTE:
-            self._kernel.add_ray_actor(component_name)
-        self._store.register_component(consumer_name, component_name, component_metadata)
-    
-    def _register_market_data(self, component_name: ComponentName, data: TimeBasedData):
-        product = data.product
-        if not data.is_resamplee():
-            broker: BaseBroker = self.get_broker(product.bkr)
-            broker._add_data_channel(data)
-        self._store.register_market_data(
-            consumer=component_name,
-            data_source=data.data_source,
-            data_origin=data.data_origin,
-            product=product,
-            resolution=data.resolution,
-            start_date=self._data_start,
-            end_date=self._data_end,
-        )

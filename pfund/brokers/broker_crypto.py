@@ -126,7 +126,7 @@ class CryptoBroker(TradeBroker):
             Exchange: type[BaseExchange] = exch.exchange_class
             exchange: BaseExchange = Exchange(env=self._env)
             self.exchanges[exch] = exchange
-            self._logger.debug(f'{self.name} added {exch}')
+            self._logger.debug(f'added {exch}')
         else:
             exchange: BaseExchange = self.get_exchange(exch)
         return exchange
@@ -138,7 +138,7 @@ class CryptoBroker(TradeBroker):
             account = self.get_account(exch, acc)
             balance = CryptoBalance(account, ccy)
             self._portfolio_manager.add_balance(balance)
-            self._logger.debug(f'{self.name} added {balance}')
+            self._logger.debug(f'added {balance}')
         return balance
 
     def add_position(self, exch: tCryptoExchange, acc: str, pdt: str) -> CryptoPosition:
@@ -148,7 +148,7 @@ class CryptoBroker(TradeBroker):
             product = self.add_product(exch, pdt=pdt)
             position = CryptoPosition(account, product)
             self._portfolio_manager.add_position(position)
-            self._logger.debug(f'{self.name} added {position}')
+            self._logger.debug(f'added {position}')
         return position
 
     def reconcile_orders(self):

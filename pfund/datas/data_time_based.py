@@ -32,7 +32,7 @@ class TimeBasedData(BaseData):
         self._extra_data = {}
 
     def __repr__(self):
-        return f'{self.product.tv}:{self.product.name}:{repr(self.resolution)}'
+        return f'{self.data_source}:{self.data_origin}:{self.product.name}:{repr(self.resolution)}'
 
     def __str__(self):
         return f'{self.product}|Data={self.resolution}'

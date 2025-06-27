@@ -5,9 +5,8 @@ if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
     import polars as pl
-    from mtflow.stores.trading_store import TradingStore
     from pfeed.typing import tDataSource
-    from pfund.datas.databoy import DataBoy
+    from pfeed.enums import DataTool, DataStorage
     from pfund.typing import (
         StrategyT, 
         ModelT, 
@@ -28,13 +27,13 @@ if TYPE_CHECKING:
     from pfund.models.model_base import BaseModel
     from pfund.features.feature_base import BaseFeature
     from pfund.indicators.indicator_base import BaseIndicator
-    from pfund.brokers.broker_base import BaseBroker
     from pfund.engines.base_engine_settings import BaseEngineSettings
 
 import time
 import logging
 import datetime
 
+from mtflow.stores.trading_store import TradingStore
 from pfund._logging.buffer import LogBuffer
 from pfund.datas.resolution import Resolution
 from pfund.datas.data_config import DataConfig
@@ -104,6 +103,10 @@ class ComponentMixin:
         engine: BaseEngine | None,
         settings: BaseEngineSettings,
         logging_config: dict,
+        data_tool: DataTool,
+        storage: DataStorage,
+        storage_options: dict,
+        use_deltalake: bool,
     ):
         """
         Hydrates the component with necessary attributes after initialization.
@@ -126,11 +129,21 @@ class ComponentMixin:
         self._run_mode = run_mode
         self._engine = engine
         self._settings = settings
+        self.store = self._create_trading_store(data_tool, storage, storage_options, use_deltalake)
         self.databoy._update_zmq_ports_in_use(settings.zmq_ports)
         if self.is_remote():
             self._setup_logging(logging_config)
         if not self.is_wasm():
             self.databoy._setup_messaging()
+    
+    def _create_trading_store(self: Component, data_tool: DataTool, storage: DataStorage, storage_options: dict, use_deltalake: bool):
+        return TradingStore(
+            env=self._env,
+            data_tool=data_tool,
+            storage=storage,
+            storage_options=storage_options,
+            use_deltalake=use_deltalake,
+        )
 
     def _setup_logging(self: Component, logging_config: dict) -> dict[str, int]:
         '''Sets up logging for component running in remote process, uses zmq's PUBHandler to send logs to engine'''
@@ -161,7 +174,10 @@ class ComponentMixin:
         )
     
     def _get_zmq_ports_in_use(self) -> dict[str, int]:
-        return self.databoy._get_zmq_ports_in_use()
+        zmq_ports_in_use = self.databoy._get_zmq_ports_in_use()
+        for component in self.components:
+            zmq_ports_in_use.update(component._get_zmq_ports_in_use())
+        return zmq_ports_in_use
     
     def _set_proxy(self, proxy: ActorProxy):
         self._proxy = proxy
@@ -195,6 +211,7 @@ class ComponentMixin:
             'run_mode': self._run_mode.value,
             'config': self.config,
             'params': self.params,
+            'consumers': [consumer.name for consumer in self._consumers],
             'datas': [repr(data) if stringify else data for data in self.databoy.get_datas()],
             'models': [model.to_dict(stringify=stringify) for model in self.models.values()],
             'features': [feature.to_dict(stringify=stringify) for feature in self.features.values()],
@@ -567,6 +584,10 @@ class ComponentMixin:
                 engine=self._engine,
                 settings=self._settings,
                 logging_config=self._logging_config,
+                data_tool=self.store._data_tool,
+                storage=self.store._storage,
+                storage_options=self.store._storage_options,
+                use_deltalake=self.store._use_deltalake,
             )
             
             if signal_cols:
@@ -704,7 +725,6 @@ class ComponentMixin:
         '''Sets up everything before start'''
         # NOTE: use is_gathered to avoid a component being gathered multiple times when it's a shared component
         if not self._is_gathered:
-            self._is_gathered = True
             self.add_datas()
             if self.is_strategy():
                 self.add_strategies()
@@ -713,6 +733,7 @@ class ComponentMixin:
             self.add_indicators()
             if not self.is_wasm():
                 self.databoy.subscribe()
+            self._is_gathered = True
             # TODO:
             # self._add_datas_from_consumer_if_none()
             # TODO:

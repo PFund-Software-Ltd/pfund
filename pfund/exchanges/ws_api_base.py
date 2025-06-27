@@ -195,7 +195,7 @@ class BaseWebsocketApi(ABC):
     def add_account(self, account: CryptoAccount) -> CryptoAccount:
         if account.name not in self._accounts:
             self._accounts[account.name] = account
-            self._logger.debug(f'added {account=}')
+            self._logger.debug(f'added account {account}')
         else:
             raise ValueError(f'account name {account.name} has already been added')
         return account
@@ -203,11 +203,11 @@ class BaseWebsocketApi(ABC):
     def _add_product(self, product: CryptoProduct) -> CryptoProduct:
         if product.name not in self._products:
             self._products[product.name] = product
-            self._logger.debug(f'added {product=}')
+            self._logger.debug(f'websocket added product {product.symbol}')
         else:
             existing_product = self._products[product.name]
             if existing_product != product:
-                raise ValueError(f'product name {product.name} has already been used for {existing_product}')
+                raise ValueError(f'product {product.symbol} has already been used for {existing_product}')
         return product
         
     def _add_data(self, data: QuoteData | TickData | BarData) -> QuoteData | TickData | BarData:
@@ -216,7 +216,7 @@ class BaseWebsocketApi(ABC):
             self._datas[product.name] = {}
         if data.channel not in self._datas[product.name]:
             self._datas[product.name][data.channel] = data
-            self._logger.debug(f'added {product.name} {data.channel} data')
+            self._logger.debug(f'added {product.symbol} {data.channel} data')
         return data
     
     def add_channel(
