@@ -60,7 +60,7 @@ class Messenger:
 
     def subscribe(self):
         from pfund.enums import TradingVenue
-        self._logger.debug(f'Complete ZeroMQ ports in use: {self._zmq_ports_in_use}')
+        self._logger.debug(f'complete ZeroMQ ports in use: {self._zmq_ports_in_use}')
         zmq_names_in_use = [q.name for q in [self._proxy, self._router, self._publisher]]
         for zmq_name, zmq_port in self._zmq_ports_in_use.items():
             # subscribe to trading venue's data

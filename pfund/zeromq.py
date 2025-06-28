@@ -123,8 +123,6 @@ class ZeroMQ:
         events = self._poller.poll(0)  # 0 sec timeout, non-blocking
         if events:
             msg = self._receiver.recv_multipart(zmq.DONTWAIT)
-            # FIXME: msg from PUBHandler doesn't follow the internal format, [b'INFO', b'test_logging!!!\n']
-            print('received msg:', msg)
             channel, topic, data, pub_ts = msg
             channel, topic, pub_ts = channel.decode(), topic.decode(), float(pub_ts.decode())
             data = orjson.loads(data)

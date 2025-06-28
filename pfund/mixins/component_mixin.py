@@ -34,7 +34,6 @@ import logging
 import datetime
 
 from mtflow.stores.trading_store import TradingStore
-from pfund._logging.buffer import LogBuffer
 from pfund.datas.resolution import Resolution
 from pfund.datas.data_config import DataConfig
 from pfund.proxies.actor_proxy import ActorProxy
@@ -121,6 +120,8 @@ class ComponentMixin:
             logging_config (dict): Configuration for logging.
             data_params (DataParamsDict): Data parameters for the component's data store
         """
+        if self.is_remote():
+            self._setup_logging(logging_config)
         self._env = Environment[env.upper()]
         self._set_name(name)
         self._set_resolution(resolution)
@@ -129,14 +130,12 @@ class ComponentMixin:
         self._settings = settings
         self.store = TradingStore(env=self._env, data_params=data_params)
         self.databoy._update_zmq_ports_in_use(settings.zmq_ports)
-        if self.is_remote():
-            self._setup_logging(logging_config)
         if not self.is_wasm():
             self.databoy._setup_messaging()
     
     def _setup_logging(self: Component, logging_config: dict) -> dict[str, int]:
         '''Sets up logging for component running in remote process, uses zmq's PUBHandler to send logs to engine'''
-        from zmq.log.handlers import PUBHandler
+        from pfund._logging.zmq_pub_handler import ZMQPubHandler
         from pfund.zeromq import ZeroMQ
         from pfund._logging.config import LoggingDictConfigurator
         from pfund.utils.utils import get_free_port
@@ -152,11 +151,15 @@ class ComponentMixin:
             self.logger.removeHandler(handler)
             handler.close()
             
-        # TODO: create a subclass of PUBHandler that can standardize the msg and support log buffer
         # add zmq PUBhandler
         zmq_url = self._settings.zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL)
         zmq_port = get_free_port()
-        zmq_handler = PUBHandler(f'{zmq_url}:{zmq_port}')
+        zmq_handler = ZMQPubHandler(f'{zmq_url}:{zmq_port}')
+        zmq_formatter = logging.Formatter(
+            fmt='%(message)s | from:%(filename)s fn:%(funcName)s ln:%(lineno)d (sent@%(asctime)s.%(msecs)03d)',
+            datefmt='%H:%M:%S'
+        )
+        zmq_handler.setFormatter(zmq_formatter)
         self.logger.addHandler(zmq_handler)
         self.databoy._update_zmq_ports_in_use(
             {self.name+'_logger': zmq_port}
@@ -727,6 +730,8 @@ class ComponentMixin:
             self._is_running = True
             self.on_start()
             if not self.is_wasm():
+                # set the ZMQPubHandler's receiver ready to flush the buffered log messages
+                self.logger.handlers[0].set_receiver_ready()
                 self.databoy.start()
             for component in self.components:
                 component.start()

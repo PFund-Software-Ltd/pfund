@@ -31,13 +31,14 @@ from pfeed.enums import DataTool
 from pfund import cprint, get_config
 from pfund.engines.meta_engine import MetaEngine
 from pfund.proxies.actor_proxy import ActorProxy
-from pfund._logging.buffer import LogBuffer
 from pfund.enums import (
     Environment, 
     Broker, 
     RunMode, 
     Database, 
-    TradingVenue, 
+    TradingVenue,
+    PFundDataChannel,
+    PFundDataTopic,
 )
 
 
@@ -166,7 +167,6 @@ class BaseEngine(metaclass=MetaEngine):
         # FIXME: do NOT allow LIVE env for now
         assert cls._env != Environment.LIVE, f"{cls._env=} is not allowed for now"
 
-        
         self.name = name or self._get_default_name()
         if 'engine' not in self.name.lower():
             self.name += '_engine'
@@ -293,13 +293,14 @@ class BaseEngine(metaclass=MetaEngine):
             self._is_running = True
             self.gather()
             self._kernel.run()
+            if not self.is_wasm():
+                self._messenger.subscribe()
+                self._messenger.start()
             for strategy in self.strategies.values():
                 strategy.start()
 
             # use ZeroMQ as long as not in WASM mode
             if not self.is_wasm():
-                self._messenger.subscribe()
-                self._messenger.start()
                 while self.is_running():
                     # TODO: should update positions, balances, orders etc. using proxy
                     if msg := self._messenger._proxy.recv():
@@ -310,7 +311,12 @@ class BaseEngine(metaclass=MetaEngine):
                         self._logger.debug(f'{channel} {topic} {data} {pub_ts}')
                     if msg := self._messenger._publisher.recv():
                         channel, topic, data, pub_ts = msg
-                        self._logger.debug(f'{channel} {topic} {data} {pub_ts}')
+                        if channel == PFundDataChannel.zmq_logging:
+                            log_level: str = topic
+                            log_level: int = logging._nameToLevel.get(log_level.upper(), logging.DEBUG)
+                            self._logger.log(log_level, f'{data}')
+                        else:
+                            self._logger.debug(f'{channel} {topic} {data} {pub_ts}')
                     time.sleep(0.0001)
             else:
                 # TODO: get msg from data engine

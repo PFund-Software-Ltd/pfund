@@ -291,13 +291,6 @@ class DataBoy:
             msg: message will only be passed in in WASM mode (i.e. data_zmq is None)
         '''
         while self._component.is_running():
-            # TEMP
-            self.logger.info('test_logging!!!')
-            import psutil
-            print('strategy pid:', psutil.Process().pid)
-            time.sleep(3)
-            continue
-            
             if self._data_zmq:
                 channel, topic, data, pub_ts = self._data_zmq.recv()
                 print(f'{self.name} recv:', channel, topic, data, pub_ts)
