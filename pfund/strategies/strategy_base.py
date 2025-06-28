@@ -97,6 +97,14 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def get_balance(self, account: BaseAccount, ccy: str) -> BaseBalance | None:
         return self.balances[account].get(ccy, None)
     
+    def to_dict(self) -> dict:
+        return {
+            **super().to_dict(),
+            'is_sub_strategy': self.is_sub_strategy(),
+            'accounts': [repr(account) for account in self.accounts.values()],
+            'strategies': [strategy.to_dict() for strategy in self.strategies.values()],
+        }
+    
     @overload
     def add_account(
         self, 
@@ -137,6 +145,9 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         else:
             raise NotImplementedError(f"Broker {broker.name} is not supported")
         return account
+    
+    def get_accounts(self) -> list[BaseAccount]:
+        return list(self.accounts.values())
     
     def add_account(self, trading_venue: tTradingVenue, name: str='', **kwargs) -> BaseAccount:
         if self.is_sub_strategy():
@@ -204,6 +215,8 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def _gather(self):
         # TODO: check if e.g. exchange balances and positions are ready, if backfilling is finished?
         # TODO: top strategy must have an account
+        self.add_strategies()
+        self.add_accounts()
         super()._gather()
         
     def create_order(
@@ -248,6 +261,9 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     ************************************************
     '''
     def add_strategies(self):
+        pass
+    
+    def add_accounts(self):
         pass
     
     def on_position(self, account, position):

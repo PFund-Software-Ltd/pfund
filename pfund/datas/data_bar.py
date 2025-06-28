@@ -12,7 +12,7 @@ import time
 
 from pfund.enums import PublicDataChannel
 from pfund.datas.resolution import Resolution
-from pfund.datas.data_time_based import TimeBasedData
+from pfund.datas.data_market import MarketData
 from pfund.utils.utils import convert_ts_to_dt
 
 
@@ -140,7 +140,7 @@ class Bar:
             self._end_ts = self._start_ts + self._resolution_in_seconds - 1  # exclusively
 
 
-class BarData(TimeBasedData):
+class BarData(MarketData):
     def __init__(
         self,
         data_source: DataSource,

@@ -1,11 +1,9 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, ClassVar
 if TYPE_CHECKING:
-    from mtflow.stores.mtstore import MTStore
     from mtflow.kernel import TradeKernel
     from pfund.accounts.account_crypto import CryptoAccount
     from pfund.accounts.account_ib import IBAccount
-    from mtflow.stores.trading_store import TradingStore
     from pfund.messenger import Messenger
     from pfeed.typing import tDataTool
     from pfund.products.product_base import BaseProduct
@@ -18,8 +16,8 @@ if TYPE_CHECKING:
         tDatabase, 
         tTradingVenue,
         DataRangeDict, 
+        DataParamsDict,
         ExternalListenersDict, 
-        ComponentName,
     )
     from pfund.brokers.broker_base import BaseBroker
     from pfund.strategies.strategy_base import BaseStrategy
@@ -83,6 +81,7 @@ class BaseEngine(metaclass=MetaEngine):
     strategies: dict[str, BaseStrategy]
     
     @classmethod
+
     def _next_engine_id(cls):
         cls._num += 1
         return str(cls._num)
@@ -227,6 +226,19 @@ class BaseEngine(metaclass=MetaEngine):
         logging_configurator.configure()
         return logging_config
     
+    # TODO: create EngineMetadata class (typed dict/dataclass/pydantic model)
+    def to_dict(self) -> dict:
+        return {
+            'name': self.name,
+            'env': self._env.value,
+            'run_mode': self._run_mode.value,
+            'data_tool': self._data_tool.value,
+            'data_start': self._data_start.strftime('%Y-%m-%d'),
+            'data_end': self._data_end.strftime('%Y-%m-%d'),
+            'settings': self._settings.model_dump(),
+            'external_listeners': self._external_listeners.model_dump(),
+        }
+    
     def gather(self):
         '''
         Sets up everything before run.
@@ -241,16 +253,37 @@ class BaseEngine(metaclass=MetaEngine):
         dataflow.add_transformation(...)
         engine.run()
         '''
+        cls = self.__class__
         if not self._is_gathered:
-            cls = self.__class__
+            engine_metadata = self.to_dict()
+            self._kernel.register_engine(engine_metadata)
+
             # TODO: pfeed's dataflows should be created in data engine at this level
             # TODO: ws_groups in engine settings? used to set ws product groups in pfeed
             for strategy in self.strategies.values():
                 strategy: BaseStrategy | ActorProxy
                 strategy._gather()
+                
+                # updates zmq ports in settings
                 cls._settings.zmq_ports.update(strategy._get_zmq_ports_in_use())
-                metadata = strategy.to_dict(stringify=False)
+                
+                # registers accounts
+                accounts: list[BaseAccount] = strategy.get_accounts()
+                for account in accounts:
+                    self._register_account(account)
+                
+                # registers products
+                datas: list[TimeBasedData] = strategy._get_datas_in_use()
+                for data in datas:
+                    self._register_product(data.product)
+                    if not data.is_resamplee():
+                        broker: BaseBroker = self.get_broker(data.product.bkr)
+                        broker._add_data_channel(data)
+                
+                # registers components
+                metadata = strategy.to_dict()
                 self._register_component(metadata)
+                
             self._is_gathered = True
         else:
             self._logger.debug(f'{self.name} is already gathered')
@@ -333,16 +366,24 @@ class BaseEngine(metaclass=MetaEngine):
             engine=None if is_remote else self,
             settings=self._settings,
             logging_config=self._logging_config,
-            data_tool=self._data_tool,
-            storage=config.storage,
-            storage_options=config.storage_options,
-            use_deltalake=config.use_deltalake,
+            data_params=self.get_data_params(),
         )
         strategy._set_top_strategy(True)
 
         self.strategies[strat] = strategy
         self._logger.debug(f"added '{strat}'")
         return strategy
+    
+    def get_data_params(self) -> DataParamsDict:
+        '''Data params are used in components' data stores'''
+        return {
+            'data_start': self._data_start,
+            'data_end': self._data_end,
+            'data_tool': self._data_tool,
+            'storage': config.storage,
+            'storage_options': config.storage_options,
+            'use_deltalake': config.use_deltalake,
+        }
     
     def get_strategy(self, name: str) -> BaseStrategy | ActorProxy:
         return self.strategies[name]
@@ -360,17 +401,7 @@ class BaseEngine(metaclass=MetaEngine):
         return self.brokers[bkr.upper()]
     
     def _register_component(self, component_metadata: dict):
-        component_name = component_metadata['name']
-        consumer_names = component_metadata['consumers']
-        self._kernel.register_component(consumer_names, component_name, component_metadata)
-        datas: list[TimeBasedData] = component_metadata['datas']
-        for data in datas:
-            if not data.is_resamplee():
-                broker: BaseBroker = self.get_broker(data.product.bkr)
-                broker._add_data_channel(data)
-            self._register_product(data.product)
-        for account in component_metadata.get('accounts', []):
-            self._register_account(account)
+        self._kernel.register_component(component_metadata)
         # register sub-components (nested components)
         strategies: list[dict] = component_metadata.get('strategies', [])
         models: list[dict] = component_metadata.get('models', [])
@@ -390,7 +421,7 @@ class BaseEngine(metaclass=MetaEngine):
             raise NotImplementedError(f"Broker {broker.name} is not supported")
         self._logger.debug(f'added product {product.symbol}')
     
-    def _register_account(self, account: BaseAccount) -> BaseAccount:
+    def _register_account(self, account: BaseAccount):
         broker: BaseBroker = self._add_broker(account.trading_venue)
         if broker.name == Broker.CRYPTO:
             account: CryptoAccount
@@ -401,5 +432,3 @@ class BaseEngine(metaclass=MetaEngine):
         else:
             raise NotImplementedError(f"Broker {broker.name} is not supported")
         self._logger.debug(f'added account {account}')
-        return account
-    

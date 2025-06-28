@@ -9,10 +9,10 @@ import time
 from collections import deque
 
 from pfund.enums import PublicDataChannel
-from pfund.datas.data_time_based import TimeBasedData
+from pfund.datas.data_market import MarketData
 
 
-class TickData(TimeBasedData):
+class TickData(MarketData):
     def __init__(
         self,
         data_source: DataSource,

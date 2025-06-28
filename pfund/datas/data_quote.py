@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 from dataclasses import dataclass, field
 
 from pfund.enums import PublicDataChannel
-from pfund.datas.data_time_based import TimeBasedData
+from pfund.datas.data_market import MarketData
 
 
 Price: TypeAlias = float
@@ -29,7 +29,7 @@ class OrderBook:
         return ask_pxs[level], self.asks[ask_pxs[level]]
     
 
-class QuoteData(TimeBasedData):
+class QuoteData(MarketData):
     def __init__(
         self,
         data_source: DataSource,
@@ -100,3 +100,17 @@ class QuoteData(TimeBasedData):
         
         for resamplee in self._resamplees:
             resamplee.on_quote(bids, asks, ts)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # drop the non-picklable C object and flag
+        state['_orderbook'] = None
+        state['_is_fast_orderbook'] = False
+        return state
+
+    def __setstate__(self, state):
+        # restore everything else
+        self.__dict__.update(state)
+        # re-create a pure-Python OrderBook so at least your API still works
+        self._orderbook = OrderBook()
+        self._is_fast_orderbook = False

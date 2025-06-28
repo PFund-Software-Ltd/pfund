@@ -5,7 +5,6 @@ if TYPE_CHECKING:
     from pfund.datas.timeframe import Timeframe
     from pfeed.enums import DataSource
     from pfund.products.product_base import BaseProduct
-    from pfund.datas import QuoteData, TickData, BarData
     from pfund.datas.resolution import Resolution
 
 import time
@@ -21,7 +20,7 @@ class TimeBasedData(BaseData):
         product: BaseProduct,
         resolution: Resolution
     ):
-        super().__init__(data_source, data_origin, product)
+        super().__init__(data_source, data_origin, product=product)
         self._ts = 0.0
         self._latency = None
         self.resolution: Resolution = resolution
@@ -31,12 +30,6 @@ class TimeBasedData(BaseData):
         self._resamplees = set()  # opposite of resampler
         self._extra_data = {}
 
-    def __repr__(self):
-        return f'{self.data_source}:{self.data_origin}:{self.product.name}:{repr(self.resolution)}'
-
-    def __str__(self):
-        return f'{self.product}|Data={self.resolution}'
-
     def __eq__(self, other):
         if not isinstance(other, TimeBasedData):
             return NotImplemented
@@ -44,10 +37,6 @@ class TimeBasedData(BaseData):
     
     def __hash__(self):
         return hash((self.product, self.resolution))
-    
-    @property
-    def zmq_channel(self: QuoteData | TickData | BarData) -> str:
-        return f'{self.product.tv}:{self.channel}:{repr(self.resolution)}:{self.product.name}:'
     
     @property
     def ts(self):

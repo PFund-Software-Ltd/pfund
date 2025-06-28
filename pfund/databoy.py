@@ -243,6 +243,8 @@ class DataBoy:
     
     def _get_zmq_ports_in_use(self) -> dict[ZeroMQName, int]:
         '''Gets ALL zmq ports in use even the ones used in components'''
+        for component in self.components:
+            self._zmq_ports_in_use.update(component._get_zmq_ports_in_use())
         return self._zmq_ports_in_use
     
     def subscribe(self):

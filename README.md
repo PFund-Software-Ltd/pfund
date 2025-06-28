@@ -25,7 +25,6 @@
 [Poetry]: https://python-poetry.org
 [Futu]: https://www.futunn.com
 [FirstRate Data]: https://firstratedata.com
-[Mantine UI]: https://ui.mantine.dev/
 
 > **This library is NOT ready for use, please wait for 0.1.0 release.**
 
@@ -47,8 +46,6 @@ PFund (/piː fʌnd/), which stands for "**Personal Fund**", is an **algo-trading
 - [x] Streamlines the algo-trading flow, from vectorized backtesting for strategy prototyping and event-driven backtesting for strategy development, to live trading for strategy deployment
 - [x] Enables parallel data processing, e.g. Interactive Brokers and Binance each have their own process for receiving data feeds
 - [x] Switches from backtesting to live trading by just changing **ONE line of code!!**
-- [ ] Features a modern frontend using [Mantine UI] and TradingView's Charts library
-- [ ] Supports manual/semi-manual trading via a trading app
 
 > As PFund is for trading only, for all the data workloads, there is a separate library to handle that:\
 [PFeed] - Data pipeline for algo-trading, helping traders in getting real-time and historical data, and storing them in a local data lake for quantitative research.

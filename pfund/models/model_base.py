@@ -37,6 +37,12 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
     @abstractmethod
     def predict(self, X: GenericFrame, *args, **kwargs) -> Tensor | ndarray:
         pass
+
+    def to_dict(self) -> dict:
+        return {
+            **super().to_dict(),
+            'model': self.model.__class__.__name__,
+        }
     
     def _assert_functions_signatures(self):
         from pfund.utils.utils import get_args_and_kwargs_from_function

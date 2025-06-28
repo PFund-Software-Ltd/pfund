@@ -6,13 +6,13 @@ if TYPE_CHECKING:
     import pandas as pd
     import polars as pl
     from pfeed.typing import tDataSource
-    from pfeed.enums import DataTool, DataStorage
     from pfund.typing import (
         StrategyT, 
         ModelT, 
         IndicatorT, 
         FeatureT, 
         DataConfigDict, 
+        DataParamsDict,
         tTradingVenue, 
         Component, 
         ComponentName,
@@ -48,7 +48,7 @@ class ComponentMixin:
 
     # custom post init for-common attributes of strategy and model
     def __mixin_post_init__(self: Component, *args, **kwargs):
-        from pfund.datas.databoy import DataBoy
+        from pfund.databoy import DataBoy
 
         self.__pfund_args__ = args
         self.__pfund_kwargs__ = kwargs
@@ -103,10 +103,7 @@ class ComponentMixin:
         engine: BaseEngine | None,
         settings: BaseEngineSettings,
         logging_config: dict,
-        data_tool: DataTool,
-        storage: DataStorage,
-        storage_options: dict,
-        use_deltalake: bool,
+        data_params: DataParamsDict,
     ):
         """
         Hydrates the component with necessary attributes after initialization.
@@ -122,6 +119,7 @@ class ComponentMixin:
             engine (BaseEngine | None): The engine instance associated with this component. It is None if the component is running in a remote process.
             settings (BaseEngineSettings): Configuration settings for the engine and component.
             logging_config (dict): Configuration for logging.
+            data_params (DataParamsDict): Data parameters for the component's data store
         """
         self._env = Environment[env.upper()]
         self._set_name(name)
@@ -129,22 +127,13 @@ class ComponentMixin:
         self._run_mode = run_mode
         self._engine = engine
         self._settings = settings
-        self.store = self._create_trading_store(data_tool, storage, storage_options, use_deltalake)
+        self.store = TradingStore(env=self._env, data_params=data_params)
         self.databoy._update_zmq_ports_in_use(settings.zmq_ports)
         if self.is_remote():
             self._setup_logging(logging_config)
         if not self.is_wasm():
             self.databoy._setup_messaging()
     
-    def _create_trading_store(self: Component, data_tool: DataTool, storage: DataStorage, storage_options: dict, use_deltalake: bool):
-        return TradingStore(
-            env=self._env,
-            data_tool=data_tool,
-            storage=storage,
-            storage_options=storage_options,
-            use_deltalake=use_deltalake,
-        )
-
     def _setup_logging(self: Component, logging_config: dict) -> dict[str, int]:
         '''Sets up logging for component running in remote process, uses zmq's PUBHandler to send logs to engine'''
         from zmq.log.handlers import PUBHandler
@@ -174,10 +163,18 @@ class ComponentMixin:
         )
     
     def _get_zmq_ports_in_use(self) -> dict[str, int]:
-        zmq_ports_in_use = self.databoy._get_zmq_ports_in_use()
+        return self.databoy._get_zmq_ports_in_use()
+    
+    def _get_datas_in_use(self) -> list[BaseData]:
+        '''
+        Gets all datas in use by this component, including the datas from its components.
+        Since data objects are created by databoy, engine has no access to them.
+        This method is used to return data objects to engine for registration.
+        '''
+        datas = self.databoy.get_datas()
         for component in self.components:
-            zmq_ports_in_use.update(component._get_zmq_ports_in_use())
-        return zmq_ports_in_use
+            datas.extend(component._get_datas_in_use())
+        return list(set(datas))
     
     def _set_proxy(self, proxy: ActorProxy):
         self._proxy = proxy
@@ -199,11 +196,8 @@ class ComponentMixin:
                 cls.params = params
     
     # TODO: add versioning, run_id etc.
-    def to_dict(self: Component, stringify: bool=True) -> dict:
-        '''
-        Args:
-            stringify: if True, serializes the data to a string, otherwise returns the data object
-        '''
+    # TODO: create ComponentMetadata class (typeddataclass/pydantic model)
+    def to_dict(self: Component) -> dict:
         metadata = {
             'class': self.__class__.__name__,
             'name': self.name,
@@ -212,23 +206,13 @@ class ComponentMixin:
             'config': self.config,
             'params': self.params,
             'consumers': [consumer.name for consumer in self._consumers],
-            'datas': [repr(data) if stringify else data for data in self.databoy.get_datas()],
-            'models': [model.to_dict(stringify=stringify) for model in self.models.values()],
-            'features': [feature.to_dict(stringify=stringify) for feature in self.features.values()],
-            'indicators': [indicator.to_dict(stringify=stringify) for indicator in self.indicators.values()],
+            'datas': [data.to_dict() for data in self.databoy.get_datas()],
+            'models': [model.to_dict() for model in self.models.values()],
+            'features': [feature.to_dict() for feature in self.features.values()],
+            'indicators': [indicator.to_dict() for indicator in self.indicators.values()],
             'signature': (self.__pfund_args__, self.__pfund_kwargs__),
             'data_signatures': self.databoy._data_signatures,
         }
-        if self.is_strategy():
-            metadata['strategies'] = [strategy.to_dict(stringify=stringify) for strategy in self.strategies.values()]
-            metadata['accounts'] = [repr(account) if stringify else account for account in self.accounts.values()]
-        elif self.is_model():
-            metadata['model'] = self.model.__class__.__name__
-        if not stringify:
-            for data in metadata['datas']:
-                # removes non-serializable attributes
-                if data.is_quote():
-                    data._orderbook = None
         return metadata
     
     @property
@@ -312,9 +296,6 @@ class ComponentMixin:
     def get_delay(ts: float) -> float:
         return time.time() - ts
     
-    def _set_trading_store(self: Component, trading_store: TradingStore):
-        self.store = trading_store
-
     @property
     def resolution(self: Component) -> Resolution | None:
         return self._resolution
@@ -584,10 +565,7 @@ class ComponentMixin:
                 engine=self._engine,
                 settings=self._settings,
                 logging_config=self._logging_config,
-                data_tool=self.store._data_tool,
-                storage=self.store._storage,
-                storage_options=self.store._storage_options,
-                use_deltalake=self.store._use_deltalake,
+                data_params=self.store._data_params,
             )
             
             if signal_cols:
@@ -726,8 +704,6 @@ class ComponentMixin:
         # NOTE: use is_gathered to avoid a component being gathered multiple times when it's a shared component
         if not self._is_gathered:
             self.add_datas()
-            if self.is_strategy():
-                self.add_strategies()
             self.add_models()
             self.add_features()
             self.add_indicators()
