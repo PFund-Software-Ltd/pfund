@@ -2,10 +2,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, ClassVar
 if TYPE_CHECKING:
     from mtflow.kernel import TradeKernel
+    from pfeed.typing import tDataTool
+    from pfeed.engine import DataEngine
     from pfund.accounts.account_crypto import CryptoAccount
     from pfund.accounts.account_ib import IBAccount
     from pfund.messenger import Messenger
-    from pfeed.typing import tDataTool
     from pfund.products.product_base import BaseProduct
     from pfund.accounts.account_base import BaseAccount
     from pfund.datas.data_time_based import TimeBasedData
@@ -78,6 +79,7 @@ class BaseEngine(metaclass=MetaEngine):
     _kernel: TradeKernel
     _is_running: bool
     _messenger: Messenger | None
+    _data_engine: DataEngine | None
     brokers: dict[str, BaseBroker]
     strategies: dict[str, BaseStrategy]
     
@@ -124,6 +126,7 @@ class BaseEngine(metaclass=MetaEngine):
                 If None, no data will be written.
         '''
         from mtflow.kernel import TradeKernel
+        from pfeed.engine import DataEngine
         from pfund.messenger import Messenger
         
         cls = self.__class__
@@ -171,12 +174,7 @@ class BaseEngine(metaclass=MetaEngine):
         if 'engine' not in self.name.lower():
             self.name += '_engine'
         self._logger: logging.Logger = logging.getLogger('pfund')
-        self._kernel = TradeKernel(
-            database=cls._database,
-            data_tool=cls._data_tool,
-            use_deltalake=config.use_deltalake,
-            external_listeners=cls._external_listeners,
-        )
+        self._kernel = TradeKernel(database=cls._database, external_listeners=cls._external_listeners)
         if not self.is_wasm():
             self._messenger = Messenger(
                 zmq_url=cls._settings.zmq_urls.get(self.name, ''), 
@@ -184,6 +182,13 @@ class BaseEngine(metaclass=MetaEngine):
             )
         else:
             self._messenger = None
+        # REVIEW: currently data engine lives in the same main thread as the trade engine.
+        self._data_engine = DataEngine(
+            env=self._env,
+            data_tool=self._data_tool,
+            use_ray=not self.is_wasm(),
+            use_deltalake=config.use_deltalake
+        )
         self.brokers: dict[Broker, BaseBroker] = {}
         self.strategies: dict[str, BaseStrategy | ActorProxy] = {}
         self._is_running: bool = False
@@ -276,9 +281,19 @@ class BaseEngine(metaclass=MetaEngine):
                 datas: list[TimeBasedData] = strategy._get_datas_in_use()
                 for data in datas:
                     self._register_product(data.product)
-                    if not data.is_resamplee():
-                        broker: BaseBroker = self.get_broker(data.product.bkr)
-                        broker._add_data_channel(data)
+                # FIXME: not ready
+                #     # NOTE: outsource the public data (e.g. orderbook) subscriptions to pfeed's data engine
+                #     if not data.is_resamplee():
+                #         (
+                #             self._data_engine
+                #                 .add_feed(data.source, data.category)
+                #                 .stream(
+                #                     product=data.product,
+                #                     channel=data.channel,
+                #                 )
+                #                 # TODO: load to PFundEngineInMemory
+                #                 # .load(to_storage='LOCAL')
+                #         )
                 
                 # registers components
                 metadata = strategy.to_dict()
@@ -317,7 +332,6 @@ class BaseEngine(metaclass=MetaEngine):
                             self._logger.log(log_level, f'{data}')
                         else:
                             self._logger.debug(f'{channel} {topic} {data} {pub_ts}')
-                    time.sleep(0.0001)
             else:
                 # TODO: get msg from data engine
                 msg = ...

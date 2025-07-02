@@ -297,10 +297,8 @@ class DataBoy:
                 # TODO: e.g. if component is a model:
                 # output = self._component.predict(...)
                 # self._signals_zmq.send(output)
-                # time.sleep(0.0001)
             # TODO:
             # if self._signals_zmq:
-                # time.sleep(0.0001)
             else:
                 # TODO: listener.databoy._collect()
                 if topic == 1:  # quote data

@@ -19,11 +19,7 @@ from pfund.brokers.broker_base import BaseBroker
 
 
 class TradeBroker(BaseBroker):
-    def __init__(
-        self, 
-        env: Environment | tEnvironment=Environment.SANDBOX,
-        settings: BaseEngineSettings | None=None,
-    ):
+    def __init__(self, env: Environment | tEnvironment=Environment.SANDBOX):
         from pfund.managers.connection_manager import ConnectionManager
         from pfund.engines.trade_engine import TradeEngine
 
@@ -44,10 +40,9 @@ class TradeBroker(BaseBroker):
     
     def _add_default_private_channels(self):
         for channel in PrivateDataChannel:
-            self.add_channel(channel, DataChannelType.private)
-        
-    def start(self, zmq=None):
-        self._zmq = zmq
+            self.add_private_channel(channel)
+    
+    def start(self):
         self._add_default_private_channels()
         self._connection_manager.connect()
         if self._settings.cancel_all_at['start']:
@@ -55,7 +50,6 @@ class TradeBroker(BaseBroker):
         self._logger.debug(f'broker {self._name} started')
 
     def stop(self):
-        self._zmq = None
         if self._settings.cancel_all_at['stop']:
             self.cancel_all_orders(reason='stop')
         self._connection_manager.disconnect()

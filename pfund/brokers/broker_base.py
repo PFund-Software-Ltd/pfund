@@ -1,7 +1,9 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar, TypeAlias
 if TYPE_CHECKING:
+    from pfund.enums import PrivateDataChannel, PublicDataChannel
     from pfund.typing import tEnvironment, ProductName, AccountName
+    from pfund.datas.resolution import Resolution
     from pfund.products.product_base import BaseProduct
     from pfund.accounts.account_base import BaseAccount
 
@@ -27,8 +29,6 @@ class BaseBroker(ABC):
         self._products: defaultdict[ExchangeName, dict[ProductName, BaseProduct]] = defaultdict(dict)
         self._accounts: defaultdict[TradingVenue, dict[AccountName, BaseAccount]] = defaultdict(dict)
 
-        self._zmq = None
-    
         self._order_manager = OrderManager(self)
         self._portfolio_manager = PortfolioManager(self)
     
@@ -63,6 +63,14 @@ class BaseBroker(ABC):
 
     @abstractmethod
     def stop(self):
+        pass
+
+    @abstractmethod
+    def add_private_channel(self, *args, channel: PrivateDataChannel):
+        pass
+
+    @abstractmethod
+    def add_public_channel(self, *args, channel: PublicDataChannel, product: BaseProduct, resolution: Resolution):
         pass
     
     # TODO: add more abstract methods, e.g. place_orders etc.

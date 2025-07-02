@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.typing import tEnvironment
-    from pfund.datas import QuoteData, TickData, BarData
+    from pfund.datas.resolution import Resolution
 
 import time
 try:
@@ -13,7 +13,7 @@ import hmac
 from decimal import Decimal
 
 from pfund.exchanges.ws_api_base import BaseWebsocketApi
-from pfund.enums import Environment, CryptoExchange, PublicDataChannel, PrivateDataChannel, DataChannelType
+from pfund.enums import Environment, CryptoExchange, PublicDataChannel, DataChannelType
 from pfund.products.product_bybit import BybitProduct
 from pfund.datas.timeframe import TimeframeUnits
 
@@ -111,39 +111,35 @@ class WebsocketApi(BaseWebsocketApi):
             ws_url = self._urls['private']
         return ws_url
     
-    def add_channel(
-        self,
-        channel: PublicDataChannel | PrivateDataChannel | str,
-        channel_type: DataChannelType,
-        data: QuoteData | TickData | BarData | None=None
+    def add_public_channel(
+        self, 
+        channel: PublicDataChannel | str, 
+        product: BybitProduct | None=None, 
+        resolution: Resolution | None=None
     ):
-        channel = super()._create_channel(channel, channel_type, data=data)
-        if channel_type == DataChannelType.public:
-            product: BybitProduct = data.product
-            if channel not in self._channels[channel_type][product.category]:
-                self._channels[channel_type][product.category].append(channel)
-                self._logger.debug(f'added channel {channel}')
-        else:
-            if channel not in self._channels[channel_type]:
-                self._channels[channel_type].append(channel)
-                self._logger.debug(f'added channel {channel}')
+        if channel.lower() in PublicDataChannel.__members__:
+            channel = self._create_public_channel(channel, product, resolution)
+        if channel not in self._channels[DataChannelType.public][product.category]:
+            self._channels[DataChannelType.public][product.category].append(channel)
+            self._logger.debug(f'added channel {channel}')
 
-    def _create_public_channel(self, data: QuoteData | TickData | BarData):
-        channel = data.channel
-        product: BybitProduct = data.product
+    def _create_public_channel(self, channel: PublicDataChannel, product: BybitProduct, resolution: Resolution):
+        channel = PublicDataChannel[channel.lower()]
         echannel = self._adapter(channel.value, group='channel')
         if channel == PublicDataChannel.orderbook:
+            orderbook_level = resolution.orderbook_level
+            orderbook_depth = resolution.period
             supported_orderbook_levels = self.SUPPORTED_ORDERBOOK_LEVELS[product.category]
             supported_orderbook_depths = self.SUPPORTED_RESOLUTIONS[TimeframeUnits.QUOTE][product.category]
-            if data.level not in supported_orderbook_levels:
-                raise NotImplementedError(f"{self.name} ({channel}.{product.symbol}) orderbook_level={data.level} is not supported, supported levels: {supported_orderbook_levels}")
-            if data.depth not in supported_orderbook_depths:
-                raise NotImplementedError(f"{self.name} ({channel}.{product.symbol}) orderbook_depth={data.depth} is not supported, supported depths: {supported_orderbook_depths}")
-            full_channel = '.'.join([echannel, str(data.depth), product.symbol])
+            if orderbook_level not in supported_orderbook_levels:
+                raise NotImplementedError(f"{self.name} ({channel}.{product.symbol}) orderbook_level={orderbook_level} is not supported, supported levels: {supported_orderbook_levels}")
+            if orderbook_depth not in supported_orderbook_depths:
+                raise NotImplementedError(f"{self.name} ({channel}.{product.symbol}) orderbook_depth={orderbook_depth} is not supported, supported depths: {supported_orderbook_depths}")
+            full_channel = '.'.join([echannel, str(orderbook_depth), product.symbol])
         elif channel == PublicDataChannel.tradebook:
             full_channel = '.'.join([echannel, product.symbol])
         elif channel == PublicDataChannel.candlestick:
-            resolution, timeframe = data.resolution, data.timeframe
+            timeframe = resolution.timeframe
             if timeframe.unit not in self.SUPPORTED_RESOLUTIONS:
                 raise NotImplementedError(f'{self.name} ({channel}.{product.symbol}) timeframe={str(timeframe)} is not supported, supported timeframes {list(self.SUPPORTED_RESOLUTIONS)}')
             eresolution = self._adapter(repr(resolution), group='resolution')

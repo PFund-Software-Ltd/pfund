@@ -1,13 +1,13 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfund.engines.base_engine_settings import BaseEngineSettings
+    from pfund.datas.resolution import Resolution
     from pfund.products.product_crypto import CryptoProduct
     from pfund.orders.order_base import BaseOrder
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.datas.data_base import BaseData
     from pfund.typing import tCryptoExchange, tEnvironment
-    from pfund.enums import OrderSide
+    from pfund.enums import OrderSide, PublicDataChannel
 
 import inspect
 from threading import Thread
@@ -18,7 +18,7 @@ from pfund.positions.position_crypto import CryptoPosition
 from pfund.balances.balance_crypto import CryptoBalance
 from pfund.accounts.account_crypto import CryptoAccount
 from pfund.utils.utils import convert_to_uppercases
-from pfund.enums import CryptoExchange, PrivateDataChannel, DataChannelType
+from pfund.enums import CryptoExchange, DataChannelType, PrivateDataChannel
 from pfund.brokers.broker_trade import TradeBroker
 
 
@@ -36,10 +36,8 @@ class CryptoBroker(TradeBroker):
         super().__init__(env=env)
         self.exchanges: dict[CryptoExchange, BaseExchange] = {}
     
-    def start(self, zmq=None):
+    def start(self):
         for exch in self._accounts:
-            exchange = self.get_exchange(exch)
-            exchange.start()
             for acc in self._accounts[exch]:
                 balances = self.get_balances(exch, acc=acc, is_api_call=True)
                 self._portfolio_manager.update_balances(exch, acc, balances)
@@ -49,34 +47,36 @@ class CryptoBroker(TradeBroker):
 
                 orders = self.get_orders(exch, acc, is_api_call=True)
                 self._order_manager.update_orders(exch, acc, orders)
-        super().start(zmq=zmq)
+        super().start()
 
     def stop(self):
         super().stop()
         for exchange in self.exchanges.values():
             exchange.stop()
     
-    def _add_data_channel(self, data: BaseData):
-        '''Adds a public channel for a data object'''
-        exchange = self.get_exchange(data.exch)
-        exchange.add_channel(data.channel, DataChannelType.public, data=data)
-    
     def _add_default_private_channels(self):
-        for exchange in self.exchanges.values():
+        for exch in self.exchanges:
             for channel in PrivateDataChannel:
-                exchange.add_channel(channel, DataChannelType.private)
+                self.add_private_channel(exch, channel)
+    
+    def add_private_channel(self, exch: tCryptoExchange, channel: PrivateDataChannel | str):
+        exchange = self.get_exchange(exch)
+        exchange.add_private_channel(channel)
         
-    def add_channel(self, exch: tCryptoExchange, channel: str, channel_type: Literal['public', 'private']):
+    def add_public_channel(
+        self, 
+        exch: tCryptoExchange, 
+        channel: PublicDataChannel | str, 
+        product: CryptoProduct | None=None, 
+        resolution: Resolution | None=None
+    ):
         '''
-        Allows users to add public or private channels manually
         Args:
-            exch: exchange name, e.g. 'BYBIT'
-            channel: exchange-specific channel name, e.g. 'tickers.{symbol}' for Bybit
-            channel_type: 'public' for public data channels, 'private' for private data channels
+            channel: when it is a str, it is assumed to be a full channel name, no product or resolution is needed
         '''
         exchange = self.get_exchange(exch)
-        exchange.add_channel(channel, DataChannelType[channel_type.lower()])
-    
+        exchange.add_public_channel(channel, product, resolution)
+        
     def get_account(self, exch: tCryptoExchange, name: str) -> CryptoAccount:
         return self._accounts[CryptoExchange[exch.upper()]][name]
     

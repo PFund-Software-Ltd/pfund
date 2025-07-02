@@ -1,18 +1,23 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Union, Literal
 if TYPE_CHECKING:
     from zmq import SocketType, SocketOption
 
 import time
+from enum import StrEnum
+from collections import defaultdict
 
-import orjson
 import zmq
+import orjson
 
 from pfund.enums import PublicDataChannel, PrivateDataChannel, PFundDataChannel, PFundDataTopic
 
 
 JSONValue = Union[dict, list, str, int, float, bool, None]
 DataChannel = Union[PFundDataChannel, PublicDataChannel, PrivateDataChannel]
+class SocketMethod(StrEnum):
+    bind = "bind"
+    connect = "connect"
 
 
 # TODO: need to tunnel zeromq connections with SSH when communicating with remote ray actors
@@ -28,76 +33,89 @@ class ZeroMQ:
         name: str,
         url: str=DEFAULT_URL,
         io_threads: int=1,
-        port: int | None=None,
-        sender_socket_type: SocketType | None=None,
-        receiver_socket_type: SocketType | None=None,
+        *,
+        sender_method: SocketMethod | Literal['bind', 'connect']='bind',
+        receiver_method: SocketMethod | Literal['bind', 'connect']='connect',
+        sender_type: SocketType | None=None,
+        receiver_type: SocketType | None=None,
     ):
         '''
         Args:
             port: If not provided, a random port will be assigned.
         '''
+        assert any([sender_type, receiver_type]), 'Either sender_type or receiver_type must be provided'
         self._name = name
-        self._sender_port: int | None = port
-        self._receiver_ports: list[int] = []
         self._url = url
         self._ctx = zmq.Context(io_threads=io_threads)
-        assert any([sender_socket_type, receiver_socket_type]), 'Either sender_socket_type or receiver_socket_type must be provided'
-        self._sender = self._ctx.socket(sender_socket_type) if sender_socket_type else None
-        if self._sender:
-            if not self._sender_port:
-                self._sender_port: int = self._sender.bind_to_random_port(self._url)
-            else:
-                self._sender.bind(f"{self._url}:{self._sender_port}")
-        self._receiver = self._ctx.socket(receiver_socket_type) if receiver_socket_type else None
-        self._poller = zmq.Poller() if self._receiver else None
+        self._socket_methods: dict[zmq.Socket, SocketMethod] = {}
+        self._socket_ports: defaultdict[zmq.Socket, list[int]] = defaultdict(list)
+        self._sender: zmq.Socket | None = None
+        self._receiver: zmq.Socket | None = None
+        self._poller: zmq.Poller | None = None
+        
+        if sender_type:
+            self._sender = self._ctx.socket(sender_type)
+            self._socket_methods[self._sender] = SocketMethod[sender_method.lower()]
+            # only queue outgoing messages once the remote peer is fully connected—otherwise block (or error) instead of buffering endlessly.
+            self._sender.setsockopt(zmq.IMMEDIATE, 1)
+        if receiver_type:
+            self._receiver = self._ctx.socket(receiver_type)
+            self._socket_methods[self._receiver] = SocketMethod[receiver_method.lower()]
+            self._poller = zmq.Poller()
+            self._poller.register(self._receiver, zmq.POLLIN)
         
     @property
     def name(self) -> str:
         return self._name
     
-    @property
-    def port(self) -> int | None:
-        return self._sender_port
+    def bind(self, socket: zmq.Socket, port: int | None=None):
+        '''Binds a socket which uses bind method to a port.'''
+        assert socket in self._socket_methods, f'{socket=} has not been initialized'
+        assert self._socket_methods[socket] == SocketMethod.bind, f'{socket=} is not a socket used for binding'
+        if port is None:
+            port: int = socket.bind_to_random_port(self._url)
+        else:
+            socket.bind(f"{self._url}:{port}")
+        if port not in self._socket_ports[socket]:
+            self._socket_ports[socket].append(port)
+        else:
+            raise ValueError(f'{port=} is already bound')
     
-    def subscribe(self, port: int, channel: str=''):
-        if self._receiver.socket_type == zmq.SUB:
+    def subscribe(self, socket: zmq.Socket, port: int, channel: str=''):
+        '''Subscribes to a port which uses connect method.'''
+        assert socket in self._socket_methods, f'{socket=} has not been initialized'
+        assert self._socket_methods[socket] == SocketMethod.connect, f'{socket=} is not a socket used for connecting'
+        socket.connect(f"{self._url}:{port}")
+        if socket.socket_type in [zmq.SUB, zmq.XSUB]:
             option: SocketOption = zmq.SUBSCRIBE
             value: int | bytes | str = channel.encode()
-            self._receiver.setsockopt(option, value)
-        elif self._receiver.socket_type in [zmq.PULL, zmq.XSUB]:
+            socket.setsockopt(option, value)
+        elif socket.socket_type == zmq.PULL:
             assert not channel, 'channel is only supported for SUB socket'
         else:
-            raise ValueError(f'{self._receiver.socket_type=} is not supported')
-        if port not in self._receiver_ports:
-            self._receiver_ports.append(port)
+            raise ValueError(f'{socket.socket_type=} is not supported for subscription')
+        if port not in self._socket_ports[socket]:
+            self._socket_ports[socket].append(port)
         else:
             raise ValueError(f'{port=} is already subscribed')
     
-    def __str__(self):
-        return f'ZeroMQ({self.name}_zmq): send using port {self._sender_port}, receive from ports {self._receiver_ports}'
-
-    def start(self):
-        if self._poller:
-            self._poller.register(self._receiver, zmq.POLLIN)
-        for port in self._receiver_ports:
-            self._receiver.connect(f"{self._url}:{port}")
-        time.sleep(1)  # give zmq some prep time, e.g. allow subscription propagation in pub-sub case
-
-    def stop(self):
-        if self._poller:
+    def terminate(self):
+        if self._poller and self._receiver:
             self._poller.unregister(self._receiver)
 
-        # terminate sender
-        self._sender.unbind(f"{self._url}:{self._sender_port}")
-        self._sender.close()
+        # terminate sockets
+        for socket in [self._sender, self._receiver]:
+            if socket is None:
+                continue
+            for port in self._socket_ports[socket]:
+                if self._socket_methods[socket] == SocketMethod.bind:
+                    socket.unbind(f"{self._url}:{port}")
+                else:
+                    socket.disconnect(f"{self._url}:{port}")
+            socket.setsockopt(zmq.LINGER, 5000)  # wait up to 5 seconds, then close anyway
+            socket.close()
         time.sleep(0.5)  # give zmq some time to clean up
 
-        # terminate receiver
-        for port in self._receiver_ports:
-            self._receiver.disconnect(f"{self._url}:{port}")
-        self._receiver.close()
-        time.sleep(0.5)  
-        
         # terminate context
         self._ctx.term()
 
@@ -110,7 +128,8 @@ class ZeroMQ:
         '''
         send_ts = time.time()
         msg = [channel.encode(), topic.encode(), orjson.dumps(data), f"{send_ts}".encode()]
-        self._sender.send_multipart(msg)
+        # TODO handle zmq.error.Again
+        self._sender.send_multipart(msg, zmq.NOBLOCK)
         # TODO: handle exception:
         # try:
         # except zmq.ZMQError as e:
@@ -127,6 +146,10 @@ class ZeroMQ:
             channel, topic, pub_ts = channel.decode(), topic.decode(), float(pub_ts.decode())
             data = orjson.loads(data)
             return channel, topic, data, pub_ts
+        else:
+            # avoids busy-waiting
+            # REVIEW: not sure if this is enough, monitor CPU usage; if not enough, sleep 1ms
+            time.sleep(0)
         # TODO: handle exception:
         # try:
         # except zmq.error.Again:  # no message available, will be raised when using zmq.DONTWAIT

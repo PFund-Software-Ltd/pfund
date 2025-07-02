@@ -21,7 +21,7 @@ def SimulatedBrokerFactory(broker: str) -> type[TradeBroker]:
 class SimulatedBroker:
     DEFAULT_INITIAL_BALANCES = {'BTC': 10, 'ETH': 100, 'USD': 1_000_000}
     
-    def __init__(self: SimulatedBroker | TradeBroker, env: Environment.BACKTEST | Environment.SANDBOX | Literal['BACKTEST', 'SANDBOX']=Environment.BACKTEST):
+    def __init__(self, env: Literal['BACKTEST', 'SANDBOX']='BACKTEST'):
         super().__init__(env=env)
         if self._env == Environment.BACKTEST:
             from pfund.engines.backtest_engine import BacktestEngine
@@ -62,9 +62,6 @@ class SimulatedBroker:
         self._initial_balances[trading_venue][account.name] = initial_balances
         return account
 
-    def add_data_channel(self: SimulatedBroker | TradeBroker, *args, **kwargs):
-        pass
-    
     # FIXME, what if a strategy needs to get_xxx before e.g. placing an order
     def get_balances(self: SimulatedBroker | TradeBroker, *args, **kwargs):
         pass

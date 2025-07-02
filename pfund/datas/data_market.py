@@ -13,14 +13,14 @@ class MarketData(TimeBasedData):
     
     @property
     def key(self) -> str:
-        return f'{self.data_source}:{self.data_origin}:{self.product.name}:{repr(self.resolution)}'
+        return f'{self.source}:{self.origin}:{self.product.name}:{repr(self.resolution)}'
     
     # TODO: create MarketDataMetadata class (typed dict/dataclass/pydantic model)
     def to_dict(self) -> dict:
         return {
             'key': self.key,
-            'data_source': self.data_source.value,
-            'data_origin': self.data_origin,
+            'data_source': self.source.value,
+            'data_origin': self.origin,
             'data_category': self.category.value,
             'zmq_channel': self.zmq_channel,
             'product': str(self.product),

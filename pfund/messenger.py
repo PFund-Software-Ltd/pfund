@@ -40,7 +40,8 @@ class Messenger:
             url=zmq_url,
             port=zmq_ports.get(router_name, None),
             receiver_socket_type=zmq.PULL,  # msgs (e.g. orders) from components -> engine
-            sender_socket_type=zmq.ROUTER,  # msgs (e.g. orders) from engine -> trading venues
+            # NOTE: exchange's private websocket is in the main thread, no need to use ROUTER for now
+            # sender_socket_type=zmq.ROUTER,  # msgs (e.g. orders) from engine -> trading venues
         )
         
         publisher_name = 'publisher'
@@ -64,6 +65,9 @@ class Messenger:
         zmq_names_in_use = [q.name for q in [self._proxy, self._router, self._publisher]]
         for zmq_name, zmq_port in self._zmq_ports_in_use.items():
             # subscribe to trading venue's data
+            # FIXME: proxy should not subscribe to trading venue's raw data directly
+            # only subscribe to the standardized data sent from the data engine in pfeed
+            # TODO: should update the zmq_ports_in_use after grouping streams in pfeed
             if zmq_name.upper() in TradingVenue.__members__:
                 self._proxy.subscribe(zmq_port)
                 self._logger.debug(f'{self._proxy.name} subscribed to {zmq_name} on port {zmq_port}')

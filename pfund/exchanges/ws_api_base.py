@@ -4,10 +4,10 @@ if TYPE_CHECKING:
     from pfund.typing import tEnvironment, ProductName, AccountName
     from pfund.adapter import Adapter
     from pfund.datas import QuoteData, TickData, BarData
+    from pfund.datas.resolution import Resolution
     from pfund.accounts.account_crypto import CryptoAccount
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.products.product_crypto import CryptoProduct
-    from pfund.datas.data_base import BaseData
 
 import os
 import time
@@ -48,7 +48,6 @@ class BaseWebsocketApi(ABC):
         self._adapter: Adapter = Exchange.adapter
         self._urls: str | dict[Literal['public', 'private'], str] | None = self.URLS.get(self._env, None)
 
-        self._datas: dict[ProductName, dict[PublicDataChannel, QuoteData | TickData | BarData]] = {}
         self._products: dict[ProductName, CryptoProduct] = {}
         self._accounts: dict[AccountName, CryptoAccount] = {}
         self._channels: dict[DataChannelType, list[str]] = {
@@ -210,44 +209,28 @@ class BaseWebsocketApi(ABC):
                 raise ValueError(f'product {product.symbol} has already been used for {existing_product}')
         return product
         
-    def _add_data(self, data: QuoteData | TickData | BarData) -> QuoteData | TickData | BarData:
-        product = self._add_product(data.product)
-        if product.name not in self._datas:
-            self._datas[product.name] = {}
-        if data.channel not in self._datas[product.name]:
-            self._datas[product.name][data.channel] = data
-            self._logger.debug(f'added {product.symbol} {data.channel} data')
-        return data
+    def add_private_channel(self, channel: PrivateDataChannel | str):
+        if channel.lower() in PrivateDataChannel.__members__:
+            channel = self._create_private_channel(channel)
+        if channel not in self._channels[DataChannelType.private]:
+            self._channels[DataChannelType.private].append(channel)
+            self._logger.debug(f'added private channel {channel}')
     
-    def add_channel(
-        self,
-        channel: PublicDataChannel | PrivateDataChannel | str,
-        channel_type: DataChannelType,
-        data: QuoteData | TickData | BarData | None=None
-    ):
-        channel = self._create_channel(channel, channel_type, data=data)
-        if channel not in self._channels[channel_type]:
-            self._channels[channel_type].append(channel)
-            self._logger.debug(f'added channel {channel}')
-    
-    def _create_channel(
+    def add_public_channel(
         self, 
-        channel: PublicDataChannel | PrivateDataChannel | str, 
-        channel_type: DataChannelType, 
-        data: QuoteData | TickData | BarData | None=None
-    ) -> str:
-        # when channel is a string, it must be a full channel
-        if channel not in PublicDataChannel and channel not in PrivateDataChannel:
-            return channel
-        else:
-            if channel_type == DataChannelType.public:
-                assert data, f'data is required for public channel {channel}'
-                self._add_data(data)
-                return self._create_public_channel(data)
-            elif channel_type == DataChannelType.private:
-                return self._create_private_channel(channel)
-            else:
-                raise ValueError(f'{channel_type=} is not supported')
+        channel: PublicDataChannel | str, 
+        product: CryptoProduct | None=None, 
+        resolution: Resolution | None=None
+    ):
+        '''
+        Args:
+            channel: when it is a str, it is assumed to be a full channel name, no product or resolution is needed
+        '''
+        if channel.lower() in PublicDataChannel.__members__:
+            channel = self._create_public_channel(channel, product, resolution)
+        if channel not in self._channels[DataChannelType.public]:
+            self._channels[DataChannelType.public].append(channel)
+            self._logger.debug(f'added public channel {channel}')
     
     # send msg to engine->connection manager to indicate it is connected 
     # to connection manager, a successful connection = connected + authenticated + subscribed + other stuff (e.g. snapshots ready)
@@ -667,11 +650,12 @@ class BaseWebsocketApi(ABC):
         pass
     
     @abstractmethod
-    def _create_public_channel(self, data: QuoteData | TickData | BarData):
+    def _create_public_channel(self, channel: PublicDataChannel, product: CryptoProduct, resolution: Resolution):
         pass
 
     def _create_private_channel(self, channel: PrivateDataChannel):
-        return self._adapter(channel.value, group='channel')
+        channel = PrivateDataChannel[channel.lower()]
+        return self._adapter(channel, group='channel')
 
     @abstractmethod
     def _subscribe(self, ws, full_channels: list[str]):

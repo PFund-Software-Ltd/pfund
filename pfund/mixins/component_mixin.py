@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
     import polars as pl
+    from mtflow.stores.trading_store import TradingStore
     from pfeed.typing import tDataSource
     from pfund.typing import (
         StrategyT, 
@@ -33,7 +34,6 @@ import time
 import logging
 import datetime
 
-from mtflow.stores.trading_store import TradingStore
 from pfund.datas.resolution import Resolution
 from pfund.datas.data_config import DataConfig
 from pfund.proxies.actor_proxy import ActorProxy
@@ -120,14 +120,15 @@ class ComponentMixin:
             logging_config (dict): Configuration for logging.
             data_params (DataParamsDict): Data parameters for the component's data store
         """
-        if self.is_remote():
-            self._setup_logging(logging_config)
+        from mtflow.stores.trading_store import TradingStore
         self._env = Environment[env.upper()]
-        self._set_name(name)
-        self._set_resolution(resolution)
         self._run_mode = run_mode
         self._engine = engine
         self._settings = settings
+        if self.is_remote():
+            self._setup_logging(logging_config)
+        self._set_name(name)
+        self._set_resolution(resolution)
         self.store = TradingStore(env=self._env, data_params=data_params)
         self.databoy._update_zmq_ports_in_use(settings.zmq_ports)
         if not self.is_wasm():

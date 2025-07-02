@@ -211,19 +211,21 @@ class BarData(MarketData):
         self._bar.clear()
 
     def __str__(self):
-        bar_type = 'Bar'
-        if not self.bar.start_ts:
-            bar_info = ['None']
+        base_info = ':'.join([
+            'BarData',
+            self.product.trading_venue,
+            self.product.name,
+            str(self.resolution)
+        ])
+        if not self.bar.start_ts or self.bar.is_empty():
+            return f"{base_info} - No data"
+        ohlcv = f"O:{self.bar.open:.2f} H:{self.bar.high:.2f} L:{self.bar.low:.2f} C:{self.bar.close:.2f} V:{self.bar.volume:.2f}"
+        
+        if self.bar.start_dt and self.bar.end_dt and self.bar.dt:
+            start_dt = self.bar.start_dt.strftime('%H:%M:%S')
+            end_dt = self.bar.end_dt.strftime('%H:%M:%S')
+            last_dt = self.bar.dt.strftime('%H:%M:%S')
+            time_info = f"({start_dt} - {end_dt}) (last={last_dt})"
+            return f"{base_info} | {ohlcv} | {time_info}"
         else:
-            bar_info = list(map(str, [self.bar.open, self.bar.high, self.bar.low, self.bar.close, self.bar.volume]))
-        return '_'.join(
-                [
-                    'START-' + str(self.bar.start_dt),
-                    str(self.product),
-                    str(self.resolution),
-                    bar_type
-                ] + bar_info + [
-                    'END-' + str(self.bar.end_dt),
-                    'LAST-' + str(self.bar.ts)
-                ]
-            )
+            return f"{base_info} | {ohlcv}"

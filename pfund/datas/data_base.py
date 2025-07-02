@@ -10,8 +10,8 @@ from pfund.products.product_base import BaseProduct
 
 class BaseData(ABC):
     def __init__(self, data_source: DataSource, data_origin: str, product: BaseProduct | None=None):
-        self.data_source: DataSource = data_source
-        self.data_origin: str = data_origin or data_source.value
+        self.source: DataSource = data_source
+        self.origin: str = data_origin or data_source.value
         self.product: BaseProduct | None = product
         
     @abstractmethod
@@ -50,10 +50,10 @@ class BaseData(ABC):
         if not isinstance(other, BaseData):
             return NotImplemented
         return (
-            self.data_source == other.data_source
-            and self.data_origin == other.data_origin
+            self.source == other.source
+            and self.origin == other.origin
             and self.product == other.product
         )
     
     def __hash__(self):
-        return hash((self.data_source, self.data_origin, self.product))
+        return hash((self.source, self.origin, self.product))

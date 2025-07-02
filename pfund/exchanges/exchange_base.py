@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, ClassVar, TypeAlias
 if TYPE_CHECKING:
     from pathlib import Path
     from pfund.exchanges.rest_api_base import Result, RawResult
+    from pfund.datas.resolution import Resolution
     from pfund.typing import tEnvironment, ProductName, AccountName
     from pfund.products.product_crypto import CryptoProduct
     from pfund.accounts.account_crypto import CryptoAccount
@@ -51,9 +52,6 @@ class BaseExchange(ABC):
         WebsocketApi = getattr(importlib.import_module(f'{exchange_path}.ws_api'), 'WebsocketApi')
         self._ws_api = WebsocketApi(self._env)
 
-        # used for REST API to send back results in threads to engine
-        self._zmq = None
-        
         if self._settings:
             self._check_if_refetch_market_configs()
     
@@ -192,15 +190,22 @@ class BaseExchange(ABC):
         else:
             raise ValueError(f'account name {account.name} has already been added')
         return account
-            
-    def add_channel(
-        self,
-        channel: PublicDataChannel | PrivateDataChannel | str,
-        channel_type: DataChannelType,
-        data: QuoteData | TickData | BarData | None=None
+    
+    def add_private_channel(self, channel: PrivateDataChannel | str):
+        self._ws_api.add_private_channel(channel)
+    
+    def add_public_channel(
+        self, 
+        channel: PublicDataChannel | str, 
+        product: CryptoProduct | None=None,
+        resolution: Resolution | None=None,
     ):
-        self._ws_api.add_channel(channel, channel_type, data=data)
-        
+        '''
+        Args:
+            channel: when it is a str, it is assumed to be a full channel name, no product or resolution is needed
+        '''
+        self._ws_api.add_public_channel(channel, product, resolution)
+            
     # FIXME
     def use_separate_private_ws_url(self) -> bool:
         return self._ws_api._use_separate_private_ws_url
@@ -241,21 +246,6 @@ class BaseExchange(ABC):
             trades_combined.append(trade_adj)
         return trades_combined
     
-    def start(self):
-        from pfund.engines.trade_engine import TradeEngine
-        zmq_ports = TradeEngine.settings['zmq_ports']
-        self._zmq = ZeroMQ(self.name+'_'+'rest_api')
-        self._zmq.start(
-            logger=self._logger,
-            send_port=zmq_ports[self.name]['rest_api'],
-            # only used to send out returns from REST API
-            # shouldn't receive any msgs, so recv_ports is empty
-            recv_ports=[],
-        )
-
-    def stop(self):
-        self._zmq.stop()
-
 
     '''
     ************************************************
