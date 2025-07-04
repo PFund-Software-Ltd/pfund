@@ -13,13 +13,13 @@ from pfund.exchanges.binance.ws_api_option import WebsocketApiOption
 class WebsocketApi(BaseWebsocketApi):
     URLS = {}
     
-    def __init__(self, env: Environment, adapter):
-        exch = Path(__file__).parent.name
-        super().__init__(env, exch, adapter)
-        self._ws_api_spot = WebsocketApiSpot(env)
-        self._ws_api_linear = WebsocketApiLinear(env)
-        self._ws_api_inverse = WebsocketApiInverse(env)
-        self._ws_api_option = WebsocketApiOption(env)
+    def __init__(self, env: Environment):
+        self._apis = {
+            "spot": WebsocketApiSpot(env),
+            "linear": WebsocketApiLinear(env),
+            "inverse": WebsocketApiInverse(env),
+            "option": WebsocketApiOption(env),
+        }
 
     def _on_message(self, ws, msg):
         pass

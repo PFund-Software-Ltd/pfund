@@ -10,7 +10,6 @@ if TYPE_CHECKING:
 import sys
 import time
 
-from pfund.enums import PublicDataChannel
 from pfund.datas.resolution import Resolution
 from pfund.datas.data_market import MarketData
 from pfund.utils.utils import convert_ts_to_dt
@@ -159,10 +158,6 @@ class BarData(MarketData):
             return getattr(self._bar, attr)
         else:
             raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{attr}'")
-    
-    @property
-    def channel(self) -> PublicDataChannel:
-        return PublicDataChannel.candlestick
     
     @property
     def bar(self):

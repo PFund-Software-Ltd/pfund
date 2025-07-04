@@ -1,9 +1,8 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Literal, ClassVar
+from typing import TYPE_CHECKING, Callable, Literal, ClassVar, TypeAlias
 if TYPE_CHECKING:
-    from pfund.typing import tEnvironment, ProductName, AccountName
+    from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
     from pfund.adapter import Adapter
-    from pfund.datas import QuoteData, TickData, BarData
     from pfund.datas.resolution import Resolution
     from pfund.accounts.account_crypto import CryptoAccount
     from pfund.exchanges.exchange_base import BaseExchange
@@ -24,11 +23,14 @@ try:
 except ImportError:
     import json
 from numpy import sign
-from websockets.asyncio.client import connect
+from websockets.asyncio.client import connect as connect_ws, ClientConnection as WebSocketConnection
 from websockets.exceptions import ConnectionClosedError
 
 from pfund.managers.order_manager import OrderUpdateSource
 from pfund.enums import Environment, Broker, CryptoExchange, PublicDataChannel, PrivateDataChannel, DataChannelType
+
+
+WS_NAME: TypeAlias = str
 
 
 class BaseWebsocketApi(ABC):
@@ -43,10 +45,9 @@ class BaseWebsocketApi(ABC):
         self._env = Environment[env.upper()]
         self._bkr = Broker.CRYPTO
         self._logger = logging.getLogger(self.name.lower())
-        self._dev_mode = False
         Exchange: type[BaseExchange] = getattr(importlib.import_module(f'pfund.exchanges.{self.name.lower()}.exchange'), 'Exchange')
         self._adapter: Adapter = Exchange.adapter
-        self._urls: str | dict[Literal['public', 'private'], str] | None = self.URLS.get(self._env, None)
+        # self._urls: str | dict[Literal['public', 'private'], str] | None = self.URLS.get(self._env, None)
 
         self._products: dict[ProductName, CryptoProduct] = {}
         self._accounts: dict[AccountName, CryptoAccount] = {}
@@ -54,15 +55,18 @@ class BaseWebsocketApi(ABC):
             DataChannelType.public: [], 
             DataChannelType.private: []
         }
-        
-        # # REVIEW: is it necessary to have self.exch as a default server?
+        # callback function if defined by user
+        self._callback: Callable[[str], None] | None = None
+        # ws_name could be e.g. bybit:linear:public, bybit:inverse:private, etc.
+        self._websockets: dict[WS_NAME, WebSocketConnection] = {}
+    
+        # REVIEW: is it necessary to have self.exch as a default server?
         # self._servers = [self.exch]  
         
         # self._use_separate_private_ws_url = self._check_if_use_separate_private_ws_url()
         
         # self._zmqs = {}
         # self._ws_threads = {}
-        # self._websockets = {}
 
         # self._sub_num = self._num_subscribed = 0
 
@@ -84,23 +88,11 @@ class BaseWebsocketApi(ABC):
         # self._asks_l2 = defaultdict(dict)
         # self._last_quote_nums = defaultdict(int)
 
-        # # callback function if defined by user
-        # self._msg_callback = None
+    def set_logger(self, logger: logging.Logger):
+        self._logger = logger
     
-    # TEMP
-    async def test(self, callback):
-        url = self._urls['public']
-        async with connect(url) as websocket:
-            message = await websocket.recv()
-            print(message)
-    
-    def _enable_dev_mode(self):
-        '''If enabled, returns only raw messages for all endpoints and stores them automatically to a yaml file as samples in caches.'''
-        self._dev_mode = True
-        self._logger.warning(
-            "DEV mode is enabled. This mode is intended **only** for internal development of the pfund library. "
-            "It should never be used in production or by end users."
-        )
+    def set_callback(self, callback: Callable[[str], None]):
+        self._callback = callback
 
     def _clean_up(self):
         self._zmqs = {}
@@ -112,6 +104,9 @@ class BaseWebsocketApi(ABC):
         self._bids_l2 = defaultdict(dict)
         self._asks_l2 = defaultdict(dict)
         self._last_quote_nums = defaultdict(int)
+    
+    def _get_url(self, channel_type: DataChannelType | Literal['public', 'private']) -> str:
+        return self.URLS[self._env][DataChannelType[channel_type.lower()]]
 
     def _check_if_use_separate_private_ws_url(self):
         if type(self._urls) is dict and self._urls['public'] != self._urls['private']:
@@ -141,9 +136,6 @@ class BaseWebsocketApi(ABC):
 
     def get_all_ws_names(self):
         return self._servers + [acc for acc in self._accounts]
-
-    def set_msg_callback(self, callback):
-        self._msg_callback = callback
 
     def _get_zmq(self, ws_name):
         return self._zmqs.get(ws_name, None)
@@ -209,28 +201,13 @@ class BaseWebsocketApi(ABC):
                 raise ValueError(f'product {product.symbol} has already been used for {existing_product}')
         return product
         
-    def add_private_channel(self, channel: PrivateDataChannel | str):
+    def add_channel(self, channel: PrivateDataChannel | FullDataChannel, *, channel_type: Literal['public', 'private']):
+        channel_type = DataChannelType[channel_type.lower()]
         if channel.lower() in PrivateDataChannel.__members__:
             channel = self._create_private_channel(channel)
-        if channel not in self._channels[DataChannelType.private]:
-            self._channels[DataChannelType.private].append(channel)
-            self._logger.debug(f'added private channel {channel}')
-    
-    def add_public_channel(
-        self, 
-        channel: PublicDataChannel | str, 
-        product: CryptoProduct | None=None, 
-        resolution: Resolution | None=None
-    ):
-        '''
-        Args:
-            channel: when it is a str, it is assumed to be a full channel name, no product or resolution is needed
-        '''
-        if channel.lower() in PublicDataChannel.__members__:
-            channel = self._create_public_channel(channel, product, resolution)
-        if channel not in self._channels[DataChannelType.public]:
-            self._channels[DataChannelType.public].append(channel)
-            self._logger.debug(f'added public channel {channel}')
+        if channel not in self._channels[channel_type]:
+            self._channels[channel_type].append(channel)
+            self._logger.debug(f'added {channel_type} channel {channel}')
     
     # send msg to engine->connection manager to indicate it is connected 
     # to connection manager, a successful connection = connected + authenticated + subscribed + other stuff (e.g. snapshots ready)
@@ -411,10 +388,6 @@ class BaseWebsocketApi(ABC):
                 if ws.name in self._accounts:
                     self._authenticate(ws.name)
         self._logger.debug(f'ws={ws.name} is opened')
-
-    @abstractmethod
-    def _on_message(self, ws, msg):
-        pass
 
     def _on_error(self, ws, error):
         self._on_disconnected(ws.name)
@@ -644,16 +617,12 @@ class BaseWebsocketApi(ABC):
     @abstractmethod
     def _authenticate(self, acc: str):
         pass
-
-    @abstractmethod
-    def _create_ws_url(self, ws_name: str) -> str:
-        pass
     
     @abstractmethod
-    def _create_public_channel(self, channel: PublicDataChannel, product: CryptoProduct, resolution: Resolution):
+    def _create_public_channel(self, product: CryptoProduct, resolution: Resolution):
         pass
 
-    def _create_private_channel(self, channel: PrivateDataChannel):
+    def _create_private_channel(self, channel: PrivateDataChannel | str):
         channel = PrivateDataChannel[channel.lower()]
         return self._adapter(channel, group='channel')
 

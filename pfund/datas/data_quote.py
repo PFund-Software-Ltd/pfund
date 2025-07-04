@@ -7,7 +7,6 @@ if TYPE_CHECKING:
 
 from dataclasses import dataclass, field
 
-from pfund.enums import PublicDataChannel
 from pfund.datas.data_market import MarketData
 
 
@@ -49,10 +48,6 @@ class QuoteData(MarketData):
             self._orderbook = OrderBook()
             self._is_fast_orderbook = False
 
-    @property
-    def channel(self) -> PublicDataChannel:
-        return PublicDataChannel.orderbook
-    
     @property
     def level(self) -> int:
         return self._orderbook_level

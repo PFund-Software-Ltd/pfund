@@ -5,8 +5,7 @@ if TYPE_CHECKING:
     from pfund.products.product_crypto import CryptoProduct
     from pfund.orders.order_base import BaseOrder
     from pfund.exchanges.exchange_base import BaseExchange
-    from pfund.datas.data_base import BaseData
-    from pfund.typing import tCryptoExchange, tEnvironment
+    from pfund.typing import tCryptoExchange, tEnvironment, FullDataChannel
     from pfund.enums import OrderSide, PublicDataChannel
 
 import inspect
@@ -18,7 +17,7 @@ from pfund.positions.position_crypto import CryptoPosition
 from pfund.balances.balance_crypto import CryptoBalance
 from pfund.accounts.account_crypto import CryptoAccount
 from pfund.utils.utils import convert_to_uppercases
-from pfund.enums import CryptoExchange, DataChannelType, PrivateDataChannel
+from pfund.enums import CryptoExchange, PrivateDataChannel
 from pfund.brokers.broker_trade import TradeBroker
 
 
@@ -57,25 +56,11 @@ class CryptoBroker(TradeBroker):
     def _add_default_private_channels(self):
         for exch in self.exchanges:
             for channel in PrivateDataChannel:
-                self.add_private_channel(exch, channel)
+                self.add_channel(exch, channel, channel_type='private')
     
-    def add_private_channel(self, exch: tCryptoExchange, channel: PrivateDataChannel | str):
+    def add_channel(self, exch: tCryptoExchange, channel: PrivateDataChannel | FullDataChannel, *, channel_type: Literal['public', 'private']):
         exchange = self.get_exchange(exch)
-        exchange.add_private_channel(channel)
-        
-    def add_public_channel(
-        self, 
-        exch: tCryptoExchange, 
-        channel: PublicDataChannel | str, 
-        product: CryptoProduct | None=None, 
-        resolution: Resolution | None=None
-    ):
-        '''
-        Args:
-            channel: when it is a str, it is assumed to be a full channel name, no product or resolution is needed
-        '''
-        exchange = self.get_exchange(exch)
-        exchange.add_public_channel(channel, product, resolution)
+        exchange.add_channel(channel, channel_type)
         
     def get_account(self, exch: tCryptoExchange, name: str) -> CryptoAccount:
         return self._accounts[CryptoExchange[exch.upper()]][name]

@@ -1,7 +1,6 @@
 from __future__ import annotations
-from typing import Callable, Any, TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from websocket import WebSocket
     from pfund.exchanges.rest_api_base import Result, RawResult
     from pfund.products.product_base import BaseProduct
 

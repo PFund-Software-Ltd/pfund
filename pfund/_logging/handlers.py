@@ -4,8 +4,6 @@ import gzip
 from logging import Handler
 from logging.handlers import TimedRotatingFileHandler
 
-import telegram
-
 
 class CompressedTimedRotatingFileHandler(TimedRotatingFileHandler):
     def gzip_logs(self, file_path):
@@ -90,6 +88,8 @@ class TelegramHandler(Handler):
         self.chat_id = chat_id
 
     def emit(self, record):
+        import telegram
+        
         bot = telegram.Bot(token=self.token)
         bot.send_message(
             self.chat_id,

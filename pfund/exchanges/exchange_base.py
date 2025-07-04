@@ -1,13 +1,12 @@
 from __future__ import annotations  
-from typing import TYPE_CHECKING, ClassVar, TypeAlias
+from typing import TYPE_CHECKING, ClassVar, TypeAlias, Literal
 if TYPE_CHECKING:
     from pathlib import Path
     from pfund.exchanges.rest_api_base import Result, RawResult
-    from pfund.datas.resolution import Resolution
-    from pfund.typing import tEnvironment, ProductName, AccountName
+    from pfund.enums import CryptoExchange, PrivateDataChannel
+    from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
     from pfund.products.product_crypto import CryptoProduct
     from pfund.accounts.account_crypto import CryptoAccount
-    from pfund.datas import QuoteData, TickData, BarData
     from pfund.engines.trade_engine_settings import TradeEngineSettings
 
 import os
@@ -20,7 +19,7 @@ from abc import ABC, abstractmethod
 
 from pfund.adapter import Adapter
 from pfund.managers.order_manager import OrderUpdateSource
-from pfund.enums import Environment, Broker, CryptoExchange, PublicDataChannel, PrivateDataChannel, DataChannelType
+from pfund.enums import Environment, Broker
 
 
 ProductCategory: TypeAlias = str
@@ -191,21 +190,9 @@ class BaseExchange(ABC):
             raise ValueError(f'account name {account.name} has already been added')
         return account
     
-    def add_private_channel(self, channel: PrivateDataChannel | str):
-        self._ws_api.add_private_channel(channel)
+    def add_channel(self, channel: PrivateDataChannel | FullDataChannel, *, channel_type: Literal['public', 'private']):
+        self._ws_api.add_channel(channel, channel_type)
     
-    def add_public_channel(
-        self, 
-        channel: PublicDataChannel | str, 
-        product: CryptoProduct | None=None,
-        resolution: Resolution | None=None,
-    ):
-        '''
-        Args:
-            channel: when it is a str, it is assumed to be a full channel name, no product or resolution is needed
-        '''
-        self._ws_api.add_public_channel(channel, product, resolution)
-            
     # FIXME
     def use_separate_private_ws_url(self) -> bool:
         return self._ws_api._use_separate_private_ws_url

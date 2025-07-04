@@ -8,7 +8,6 @@ if TYPE_CHECKING:
 import time
 from collections import deque
 
-from pfund.enums import PublicDataChannel
 from pfund.datas.data_market import MarketData
 
 
@@ -26,10 +25,6 @@ class TickData(MarketData):
         # TODO: support period > 1?
         # self._is_appended = (self.period > 1)
         # self.ticks = deque(maxlen=self.period)
-    
-    @property
-    def channel(self) -> PublicDataChannel:
-        return PublicDataChannel.tradebook
     
     @property
     def price(self):

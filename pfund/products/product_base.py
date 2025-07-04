@@ -53,6 +53,7 @@ class BaseProduct(BaseModel):
         return data
     
     def model_post_init(self, __context: Any):
+        # REVIEW: is adapter still needed?
         if not self.adapter:
             self.adapter = Adapter(self.trading_venue)
         if hasattr(self, '__mixin_post_init__'):

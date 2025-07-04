@@ -289,7 +289,7 @@ class BaseEngine(metaclass=MetaEngine):
                 #                 .add_feed(data.source, data.category)
                 #                 .stream(
                 #                     product=data.product,
-                #                     channel=data.channel,
+                #                     resolution=data.resolution,
                 #                 )
                 #                 # TODO: load to PFundEngineInMemory
                 #                 # .load(to_storage='LOCAL')

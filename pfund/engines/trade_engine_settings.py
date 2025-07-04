@@ -16,6 +16,8 @@ class TradeEngineSettings(BaseEngineSettings):
     renew_market_configs_every_x_days: int = Field(default=7)
     # Always use the WebSocket API for actions like placing or canceling orders, even if REST is available.
     websocket_first: bool = Field(default=True)
+    # Swap live data for EOD data (live data is the recorded data and EOD data is the data from a data provider)
+    swap_live_for_eod: bool = Field(default=True)
     
     @model_validator(mode="after")
     def _merge_defaults(self):

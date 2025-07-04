@@ -40,7 +40,7 @@ class TradeBroker(BaseBroker):
     
     def _add_default_private_channels(self):
         for channel in PrivateDataChannel:
-            self.add_private_channel(channel)
+            self.add_channel(channel, channel_type='private')
     
     def start(self):
         self._add_default_private_channels()
