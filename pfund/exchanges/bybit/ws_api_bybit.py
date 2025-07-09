@@ -1,16 +1,20 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
+    from websockets.asyncio.client import ClientConnection as WebSocket
     from pfund.datas.resolution import Resolution
+    from pfund.accounts.account_crypto import CryptoAccount
 
+import os
 import time
-import asyncio
+import inspect
+import hmac
+from decimal import Decimal
+
 try:
     import orjson as json
 except ImportError:
     import json
-import hmac
-from decimal import Decimal
 
 from pfund.exchanges.ws_api_base import BaseWebsocketApi
 from pfund.enums import Environment, CryptoExchange, PublicDataChannel, DataChannelType
@@ -22,7 +26,7 @@ ProductCategory = BybitProduct.ProductCategory
 
 
 class BybitWebsocketApi(BaseWebsocketApi):
-    name: ClassVar[str]
+    exch = CryptoExchange.BYBIT
     CATEGORY: ClassVar[BybitProduct.ProductCategory]
     VERSION = 'v5'
     URLS = {
@@ -33,102 +37,93 @@ class BybitWebsocketApi(BaseWebsocketApi):
             DataChannelType.private: f'wss://stream.bybit.com/{VERSION}/private'
         }
     }
+    # it defines the maximum number of arguments allowed in the 'args' list of a WebSocket message: {'op': '...', 'args': [...]}
+    PUBLIC_CHANNEL_ARGS_LIMIT = os.sys.maxsize
     
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        cls.name = CryptoExchange.BYBIT.lower() + ':' + cls.CATEGORY.lower()
-
-    async def connect(self):
-        async with asyncio.TaskGroup() as task_group:
-            for channel_type, channels in self._channels.items():
-                if channels:
-                    url = self._get_url(channel_type)
-                    task_group.create_task(self._connect_ws(url, channel_type))
-    
-    async def _connect_ws(self, url: str, channel_type: DataChannelType):
-        from websockets.asyncio.client import connect as connect_ws
-        async with connect_ws(url) as ws:
-            ws_name = self.name + ':' + channel_type
-            if ws_name in self._websockets:
-                raise RuntimeError(f'ws={ws_name} already exists')
-            self._websockets[ws_name] = ws
-            async for msg in ws:
-                self._on_message(ws, msg)
-    
-    async def disconnect(self, reason: str=''):
-        for ws_name in list(self._websockets):
-            await self._disconnect_ws(ws_name, reason=reason)
-            self._websockets.pop(ws_name, None)
+    def _create_ws_name(self, account_name: str=''):
+        if not account_name:
+            return '_'.join([self.exch, self.CATEGORY, 'ws']).lower()
+        else:
+            return '_'.join([account_name, 'ws']).lower()
         
-    async def _disconnect_ws(self, ws_name: str, reason: str=''):
-        ws = self._websockets.get(ws_name)
-        if ws and not ws.closed:
-            await ws.close(code=1000, reason=reason)
-            await ws.wait_closed()
+    def _split_channels_into_batches(self, channels: list[str], channel_type: DataChannelType) -> list[list[str]]:
+        num_channels = len(channels)
+        is_exceeded_args_limit = (channel_type == DataChannelType.public) and (num_channels > self.PUBLIC_CHANNEL_ARGS_LIMIT)
+        if not is_exceeded_args_limit:
+            batched_channels = [channels]
+        else:
+            args_limit = self.PUBLIC_CHANNEL_ARGS_LIMIT
+            batched_channels = [channels[i:i+args_limit] for i in range(0, num_channels, args_limit)]
+        return batched_channels
+
+    async def _subscribe(self, ws: WebSocket, channels: list[str], channel_type: DataChannelType):
+        batched_channels = self._split_channels_into_batches(channels, channel_type)
+        for _channels in batched_channels:
+            # number of subscription is per msg, not per channel
+            self._sub_num += 1
+            await self._send(ws, msg={'op': 'subscribe', 'args': _channels})
+
+    async def _unsubscribe(self, ws: WebSocket, channels: list[str], channel_type: DataChannelType):
+        batched_channels = self._split_channels_into_batches(channels, channel_type)
+        for _channels in batched_channels:
+            # number of subscription is per msg instead of per channel
+            self._sub_num -= 1
+            await self._send(ws, msg={'op': 'unsubscribe', 'args': _channels})
     
-    def _on_message(self, ws, msg: bytes):
-        msg = json.loads(msg)
-        print('***ws message', msg, self._callback)
-        
-        # ws_name = ws.name
-        # self._logger.debug(f'ws={ws_name} {msg=}')
-        # try:
-        #     if 'op' in msg:
-        #         op = msg['op']
-        #         ret = msg.get('ret_msg')
-        #         if msg.get('success', True):
-        #             if ret == 'pong' or op == 'pong':
-        #                 pass
-        #             elif op == 'auth':
-        #                 self._is_authenticated[ws_name] = True
-        #             elif op == 'subscribe':
-        #                 self._num_subscribed += 1
-        #             else:
-        #                 self._logger.warning(f'unhandled ws={ws_name} msg {msg}')
-        #         else:
-        #             self._logger.error(f'ws={ws_name} unsuccessful msg {msg}')
-        #     elif 'topic' in msg:
-        #         if self._msg_callback is None:
-        #             self._process_message(ws, msg)
-        #         else:
-        #             self._msg_callback(ws, msg)
-        #     else:
-        #         self._logger.warning(f'unhandled ws={ws_name} msg {msg}')
-        # except:
-        #     self._logger.exception(f'_on_message ws={ws_name} exception {msg}:')
-
-    def _add_server(self, category: str):
-        if category not in self._servers:
-            self._servers.append(category)
-            self._logger.debug(f'added server "{category}"')
-            # FIXME: remove the default server
-            if self.exch in self._servers:
-                self._servers.remove(self.exch)
-                
-    def _ping(self):
-        msg = {"op": "ping"}
-        websockets = list(self._websockets.values())
-        for ws in websockets:
-            if ws and ws.sock and ws.sock.connected:
-                self._send(ws, msg)
-
-    def _authenticate(self, acc: str):
-        account = self._accounts[acc]
-        ws = self._websockets[acc]
+    async def _authenticate(self, ws: WebSocket, account: CryptoAccount):
         expires = int( (time.time() + 1) * 1000 )
         signature = hmac.new(
-            bytes(account.secret, "utf-8"), 
-            bytes(f'GET/realtime{expires}', "utf-8"), 
+            bytes(account._secret, "utf-8"),
+            bytes(f'GET/realtime{expires}', "utf-8"),
             digestmod="sha256"
         ).hexdigest()
         # param = f"api_key={account.key}&expires={expires}&signature={signature}"
         # private_url_extension = '?' + param
-        self._logger.debug(f'ws={account.name} authenticates')
-        msg = {'op': 'auth', 'args': [account.key, expires, signature]}
-        self._send(ws, msg)
+        self._logger.debug(f'{ws.name} authenticates')
+        msg = {'op': 'auth', 'args': [account._key, expires, signature]}
+        await self._send(ws, msg)
+    
+    async def _ping(self):
+        msg = {"op": "ping"}
+        for ws in self._websockets.values():
+            await self._send(ws, msg)
+    
+    async def _on_message(self, ws, msg: bytes):
+        msg = json.loads(msg)
+        self._logger.debug(f'{ws.name} {msg=}')
+        res = self._callback(msg)
+        if inspect.isawaitable(res):
+            await res
+        try:
+            if 'op' in msg:
+                op: str = msg['op']
+                ret: str | None = msg.get('ret_msg')
+                if 'success' in msg and msg['success']:
+                    if op == 'auth':
+                        self._is_authenticated[ws.name] = True
+                    elif op == 'subscribe':
+                        self._num_subscribed += 1
+                    else:
+                        self._logger.warning(f'{ws.name} unhandled msg {msg}')
+                # FIXME
+                elif ret == 'pong' or op == 'pong':
+                    pass
+                else:
+                    self._logger.error(f'{ws.name} unsuccessful msg {msg}')
+            # FIXME
+            # elif 'topic' in msg:
+            #     if self._msg_callback is None:
+            #         self._process_message(ws, msg)
+            #     else:
+            #         self._msg_callback(ws, msg)
+            # else:
+            #     self._logger.warning(f'unhandled ws={ws_name} msg {msg}')
+        except Exception:
+            self._logger.exception(f'{ws.name} _on_message exception:')
 
     def _create_public_channel(self, product: BybitProduct, resolution: Resolution):
         '''Creates a full public channel name based on the product and resolution'''
+        self.add_product(product)
         if resolution.is_quote():
             channel = PublicDataChannel.orderbook
             echannel = self._adapter(channel.value, group='channel')
@@ -137,9 +132,9 @@ class BybitWebsocketApi(BaseWebsocketApi):
             supported_orderbook_levels = self.SUPPORTED_ORDERBOOK_LEVELS[product.category]
             supported_orderbook_depths = self.SUPPORTED_RESOLUTIONS[TimeframeUnits.QUOTE][product.category]
             if orderbook_level not in supported_orderbook_levels:
-                raise NotImplementedError(f"{self.name} ({channel}.{product.symbol}) orderbook_level={orderbook_level} is not supported, supported levels: {supported_orderbook_levels}")
+                raise NotImplementedError(f"{self.exch} ({channel}.{product.symbol}) orderbook_level={orderbook_level} is not supported, supported levels: {supported_orderbook_levels}")
             if orderbook_depth not in supported_orderbook_depths:
-                raise NotImplementedError(f"{self.name} ({channel}.{product.symbol}) orderbook_depth={orderbook_depth} is not supported, supported depths: {supported_orderbook_depths}")
+                raise NotImplementedError(f"{self.exch} ({channel}.{product.symbol}) orderbook_depth={orderbook_depth} is not supported, supported depths: {supported_orderbook_depths}")
             full_channel = '.'.join([echannel, str(orderbook_depth), product.symbol])
         elif resolution.is_tick():
             channel = PublicDataChannel.tradebook
@@ -148,54 +143,16 @@ class BybitWebsocketApi(BaseWebsocketApi):
         elif resolution.is_bar():
             channel = PublicDataChannel.candlestick
             echannel = self._adapter(channel.value, group='channel')
-            timeframe = resolution.timeframe
+            period, timeframe = resolution.period, resolution.timeframe
             if timeframe.unit not in self.SUPPORTED_RESOLUTIONS:
-                raise NotImplementedError(f'{self.name} ({channel}.{product.symbol}) timeframe={str(timeframe)} is not supported, supported timeframes {list(self.SUPPORTED_RESOLUTIONS)}')
+                raise ValueError(f'{self.exch} ({channel}.{product.symbol}) {resolution=} (timeframe={timeframe.unit.name}) is not supported, supported timeframes: {[tf.name for tf in self.SUPPORTED_RESOLUTIONS]}')
+            elif period not in self.SUPPORTED_RESOLUTIONS[timeframe.unit]:
+                raise ValueError(f'{self.exch} ({channel}.{product.symbol}) {resolution=} ({period=}) is not supported, supported periods: {self.SUPPORTED_RESOLUTIONS[timeframe.unit]}')
             eresolution = self._adapter(repr(resolution), group='resolution')
             full_channel = '.'.join([echannel, eresolution, product.symbol])
         else:
             raise NotImplementedError(f'{resolution=} is not supported for creating public channel')
         return full_channel
-    
-    def _check_if_exceeds_public_channel_args_limits(self, ws, num_full_channels):
-        is_public_channel = (ws.name in self._servers)
-        if is_public_channel and ws.name in self.PUBLIC_CHANNEL_ARGS_LIMITS and num_full_channels > self.PUBLIC_CHANNEL_ARGS_LIMITS[ws.name]:
-            return True
-        return False
-
-    def _subscribe(self, ws, full_channels: list[str]):
-        num_full_channels = len(full_channels)
-        if not self._check_if_exceeds_public_channel_args_limits(ws, num_full_channels):
-            chunked_full_channels = [full_channels]
-        else:
-            limit = self.PUBLIC_CHANNEL_ARGS_LIMITS[ws.name]
-            chunked_full_channels = [full_channels[i:i+limit] for i in range(0, num_full_channels, limit)]
-        for full_channels in chunked_full_channels:
-            # self._sub_num += len(full_channels)
-            # number of subscription is per msg instead of per channel
-            self._sub_num += 1
-            msg = {'op': 'subscribe', 'args': full_channels}
-            self._send(ws, msg)
-            self._logger.debug(f'ws={ws.name} subscribes {full_channels}')
-
-    def _unsubscribe(self, ws, full_channels: list[str]):
-        num_full_channels = len(full_channels)
-        if not self._check_if_exceeds_public_channel_args_limits(ws, num_full_channels):
-            chunked_full_channels = [full_channels]
-        else:
-            limit = self.PUBLIC_CHANNEL_ARGS_LIMITS[ws.name]
-            chunked_full_channels = [full_channels[i:i+limit] for i in range(0, num_full_channels, limit)]
-        for full_channels in chunked_full_channels:
-            # self._sub_num -= len(full_channels)
-            # number of subscription is per msg instead of per channel
-            self._sub_num -= 1
-            msg = {'op': 'unsubscribe', 'args': full_channels}
-            self._send(ws, msg)
-            self._logger.debug(f'ws={ws.name} unsubscribes {full_channels}')
-
-    # will receive msg=b'', ignore
-    def _on_pong(self, ws, msg):
-        pass
 
     def _process_message(self, ws, msg: dict) -> dict | None:
         ws_name = ws.name

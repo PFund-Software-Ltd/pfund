@@ -32,7 +32,7 @@ class BacktestEngine(BaseEngine):
         self,
         mode: Literal['vectorized', 'hybrid', 'event_driven']='vectorized',
         name: str='',
-        # FIXME: should use ray on both dataset and component?
+        # FIXME: should use ray on only dataset, when a component is a ray actor and its true, raise error
         use_ray_on: Literal['dataset', 'component'] | None='dataset',
         data_tool: tDataTool='polars',
         data_range: str | DataRangeDict | Literal['ytd']='1d',

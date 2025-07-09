@@ -22,7 +22,7 @@ from pfund.exchanges.bybit.exchange import ProductCategory
 
 # TODO complete the endpoints
 class RestApi(BaseRestApi):
-    name = CryptoExchange.BYBIT
+    exch = CryptoExchange.BYBIT
 
     VERSION = 'v5'
     URLS = {

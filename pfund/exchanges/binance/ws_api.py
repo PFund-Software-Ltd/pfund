@@ -20,7 +20,7 @@ class WebsocketApi(BaseWebsocketApi):
             "inverse": WebsocketApiInverse(env),
             "option": WebsocketApiOption(env),
         }
-
+    
     def _on_message(self, ws, msg):
         pass
     

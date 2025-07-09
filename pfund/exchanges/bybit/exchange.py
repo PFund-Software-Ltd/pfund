@@ -77,6 +77,7 @@ class Exchange(BaseExchange):
             params=params,
         )
 
+    # FIXME: remove pdt, pass in product object
     def get_positions(self, account: CryptoAccount, pdt: str='', category: tProductCategory='', **kwargs) -> dict | None:
         schema = {
             'result': ['result', 'list'],
@@ -104,7 +105,7 @@ class Exchange(BaseExchange):
             for element in iterator:
                 params = {'category': category}
                 if pdt:
-                    epdt = self.adapter(element, group=category)
+                    epdt = self.adapter(element, group=product.type)
                     params['symbol'] = epdt
                 else:
                     eqccy = self.adapter(element)
@@ -159,7 +160,7 @@ class Exchange(BaseExchange):
             for element in iterator:
                 params = {'category': category}
                 if pdt:
-                    epdt = self.adapter(element, group=category)
+                    epdt = self.adapter(element, group=product.type)
                     params['symbol'] = epdt
                 else:
                     eqccy = self.adapter(element)
@@ -234,7 +235,7 @@ class Exchange(BaseExchange):
         for category in categories:
             params = {'category': category, 'startTime': start_time, 'endTime': end_time}
             if pdt:
-                epdt = self.adapter(pdt, group=category)
+                epdt = self.adapter(pdt, group=product.type)
                 params['symbol'] = epdt
             if kwargs:
                 params.update(kwargs)

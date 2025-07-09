@@ -1,9 +1,9 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfund.datas.resolution import Resolution
     from pfund.products.product_crypto import CryptoProduct
     from pfund.orders.order_base import BaseOrder
+    from pfund.datas.data_time_based import TimeBasedData
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.typing import tCryptoExchange, tEnvironment, FullDataChannel
     from pfund.enums import OrderSide, PublicDataChannel
@@ -58,9 +58,13 @@ class CryptoBroker(TradeBroker):
             for channel in PrivateDataChannel:
                 self.add_channel(exch, channel, channel_type='private')
     
-    def add_channel(self, exch: tCryptoExchange, channel: PrivateDataChannel | FullDataChannel, *, channel_type: Literal['public', 'private']):
+    def add_public_channel(self, exch: tCryptoExchange, channel: PublicDataChannel | FullDataChannel, data: TimeBasedData | None=None):
         exchange = self.get_exchange(exch)
-        exchange.add_channel(channel, channel_type)
+        exchange.add_public_channel(channel, data=data)
+    
+    def add_private_channel(self, exch: tCryptoExchange, channel: PrivateDataChannel | FullDataChannel):
+        exchange = self.get_exchange(exch)
+        exchange.add_private_channel(channel)
         
     def get_account(self, exch: tCryptoExchange, name: str) -> CryptoAccount:
         return self._accounts[CryptoExchange[exch.upper()]][name]

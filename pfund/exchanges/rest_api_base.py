@@ -57,7 +57,7 @@ class RequestMethod(StrEnum):
     
 
 class BaseRestApi(ABC):
-    name: ClassVar[CryptoExchange]
+    exch: ClassVar[CryptoExchange]
     SAMPLES_FILENAME = 'rest_api_samples.yml'
 
     URLS: ClassVar[dict[Environment, str]] = {}
@@ -66,9 +66,9 @@ class BaseRestApi(ABC):
     
     def __init__(self, env: Environment | tEnvironment):
         self._env = Environment[env.upper()]
-        self._logger = logging.getLogger(self.name.lower())
+        self._logger = logging.getLogger(self.exch.lower())
         self._dev_mode = False
-        Exchange: type[BaseExchange] = getattr(importlib.import_module(f'pfund.exchanges.{self.name.lower()}.exchange'), 'Exchange')
+        Exchange: type[BaseExchange] = getattr(importlib.import_module(f'pfund.exchanges.{self.exch.lower()}.exchange'), 'Exchange')
         self._adapter: Adapter = Exchange.adapter
         self._url: str | None = self.URLS.get(self._env, None)
         self._client = AsyncClient()
@@ -121,7 +121,7 @@ class BaseRestApi(ABC):
     def sample_file_path(self) -> Path:
         from pfund.config import get_config
         config = get_config()
-        return Path(config.cache_path) / self.name / self.SAMPLES_FILENAME
+        return Path(config.cache_path) / self.exch / self.SAMPLES_FILENAME
     
     def _append_sample_return(self, endpoint_name: EndpointName, raw_result: RawResult):
         existing_samples = load_yaml_file(self.sample_file_path) or {}
@@ -160,7 +160,7 @@ class BaseRestApi(ABC):
                 'params': params,
             },
             'data': {
-                'exchange': self.name,
+                'exchange': self.exch,
                 'account': account.name if account else None,
                 'message': None,
             }

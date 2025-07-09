@@ -24,5 +24,3 @@ class WebsocketApiLinear(BybitWebsocketApi):
         TimeframeUnits.MINUTE: [1, 3, 5, 15, 30, 60, 120, 240, 360, 720],
         TimeframeUnits.DAY: [1],
     }
-    # REVIEW
-    PUBLIC_CHANNEL_ARGS_LIMITS = None

@@ -25,4 +25,4 @@ class WebsocketApiSpot(BybitWebsocketApi):
         TimeframeUnits.DAY: [1],
     }
     # REVIEW
-    PUBLIC_CHANNEL_ARGS_LIMITS = 10
+    PUBLIC_CHANNEL_ARGS_LIMIT = 10

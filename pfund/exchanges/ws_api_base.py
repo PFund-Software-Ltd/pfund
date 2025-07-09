@@ -1,6 +1,7 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Literal, ClassVar, TypeAlias
+from typing import TYPE_CHECKING, Callable, Literal, ClassVar, TypeAlias, Awaitable
 if TYPE_CHECKING:
+    from websockets.asyncio.client import ClientConnection as WebSocket
     from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
     from pfund.adapter import Adapter
     from pfund.datas.resolution import Resolution
@@ -8,13 +9,11 @@ if TYPE_CHECKING:
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.products.product_crypto import CryptoProduct
 
-import os
 import time
 import logging
 import importlib
+import asyncio
 from abc import ABC, abstractmethod
-from contextlib import suppress
-from threading import Thread
 from collections import defaultdict
 from functools import reduce
 
@@ -23,18 +22,17 @@ try:
 except ImportError:
     import json
 from numpy import sign
-from websockets.asyncio.client import connect as connect_ws, ClientConnection as WebSocketConnection
-from websockets.exceptions import ConnectionClosedError
+from websockets.protocol import State
 
 from pfund.managers.order_manager import OrderUpdateSource
-from pfund.enums import Environment, Broker, CryptoExchange, PublicDataChannel, PrivateDataChannel, DataChannelType
+from pfund.enums import Environment, Broker, CryptoExchange, PrivateDataChannel, DataChannelType
 
 
-WS_NAME: TypeAlias = str
+WebSocketName: TypeAlias = str
 
 
 class BaseWebsocketApi(ABC):
-    name: ClassVar[CryptoExchange]
+    exch: ClassVar[CryptoExchange]
     SAMPLES_FILENAME = 'ws_api_samples.yml'
 
     URLS: ClassVar[dict[Environment, str | dict[Literal['public', 'private'], str]]] = {}
@@ -44,10 +42,10 @@ class BaseWebsocketApi(ABC):
     def __init__(self, env: Environment | tEnvironment):
         self._env = Environment[env.upper()]
         self._bkr = Broker.CRYPTO
-        self._logger = logging.getLogger(self.name.lower())
-        Exchange: type[BaseExchange] = getattr(importlib.import_module(f'pfund.exchanges.{self.name.lower()}.exchange'), 'Exchange')
+        self._logger = logging.getLogger(self.exch.lower())
+        Exchange: type[BaseExchange] = getattr(importlib.import_module(f'pfund.exchanges.{self.exch.lower()}.exchange'), 'Exchange')
         self._adapter: Adapter = Exchange.adapter
-        # self._urls: str | dict[Literal['public', 'private'], str] | None = self.URLS.get(self._env, None)
+        self._callback: Callable[[str], Awaitable[None] | None] | None = None
 
         self._products: dict[ProductName, CryptoProduct] = {}
         self._accounts: dict[AccountName, CryptoAccount] = {}
@@ -55,134 +53,58 @@ class BaseWebsocketApi(ABC):
             DataChannelType.public: [], 
             DataChannelType.private: []
         }
-        # callback function if defined by user
-        self._callback: Callable[[str], None] | None = None
-        # ws_name could be e.g. bybit:linear:public, bybit:inverse:private, etc.
-        self._websockets: dict[WS_NAME, WebSocketConnection] = {}
+        self._websockets: dict[WebSocketName, WebSocket] = {}
     
-        # REVIEW: is it necessary to have self.exch as a default server?
-        # self._servers = [self.exch]  
-        
-        # self._use_separate_private_ws_url = self._check_if_use_separate_private_ws_url()
-        
-        # self._zmqs = {}
-        # self._ws_threads = {}
+        self._is_authenticated = defaultdict(bool)
+        self._is_reconnecting = False
+        self._sub_num = self._num_subscribed = 0
 
-        # self._sub_num = self._num_subscribed = 0
-
-        # self._background_thread = None
-        # self._ping_timeout = 10  # in seconds
+        # FIXME
         # self._ping_freq = 20  # in seconds
         # self._last_ping_ts = time.time()
 
         # self._check_connection_freq = 10
         # self._last_check_connection_ts = time.time()
-
-        # self._is_connected = defaultdict(bool)
-        # self._is_authenticating = defaultdict(bool) 
-        # self._is_authenticated = defaultdict(bool)
-        # self._is_reconnecting = False
         
         # self._is_snapshots_ready = defaultdict(bool)
         # self._bids_l2 = defaultdict(dict)
         # self._asks_l2 = defaultdict(dict)
         # self._last_quote_nums = defaultdict(int)
+    
+    @abstractmethod
+    async def _subscribe(self, ws: WebSocket, channels: list[str], channel_type: DataChannelType):
+        pass
 
+    @abstractmethod
+    async def _unsubscribe(self, ws: WebSocket, channels: list[str], channel_type: DataChannelType):
+        pass
+
+    @abstractmethod
+    async def _authenticate(self, ws: WebSocket, account: CryptoAccount):
+        pass
+    
+    @abstractmethod
+    def _create_public_channel(self, product: CryptoProduct, resolution: Resolution):
+        pass
+
+    def _create_private_channel(self, channel: PrivateDataChannel | str):
+        channel = PrivateDataChannel[channel.lower()]
+        return self._adapter(channel, group='channel')
+    
     def set_logger(self, logger: logging.Logger):
         self._logger = logger
-    
-    def set_callback(self, callback: Callable[[str], None]):
+
+    def set_callback(self, callback: Callable[[str], Awaitable[None] | None]):
         self._callback = callback
 
-    def _clean_up(self):
-        self._zmqs = {}
-        self._ws_threads = {}
-        self._websockets = {}
-        self._is_reconnecting = False
-        self._sub_num = self._num_subscribed = 0
-        self._is_snapshots_ready = defaultdict(bool)
-        self._bids_l2 = defaultdict(dict)
-        self._asks_l2 = defaultdict(dict)
-        self._last_quote_nums = defaultdict(int)
-    
     def _get_url(self, channel_type: DataChannelType | Literal['public', 'private']) -> str:
         return self.URLS[self._env][DataChannelType[channel_type.lower()]]
-
-    def _check_if_use_separate_private_ws_url(self):
-        if type(self._urls) is dict and self._urls['public'] != self._urls['private']:
-            return True
-        return False
-
-    def _run_background_tasks(self):
-        while _is_running := self._websockets:
-            now = time.time()
-            if hasattr(self, '_ping') and now - self._last_ping_ts > self._ping_freq:
-                self._ping()
-                self._last_ping_ts = now
-            if now - self._last_check_connection_ts > self._check_connection_freq:
-                self.check_connection()
-                self._last_check_connection_ts = now
-
-    def _adjust_input_ws_names(self, ws_names: str|list[str]|None) -> list:
-        if type(ws_names) is str: 
-            ws_names = [ws_names]
-        # case 1: ws_names is provided
-        # case 2: already has some ws servers running (e.g. for disconnect())
-        # case 3: no ws servers running (e.g. for connect())
-        return ws_names or list(self._websockets) or self.get_all_ws_names()
-
-    def get_servers(self):
-        return self._servers
-
-    def get_all_ws_names(self):
-        return self._servers + [acc for acc in self._accounts]
-
-    def _get_zmq(self, ws_name):
-        return self._zmqs.get(ws_name, None)
-
-    def pong(self):
-        """Pongs back to Engine's ping to show that it is alive"""
-        ws_name = self._servers[0]
-        zmq = self._get_zmq(ws_name)
-        if zmq:
-            zmq_msg = (4, 0, (self._bkr, self.exch, 'pong'))
-            zmq.send(*zmq_msg, receiver='engine')
-
-    def get_zmqs(self) -> list:
-        return list(self._zmqs.values())
-
-    def start_zmqs(self):
-        from pfund.engines.trade_engine import TradeEngine
-        zmq_ports = TradeEngine.settings['zmq_ports']
-        for ws_name in self.get_all_ws_names():
-            if ws_name in self._servers:
-                if self._use_separate_private_ws_url:
-                    port = zmq_ports[self.exch]['ws_api']['public'][ws_name]
-                else:
-                    port = zmq_ports[self.exch]['ws_api']
-            elif ws_name in self._accounts:
-                if self._use_separate_private_ws_url:
-                    port = zmq_ports[self.exch]['ws_api']['private'][ws_name]
-                else:
-                    continue
-            self._zmqs[ws_name] = ZeroMQ(ws_name)
-            self._zmqs[ws_name].start(
-                logger=self._logger,
-                send_port=port,
-                recv_ports=[zmq_ports['engine']]
-            )
-        # send the process ID to engine
-        ws_name = self._servers[0]
-        zmq = self._get_zmq(ws_name)
-        if zmq:
-            zmq_msg = (4, 1, (self._bkr, self.exch, os.getpid()))
-            zmq.send(*zmq_msg, receiver='engine')
-
-    def stop_zmqs(self):
-        for zmq in self._zmqs.values():
-            zmq.stop()
-        self._zmqs = {}
-
+    
+    def _is_separate_url_for_private_channels(self) -> bool:
+        public_url = self._get_url(DataChannelType.public)
+        private_url = self._get_url(DataChannelType.private)
+        return public_url != private_url
+    
     def add_account(self, account: CryptoAccount) -> CryptoAccount:
         if account.name not in self._accounts:
             self._accounts[account.name] = account
@@ -191,7 +113,7 @@ class BaseWebsocketApi(ABC):
             raise ValueError(f'account name {account.name} has already been added')
         return account
 
-    def _add_product(self, product: CryptoProduct) -> CryptoProduct:
+    def add_product(self, product: CryptoProduct) -> CryptoProduct:
         if product.name not in self._products:
             self._products[product.name] = product
             self._logger.debug(f'websocket added product {product.symbol}')
@@ -201,89 +123,52 @@ class BaseWebsocketApi(ABC):
                 raise ValueError(f'product {product.symbol} has already been used for {existing_product}')
         return product
         
-    def add_channel(self, channel: PrivateDataChannel | FullDataChannel, *, channel_type: Literal['public', 'private']):
+    def add_channel(self, channel: FullDataChannel, *, channel_type: Literal['public', 'private']):
         channel_type = DataChannelType[channel_type.lower()]
-        if channel.lower() in PrivateDataChannel.__members__:
-            channel = self._create_private_channel(channel)
         if channel not in self._channels[channel_type]:
             self._channels[channel_type].append(channel)
             self._logger.debug(f'added {channel_type} channel {channel}')
-    
-    # send msg to engine->connection manager to indicate it is connected 
-    # to connection manager, a successful connection = connected + authenticated + subscribed + other stuff (e.g. snapshots ready)
-    def _on_all_connected(self):
-        ws_name = self._servers[0]
-        zmq = self._get_zmq(ws_name)
-        if zmq:
-            zmq_msg = (4, 2, (self._bkr, self.exch, 'connected'),)
-            zmq.send(*zmq_msg, receiver='engine')
-
-    def _on_all_disconnected(self):
-        ws_name = self._servers[0]
-        zmq = self._get_zmq(ws_name)
-        if zmq:
-            zmq_msg = (4, 3, (self._bkr, self.exch, 'disconnected'))
-            zmq.send(*zmq_msg, receiver='engine')
-
-    def _on_connected(self, ws_name: str):
-        if not self._is_connected[ws_name]:
-            self._is_connected[ws_name] = True
-            self._logger.debug(f'ws={ws_name} is connected')
+        
+    def _create_ws_name(self, account_name: str=''):
+        if not account_name:
+            return '_'.join([self.exch, 'ws']).lower()
         else:
-            self._logger.warning(f'ws={ws_name} is already connected')
-
-    def _on_disconnected(self, ws_name: str):
-        if self._is_connected[ws_name]:
-            self._is_connected[ws_name] = False
-            self._is_authenticated[ws_name] = False
-            self._logger.debug(f'ws={ws_name} is disconnected')
+            return '_'.join([account_name, 'ws']).lower()
+        
+    def _add_ws(self, ws_name: WebSocketName, ws: WebSocket):
+        ws.name = ws_name  # HACK: assign ws_name to ws.name for conveniencec
+        if ws_name in self._websockets:
+            raise Exception(f'{ws_name} already exists')
+        self._websockets[ws_name] = ws
+        
+    async def _checkup(self, num_connections: int):
+        wait_secs = 5
+        while len(self._websockets) != num_connections:
+            self._logger.debug(f'waiting for all websockets to connect, websockets={list(self._websockets)}')
+            await asyncio.sleep(1)
+            wait_secs -= 1
+            if wait_secs <= 0:
+                raise Exception(f'{self.exch} websockets failed to connect, {num_connections=} {list(self._websockets)=}')
+        # TODO: check if sub_num = num_subscribed, auth etc.
         else:
-            self._logger.warning(f'ws={ws_name} is already disconnected')
-
-    # connected = ws is connected
-    def is_connected(self, ws_name):
-        return self._is_connected[ws_name]
-
-    def _is_all_connected(self, ws_names: list):
-        return all([self._is_connected[ws_name] for ws_name in ws_names])
-
-    def _is_all_authenticated(self, ws_names: list):
-        return all([self._is_authenticated[ws_name] for ws_name in ws_names if ws_name not in self._servers])
-
-    def _is_all_subscribed(self):
-        return self._num_subscribed == self._sub_num and self._num_subscribed != 0 and self._sub_num != 0
-
-    def _is_all_snapshots_ready(self):
-        return all([self._is_snapshots_ready[pdt] for pdt in self._products])
-
-    def _create_ws_app(self, ws_name: str, url: str) -> WebSocketApp:
-        ws = WebSocketApp(
-            url,
-            on_open=self._on_open, 
-            on_message=self._on_message,
-            on_error=self._on_error, 
-            on_close=self._on_close,
-            on_pong=self._on_pong,
-        )
-        # HACK: useful self-assigned attribute to the ws object
-        ws.name = ws_name
-        return ws
+            pass
     
-    def _create_ws_thread(self, ws):
-        return Thread(
-            name=ws.name,
-            target=ws.run_forever, 
-            kwargs={
-                'ping_interval': self._ping_freq,
-                'ping_timeout': self._ping_timeout,
-            }, 
-            daemon=True
-        )
-
+    # FIXME
+    def _cleanup(self):
+        self._websockets.clear()
+        self._is_reconnecting = False
+        self._sub_num = self._num_subscribed = 0
+        self._is_snapshots_ready = defaultdict(bool)
+        self._bids_l2 = defaultdict(dict)
+        self._asks_l2 = defaultdict(dict)
+        self._last_quote_nums = defaultdict(int)
+        
+    # FIXME
     def check_connection(self):
         if reconnect_ws_names := [ws_name for ws_name, ws in self._websockets.items() if not (self._is_connected[ws_name] and ws.sock and ws.sock.connected)]:
             self.reconnect(reconnect_ws_names)
 
+    # FIXME
     def reconnect(self, ws_names: str|list[str]|None=None, reason: str=''):
         ws_names = self._adjust_input_ws_names(ws_names)
         if not self._is_reconnecting:
@@ -294,129 +179,84 @@ class BaseWebsocketApi(ABC):
             self._is_reconnecting = False
         else:
             self._logger.debug(f'{ws_names} is already reconnecting, do not reconnect again due to {reason=}')
-    
-    def connect(self, ws_names: str|list[str]|None=None) -> bool:
-        ws_names = self._adjust_input_ws_names(ws_names)
-        for ws_name in ws_names:
-            is_private_ws = ws_name in self._accounts
-            # if no separate server for private_ws, it will share the same server with public_ws
-            if is_private_ws and not self._use_separate_private_ws_url:
-                continue
-            ws_url = self._create_ws_url(ws_name)
-            self._logger.debug(f'ws={ws_name} is connecting to {ws_url}')
-            ws = self._create_ws_app(ws_name, ws_url)
-            self._websockets[ws_name] = ws
-            self._ws_threads[ws_name] = self._create_ws_thread(ws)
         
-        # start running the ws apps
-        for thd in self._ws_threads.values():
-            thd.start()
-            self._logger.debug(f'thread {thd.name} started')
-        
-        if self._wait(lambda: self._is_all_connected(ws_names), reason='connection'):
-            if self._wait(lambda: self._is_all_authenticated(ws_names), reason='authentication'):
-                for ws_name in ws_names:
-                    if full_channels := self._channels['public' if ws_name in self._servers else 'private']:
-                        ws = self._websockets[ws_name]
-                        self._subscribe(ws, full_channels)
-                if self._sub_num == 0:
-                    raise Exception(f'No subscription/Empty channel for {self.exch} ws, please subscribe to at least one channel')
-                if self._wait(self._is_all_subscribed, reason='subscription'):
-                    if hasattr(self, '_get_initial_snapshots'):
-                        Thread(target=self._get_initial_snapshots, daemon=True).start()
-                        self._logger.debug(f'_get_initial_snapshots thread started')
-                    pdts = list(self._orderbook_levels) if self._orderbook_levels else list(self._products)
-                    # set all snapshots to be ready if orderbook is level 1
-                    for pdt in pdts:
-                        if self._orderbook_levels.get(pdt, 1) == 1:
-                            self._is_snapshots_ready[pdt] = True
-                    if self._wait(self._is_all_snapshots_ready, reason='snapshots'):
-                        self._background_thread = Thread(target=self._run_background_tasks, daemon=True)
-                        self._background_thread.start()
-                        self._logger.debug(f'background thread started')
-                        self._on_all_connected()
-                        return
-        self.disconnect(reason='connection failed')
+    async def connect(self):
+        num_ws_connections = 0
+        async with asyncio.TaskGroup() as task_group:
+            is_empty_channels = not self._channels[DataChannelType.public] and not self._channels[DataChannelType.private]
+            if is_empty_channels:
+                return
+            channel_type = DataChannelType.public
+            url = self._get_url(channel_type)
+            num_ws_connections += 1
+            task_group.create_task(self._connect_ws(url))
+            if self._is_separate_url_for_private_channels():
+                channel_type = DataChannelType.private
+                url = self._get_url(channel_type)
+                for account in self._accounts.values():
+                    num_ws_connections += 1
+                    task_group.create_task(self._connect_ws(url, account=account))
+            await self._checkup(num_ws_connections)
 
-    def disconnect(self, ws_names: str|list[str]|None=None, reason: str=''):
-        ws_names = self._adjust_input_ws_names(ws_names)
-        for ws_name in ws_names:
-            ws = self._websockets[ws_name]
-            self._logger.warning(f'ws={ws_name} is disconnecting, {reason=}')
-            del self._websockets[ws_name]
-            self._logger.warning(f'ws={ws_name} is closing')
-            ws.close()
-            thd = self._ws_threads[ws_name]
-            while thd.is_alive():
-                self._logger.debug(f'waiting for thread {thd.name} to finish')
-                time.sleep(1)
-            else:
-                self._logger.debug(f'thread {thd.name} is finished')
-                del self._ws_threads[ws_name]
-        while self._background_thread and self._background_thread.is_alive():
-            self._logger.debug(f'waiting for background thread to finish')
-            time.sleep(1)
-        else:
-            self._background_thread = None
-            self._logger.debug(f'background thread is finished')
-        self._clean_up()
-        self._on_all_disconnected()
+    async def _connect_ws(self, url: str, account: CryptoAccount | None=None):
+        from websockets.asyncio.client import connect
+        from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK, ConnectionClosed
 
-    def _send(self, ws, msg):
+        ws_name = self._create_ws_name(account_name=account.name if account else '')
+        self._logger.debug(f'{ws_name} is connecting to {url}')
         try:
-            with suppress(WebSocketConnectionClosedException):
-                ws.send(json.dumps(msg))
-        except:
-            self._logger.exception(f'ws={ws.name} exception:')
+            async with connect(url) as ws:
+                self._add_ws(ws_name, ws)
+                
+                if not self._is_separate_url_for_private_channels():
+                    for account in self._accounts.values():
+                        self._authenticate(ws, account)
+                    for channel_type, channels in self._channels.items():
+                        if not channels:
+                            continue
+                        await self._subscribe(ws, channels, channel_type)
+                else:
+                    if account is None:
+                        channel_type = DataChannelType.public
+                    else:
+                        channel_type = DataChannelType.private
+                        self._authenticate(ws, account)
+                    if channels := self._channels[channel_type]:
+                        await self._subscribe(ws, channels, channel_type)
 
-    def _on_pong(self, ws, msg):
-        self._logger.warning(f'unhandled ws={ws.name} pong {msg=}')
-
-    def _on_open(self, ws):
-        self._on_connected(ws.name)
-        if not self._use_separate_private_ws_url:
-            for acc in self._accounts:
-                self._authenticate(acc)
-        else:
-            # is_authenticating is True = the exchange authenticates when connecting to the ws server
-            # so ws connection is opened = authenticated
-            if self._is_authenticating[ws.name]:
-                if ws.name not in self._servers:
-                    self._is_authenticated[ws.name] = True
-                    self._is_authenticating[ws.name] = False
-            else:
-                if ws.name in self._accounts:
-                    self._authenticate(ws.name)
-        self._logger.debug(f'ws={ws.name} is opened')
-
-    def _on_error(self, ws, error):
-        self._on_disconnected(ws.name)
-        self._logger.error(f'ws={ws.name} error {error}')
-
-    def _on_close(self, ws, status_code, reason):
-        self._on_disconnected(ws.name)
-        self._logger.warning(f'ws={ws.name} is closed, status_code={status_code} reason={reason}')
+                try:
+                    async for msg in ws:
+                        await self._on_message(ws, msg)
+                except ConnectionClosedOK:
+                    self._logger.debug(f"{ws_name} closed normally")
+                except ConnectionClosedError as e:
+                    self._logger.error(f"{ws_name} closed with error: {e}")
+                except ConnectionClosed as e:
+                    self._logger.error(f"{ws_name} connection lost: {e}")
+                except Exception:
+                    self._logger.exception(f"{ws_name} unexpected error in message loop:")
+        except Exception as err:
+            self._logger.warning(f'{ws_name} failed to connect ({err=}), will try again later')
+        
+    async def disconnect(self, reason: str=''):
+        for ws in self._websockets.values():
+            await self._disconnect_ws(ws, reason=reason)
+        self._cleanup()
+            
+    async def _disconnect_ws(self, ws: WebSocket, reason: str=''):
+        if ws.state != State.OPEN:
+            self._logger.warning(f'{ws.name} (state={ws.state.name}) is not OPEN, cannot disconnect, {reason=}')
+            return
+        self._logger.warning(f'{ws.name} is disconnecting, {reason=}')
+        await ws.close(code=1000, reason=reason)
+        await ws.wait_closed()
     
-    def _wait(self, condition_func: Callable, reason: str='', timeout: int=10):
-        while timeout:
-            if condition_func():
-                self._logger.debug(f'{reason} is successful')
-                return True
-            timeout -= 1
-            time.sleep(1)
-            log_msg = f'waiting for {reason}'
-            if reason in ['connection', 'disconnection']:
-                log_msg += f' _is_connected: {self._is_connected}'
-            elif reason == 'authentication':
-                log_msg += f' _is_authenticated: {self._is_authenticated}'
-            elif 'subscription' in reason:
-                log_msg += f' {self._sub_num=} {self._num_subscribed=}'
-            elif reason == 'snapshots':
-                log_msg += f' _is_snapshots_ready: {self._is_snapshots_ready}'
-            self._logger.info(log_msg)
-        else:
-            self._logger.warning(f'failed {log_msg}')
-            return False
+    async def _send(self, ws: WebSocket, msg: dict):
+        try:
+            await ws.send(json.dumps(msg))
+            self._logger.debug(f'{ws.name} sent {msg}')
+        except Exception:
+            self._logger.exception(f'{ws.name} _send() exception:')
 
     def _validate_sequence_num(self, ws_name: str, pdt: str, seq_num: int, type_: Literal['quote', 'position']='quote') -> bool:
         if type_ == 'quote':
@@ -613,23 +453,3 @@ class BaseWebsocketApi(ABC):
         else:
             data = {'bkr': self._bkr, 'exch': self.exch, 'acc': acc, 'channel': 'trade', 'data': trades}
             return data
-
-    @abstractmethod
-    def _authenticate(self, acc: str):
-        pass
-    
-    @abstractmethod
-    def _create_public_channel(self, product: CryptoProduct, resolution: Resolution):
-        pass
-
-    def _create_private_channel(self, channel: PrivateDataChannel | str):
-        channel = PrivateDataChannel[channel.lower()]
-        return self._adapter(channel, group='channel')
-
-    @abstractmethod
-    def _subscribe(self, ws, full_channels: list[str]):
-        pass
-
-    @abstractmethod
-    def _unsubscribe(self, ws, full_channels: list[str]):
-        pass

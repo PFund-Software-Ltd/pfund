@@ -3,7 +3,8 @@ from typing import TYPE_CHECKING, ClassVar, TypeAlias, Literal
 if TYPE_CHECKING:
     from pathlib import Path
     from pfund.exchanges.rest_api_base import Result, RawResult
-    from pfund.enums import CryptoExchange, PrivateDataChannel
+    from pfund.enums import CryptoExchange
+    from pfund.datas.data_time_based import TimeBasedData
     from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
     from pfund.products.product_crypto import CryptoProduct
     from pfund.accounts.account_crypto import CryptoAccount
@@ -19,7 +20,7 @@ from abc import ABC, abstractmethod
 
 from pfund.adapter import Adapter
 from pfund.managers.order_manager import OrderUpdateSource
-from pfund.enums import Environment, Broker
+from pfund.enums import Environment, Broker, PrivateDataChannel, PublicDataChannel
 
 
 ProductCategory: TypeAlias = str
@@ -168,8 +169,8 @@ class BaseExchange(ABC):
                     f"Please set 'refetch_market_configs=True' in TradeEngine's settings to refetch the latest market configurations."
                 )
             self._products[product.name] = product
-            # REVIEW: maybe use asset_type instead of category for more generic grouping?
-            self.adapter._add_mapping(product.category, product.name, product.symbol)
+            self._ws_api.add_product(product)
+            self.adapter._add_mapping(product.type, product.name, product.symbol)
         else:
             existing_product: CryptoProduct = self.get_product(product.name)
             # assert products are the same with the same name
@@ -190,16 +191,16 @@ class BaseExchange(ABC):
             raise ValueError(f'account name {account.name} has already been added')
         return account
     
-    def add_channel(self, channel: PrivateDataChannel | FullDataChannel, *, channel_type: Literal['public', 'private']):
-        self._ws_api.add_channel(channel, channel_type)
+    def add_public_channel(self, channel: PublicDataChannel | FullDataChannel, data: TimeBasedData | None=None):
+        if channel.lower() in PublicDataChannel.__members__:
+            channel: FullDataChannel = self._ws_api._create_public_channel(data.product, data.resolution)
+        self._ws_api.add_channel(channel, channel_type='public')
     
-    # FIXME
-    def use_separate_private_ws_url(self) -> bool:
-        return self._ws_api._use_separate_private_ws_url
+    def add_private_channel(self, channel: PrivateDataChannel | FullDataChannel):
+        if channel.lower() in PrivateDataChannel.__members__:
+            channel: FullDataChannel = self._ws_api._create_private_channel(channel)
+        self._ws_api.add_channel(channel, channel_type='private')
     
-    def get_ws_servers(self):
-        return self._ws_api._servers
-
     # REVIEW
     @staticmethod
     def _combine_trades(trades: list):
@@ -260,7 +261,7 @@ class BaseExchange(ABC):
                 for order in res:
                     epdt = step_into(order, schema['pdt'])
                     category = params.get('category', '')
-                    pdt = self.adapter(epdt, group=category)
+                    pdt = self.adapter(epdt, group=product.type)
                     update = {}
                     for k, (ek, *sequence) in schema['data'].items():
                         group = k + 's' if k in ['tif', 'side'] else ''
@@ -320,7 +321,8 @@ class BaseExchange(ABC):
                 for position in res:
                     epdt = step_into(position, schema['pdt'])
                     category = params.get('category', '')
-                    pdt = self.adapter(epdt, group=category)
+                    # TODO: convert category to product asset type
+                    pdt = self.adapter(epdt, group=asset_type)
                     qty = float(step_into(position, schema['data']['qty'][0]))
                     if qty == 0 and pdt not in self._products:
                         continue
@@ -354,7 +356,8 @@ class BaseExchange(ABC):
                 for trade in res:
                     epdt = step_into(trade, schema['pdt'])
                     category = params.get('category', '')
-                    pdt = self.adapter(epdt, group=category)
+                    # TODO: convert category to product asset type
+                    pdt = self.adapter(epdt, group=asset_type)
                     update = {}
                     for k, (ek, *sequence) in schema['data'].items():
                         group = k + 's' if k in ['tif', 'side'] else ''
