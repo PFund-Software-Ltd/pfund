@@ -29,6 +29,7 @@ from pfund.enums import Environment, Broker, CryptoExchange, PrivateDataChannel,
 
 
 WebSocketName: TypeAlias = str
+Price: TypeAlias = float
 
 
 class BaseWebsocketApi(ABC):
@@ -38,6 +39,8 @@ class BaseWebsocketApi(ABC):
     URLS: ClassVar[dict[Environment, str | dict[Literal['public', 'private'], str]]] = {}
     SUPPORTED_ORDERBOOK_LEVELS = {}
     SUPPORTED_RESOLUTIONS = {}
+    CHECK_FREQ = 10  # check connections frequency (in seconds)
+    PING_FREQ = 20  # application-level ping to exchange (in seconds)
 
     def __init__(self, env: Environment | tEnvironment):
         self._env = Environment[env.upper()]
@@ -50,26 +53,20 @@ class BaseWebsocketApi(ABC):
         self._products: dict[ProductName, CryptoProduct] = {}
         self._accounts: dict[AccountName, CryptoAccount] = {}
         self._channels: dict[DataChannelType, list[str]] = {
-            DataChannelType.public: [], 
+            DataChannelType.public: [],
             DataChannelType.private: []
         }
-        self._websockets: dict[WebSocketName, WebSocket] = {}
     
-        self._is_authenticated = defaultdict(bool)
-        self._is_reconnecting = False
-        self._sub_num = self._num_subscribed = 0
-
-        # FIXME
-        # self._ping_freq = 20  # in seconds
-        # self._last_ping_ts = time.time()
-
-        # self._check_connection_freq = 10
-        # self._last_check_connection_ts = time.time()
+        self._websockets: dict[WebSocketName, WebSocket] = {}
+        self._sub_num = self._num_subscribed = self._ws_num = 0
+        self._is_authenticated: dict[WebSocketName, bool] = defaultdict(bool)
         
-        # self._is_snapshots_ready = defaultdict(bool)
-        # self._bids_l2 = defaultdict(dict)
-        # self._asks_l2 = defaultdict(dict)
-        # self._last_quote_nums = defaultdict(int)
+        self._bids_l2: dict[ProductName, dict[Price, float]] = defaultdict(dict)
+        self._asks_l2: dict[ProductName, dict[Price, float]] = defaultdict(dict)
+        self._last_quote_nums: dict[ProductName, int] = defaultdict(int)
+        
+        self._last_ping_ts = time.time()
+        self._last_check_ts = time.time()
     
     @abstractmethod
     async def _subscribe(self, ws: WebSocket, channels: list[str], channel_type: DataChannelType):
@@ -81,6 +78,10 @@ class BaseWebsocketApi(ABC):
 
     @abstractmethod
     async def _authenticate(self, ws: WebSocket, account: CryptoAccount):
+        pass
+
+    @abstractmethod
+    async def _ping(self):
         pass
     
     @abstractmethod
@@ -99,11 +100,6 @@ class BaseWebsocketApi(ABC):
 
     def _get_url(self, channel_type: DataChannelType | Literal['public', 'private']) -> str:
         return self.URLS[self._env][DataChannelType[channel_type.lower()]]
-    
-    def _is_separate_url_for_private_channels(self) -> bool:
-        public_url = self._get_url(DataChannelType.public)
-        private_url = self._get_url(DataChannelType.private)
-        return public_url != private_url
     
     def add_account(self, account: CryptoAccount) -> CryptoAccount:
         if account.name not in self._accounts:
@@ -135,94 +131,120 @@ class BaseWebsocketApi(ABC):
         else:
             return '_'.join([account_name, 'ws']).lower()
         
+    def _get_ws(self, ws_name: WebSocketName) -> WebSocket:
+        if not ws_name.endswith('_ws'):
+            ws_name += '_ws'
+        return self._websockets[ws_name]
+        
     def _add_ws(self, ws_name: WebSocketName, ws: WebSocket):
         ws.name = ws_name  # HACK: assign ws_name to ws.name for conveniencec
         if ws_name in self._websockets:
             raise Exception(f'{ws_name} already exists')
         self._websockets[ws_name] = ws
         
-    async def _checkup(self, num_connections: int):
-        wait_secs = 5
-        while len(self._websockets) != num_connections:
-            self._logger.debug(f'waiting for all websockets to connect, websockets={list(self._websockets)}')
+    async def _wait(self, target_condition: Callable[[], bool], description: str, timeout: int=5):
+        while not target_condition():
+            self._logger.debug(description)
             await asyncio.sleep(1)
-            wait_secs -= 1
-            if wait_secs <= 0:
-                raise Exception(f'{self.exch} websockets failed to connect, {num_connections=} {list(self._websockets)=}')
-        # TODO: check if sub_num = num_subscribed, auth etc.
-        else:
-            pass
+            timeout -= 1
+            if timeout <= 0:
+                raise Exception(f'failed {description}')
+        
+    async def _checkup(self):
+        await self._wait(
+            target_condition=lambda: len(self._websockets) == self._ws_num,
+            description=f'waiting for all websockets to connect, ws_num={self._ws_num} websockets={list(self._websockets)}',
+        )
+        await self._wait(
+            target_condition=lambda: self._num_subscribed == self._sub_num,
+            description=f'waiting for all channels to be subscribed, sub_num={self._sub_num} num_subscribed={self._num_subscribed}',
+        )
+        if self._accounts:
+            await self._wait(
+                target_condition=lambda: all(self._is_authenticated[self._create_ws_name(account_name=account.name)] for account in self._accounts.values()),
+                description=f'waiting for all accounts to be authenticated, is_authenticated={self._is_authenticated}',
+            )
     
-    # FIXME
     def _cleanup(self):
         self._websockets.clear()
-        self._is_reconnecting = False
-        self._sub_num = self._num_subscribed = 0
-        self._is_snapshots_ready = defaultdict(bool)
-        self._bids_l2 = defaultdict(dict)
-        self._asks_l2 = defaultdict(dict)
-        self._last_quote_nums = defaultdict(int)
-        
-    # FIXME
-    def check_connection(self):
-        if reconnect_ws_names := [ws_name for ws_name, ws in self._websockets.items() if not (self._is_connected[ws_name] and ws.sock and ws.sock.connected)]:
-            self.reconnect(reconnect_ws_names)
+        self._sub_num = self._num_subscribed = self._ws_num = 0
+        self._is_authenticated.clear()
+        self._bids_l2.clear()
+        self._asks_l2.clear()
+        self._last_quote_nums.clear()
+        self._last_ping_ts = time.time()
+        self._last_check_ts = time.time()
 
-    # FIXME
-    def reconnect(self, ws_names: str|list[str]|None=None, reason: str=''):
-        ws_names = self._adjust_input_ws_names(ws_names)
-        if not self._is_reconnecting:
-            self._logger.warning(f'{ws_names} is reconnecting, {reason=}')
-            self._is_reconnecting = True
-            self.disconnect(ws_names, reason='reconnection')
-            self.connect(ws_names)
-            self._is_reconnecting = False
-        else:
-            self._logger.debug(f'{ws_names} is already reconnecting, do not reconnect again due to {reason=}')
+    async def _check_connection(self):
+        tasks = []
+        for ws_name in list(self._websockets):
+            ws = self._get_ws(ws_name)
+            if ws.state in [State.CLOSING, State.CLOSED]:
+                await self._disconnect_ws(ws, reason='connection lost, reconnecting')
+                
+                # look for account used by the ws if it is a private ws
+                for _account in self._accounts.values():
+                    if ws_name == self._create_ws_name(account_name=_account.name):
+                        channel_type = DataChannelType.private
+                        account: CryptoAccount = _account
+                        break
+                else:
+                    channel_type = DataChannelType.public
+                    account = None
+                
+                url = self._get_url(channel_type)
+                tasks.append(self._connect_ws(url, account=account))
+                
+        if tasks:
+            await asyncio.gather(*tasks)
+                
+    async def _run_background_tasks(self):
+        while self._websockets:
+            now = time.time()
+            if now - self._last_ping_ts > self.PING_FREQ:
+                await self._ping()
+                self._last_ping_ts = now
+            if now - self._last_check_ts > self.CHECK_FREQ:
+                await self._check_connection()
+                self._last_check_ts = now
+            await asyncio.sleep(1)
         
     async def connect(self):
-        num_ws_connections = 0
         async with asyncio.TaskGroup() as task_group:
-            is_empty_channels = not self._channels[DataChannelType.public] and not self._channels[DataChannelType.private]
-            if is_empty_channels:
-                return
-            channel_type = DataChannelType.public
-            url = self._get_url(channel_type)
-            num_ws_connections += 1
-            task_group.create_task(self._connect_ws(url))
-            if self._is_separate_url_for_private_channels():
-                channel_type = DataChannelType.private
+            for channel_type, channels in self._channels.items():
+                if not channels:
+                    continue
                 url = self._get_url(channel_type)
-                for account in self._accounts.values():
-                    num_ws_connections += 1
-                    task_group.create_task(self._connect_ws(url, account=account))
-            await self._checkup(num_ws_connections)
+                if channel_type == DataChannelType.public:
+                    self._ws_num += 1
+                    task_group.create_task(self._connect_ws(url))
+                else:
+                    # REVIEW: forcing pattern: one account uses one websocket connection
+                    for account in self._accounts.values():
+                        self._ws_num += 1
+                        task_group.create_task(self._connect_ws(url, account=account))
+        await self._checkup()
+        await self._run_background_tasks()
 
     async def _connect_ws(self, url: str, account: CryptoAccount | None=None):
         from websockets.asyncio.client import connect
         from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK, ConnectionClosed
 
         ws_name = self._create_ws_name(account_name=account.name if account else '')
+        assert ws_name.endswith('_ws'), f'{ws_name=} must end with "_ws"'
         self._logger.debug(f'{ws_name} is connecting to {url}')
         try:
             async with connect(url) as ws:
+                self._logger.debug(f'{ws_name} is connected')
                 self._add_ws(ws_name, ws)
                 
-                if not self._is_separate_url_for_private_channels():
-                    for account in self._accounts.values():
-                        self._authenticate(ws, account)
-                    for channel_type, channels in self._channels.items():
-                        if not channels:
-                            continue
-                        await self._subscribe(ws, channels, channel_type)
+                if account is None:
+                    channel_type = DataChannelType.public
                 else:
-                    if account is None:
-                        channel_type = DataChannelType.public
-                    else:
-                        channel_type = DataChannelType.private
-                        self._authenticate(ws, account)
-                    if channels := self._channels[channel_type]:
-                        await self._subscribe(ws, channels, channel_type)
+                    channel_type = DataChannelType.private
+                    self._authenticate(ws, account)
+                if channels := self._channels[channel_type]:
+                    await self._subscribe(ws, channels, channel_type)
 
                 try:
                     async for msg in ws:
@@ -235,21 +257,22 @@ class BaseWebsocketApi(ABC):
                     self._logger.error(f"{ws_name} connection lost: {e}")
                 except Exception:
                     self._logger.exception(f"{ws_name} unexpected error in message loop:")
+            self._logger.warning(f'{ws_name} is disconnected')
         except Exception as err:
             self._logger.warning(f'{ws_name} failed to connect ({err=}), will try again later')
         
     async def disconnect(self, reason: str=''):
-        for ws in self._websockets.values():
+        for ws_name in list(self._websockets):
+            ws = self._get_ws(ws_name)
             await self._disconnect_ws(ws, reason=reason)
         self._cleanup()
             
     async def _disconnect_ws(self, ws: WebSocket, reason: str=''):
-        if ws.state != State.OPEN:
-            self._logger.warning(f'{ws.name} (state={ws.state.name}) is not OPEN, cannot disconnect, {reason=}')
-            return
-        self._logger.warning(f'{ws.name} is disconnecting, {reason=}')
+        self._logger.warning(f'{ws.name} is disconnecting (state={ws.state.name}), {reason=}')
         await ws.close(code=1000, reason=reason)
         await ws.wait_closed()
+        self._websockets.pop(ws.name, None)
+        self._is_authenticated[ws.name] = False
     
     async def _send(self, ws: WebSocket, msg: dict):
         try:

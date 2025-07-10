@@ -60,7 +60,7 @@ class BaseOrder(BaseModel):
     order_type: OrderType | str = OrderType.LIMIT
     time_in_force: TimeInForce | str = TimeInForce.GTC
     is_reduce_only: bool = False
-    key: str | None=Field(default=None, description='unique key for the order')
+    key: str | None=Field(default=None, description='unique key for the order, can be used as client order id')
     order_id: str=Field(default='', description='order id given by the trading venue')
     alias: str=''
     remark: str = ''

@@ -89,12 +89,13 @@ class BybitWebsocketApi(BaseWebsocketApi):
             await self._send(ws, msg)
     
     async def _on_message(self, ws, msg: bytes):
-        msg = json.loads(msg)
-        self._logger.debug(f'{ws.name} {msg=}')
-        res = self._callback(msg)
-        if inspect.isawaitable(res):
-            await res
         try:
+            msg = json.loads(msg)
+            self._logger.debug(f'{ws.name} {msg=}')
+            res = self._callback(msg)
+            if inspect.isawaitable(res):
+                await res
+
             if 'op' in msg:
                 op: str = msg['op']
                 ret: str | None = msg.get('ret_msg')
@@ -205,7 +206,6 @@ class BybitWebsocketApi(BaseWebsocketApi):
             else:
                 if not self._validate_sequence_num(ws_name, pdt, seq_num):
                     return
-            self._is_snapshots_ready[pdt] = True
             self._bids_l2[pdt] = {}
             self._asks_l2[pdt] = {}
             bids, asks = data['b'], data['a']

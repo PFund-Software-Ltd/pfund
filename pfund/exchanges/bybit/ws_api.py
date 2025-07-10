@@ -46,13 +46,16 @@ class WebsocketApi(BaseWebsocketApi):
         else:
             return self._apis[ProductCategory[category.upper()]]
     
-    def _subscribe(self, *args, **kwargs):
+    async def _subscribe(self, *args, **kwargs):
         raise NotImplementedError("this method should not be called in this Websocket Facade class")
     
-    def _unsubscribe(self, *args, **kwargs):
+    async def _unsubscribe(self, *args, **kwargs):
         raise NotImplementedError("this method should not be called in this Websocket Facade class")
     
-    def _authenticate(self, *args, **kwargs):
+    async def _authenticate(self, *args, **kwargs):
+        raise NotImplementedError("this method should not be called in this Websocket Facade class")
+    
+    async def _ping(self, *args, **kwargs):
         raise NotImplementedError("this method should not be called in this Websocket Facade class")
     
     def _create_public_channel(self, product: BybitProduct, resolution: Resolution):
