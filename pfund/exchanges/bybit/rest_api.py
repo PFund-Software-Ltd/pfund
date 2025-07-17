@@ -114,7 +114,7 @@ class RestApi(BaseRestApi):
         category = ProductCategory[category.upper()]
         params = {'category': category.lower()}
         schema = {
-            '@result': ['result', 'list'],
+            '@data': ['result', 'list'],
             'symbol': ['symbol'],
             'base_asset': [
                 'baseCoin',

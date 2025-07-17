@@ -43,6 +43,7 @@ class TradeBroker(BaseBroker):
             self.add_channel(channel, channel_type='private')
     
     def start(self):
+        # TODO: check if all product names and account names are unique
         self._add_default_private_channels()
         self._connection_manager.connect()
         if self._settings.cancel_all_at['start']:

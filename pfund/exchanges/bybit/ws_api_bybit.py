@@ -1,7 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
-    from websockets.asyncio.client import ClientConnection as WebSocket
     from pfund.datas.resolution import Resolution
     from pfund.accounts.account_crypto import CryptoAccount
 
@@ -12,7 +11,8 @@ import inspect
 import msgspec
 from decimal import Decimal
 
-from pfund.exchanges.ws_api_base import BaseWebsocketApi
+from pfund.parser import SchemaParser
+from pfund.exchanges.ws_api_base import BaseWebsocketApi, NamedWebSocket
 from pfund.enums import Environment, CryptoExchange, PublicDataChannel, DataChannelType
 from pfund.products.product_bybit import BybitProduct
 from pfund.datas.timeframe import TimeframeUnits
@@ -52,21 +52,21 @@ class BybitWebsocketApi(BaseWebsocketApi):
             batched_channels = [channels[i:i+args_limit] for i in range(0, num_channels, args_limit)]
         return batched_channels
 
-    async def _subscribe(self, ws: WebSocket, channels: list[str], channel_type: DataChannelType):
+    async def _subscribe(self, ws: NamedWebSocket, channels: list[str], channel_type: DataChannelType):
         batched_channels = self._split_channels_into_batches(channels, channel_type)
         for _channels in batched_channels:
             # number of subscription is per msg, not per channel
             self._sub_num += 1
             await self._send(ws, msg={'op': 'subscribe', 'args': _channels})
 
-    async def _unsubscribe(self, ws: WebSocket, channels: list[str], channel_type: DataChannelType):
+    async def _unsubscribe(self, ws: NamedWebSocket, channels: list[str], channel_type: DataChannelType):
         batched_channels = self._split_channels_into_batches(channels, channel_type)
         for _channels in batched_channels:
             # number of subscription is per msg instead of per channel
             self._sub_num -= 1
             await self._send(ws, msg={'op': 'unsubscribe', 'args': _channels})
     
-    async def _authenticate(self, ws: WebSocket, account: CryptoAccount):
+    async def _authenticate(self, ws: NamedWebSocket, account: CryptoAccount):
         expires = int( (time.time() + 1) * 1000 )
         signature = hmac.new(
             bytes(account._secret, "utf-8"),
@@ -105,11 +105,12 @@ class BybitWebsocketApi(BaseWebsocketApi):
                 else:
                     self._logger.error(f'{ws_name} unsuccessful msg {msg}')
             elif 'topic' in msg:
-                # HACK: echannel = external channel, this allows users (incl. pfeed) to easily get the channel from the msg
-                msg['echannel'] = msg['topic']
+                pass
             else:
                 self._logger.warning(f'{ws_name} unhandled msg {msg}')
                 
+            if not self._callback_raw_msg:
+                msg = self._parse_message(msg)
             result = self._callback(msg)
             if inspect.isawaitable(result):
                 await result
@@ -149,6 +150,45 @@ class BybitWebsocketApi(BaseWebsocketApi):
         else:
             raise NotImplementedError(f'{resolution=} is not supported for creating public channel')
         return full_channel
+    
+    def _parse_message(self, msg: dict) -> dict:
+        channel: str = msg['topic']
+        if channel.startswith('kline'):
+            return self._parse_kline(msg)
+        else:
+            raise NotImplementedError(f'{self.exch} {channel=} is not supported')
+    
+    # REVIEW: schema only for linear products?
+    @staticmethod
+    def _parse_kline(msg: dict) -> dict:
+        # since timestamp in bybit is in mts
+        def adjust_ts(ms: int) -> float:
+            return ms / 10**3  
+        schema = {
+            'ts': ('ts', adjust_ts),
+            'channel': ['topic'],
+            '@data': ['data'],
+            'data': {
+                'open': ('open', float),
+                'high': ('high', float),
+                'low': ('low', float),
+                'close': ('close', float),
+                'volume': ('volume', float),
+                'ts': ('timestamp', float, adjust_ts),
+            },
+            'extra_data': (
+                'data',
+                # add the remaining fields other than ['open', 'high', 'low', 'close', 'volume', 'ts'] to the extra_data
+                lambda data: [
+                    {k: v for k, v in bar_dict.items() if k not in ['open', 'high', 'low', 'close', 'volume', 'ts']} 
+                    for bar_dict in data
+                ]
+            ),
+        }
+        data: dict = SchemaParser.convert(msg, schema)
+        data['data'] = data['data'][0]  # only one element in the list, access it
+        data['extra_data'] = data['extra_data'][0]  # only one element in the list, access it
+        return data
 
     def _process_message(self, ws, msg: dict) -> dict | None:
         ws_name = ws.name
@@ -264,28 +304,6 @@ class BybitWebsocketApi(BaseWebsocketApi):
         echannel, epdt = full_channel.split('.')
         pdt = self._adapter(epdt, group=ws_name)
         return super()._process_tradebook_msg(ws_name, msg, pdt, schema)
-    
-    @staticmethod
-    def _parse_kline(msg: dict):
-        schema = {
-            '@result': ['data'],
-            'ts': ('ts', lambda ms: ms / 10**3),  # since timestamp in bybit is in mts
-            'data': {
-                'open': ('open', float),
-                'high': ('high', float),
-                'low': ('low', float),
-                'close': ('close', float),
-                'volume': ('volume', float),
-                'ts': ('timestamp', float),
-            }
-        }
-        # TEMP
-        from pfund.parser import SchemaParser
-        print('***msg:', msg)
-        data: dict = SchemaParser.convert(msg, schema)
-        print('***data:', data)
-        exit()
-        # return super()._process_kline_msg(ws_name, msg, resolution, pdt, schema)
 
     def _process_position_msg(self, ws_name, msg):
         schema = {

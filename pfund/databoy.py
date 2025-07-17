@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from logging import Logger
-    from pfund.zeromq import ZeroMQ
+    from pfeed.messaging.zeromq import ZeroMQ
     from pfeed.typing import tDataSource
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
@@ -212,7 +212,7 @@ class DataBoy:
             zmq_ports_in_use: dict[str, int] of zmq ports in use by the component
         '''
         import zmq
-        from pfund.zeromq import ZeroMQ
+        from pfeed.messaging.zeromq import ZeroMQ
         
         zmq_urls = self._component._settings.zmq_urls
         zmq_ports = self._component._settings.zmq_ports

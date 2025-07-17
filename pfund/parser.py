@@ -3,102 +3,106 @@ from pydantic import validate_call
 from pfund.errors import ParseApiResponseError
 
 
+# OPTIMIZE
 class SchemaParser:
     """
     Transforms API responses into standardized format using schema-based rules.
     
     **Core Concept:**
-    A schema defines how to convert exchange-specific API responses into standardized 
-    dictionaries. The parser extracts data from the API response and applies 
-    transformation rules to produce consistent output format.
+    A schema defines how to convert API responses into standardized dictionaries.
+    Normal fields extract directly from the root message, while nested schemas 
+    use special `@xxx` keys to locate their data source.
     
     **Schema Structure:**
     ```python
     schema = {
-        '@result': ['path', 'to', 'data'],  # Locates data within API response
-        'output_field': extraction_rule,    # Maps to standardized field names
-        # ... more field mappings
+        'field1': extraction_rule,        # Extract from root message
+        'field2': extraction_rule,        # Extract from root message
+        '@nested_key': ['path', 'to'],    # Path for nested schema (only when needed)
+        'nested_key': {                   # Nested schema definition
+            'sub_field': extraction_rule
+        }
     }
     ```
     
     **Extraction Rules:**
     
-    1. **Hardcoded values** (non list/tuple/dict type, e.g. string):
+    1. **Hardcoded values** (non list/tuple/dict types):
        ```python
        'category': 'spot'  # Always outputs this exact value
        ```
     
     2. **Field paths** (list/tuple with extractors and transformers):
        ```python
-       'price': ['priceData', 'current', float]  # Extract nested field, convert to float
-       'ts': ('timestamp', lambda ms: ms / 1000)  # Extract and transform timestamp
+       'price': ['current_price', float]           # Extract nested field, convert to float
+       'ts': ('timestamp', lambda ms: ms / 1000)   # Extract and transform timestamp
        ```
     
-    3. **Nested schemas** (dict):
+    3. **Nested schemas** (dict with corresponding @xxx path):
        ```python
-       'data': {
+       '@data': ['response', 'items'],  # Path to nested data
+       'data': {                        # Schema for nested data
            'open': ('open', float),
            'close': ('close', float)
        }
        ```
     
-    **Field Path Processing:**
-    Field paths are processed left-to-right as a pipeline:
-    - **Extractors** (strings): Navigate into nested data structures using dict keys
-    - **Transformers** (functions): Modify the extracted value
+    **Processing Logic:**
     
-    **Missing Field Handling:**
-    If an extractor key doesn't exist in the data, the field is set to None and 
-    processing continues. This allows schemas to include fields that only apply 
-    to certain data types (e.g., 'expiration' for futures but not perpetuals).
+    - **Normal fields**: Extract directly from the root API response
+    - **Nested schemas**: Use `@xxx` keys to locate data, then apply nested schema
+    - **Field paths**: Processed left-to-right as pipeline (extractors → transformers)
+    - **Missing fields**: Set to None when extractor keys don't exist
+    - **Response types**: Handles both single dict and list of dicts automatically
     
-    **Input/Output:**
-    - **Input**: API response (dict or list of dicts) + schema definition
-    - **Output**: List of standardized dictionaries (always returns list for consistency)
-    - The '@result' key is removed from the schema after locating the data
+    **Key Features:**
+    
+    - No special keys needed for simple schemas
+    - `@xxx` keys only required for nested data extraction  
+    - Graceful handling of optional fields (e.g., 'expiration' for futures only)
+    - Automatic handling of single vs. multiple response items
     
     **Example:**
     ```python
     api_response = {
+        'topic': 'kline.1.BTCUSDT',
+        'ts': 1752760761525,
         'data': [
-            {'symbol': 'BTCUSD', 'price': '50000', 'volume': '100'},
-            {'symbol': 'ETHUSD', 'price': '3000', 'volume': '200'}
+            {'open': '118407.3', 'close': '118354.3', 'timestamp': 1752760761525}
         ]
     }
     
     schema = {
-        '@result': ['data'],
-        'product': ['symbol'],
-        'price': ('price', float),
-        'volume': ('volume', float)
+        'ts': ('ts', lambda ms: ms / 1000),  # Extract from root, transform
+        '@data': ['data'],                   # Path to nested data
+        'data': {                           # Nested schema
+            'open': ('open', float),
+            'close': ('close', float),
+            'ts': ('timestamp', float)
+        }
     }
     
-    # Output: [
-    #     {'product': 'BTCUSD', 'price': 50000.0, 'volume': 100.0},
-    #     {'product': 'ETHUSD', 'price': 3000.0, 'volume': 200.0}
-    # ]
+    # Output: {
+    #     'ts': 1752760761.525,
+    #     'data': [{'open': 118407.3, 'close': 118354.3, 'ts': 1752760761525.0}]
+    # }
     ```
     """
-    result_key: str = "@result"  # used to locate the result to be parsed
     
-    @classmethod
+    @staticmethod
     @validate_call
-    def _parse(cls, item: dict, schema: dict) -> dict:
-        '''Parse the item according to the schema
-        Args:
-            item: The item to be parsed
-            schema: The schema to be used for parsing
-        Returns:
-            The parsed item
+    def _parse(msg: dict, schema: dict) -> dict:
+        '''
+        Convert the input message to the desired format according to the schema.
         '''
         try:
-            parsed_item = {}
+            output = {}
             for key, path in schema.items():
-                if key == cls.result_key:
+                if key.startswith('@'):
                     continue
                 # Case 1: Path with optional transformers
                 if isinstance(path, (list, tuple)):
-                    value = item
+                    value = msg
                     for extractor_or_transformer in path:
                         if isinstance(extractor_or_transformer, str):
                             extractor: str = extractor_or_transformer
@@ -109,48 +113,38 @@ class SchemaParser:
                             else:
                                 value = None
                                 break
+                        elif isinstance(extractor_or_transformer, dict):
+                            raise ValueError(f'dict is not allowed for extractor or transformer: {extractor_or_transformer}')
                         else:
                             # NOTE: it doesn't have to be a function, e.g. it could be an operation like float()
                             transformer = extractor_or_transformer
                             value = transformer(value)
-                    parsed_item[key] = value
+                    output[key] = value
                 # Case 2: Nested schema
-                # REVIEW: nested schema cannot use @result key, so now assume that "item" is already the result
                 elif isinstance(path, dict):
+                    key_to_source = f'@{key}'
+                    assert key_to_source in schema, f'"{key_to_source}" must be defined for nested schema'
+                    path_to_source = schema[key_to_source]
+                    value: dict = msg
+                    for p in path_to_source:
+                        value: dict | list[dict] = value[p]
                     nested_schema = path
-                    parsed_item[key] = cls._parse(item, nested_schema)
+                    output[key] = SchemaParser.convert(value, nested_schema)
                 # Case 3: Hardcoded value
                 else:
-                    parsed_item[key] = path
-            return parsed_item
+                    output[key] = path
+            return output
         except Exception as exc:
             raise ParseApiResponseError(f'Failed to parse api response: {exc}')
     
-    @classmethod
+    @staticmethod
     @validate_call
-    def _extract_result(cls, api_response: dict, result_path: list[str] | tuple[str]) -> dict | list[dict]:
-        '''Extract the result to be parsed from the API response'''
-        try:
-            result_to_be_parsed: dict = api_response
-            for key in result_path:
-                result_to_be_parsed = result_to_be_parsed[key]
-            return result_to_be_parsed
-        except Exception as exc:
-            raise ParseApiResponseError(f'Failed to extract result: {exc}')
-    
-    @classmethod
-    @validate_call
-    def convert(cls, api_response: dict, schema: dict) -> dict | list[dict]:
-        '''
-        Convert the API response to the desired format according to the schema.
-        Args:
-            api_response: API response
-            schema: Schema definition
-        '''
-        result_to_be_parsed: dict | list[dict] = cls._extract_result(api_response, schema[cls.result_key])
-        if isinstance(result_to_be_parsed, dict):
-            return cls._parse(result_to_be_parsed, schema)
-        elif isinstance(result_to_be_parsed, list):
-            return [cls._parse(item, schema) for item in result_to_be_parsed]
+    def convert(api_response: dict | list[dict], schema: dict) -> dict | list[dict]:
+        if isinstance(api_response, dict):
+            result: dict =  SchemaParser._parse(api_response, schema)
+            return result
+        elif isinstance(api_response, list):
+            result: list[dict] = [SchemaParser._parse(item, schema) for item in api_response]
+            return result
         else:
-            raise ParseApiResponseError(f'Unhandled result type "{type(result_to_be_parsed)}":\n{result_to_be_parsed}')
+            raise ParseApiResponseError(f'Unhandled API response type "{type(api_response)}":\n{api_response}')

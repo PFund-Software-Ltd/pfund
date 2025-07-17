@@ -18,7 +18,7 @@ class Messenger:
             publisher: ZeroMQ publisher for broadcasting internal states to external apps
         '''
         import zmq
-        from pfund.zeromq import ZeroMQ
+        from pfeed.messaging.zeromq import ZeroMQ
         
         self._logger = logging.getLogger('pfund')
         

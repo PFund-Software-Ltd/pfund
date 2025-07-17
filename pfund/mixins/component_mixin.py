@@ -137,7 +137,7 @@ class ComponentMixin:
     def _setup_logging(self: Component, logging_config: dict) -> dict[str, int]:
         '''Sets up logging for component running in remote process, uses zmq's PUBHandler to send logs to engine'''
         from pfund._logging.zmq_pub_handler import ZMQPubHandler
-        from pfund.zeromq import ZeroMQ
+        from pfeed.messaging.zeromq import ZeroMQ
         from pfund._logging.config import LoggingDictConfigurator
         from pfund.utils.utils import get_free_port
 

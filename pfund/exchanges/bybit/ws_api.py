@@ -61,6 +61,9 @@ class WebsocketApi(BaseWebsocketApi):
     async def _on_message(self, *args, **kwargs):
         raise NotImplementedError("this method should not be called in this Websocket Facade class")
     
+    def _parse_message(self, msg: dict) -> dict:
+        raise NotImplementedError("this method should not be called in this Websocket Facade class")
+    
     def _create_public_channel(self, product: BybitProduct, resolution: Resolution):
         api = self.get_api(product.category)
         return api._create_public_channel(product, resolution)
@@ -70,9 +73,9 @@ class WebsocketApi(BaseWebsocketApi):
         for api in self._apis.values():
             api.set_logger(logger)
     
-    def set_callback(self, callback: Callable[[str], Awaitable[None] | None]):
+    def set_callback(self, callback: Callable[[str], Awaitable[None] | None], raw_msg: bool=False):
         for api in self._apis.values():
-            api.set_callback(callback)
+            api.set_callback(callback, raw_msg=raw_msg)
     
     def add_account(self, account: CryptoAccount) -> CryptoAccount:
         api = self.get_api()

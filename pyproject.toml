@@ -28,23 +28,20 @@ dependencies = [
     "pfolio>=0.0.2",
     "click>=8.1.8",
     "trogon>=0.6.0",
-    "platformdirs>=4.2.2",
-    "python-dotenv>=1.1.0",
+    "platformdirs>=4.3.8",
+    "python-dotenv>=1.1.1",
     "pyyaml>=6.0.2",
     "httpx>=0.28.1",
     "websockets>=15.0.1",
     "ta>=0.11.0",
     "scikit-learn>=1.7.0",
-    "orjson>=3.10.18",
 ]
 
 [project.optional-dependencies]
 core = [
     "mtflow[core]>=0.0.1.dev2",
     "pfolio[core]>=0.0.2",
-    "pyzmq>=27.0.0",
-    "order-book>=0.6.1",
-    "python-telegram-bot>=22.1",
+    "python-telegram-bot>=22.2.0",
 ]
 
 [project.scripts]

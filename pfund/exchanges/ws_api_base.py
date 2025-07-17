@@ -1,13 +1,13 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Callable, Literal, ClassVar, TypeAlias, Awaitable, Any
 if TYPE_CHECKING:
-    from websockets.asyncio.client import ClientConnection as WebSocket
     from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
     from pfund.adapter import Adapter
     from pfund.datas.resolution import Resolution
     from pfund.accounts.account_crypto import CryptoAccount
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.products.product_crypto import CryptoProduct
+    
 
 import time
 import logging
@@ -17,12 +17,10 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from functools import reduce
 
-try:
-    import orjson as json
-except ImportError:
-    import json
+import msgspec
 from numpy import sign
 from websockets.protocol import State
+from websockets.asyncio.client import ClientConnection as WebSocket
 
 from pfund.managers.order_manager import OrderUpdateSource
 from pfund.enums import Environment, Broker, CryptoExchange, PrivateDataChannel, DataChannelType
@@ -30,13 +28,14 @@ from pfund.enums import Environment, Broker, CryptoExchange, PrivateDataChannel,
 
 WebSocketName: TypeAlias = str
 Price: TypeAlias = float
+class NamedWebSocket(WebSocket):
+    name: str
 
 
 class BaseWebsocketApi(ABC):
     exch: ClassVar[CryptoExchange]
-    SAMPLES_FILENAME = 'ws_api_samples.yml'
 
-    URLS: ClassVar[dict[Environment, str | dict[Literal['public', 'private'], str]]] = {}
+    URLS: ClassVar[dict[Environment, dict[DataChannelType | Literal['public', 'private'], str]]] = {}
     SUPPORTED_ORDERBOOK_LEVELS = {}
     SUPPORTED_RESOLUTIONS = {}
     CHECK_FREQ = 10  # check connections frequency (in seconds)
@@ -49,6 +48,7 @@ class BaseWebsocketApi(ABC):
         Exchange: type[BaseExchange] = getattr(importlib.import_module(f'pfund.exchanges.{self.exch.lower()}.exchange'), 'Exchange')
         self._adapter: Adapter = Exchange.adapter
         self._callback: Callable[[str], Awaitable[None] | None] | None = None
+        self._callback_raw_msg: bool = False
 
         self._products: dict[ProductName, CryptoProduct] = {}
         self._accounts: dict[AccountName, CryptoAccount] = {}
@@ -65,15 +65,15 @@ class BaseWebsocketApi(ABC):
         self._last_check_ts = time.time()
     
     @abstractmethod
-    async def _subscribe(self, ws: WebSocket, channels: list[str], channel_type: DataChannelType):
+    async def _subscribe(self, ws: NamedWebSocket, channels: list[str], channel_type: DataChannelType):
         pass
 
     @abstractmethod
-    async def _unsubscribe(self, ws: WebSocket, channels: list[str], channel_type: DataChannelType):
+    async def _unsubscribe(self, ws: NamedWebSocket, channels: list[str], channel_type: DataChannelType):
         pass
 
     @abstractmethod
-    async def _authenticate(self, ws: WebSocket, account: CryptoAccount):
+    async def _authenticate(self, ws: NamedWebSocket, account: CryptoAccount):
         pass
 
     @abstractmethod
@@ -92,11 +92,22 @@ class BaseWebsocketApi(ABC):
         channel = PrivateDataChannel[channel.lower()]
         return self._adapter(channel, group='channel')
     
+    @abstractmethod
+    def _parse_message(self, msg: dict) -> dict:
+        pass
+    
     def set_logger(self, logger: logging.Logger):
         self._logger = logger
 
-    def set_callback(self, callback: Callable[[str], Awaitable[None] | None]):
+    def set_callback(self, callback: Callable[[str], Awaitable[None] | None], raw_msg: bool=False):
+        '''
+        Args:
+            raw_msg: 
+                if True, the callback will receive the raw messages.
+                if False, the callback will receive parsed messages.
+        '''
         self._callback = callback
+        self._callback_raw_msg = raw_msg
 
     def _get_url(self, channel_type: DataChannelType | Literal['public', 'private']) -> str:
         return self.URLS[self._env][DataChannelType[channel_type.lower()]]
@@ -119,8 +130,8 @@ class BaseWebsocketApi(ABC):
                 raise ValueError(f'product {product.symbol} has already been used for {existing_product}')
         return product
         
-    def add_channel(self, channel: FullDataChannel, *, channel_type: Literal['public', 'private']):
-        channel_type = DataChannelType[channel_type.lower()]
+    def add_channel(self, channel: FullDataChannel, *, channel_type: Literal['public', 'private']): 
+        channel_type: DataChannelType = DataChannelType[channel_type.lower()]
         if channel not in self._channels[channel_type]:
             self._channels[channel_type].append(channel)
             self._logger.debug(f'added {channel_type} channel {channel}')
@@ -131,7 +142,7 @@ class BaseWebsocketApi(ABC):
         else:
             return '_'.join([account_name, 'ws']).lower()
         
-    def _get_ws(self, ws_name: WebSocketName) -> WebSocket:
+    def _get_ws(self, ws_name: WebSocketName) -> NamedWebSocket:
         if not ws_name.endswith('_ws'):
             ws_name += '_ws'
         return self._websockets[ws_name]
@@ -264,16 +275,16 @@ class BaseWebsocketApi(ABC):
             await self._disconnect_ws(ws, reason=reason)
         self._cleanup()
             
-    async def _disconnect_ws(self, ws: WebSocket, reason: str=''):
+    async def _disconnect_ws(self, ws: NamedWebSocket, reason: str=''):
         self._logger.warning(f'{ws.name} is disconnecting (state={ws.state.name}), {reason=}')
         await ws.close(code=1000, reason=reason)
         await ws.wait_closed()
         self._websockets.pop(ws.name, None)
         self._is_authenticated[ws.name] = False
     
-    async def _send(self, ws: WebSocket, msg: dict):
+    async def _send(self, ws: NamedWebSocket, msg: dict):
         try:
-            await ws.send(json.dumps(msg))
+            await ws.send(msgspec.json.encode(msg))
             self._logger.debug(f'{ws.name} sent {msg}')
         except Exception:
             self._logger.exception(f'{ws.name} _send() exception:')
@@ -323,29 +334,6 @@ class BaseWebsocketApi(ABC):
         else:
             data = {'bkr': self._bkr, 'exch': self.exch, 'pdt': pdt, 'channel': 'tradebook', 'data': ticks}
             return data
-
-    def _process_kline_msg(self, msg, resolution: str, pdt, schema):
-        bars = []
-        res = msg[schema['result']]
-        res_type = type(res)
-        ts_adj = schema['ts_adj']
-        msg_ts = float(step_into(msg, schema['ts'])) * ts_adj if 'ts' in schema else None
-        if res_type is list:
-            for kline in res:
-                bar = {'ts': msg_ts, 'resolution': resolution, 'data': {}, 'extra_data': {}}
-                for k, (ek, *sequence) in schema['data'].items():
-                    initial_value = self._adapter(step_into(kline, ek))
-                    v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
-                    bar['data'][k] = v
-                    if k == 'ts':
-                        bar['data'][k] *= ts_adj
-                for k, (ek, *sequence) in schema.get('extra_data', {}).items():
-                    initial_value = step_into(kline, ek)
-                    v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
-                    bar['extra_data'][k] = v
-                bars.append(bar)
-        else:
-            raise NotImplementedError(f'{self.exch} ws kline msg {res_type=} is not supported')
 
     def _process_position_msg(self, ws_name, msg, schema) -> dict:
         acc = ws_name
