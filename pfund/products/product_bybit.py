@@ -20,7 +20,7 @@ class BybitProduct(CryptoProduct):
     category: ProductCategory | None = None
 
     @model_validator(mode='after')
-    def _derive_product_category(self) -> ProductCategory:
+    def _derive_product_category(self):
         if self.asset_type == CryptoAssetType.CRYPTO:
             category = self.ProductCategory.SPOT
         elif self.is_inverse():

@@ -18,20 +18,21 @@ from httpx import AsyncClient
 from httpx import RequestError, HTTPStatusError
 from json import JSONDecodeError
 
-from pfund.errors import ParseRawResultError
-from pfund.utils.utils import load_yaml_file, dump_yaml_file, parse_raw_result
+from pfund.errors import ParseApiResponseError
+from pfund.parser import SchemaParser
+from pfund.utils.utils import load_yaml_file, dump_yaml_file
 from pfund.enums import Environment, CryptoExchange
 
 
 EndpointName: TypeAlias = str
 EndpointPath: TypeAlias = str
-RawResult: TypeAlias = dict | list[dict]
+ApiResponse: TypeAlias = dict | list[dict]
 
     
 class ResultData(TypedDict):
     exchange: CryptoExchange
     account: str | None
-    message: dict | None
+    message: dict | list[dict] | None
 
 
 class RequestData(TypedDict):
@@ -82,7 +83,7 @@ class BaseRestApi(ABC):
         )
         
     @property
-    def nonce():
+    def nonce(self):
         return int(time.time() * 1000)
     
     @abstractmethod
@@ -123,12 +124,12 @@ class BaseRestApi(ABC):
         config = get_config()
         return Path(config.cache_path) / self.exch / self.SAMPLES_FILENAME
     
-    def _append_sample_return(self, endpoint_name: EndpointName, raw_result: RawResult):
+    def _append_sample_return(self, endpoint_name: EndpointName, api_response: ApiResponse):
         existing_samples = load_yaml_file(self.sample_file_path) or {}
-        existing_samples[endpoint_name] = raw_result
+        existing_samples[endpoint_name] = api_response
         dump_yaml_file(self.sample_file_path, existing_samples)
     
-    def get_sample_return(self, endpoint_name: EndpointName) -> RawResult:
+    def get_sample_return(self, endpoint_name: EndpointName) -> ApiResponse:
         samples = load_yaml_file(self.sample_file_path)
         return samples[endpoint_name]
     
@@ -139,7 +140,7 @@ class BaseRestApi(ABC):
         account: CryptoAccount | None=None,
         # data: dict | None=None,  # FIXME
         params: dict | None=None,
-    ) -> Result | RawResult:
+    ) -> Result | ApiResponse:
         '''
         Args:
             schema: schema to parse the returned message, if None, return the raw message
@@ -167,17 +168,18 @@ class BaseRestApi(ABC):
         }
         try:
             response: Response = await self._client.send(request)
-            raw_result: RawResult = response.raise_for_status().json()
+            api_response: ApiResponse = response.raise_for_status().json()
             if self._dev_mode:
-                self._append_sample_return(endpoint_name, raw_result)
-                return raw_result
+                self._append_sample_return(endpoint_name, api_response)
+                return api_response
             result['request']['status_code'] = response.status_code
-            is_success = response.is_success and self._is_success(raw_result)
+            is_success = response.is_success and self._is_success(api_response)
             result['is_success'] = is_success
-            result['data']['message'] = parse_raw_result(raw_result, schema) if is_success else raw_result
+            message: dict | list[dict] = SchemaParser.convert(api_response, schema) if is_success else api_response
+            result['data']['message'] = message
             if not is_success:
-                self._logger.warning(f'"{endpoint_name}" failed: {raw_result}')
-        except (ParseRawResultError, JSONDecodeError, RequestError, HTTPStatusError) as exc:
+                self._logger.warning(f'"{endpoint_name}" failed: {api_response}')
+        except (ParseApiResponseError, JSONDecodeError, RequestError, HTTPStatusError) as exc:
             result['error'] = f'{type(exc).__name__}: {exc}'
             self._logger.exception(f'REST API "{endpoint_name}" error:')
         except Exception as exc:

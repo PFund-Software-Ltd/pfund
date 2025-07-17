@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar, TypeAlias, Literal
 if TYPE_CHECKING:
     from pathlib import Path
-    from pfund.exchanges.rest_api_base import Result, RawResult
+    from pfund.exchanges.rest_api_base import Result, ApiResponse
     from pfund.enums import CryptoExchange
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
@@ -170,7 +170,7 @@ class BaseExchange(ABC):
                 )
             self._products[product.name] = product
             self._ws_api.add_product(product)
-            self.adapter._add_mapping(product.type, product.name, product.symbol)
+            self.adapter.add_mapping(product.type, product.name, product.symbol)
         else:
             existing_product: CryptoProduct = self.get_product(product.name)
             # assert products are the same with the same name

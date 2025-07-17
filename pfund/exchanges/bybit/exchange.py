@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfund.exchanges.rest_api_base import Result, RawResult
+    from pfund.exchanges.rest_api_base import Result, ApiResponse
     from pfund.products.product_base import BaseProduct
 
 import asyncio
@@ -56,7 +56,7 @@ class Exchange(BaseExchange):
             # result->list will return a useless list type containing a dict, 
             # need index '0' to get the real result
             # TODO, need to make sure it has really only one result so that using index 0 is safe
-            'result': ['result', 'list', 0, 'coin'],
+            '@result': ['result', 'list', 0, 'coin'],
             'ts': 'time',
             'ts_adj': 1/10**3,  # since timestamp in bybit is in mts
             'ccy': 'coin',
@@ -80,7 +80,7 @@ class Exchange(BaseExchange):
     # FIXME: remove pdt, pass in product object
     def get_positions(self, account: CryptoAccount, pdt: str='', category: tProductCategory='', **kwargs) -> dict | None:
         schema = {
-            'result': ['result', 'list'],
+            '@result': ['result', 'list'],
             'ts': 'time',
             'ts_adj': 1/10**3,  # since timestamp in bybit is in mts
             'pdt': 'symbol',
@@ -128,7 +128,7 @@ class Exchange(BaseExchange):
 
     def get_orders(self, account: CryptoAccount, pdt: str='', category: tProductCategory='', **kwargs):
         schema = {
-            'result': ['result', 'list'],
+            '@result': ['result', 'list'],
             'ts': 'time',
             'ts_adj': 1/10**3,  # since timestamp in bybit is in mts
             'pdt': 'symbol',
@@ -202,7 +202,7 @@ class Exchange(BaseExchange):
                 date = date.replace(tzinfo=datetime.timezone.utc)
             return date
         schema = {
-            'result': ['result', 'list'],
+            '@result': ['result', 'list'],
             'ts': 'time',
             'ts_adj': 1/10**3,  # since timestamp in bybit is in mts
             'pdt': 'symbol',
@@ -272,7 +272,7 @@ class Exchange(BaseExchange):
             expires_in: time in milliseconds, specify how long the HTTP request is valid.
         '''
         schema = {
-            'result': 'result',
+            '@result': 'result',
             'ts': 'time',
             'ts_adj': 1/10**3,  # convert bybit's milliseconds to seconds
             'data': {
@@ -314,7 +314,7 @@ class Exchange(BaseExchange):
 
     def cancel_order(self, account: CryptoAccount, product: BaseProduct, order: CryptoOrder):
         schema = {
-            'result': 'result',
+            '@result': 'result',
             'ts': 'time',
             'ts_adj': 1/10**3,  # since timestamp in bybit is in mts
             'data': {

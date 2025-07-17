@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     from pfund.exchanges.bybit.exchange import tProductCategory
     from pfund.accounts.account_crypto import CryptoAccount
     from httpx import Request
-    from pfund.exchanges.rest_api_base import Result, RawResult
+    from pfund.exchanges.rest_api_base import Result, ApiResponse
 
 import hmac
 import inspect
@@ -109,12 +109,12 @@ class RestApi(BaseRestApi):
         '''Checks if the returned message means successful based on the exchange's standard'''
         return 'retCode' in msg and msg['retCode'] == 0
     
-    async def get_markets(self, category: ProductCategory | tProductCategory) -> Result | RawResult:
+    async def get_markets(self, category: ProductCategory | tProductCategory) -> Result | ApiResponse:
         endpoint_name = inspect.currentframe().f_code.co_name
         category = ProductCategory[category.upper()]
         params = {'category': category.lower()}
         schema = {
-            'result': ['result', 'list'],
+            '@result': ['result', 'list'],
             'symbol': ['symbol'],
             'base_asset': [
                 'baseCoin',
@@ -147,5 +147,5 @@ class RestApi(BaseRestApi):
                 schema['asset_type'] = CryptoAssetType.OPT
                 schema['option_type'] = ('optionsType', lambda option_type: OptionType[option_type.upper()])
                 schema['strike_price'] = ('symbol', lambda symbol: Decimal(symbol.split('-')[2]))
-        result: Result | RawResult = await self._request(endpoint_name, schema, params=params)
+        result: Result | ApiResponse = await self._request(endpoint_name, schema, params=params)
         return result

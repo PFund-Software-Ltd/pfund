@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Literal, ClassVar, TypeAlias, Awaitable
+from typing import TYPE_CHECKING, Callable, Literal, ClassVar, TypeAlias, Awaitable, Any
 if TYPE_CHECKING:
     from websockets.asyncio.client import ClientConnection as WebSocket
     from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
@@ -61,10 +61,6 @@ class BaseWebsocketApi(ABC):
         self._sub_num = self._num_subscribed = self._ws_num = 0
         self._is_authenticated: dict[WebSocketName, bool] = defaultdict(bool)
         
-        self._bids_l2: dict[ProductName, dict[Price, float]] = defaultdict(dict)
-        self._asks_l2: dict[ProductName, dict[Price, float]] = defaultdict(dict)
-        self._last_quote_nums: dict[ProductName, int] = defaultdict(int)
-        
         self._last_ping_ts = time.time()
         self._last_check_ts = time.time()
     
@@ -82,6 +78,10 @@ class BaseWebsocketApi(ABC):
 
     @abstractmethod
     async def _ping(self):
+        pass
+    
+    @abstractmethod
+    async def _on_message(self, ws_name: str, raw_msg: bytes) -> Any:
         pass
     
     @abstractmethod
@@ -169,9 +169,6 @@ class BaseWebsocketApi(ABC):
         self._websockets.clear()
         self._sub_num = self._num_subscribed = self._ws_num = 0
         self._is_authenticated.clear()
-        self._bids_l2.clear()
-        self._asks_l2.clear()
-        self._last_quote_nums.clear()
         self._last_ping_ts = time.time()
         self._last_check_ts = time.time()
 
@@ -242,13 +239,13 @@ class BaseWebsocketApi(ABC):
                     channel_type = DataChannelType.public
                 else:
                     channel_type = DataChannelType.private
-                    self._authenticate(ws, account)
+                    await self._authenticate(ws, account)
                 if channels := self._channels[channel_type]:
                     await self._subscribe(ws, channels, channel_type)
 
                 try:
                     async for msg in ws:
-                        await self._on_message(ws, msg)
+                        await self._on_message(ws_name, msg)
                 except ConnectionClosedOK:
                     self._logger.debug(f"{ws_name} closed normally")
                 except ConnectionClosedError as e:
@@ -327,7 +324,7 @@ class BaseWebsocketApi(ABC):
             data = {'bkr': self._bkr, 'exch': self.exch, 'pdt': pdt, 'channel': 'tradebook', 'data': ticks}
             return data
 
-    def _process_kline_msg(self, ws_name, msg, resolution: str, pdt, schema):
+    def _process_kline_msg(self, msg, resolution: str, pdt, schema):
         bars = []
         res = msg[schema['result']]
         res_type = type(res)
@@ -349,14 +346,6 @@ class BaseWebsocketApi(ABC):
                 bars.append(bar)
         else:
             raise NotImplementedError(f'{self.exch} ws kline msg {res_type=} is not supported')
-        zmq = self._get_zmq(ws_name)
-        if zmq:
-            for bar in bars:
-                zmq_msg = (1, 3, (self._bkr, self.exch, pdt, bar))
-                zmq.send(*zmq_msg)
-        else:
-            data = {'bkr': self._bkr, 'exch': self.exch, 'pdt': pdt, 'channel': f'kline.{resolution}', 'data': bars}
-            return data
 
     def _process_position_msg(self, ws_name, msg, schema) -> dict:
         acc = ws_name

@@ -195,3 +195,5 @@ tests/data/
 # pixi environments
 .pixi
 *.egg-info
+
+.python-version

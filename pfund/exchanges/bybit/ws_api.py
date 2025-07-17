@@ -58,6 +58,9 @@ class WebsocketApi(BaseWebsocketApi):
     async def _ping(self, *args, **kwargs):
         raise NotImplementedError("this method should not be called in this Websocket Facade class")
     
+    async def _on_message(self, *args, **kwargs):
+        raise NotImplementedError("this method should not be called in this Websocket Facade class")
+    
     def _create_public_channel(self, product: BybitProduct, resolution: Resolution):
         api = self.get_api(product.category)
         return api._create_public_channel(product, resolution)

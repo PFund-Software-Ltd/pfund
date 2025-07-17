@@ -14,6 +14,7 @@ class DataConfig(BaseModel):
     data_origin: str=''
     primary_resolution: Resolution = Field(description='primary resolution used for trading, must be a bar resolution (e.g. "1s", "1m", "1h", "1d")')
     extra_resolutions: list[Resolution] = Field(default_factory=list, description='extra resolutions, e.g. "1t" for tick data, "1q" for quote data')
+    # TODO: handle quote_L1 resampled by quote_L2
     resample: dict[Annotated[Resolution, "ResampleeResolution"], Annotated[Resolution, "ResamplerResolution"]] = Field(
         default_factory=dict, 
         description='key is the resolution to resample to (resamplee), value is the resolution to resample from (resampler), e.g. {"1h": "1m"} means 1 hour bar is resampled by 1 minute bar.'

@@ -7,14 +7,10 @@ if TYPE_CHECKING:
 
 import os
 import time
-import inspect
 import hmac
+import inspect
+import msgspec
 from decimal import Decimal
-
-try:
-    import orjson as json
-except ImportError:
-    import json
 
 from pfund.exchanges.ws_api_base import BaseWebsocketApi
 from pfund.enums import Environment, CryptoExchange, PublicDataChannel, DataChannelType
@@ -88,40 +84,39 @@ class BybitWebsocketApi(BaseWebsocketApi):
         for ws in self._websockets.values():
             await self._send(ws, msg)
     
-    async def _on_message(self, ws, msg: bytes):
+    async def _on_message(self, ws_name: str, raw_msg: bytes):
         try:
-            msg = json.loads(msg)
-            self._logger.debug(f'{ws.name} {msg=}')
-            res = self._callback(msg)
-            if inspect.isawaitable(res):
-                await res
+            msg: dict = msgspec.json.decode(raw_msg)
+            self._logger.debug(f'{ws_name} {msg=}')
 
             if 'op' in msg:
                 op: str = msg['op']
                 ret: str | None = msg.get('ret_msg')
                 if 'success' in msg and msg['success']:
                     if op == 'auth':
-                        self._is_authenticated[ws.name] = True
+                        self._is_authenticated[ws_name] = True
                     elif op == 'subscribe':
                         self._num_subscribed += 1
                     else:
-                        self._logger.warning(f'{ws.name} unhandled msg {msg}')
-                # FIXME
+                        self._logger.warning(f'{ws_name} unhandled msg {msg}')
+                # REVIEW: check if the current ping-pong is correct
                 elif ret == 'pong' or op == 'pong':
                     pass
                 else:
-                    self._logger.error(f'{ws.name} unsuccessful msg {msg}')
-            # FIXME
-            # elif 'topic' in msg:
-            #     if self._msg_callback is None:
-            #         self._process_message(ws, msg)
-            #     else:
-            #         self._msg_callback(ws, msg)
-            # else:
-            #     self._logger.warning(f'unhandled ws={ws_name} msg {msg}')
+                    self._logger.error(f'{ws_name} unsuccessful msg {msg}')
+            elif 'topic' in msg:
+                # HACK: echannel = external channel, this allows users (incl. pfeed) to easily get the channel from the msg
+                msg['echannel'] = msg['topic']
+            else:
+                self._logger.warning(f'{ws_name} unhandled msg {msg}')
+                
+            result = self._callback(msg)
+            if inspect.isawaitable(result):
+                await result
+                
         except Exception:
-            self._logger.exception(f'{ws.name} _on_message exception:')
-
+            self._logger.exception(f'{ws_name} _on_message exception:')
+            
     def _create_public_channel(self, product: BybitProduct, resolution: Resolution):
         '''Creates a full public channel name based on the product and resolution'''
         self.add_product(product)
@@ -157,25 +152,25 @@ class BybitWebsocketApi(BaseWebsocketApi):
 
     def _process_message(self, ws, msg: dict) -> dict | None:
         ws_name = ws.name
-        full_channel = msg['topic']
-        if full_channel.startswith('orderbook'):
-            return self._process_orderbook_l2_msg(ws_name, full_channel, msg)
-        elif full_channel.startswith('publicTrade'):
-            return self._process_tradebook_msg(ws_name, full_channel, msg)
-        elif full_channel.startswith('kline'):
-            return self._process_kline_msg(ws_name, full_channel, msg)
+        channel = msg['topic']
+        if channel.startswith('orderbook'):
+            return self._process_orderbook_l2_msg(channel, msg)
+        elif channel.startswith('publicTrade'):
+            return self._process_tradebook_msg(channel, msg)
+        elif channel.startswith('kline'):
+            return self._parse_kline(msg)
         # TODO, EXTEND, custom data
-        # elif full_channel.startswith('tickers'):
+        # elif channel.startswith('tickers'):
         #     pass
-        # elif full_channel.startswith('liquidation'):
+        # elif channel.startswith('liquidation'):
         #     pass
-        elif full_channel == 'position':
+        elif channel == 'position':
             return self._process_position_msg(ws_name, msg)
-        elif full_channel == 'wallet':
+        elif channel == 'wallet':
             return self._process_balance_msg(ws_name, msg)
-        elif full_channel == 'order':
+        elif channel == 'order':
             return self._process_order_msg(ws_name, msg)
-        elif full_channel == 'execution':
+        elif channel == 'execution':
             return self._process_trade_msg(ws_name, msg)
         else:
             self._logger.warning(f'unhandled topic ws={ws_name} msg {msg}')
@@ -270,11 +265,11 @@ class BybitWebsocketApi(BaseWebsocketApi):
         pdt = self._adapter(epdt, group=ws_name)
         return super()._process_tradebook_msg(ws_name, msg, pdt, schema)
     
-    def _process_kline_msg(self, ws_name, full_channel, msg):
+    @staticmethod
+    def _parse_kline(msg: dict):
         schema = {
-            'result': 'data',
-            'ts': 'ts',
-            'ts_adj': 1/10**3,  # since timestamp in bybit is in mts
+            '@result': ['data'],
+            'ts': ('ts', lambda ms: ms / 10**3),  # since timestamp in bybit is in mts
             'data': {
                 'open': ('open', float),
                 'high': ('high', float),
@@ -284,10 +279,13 @@ class BybitWebsocketApi(BaseWebsocketApi):
                 'ts': ('timestamp', float),
             }
         }
-        echannel, eresolution, epdt = full_channel.split('.')
-        resolution = self._adapter(eresolution, group='resolution')
-        pdt = self._adapter(epdt, group=ws_name)
-        return super()._process_kline_msg(ws_name, msg, resolution, pdt, schema)
+        # TEMP
+        from pfund.parser import SchemaParser
+        print('***msg:', msg)
+        data: dict = SchemaParser.convert(msg, schema)
+        print('***data:', data)
+        exit()
+        # return super()._process_kline_msg(ws_name, msg, resolution, pdt, schema)
 
     def _process_position_msg(self, ws_name, msg):
         schema = {

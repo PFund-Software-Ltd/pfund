@@ -183,6 +183,7 @@ class BarData(MarketData):
         for resamplee in self._resamplees:
             resamplee.on_bar(o, h, l, c, v, ts, is_incremental=True)
 
+    # TODO: store all the ticks used to create the bar?
     # use tick updates to update bar
     def on_tick(self, price, quantity, ts, is_backfill=False):
         self.on_bar(price, price, price, price, quantity, ts, is_incremental=True, is_backfill=is_backfill)

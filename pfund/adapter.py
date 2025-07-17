@@ -43,16 +43,16 @@ class Adapter:
         for group in config:
             if config[group]:
                 for k, v in config[group].items():
-                    self._add_mapping(group, k, v)
+                    self.add_mapping(group, k, v)
             else:
                 self._adapter[group.lower()] = {}
 
-    def _add_mapping(self, group: str, k: str, v: str):
+    def add_mapping(self, group: str, key: Any, value: Any):
         group = group.lower()
         if group not in self._adapter:
             self._adapter[group] = {}
-        self._adapter[group][k] = v
-        self._adapter[group][v] = k
+        self._adapter[group][key] = value
+        self._adapter[group][value] = key
     
     def __len__(self):
         '''
@@ -67,5 +67,12 @@ class Adapter:
                 return True
         return False
 
-    def __call__(self, key: str, *, group: str) -> str:
-        return self._adapter[group.lower()].get(key, key)
+    def __call__(self, key: Any, *, group: str, strict: bool=False) -> Any:
+        '''
+        Args:
+            strict: if True, raise KeyError if key is not found
+        '''
+        if strict:
+            return self._adapter[group.lower()][key]
+        else:
+            return self._adapter[group.lower()].get(key, key)
