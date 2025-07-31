@@ -7,7 +7,6 @@ if TYPE_CHECKING:
     from pfund.accounts.account_crypto import CryptoAccount
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.products.product_crypto import CryptoProduct
-    
 
 import time
 import logging
@@ -95,10 +94,10 @@ class BaseWebsocketApi(ABC):
     @abstractmethod
     def _parse_message(self, msg: dict) -> dict:
         pass
-    
-    def set_logger(self, logger: logging.Logger):
-        self._logger = logger
 
+    def set_logger(self, name: str):
+        self._logger = logging.getLogger(name)
+    
     def set_callback(self, callback: Callable[[str], Awaitable[None] | None], raw_msg: bool=False):
         '''
         Args:
@@ -265,7 +264,6 @@ class BaseWebsocketApi(ABC):
                     self._logger.error(f"{ws_name} connection lost: {e}")
                 except Exception:
                     self._logger.exception(f"{ws_name} unexpected error in message loop:")
-            self._logger.warning(f'{ws_name} is disconnected')
         except Exception as err:
             self._logger.warning(f'{ws_name} failed to connect ({err=}), will try again later')
         
@@ -281,6 +279,7 @@ class BaseWebsocketApi(ABC):
         await ws.wait_closed()
         self._websockets.pop(ws.name, None)
         self._is_authenticated[ws.name] = False
+        self._logger.warning(f'{ws.name} is disconnected')
     
     async def _send(self, ws: NamedWebSocket, msg: dict):
         try:

@@ -38,7 +38,6 @@ tCryptoExchange = Literal['BINANCE', 'BYBIT', 'OKX']
 tDatabase = Literal['DUCKDB', 'POSTGRESQL']
 tOrderType = Literal['LIMIT', 'MARKET', 'STOP_MARKET', 'STOP_LIMIT']
 
-
 ComponentNameWithData: TypeAlias = ComponentName
 ComponentNameWithLogger: TypeAlias = ComponentName
 ZeroMQName = Union[

@@ -252,12 +252,13 @@ class DataBoy:
         # subscribe to engine's data proxied from trading venues (e.g. bybit's websocket)
         engine_proxy_port = zmq_ports['proxy']
         for data in self.get_datas():
-            self._data_zmq.subscribe(engine_proxy_port, channel=data.zmq_channel)
+            self._data_zmq.connect(engine_proxy_port, channel=data.zmq_channel)
+            # TODO: setsockopt(zmq.SUBSCRIBE, data.zmq_channel.encode())
             self.logger.debug(f'{self.name} subscribed to {data.zmq_channel} on port {engine_proxy_port}')
 
         for component in self.components:
             component_port = zmq_ports[component.name]
-            self._signals_zmq.subscribe(component_port)
+            self._signals_zmq.connect(component_port)
             self.logger.debug(f'{self.name} subscribed to {component.name} on port {component_port}')
     
     # FIXME

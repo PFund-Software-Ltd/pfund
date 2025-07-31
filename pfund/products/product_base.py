@@ -5,7 +5,6 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
 
-from pfund.adapter import Adapter
 from pfund.products.product_basis import ProductBasis, ProductAssetType
 from pfund.enums import Broker, CryptoExchange, TradingVenue
 
@@ -17,7 +16,6 @@ class BaseProduct(BaseModel):
     broker: Broker
     exchange: CryptoExchange | str = ''
     basis: ProductBasis
-    adapter: Adapter | None = None
     specs: dict = Field(default_factory=dict, description='specifications that make a product unique, e.g. for options, specs are strike_price, expiration_date, etc.')
     symbol: str = Field(
         default='', 
@@ -53,17 +51,11 @@ class BaseProduct(BaseModel):
         return data
     
     def model_post_init(self, __context: Any):
-        # REVIEW: is adapter still needed?
-        if not self.adapter:
-            self.adapter = Adapter(self.trading_venue)
         if hasattr(self, '__mixin_post_init__'):
             self.__mixin_post_init__()
         self.specs = self._create_specs()
         self.symbol = self.symbol or self._create_symbol()
-        self.name = self.name or self._create_name()
-    
-    def _create_name(self) -> str:
-        return self.symbol
+        self.name = self.name or self.symbol
     
     @property
     def tv(self) -> TradingVenue:
@@ -169,8 +161,9 @@ class BaseProduct(BaseModel):
             return NotImplemented  # Allow other types to define equality with BaseProduct
         return (
             self.trading_venue == other.trading_venue 
-            and self.name == other.name
+            and self.symbol == other.symbol
+            and self.asset_type == other.asset_type
         )
         
     def __hash__(self) -> int:
-        return hash((self.trading_venue, self.name))
+        return hash((self.trading_venue, self.symbol, self.asset_type))

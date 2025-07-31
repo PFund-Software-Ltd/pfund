@@ -41,8 +41,9 @@ class BybitProduct(CryptoProduct):
         return self
     
     def _create_symbol(self):
-        ebase_asset = self.adapter(self.base_asset, group='asset')
-        equote_asset = self.adapter(self.quote_asset, group='asset')
+        from pfund.exchanges import Bybit
+        ebase_asset = Bybit.adapter(self.base_asset, group='asset')
+        equote_asset = Bybit.adapter(self.quote_asset, group='asset')
         if self.asset_type == CryptoAssetType.PERP:
             if equote_asset == 'USDC':
                 symbol = ebase_asset + str(self.asset_type)
@@ -67,11 +68,3 @@ class BybitProduct(CryptoProduct):
             strike_price = str(self.strike_price)
             symbol = '-'.join([ebase_asset, expiration, strike_price, option_type])
         return symbol
-
-    def _create_name(self) -> str:
-        # NOTE: for spot and perpetual, the symbol could be the duplicated, e.g. BTCUSDT for both spot and perpetual
-        # use product basis as name for uniqueness
-        if self.is_perpetual() or self.is_spot():
-            return str(self.basis)
-        else:
-            return self.symbol

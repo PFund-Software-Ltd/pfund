@@ -62,7 +62,7 @@ class ComponentMixin:
         self._run_mode: RunMode | None = None
         self._resolution: Resolution | None = None
         
-        self.logger: logging.Logger | None = logging.getLogger('pfund')
+        self.logger: logging.Logger = logging.getLogger('pfund')
         self._proxy: ActorProxy | None = None
         self._engine: BaseEngine | None = None
         self._settings: BaseEngineSettings | None = None

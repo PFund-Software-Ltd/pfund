@@ -24,19 +24,27 @@ class WebsocketApi(BaseWebsocketApi):
     exch = CryptoExchange.BYBIT
     
     def __init__(self, env: Environment | tEnvironment):
+        super().__init__(env)
+        self._apis: dict[ProductCategory, BybitWebsocketApi] = {
+            ProductCategory.LINEAR: self._get_api_class('linear')(env),
+            ProductCategory.INVERSE: self._get_api_class('inverse')(env),
+            ProductCategory.SPOT: self._get_api_class('spot')(env),
+            ProductCategory.OPTION: self._get_api_class('option')(env),
+        }
+    
+    @staticmethod
+    def _get_api_class(category: ProductCategory | tProductCategory) -> type[BybitWebsocketApi]:
         from pfund.exchanges.bybit.ws_api_linear import WebsocketApiLinear
         from pfund.exchanges.bybit.ws_api_inverse import WebsocketApiInverse
         from pfund.exchanges.bybit.ws_api_spot import WebsocketApiSpot
         from pfund.exchanges.bybit.ws_api_option import WebsocketApiOption
-
-        super().__init__(env)
-        
-        self._apis: dict[ProductCategory, BybitWebsocketApi] = {
-            ProductCategory.LINEAR: WebsocketApiLinear(env),
-            ProductCategory.INVERSE: WebsocketApiInverse(env),
-            ProductCategory.SPOT: WebsocketApiSpot(env),
-            ProductCategory.OPTION: WebsocketApiOption(env),
-        }
+        category = ProductCategory[category.upper()]
+        return {
+            ProductCategory.LINEAR: WebsocketApiLinear,
+            ProductCategory.INVERSE: WebsocketApiInverse,
+            ProductCategory.SPOT: WebsocketApiSpot,
+            ProductCategory.OPTION: WebsocketApiOption,
+        }[category]
         
     def get_api(self, category: tProductCategory | None=None):
         # for some actions that are not specific to a product category, just use the first api
@@ -68,10 +76,10 @@ class WebsocketApi(BaseWebsocketApi):
         api = self.get_api(product.category)
         return api._create_public_channel(product, resolution)
     
-    def set_logger(self, logger: logging.Logger):
-        super().set_logger(logger)
+    def set_logger(self, name: str):
+        super().set_logger(name)
         for api in self._apis.values():
-            api.set_logger(logger)
+            api.set_logger(name)
     
     def set_callback(self, callback: Callable[[str], Awaitable[None] | None], raw_msg: bool=False):
         for api in self._apis.values():

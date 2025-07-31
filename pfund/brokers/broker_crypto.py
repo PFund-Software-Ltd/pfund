@@ -103,7 +103,13 @@ class CryptoBroker(TradeBroker):
             if existing_product == product:
                 product = existing_product
             else:
-                raise ValueError(f'product name {name} has already been used for {existing_product}')
+                raise ValueError(
+                    f'''
+                    product name {name} has already been used for {existing_product}\n
+                    please provide a unique product name for {product}\n
+                    in add_data(..., product_name='<your_unique_product_name>')
+                    '''
+                )
         return product
     
     def get_exchange(self, exch: tCryptoExchange) -> BaseExchange:

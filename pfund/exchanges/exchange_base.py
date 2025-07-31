@@ -30,15 +30,11 @@ class BaseExchange(ABC):
     bkr = Broker.CRYPTO
     name: ClassVar[CryptoExchange]
     adapter: ClassVar[Adapter]
+    
     MARKET_CONFIGS_FILENAME = 'market_configs.yml'
-
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        cls.adapter = Adapter(cls.name)
             
     def __init__(self, env: Environment | tEnvironment):
         from pfund.engines.trade_engine import TradeEngine
-        
         self._env = Environment[env.upper()]
         self._logger = logging.getLogger(self.name.lower())
         self._products: dict[ProductName, CryptoProduct] = {}
@@ -54,6 +50,10 @@ class BaseExchange(ABC):
 
         if self._settings:
             self._check_if_refetch_market_configs()
+    
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        cls.adapter = Adapter(cls.name)
     
     @property
     def broker(self) -> Broker:
@@ -150,7 +150,7 @@ class BaseExchange(ABC):
     def create_product(cls, basis: str, name: str='', symbol: str='', **specs) -> CryptoProduct:
         from pfund.products import ProductFactory
         Product = ProductFactory(trading_venue=cls.name, basis=basis)
-        return Product(basis=basis, adapter=cls.adapter, name=name, symbol=symbol, **specs)
+        return Product(basis=basis, name=name, symbol=symbol, **specs)
 
     def get_product(self, name: str) -> CryptoProduct:
         '''

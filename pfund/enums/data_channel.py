@@ -22,7 +22,6 @@ class DataChannelType(StrEnum):
 class PFundDataChannel(StrEnum):
     zmq_logging = 'zmq_logging'
     internal = 'internal'
-    signal = 'signal'
     # ping = 'ping'
     # pong = 'pong'
     

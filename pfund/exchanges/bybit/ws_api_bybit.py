@@ -151,19 +151,20 @@ class BybitWebsocketApi(BaseWebsocketApi):
             raise NotImplementedError(f'{resolution=} is not supported for creating public channel')
         return full_channel
     
-    def _parse_message(self, msg: dict) -> dict:
+    @staticmethod
+    def _parse_message(msg: dict) -> dict:
         channel: str = msg['topic']
         if channel.startswith('kline'):
-            return self._parse_kline(msg)
+            return BybitWebsocketApi._parse_kline(msg)
         else:
-            raise NotImplementedError(f'{self.exch} {channel=} is not supported')
+            raise NotImplementedError(f'{BybitWebsocketApi.exch} {channel=} is not supported')
     
     # REVIEW: schema only for linear products?
     @staticmethod
     def _parse_kline(msg: dict) -> dict:
         # since timestamp in bybit is in mts
         def adjust_ts(ms: int) -> float:
-            return ms / 10**3  
+            return ms / 10**3
         schema = {
             'ts': ('ts', adjust_ts),
             'channel': ['topic'],
@@ -178,9 +179,9 @@ class BybitWebsocketApi(BaseWebsocketApi):
             },
             'extra_data': (
                 'data',
-                # add the remaining fields other than ['open', 'high', 'low', 'close', 'volume', 'ts'] to the extra_data
+                # add the remaining fields other than ['open', 'high', 'low', 'close', 'volume', 'timestamp'] to the extra_data
                 lambda data: [
-                    {k: v for k, v in bar_dict.items() if k not in ['open', 'high', 'low', 'close', 'volume', 'ts']} 
+                    {k: v for k, v in bar_dict.items() if k not in ['open', 'high', 'low', 'close', 'volume', 'timestamp']} 
                     for bar_dict in data
                 ]
             ),

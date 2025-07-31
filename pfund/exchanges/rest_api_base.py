@@ -59,6 +59,7 @@ class RequestMethod(StrEnum):
 
 class BaseRestApi(ABC):
     exch: ClassVar[CryptoExchange]
+    
     SAMPLES_FILENAME = 'rest_api_samples.yml'
 
     URLS: ClassVar[dict[Environment, str]] = {}
@@ -72,6 +73,15 @@ class BaseRestApi(ABC):
         Exchange: type[BaseExchange] = getattr(importlib.import_module(f'pfund.exchanges.{self.exch.lower()}.exchange'), 'Exchange')
         self._adapter: Adapter = Exchange.adapter
         self._url: str | None = self.URLS.get(self._env, None)
+        self._client = AsyncClient()
+        
+    def __getstate__(self) -> object:
+        state = self.__dict__.copy()
+        state['_client'] = None  # remove client to avoid pickling error
+        return state
+    
+    def __setstate__(self, state: object):
+        self.__dict__.update(state)
         self._client = AsyncClient()
     
     def _enable_dev_mode(self):
