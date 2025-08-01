@@ -6,7 +6,7 @@ It is referring to the actual functions defined in data_tool_xxx.py
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.typing import GenericSeries
+    from pfeed._typing import GenericSeries
 
 
 class _BacktestDataFrame:

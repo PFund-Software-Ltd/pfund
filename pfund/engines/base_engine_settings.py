@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, ConfigDict
 
-from pfund.typing import tTradingVenue, ComponentName, EngineName, ZeroMQName
+from pfund._typing import tTradingVenue, ComponentName, EngineName, ZeroMQName
 
 
 

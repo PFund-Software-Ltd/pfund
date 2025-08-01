@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Union
 if TYPE_CHECKING:
-    from pfeed.typing import tStorage
-    from pfund.typing import tEnvironment
+    from pfeed._typing import tStorage
+    from pfund._typing import tEnvironment
     
 import os
 import sys

@@ -12,7 +12,7 @@ import msgspec
 from decimal import Decimal
 
 from pfund.parser import SchemaParser
-from pfund.exchanges.ws_api_base import BaseWebsocketApi, NamedWebSocket
+from pfund.exchanges.ws_api_base import BaseWebSocketAPI, NamedWebSocket
 from pfund.enums import Environment, CryptoExchange, PublicDataChannel, DataChannelType
 from pfund.products.product_bybit import BybitProduct
 from pfund.datas.timeframe import TimeframeUnits
@@ -21,7 +21,7 @@ from pfund.datas.timeframe import TimeframeUnits
 ProductCategory = BybitProduct.ProductCategory
 
 
-class BybitWebsocketApi(BaseWebsocketApi):
+class BybitWebSocketAPI(BaseWebSocketAPI):
     exch = CryptoExchange.BYBIT
     CATEGORY: ClassVar[BybitProduct.ProductCategory]
     VERSION = 'v5'
@@ -155,9 +155,9 @@ class BybitWebsocketApi(BaseWebsocketApi):
     def _parse_message(msg: dict) -> dict:
         channel: str = msg['topic']
         if channel.startswith('kline'):
-            return BybitWebsocketApi._parse_kline(msg)
+            return BybitWebSocketAPI._parse_kline(msg)
         else:
-            raise NotImplementedError(f'{BybitWebsocketApi.exch} {channel=} is not supported')
+            raise NotImplementedError(f'{BybitWebSocketAPI.exch} {channel=} is not supported')
     
     # REVIEW: schema only for linear products?
     @staticmethod

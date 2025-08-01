@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from numpy import ndarray
-    from pfeed.typing import GenericFrame
+    from pfeed._typing import GenericFrame
 
 from abc import abstractmethod
 

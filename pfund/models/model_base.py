@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from numpy import ndarray
     import torch.nn as nn
     from sklearn.base import BaseEstimator
-    from pfeed.typing import GenericFrame
+    from pfeed._typing import GenericFrame
     from pfund.indicators.indicator_base import TaFunction, TalibFunction
     MachineLearningModel = Union[
         nn.Module,

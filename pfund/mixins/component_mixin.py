@@ -6,8 +6,8 @@ if TYPE_CHECKING:
     import pandas as pd
     import polars as pl
     from mtflow.stores.trading_store import TradingStore
-    from pfeed.typing import tDataSource
-    from pfund.typing import (
+    from pfeed._typing import tDataSource
+    from pfund._typing import (
         StrategyT, 
         ModelT, 
         IndicatorT, 

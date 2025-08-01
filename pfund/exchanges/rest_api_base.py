@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, TypedDict, Literal, ClassVar, TypeAlias
 if TYPE_CHECKING:
-    from pfund.typing import tEnvironment
+    from pfund._typing import tEnvironment
     from pfund.adapter import Adapter
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.accounts.account_crypto import CryptoAccount
@@ -57,7 +57,7 @@ class RequestMethod(StrEnum):
     PATCH = 'PATCH'
     
 
-class BaseRestApi(ABC):
+class BaseRESTfulAPI(ABC):
     exch: ClassVar[CryptoExchange]
     
     SAMPLES_FILENAME = 'rest_api_samples.yml'

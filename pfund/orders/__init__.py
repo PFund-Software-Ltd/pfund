@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.typing import tOrderType, tTradingVenue
+    from pfund._typing import tOrderType, tTradingVenue
     from pfund.orders.order_base import BaseOrder
 
 from pfund.enums import OrderType, TradingVenue

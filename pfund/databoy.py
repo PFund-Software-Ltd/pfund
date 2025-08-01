@@ -3,10 +3,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from logging import Logger
     from pfeed.messaging.zeromq import ZeroMQ
-    from pfeed.typing import tDataSource
+    from pfeed._typing import tDataSource
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund.typing import (
+    from pfund._typing import (
         ComponentName, 
         Component, 
         ProductName, 
@@ -86,8 +86,8 @@ class DataBoy:
     @staticmethod
     def _get_supported_resolutions(bkr: Broker, exch: CryptoExchange | str) -> dict:
         if bkr == Broker.CRYPTO:
-            WebsocketApi = getattr(importlib.import_module(f'pfund.exchanges.{exch.lower()}.ws_api'), 'WebsocketApi')
-            supported_resolutions = WebsocketApi.SUPPORTED_RESOLUTIONS
+            WebSocketAPI = getattr(importlib.import_module(f'pfund.exchanges.{exch.lower()}.ws_api'), 'WebSocketAPI')
+            supported_resolutions = WebSocketAPI.SUPPORTED_RESOLUTIONS
         elif bkr == Broker.IB:
             IBApi = getattr(importlib.import_module('pfund.brokers.ib.ib_api'), 'IBApi')
             supported_resolutions = IBApi.SUPPORTED_RESOLUTIONS

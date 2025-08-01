@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.typing import tBroker
+    from pfund._typing import tBroker
     from pfund.brokers.broker_base import BaseBroker
 
 from pfund.enums import Environment, Broker

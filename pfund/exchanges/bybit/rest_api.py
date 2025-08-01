@@ -16,12 +16,12 @@ from decimal import Decimal
 import orjson as json
 
 from pfund.enums import Environment, CryptoExchange, CryptoAssetType, OptionType
-from pfund.exchanges.rest_api_base import BaseRestApi, RequestMethod
+from pfund.exchanges.rest_api_base import BaseRESTfulAPI, RequestMethod
 from pfund.exchanges.bybit.exchange import ProductCategory
 
 
 # TODO complete the endpoints
-class RestApi(BaseRestApi):
+class RESTfulAPI(BaseRESTfulAPI):
     exch = CryptoExchange.BYBIT
 
     VERSION = 'v5'

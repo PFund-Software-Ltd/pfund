@@ -3,14 +3,14 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfund.engines.base_engine_settings import BaseEngineSettings
     from pfeed.enums import DataSource
-    from pfeed.typing import tDataSource
+    from pfeed._typing import tDataSource
     from pfeed.feeds.market_feed import MarketFeed
     from pfund.orders.order_base import BaseOrder
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.brokers.broker_crypto import CryptoBroker
     from pfund.brokers.ib.broker_ib import IBBroker
     from pfund.engines.trade_engine_settings import TradeEngineSettings
-    from pfund.typing import tEnvironment
+    from pfund._typing import tEnvironment
 
 from abc import abstractmethod
 

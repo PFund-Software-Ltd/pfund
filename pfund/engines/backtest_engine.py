@@ -3,9 +3,9 @@ from typing import TYPE_CHECKING, Literal, ClassVar
 if TYPE_CHECKING:
     import pandas as pd
     from sklearn.model_selection import TimeSeriesSplit
-    from pfeed.typing import tDataTool
-    from pfund.typing import StrategyT, ModelT, FeatureT, IndicatorT, tDatabase
-    from pfund.typing import DataRangeDict, DatasetSplitsDict, BacktestEngineSettingsDict, ExternalListenersDict
+    from pfeed._typing import tDataTool
+    from pfund._typing import StrategyT, ModelT, FeatureT, IndicatorT, tDatabase
+    from pfund._typing import DataRangeDict, DatasetSplitsDict, BacktestEngineSettingsDict, ExternalListenersDict
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.models.model_base import BaseModel
     from pfund.mixins.backtest_mixin import BacktestMixin

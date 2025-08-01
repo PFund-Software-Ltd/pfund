@@ -12,8 +12,8 @@ message queue.
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfeed.typing import tDataTool
-    from pfund.typing import DataRangeDict, TradeEngineSettingsDict, tDatabase, ExternalListenersDict
+    from pfeed._typing import tDataTool
+    from pfund._typing import DataRangeDict, TradeEngineSettingsDict, tDatabase, ExternalListenersDict
 
 from pfund.engines.base_engine import BaseEngine
 

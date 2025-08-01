@@ -1,4 +1,4 @@
-from pfund.typing import tEnvironment
+from pfund._typing import tEnvironment
 from pfund.brokers.broker_trade import TradeBroker
 
 

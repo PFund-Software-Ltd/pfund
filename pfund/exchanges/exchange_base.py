@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from pfund.exchanges.rest_api_base import Result, ApiResponse
     from pfund.enums import CryptoExchange
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
+    from pfund._typing import tEnvironment, ProductName, AccountName, FullDataChannel
     from pfund.products.product_crypto import CryptoProduct
     from pfund.accounts.account_crypto import CryptoAccount
     from pfund.engines.trade_engine_settings import TradeEngineSettings
@@ -43,10 +43,10 @@ class BaseExchange(ABC):
 
         # APIs
         exchange_path = f'pfund.exchanges.{self.name.lower()}'
-        RestApi = getattr(importlib.import_module(f'{exchange_path}.rest_api'), 'RestApi')
-        self._rest_api = RestApi(self._env)
-        WebsocketApi = getattr(importlib.import_module(f'{exchange_path}.ws_api'), 'WebsocketApi')
-        self._ws_api = WebsocketApi(self._env)
+        RESTfulAPI = getattr(importlib.import_module(f'{exchange_path}.rest_api'), 'RESTfulAPI')
+        self._rest_api = RESTfulAPI(self._env)
+        WebSocketAPI = getattr(importlib.import_module(f'{exchange_path}.ws_api'), 'WebSocketAPI')
+        self._ws_api = WebSocketAPI(self._env)
 
         if self._settings:
             self._check_if_refetch_market_configs()

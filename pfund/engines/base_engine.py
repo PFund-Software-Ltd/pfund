@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, ClassVar
 if TYPE_CHECKING:
     from mtflow.kernel import TradeKernel
-    from pfeed.typing import tDataTool
+    from pfeed._typing import tDataTool
     from pfeed.engine import DataEngine
     from pfund.accounts.account_crypto import CryptoAccount
     from pfund.accounts.account_ib import IBAccount
@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfund.accounts.account_base import BaseAccount
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund.typing import (
+    from pfund._typing import (
         StrategyT, 
         tEnvironment, 
         tBroker,

@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
     from sklearn.model_selection._split import BaseCrossValidator
     from pfeed.enums import DataTool
-    from pfeed.typing import GenericDataFrame
-    from pfund.typing import DataRangeDict, DatasetSplitsDict
+    from pfeed._typing import GenericDataFrame
+    from pfund._typing import DataRangeDict, DatasetSplitsDict
     from pfund.datas.data_base import BaseData
 
 

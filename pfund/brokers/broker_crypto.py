@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from pfund.orders.order_base import BaseOrder
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.exchanges.exchange_base import BaseExchange
-    from pfund.typing import tCryptoExchange, tEnvironment, FullDataChannel
+    from pfund._typing import tCryptoExchange, tEnvironment, FullDataChannel
     from pfund.enums import OrderSide, PublicDataChannel
 
 import inspect

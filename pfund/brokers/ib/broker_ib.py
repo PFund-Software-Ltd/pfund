@@ -6,7 +6,7 @@ from typing import Literal, TYPE_CHECKING
 
 from pfund.config import Configuration
 if TYPE_CHECKING:
-    from pfund.typing import tEnvironment
+    from pfund._typing import tEnvironment
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_config import DataConfig
     from pfund.datas.data_time_based import TimeBasedData

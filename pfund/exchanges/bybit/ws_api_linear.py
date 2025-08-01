@@ -1,12 +1,12 @@
-from pfund.exchanges.bybit.ws_api_bybit import BybitWebsocketApi
+from pfund.exchanges.bybit.ws_api_bybit import BybitWebSocketAPI
 from pfund.enums import Environment, DataChannelType
 from pfund.products.product_bybit import BybitProduct
 from pfund.datas.timeframe import TimeframeUnits
 
 
-class WebsocketApiLinear(BybitWebsocketApi):
+class WebSocketAPILinear(BybitWebSocketAPI):
     CATEGORY = BybitProduct.ProductCategory.LINEAR
-    VERSION = BybitWebsocketApi.VERSION
+    VERSION = BybitWebSocketAPI.VERSION
     URLS = {
         Environment.PAPER: {
             DataChannelType.public: f'wss://stream-testnet.bybit.com/{VERSION}/public/{CATEGORY.lower()}',

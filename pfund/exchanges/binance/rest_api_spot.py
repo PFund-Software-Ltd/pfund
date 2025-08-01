@@ -9,10 +9,10 @@ Supports Binance's spot trading, including:
     https://api3.binance.com
     https://api4.binance.com
 '''
-from pfund.exchanges.rest_api_base import BaseRestApi
+from pfund.exchanges.rest_api_base import BaseRESTfulAPI
 
 
-class RestApiSpot(BaseRestApi):
+class RESTfulAPISpot(BaseRESTfulAPI):
     URLS = {
         'PAPER': 'https://testnet.binance.vision',
         'LIVE': 'https://api.binance.com',

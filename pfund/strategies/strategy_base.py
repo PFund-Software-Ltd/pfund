@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Literal, TYPE_CHECKING, overload
 if TYPE_CHECKING:
-    from pfund.typing import (
+    from pfund._typing import (
         StrategyT, 
         tTradingVenue, 
         tCryptoExchange,

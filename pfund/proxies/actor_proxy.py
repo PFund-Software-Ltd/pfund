@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ray.actor import ActorHandle
-    from pfund.typing import Component
+    from pfund._typing import Component
 
 from pfund import cprint, print_warning, print_error
 

@@ -4,8 +4,8 @@ if TYPE_CHECKING:
     import torch
     import pandas as pd
     import polars as pl
-    from pfeed.typing import tDataSource, tStorage, GenericFrame
-    from pfund.typing import ModelT, DataConfigDict, tTradingVenue
+    from pfeed._typing import tDataSource, tStorage, GenericFrame
+    from pfund._typing import ModelT, DataConfigDict, tTradingVenue
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.engines.backtest_engine import BacktestEngine

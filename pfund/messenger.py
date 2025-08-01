@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.typing import ZeroMQName
+    from pfund._typing import ZeroMQName
 
 import logging
 

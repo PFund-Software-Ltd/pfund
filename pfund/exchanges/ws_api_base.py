@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Callable, Literal, ClassVar, TypeAlias, Awaitable, Any
 if TYPE_CHECKING:
-    from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
+    from pfund._typing import tEnvironment, ProductName, AccountName, FullDataChannel
     from pfund.adapter import Adapter
     from pfund.datas.resolution import Resolution
     from pfund.accounts.account_crypto import CryptoAccount
@@ -31,7 +31,7 @@ class NamedWebSocket(WebSocket):
     name: str
 
 
-class BaseWebsocketApi(ABC):
+class BaseWebSocketAPI(ABC):
     exch: ClassVar[CryptoExchange]
 
     URLS: ClassVar[dict[Environment, dict[DataChannelType | Literal['public', 'private'], str]]] = {}

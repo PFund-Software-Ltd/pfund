@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar, TypeAlias
 if TYPE_CHECKING:
     from pfund.enums import PrivateDataChannel, PublicDataChannel
-    from pfund.typing import tEnvironment, ProductName, AccountName
+    from pfund._typing import tEnvironment, ProductName, AccountName
     from pfund.datas.resolution import Resolution
     from pfund.products.product_base import BaseProduct
     from pfund.accounts.account_base import BaseAccount

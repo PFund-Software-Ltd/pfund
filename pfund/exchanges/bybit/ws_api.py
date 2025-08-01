@@ -4,28 +4,28 @@ from typing import TYPE_CHECKING, Literal, Callable, Awaitable
 from pfund.accounts.account_crypto import CryptoAccount
 if TYPE_CHECKING:
     import logging
-    from pfund.typing import tEnvironment, FullDataChannel
+    from pfund._typing import tEnvironment, FullDataChannel
     from pfund.datas.resolution import Resolution
     from pfund.exchanges.bybit.exchange import tProductCategory
-    from pfund.exchanges.bybit.ws_api_bybit import BybitWebsocketApi
+    from pfund.exchanges.bybit.ws_api_bybit import BybitWebSocketAPI
     from pfund.enums import Environment
 
 import asyncio
 
 from pfund.enums import CryptoExchange
 from pfund.products.product_bybit import BybitProduct
-from pfund.exchanges.ws_api_base import BaseWebsocketApi
+from pfund.exchanges.ws_api_base import BaseWebSocketAPI
 
 ProductCategory = BybitProduct.ProductCategory
 
 
-class WebsocketApi(BaseWebsocketApi):
+class WebSocketAPI(BaseWebSocketAPI):
     '''A facade for the Bybit websocket API.'''
     exch = CryptoExchange.BYBIT
     
     def __init__(self, env: Environment | tEnvironment):
         super().__init__(env)
-        self._apis: dict[ProductCategory, BybitWebsocketApi] = {
+        self._apis: dict[ProductCategory, BybitWebSocketAPI] = {
             ProductCategory.LINEAR: self._get_api_class('linear')(env),
             ProductCategory.INVERSE: self._get_api_class('inverse')(env),
             ProductCategory.SPOT: self._get_api_class('spot')(env),
@@ -33,17 +33,17 @@ class WebsocketApi(BaseWebsocketApi):
         }
     
     @staticmethod
-    def _get_api_class(category: ProductCategory | tProductCategory) -> type[BybitWebsocketApi]:
-        from pfund.exchanges.bybit.ws_api_linear import WebsocketApiLinear
-        from pfund.exchanges.bybit.ws_api_inverse import WebsocketApiInverse
-        from pfund.exchanges.bybit.ws_api_spot import WebsocketApiSpot
-        from pfund.exchanges.bybit.ws_api_option import WebsocketApiOption
+    def _get_api_class(category: ProductCategory | tProductCategory) -> type[BybitWebSocketAPI]:
+        from pfund.exchanges.bybit.ws_api_linear import WebSocketAPILinear
+        from pfund.exchanges.bybit.ws_api_inverse import WebSocketAPIInverse
+        from pfund.exchanges.bybit.ws_api_spot import WebSocketAPISpot
+        from pfund.exchanges.bybit.ws_api_option import WebSocketAPIOption
         category = ProductCategory[category.upper()]
         return {
-            ProductCategory.LINEAR: WebsocketApiLinear,
-            ProductCategory.INVERSE: WebsocketApiInverse,
-            ProductCategory.SPOT: WebsocketApiSpot,
-            ProductCategory.OPTION: WebsocketApiOption,
+            ProductCategory.LINEAR: WebSocketAPILinear,
+            ProductCategory.INVERSE: WebSocketAPIInverse,
+            ProductCategory.SPOT: WebSocketAPISpot,
+            ProductCategory.OPTION: WebSocketAPIOption,
         }[category]
         
     def get_api(self, category: tProductCategory | None=None):

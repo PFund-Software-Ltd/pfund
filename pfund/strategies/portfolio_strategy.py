@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.typing import StrategyT
+    from pfund._typing import StrategyT
 
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.strategies.rebalancing_strategy import RebalancingStrategy

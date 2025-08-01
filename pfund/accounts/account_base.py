@@ -3,7 +3,7 @@ from typing import ClassVar
 import os
 
 from pfund.enums import Environment, TradingVenue
-from pfund.typing import tEnvironment, tTradingVenue
+from pfund._typing import tEnvironment, tTradingVenue
 
 
 class BaseAccount:
