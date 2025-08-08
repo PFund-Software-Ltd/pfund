@@ -37,15 +37,15 @@ class SimulatedBroker:
 
     def start(self: SimulatedBroker | TradeBroker):
         self._safety_check()
-        self._logger.debug(f'broker {self._name} started')
+        self._logger.debug(f'broker {self.name} started')
         self.initialize_balances()
         
     def stop(self: SimulatedBroker | TradeBroker):
-        self._logger.debug(f'broker {self._name} stopped')
+        self._logger.debug(f'broker {self.name} stopped')
     
     def _create_account(self: SimulatedBroker | TradeBroker, name: str, **kwargs):
         # TODO: add initial_balances, initial_positions to SimulatedAccount, should not be broker's attributes
-        return SimulatedAccount(env=self._env, bkr=self._name, name=name)
+        return SimulatedAccount(env=self._env, bkr=self.name, name=name)
     
     def add_account(
         self: SimulatedBroker | TradeBroker, 
@@ -58,7 +58,7 @@ class SimulatedBroker:
             initial_balances = self.DEFAULT_INITIAL_BALANCES
         else: 
             initial_balances = {k.upper(): v for k, v in initial_balances.items()}
-        trading_venue = account.exch if self._name == Broker.CRYPTO else self._name
+        trading_venue = account.exch if self.name == Broker.CRYPTO else self.name
         self._initial_balances[trading_venue][account.name] = initial_balances
         return account
 

@@ -77,8 +77,6 @@ ALIASES = {
     'prev': 'previous',
     'thd': 'thread',
     'cb': 'callback',
-    'cm': 'connection_manager',
-    'sm': 'subscription_manager',
     'om': 'order_manager',
 
     'ack': 'acknowledge',

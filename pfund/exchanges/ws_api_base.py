@@ -16,8 +16,8 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from functools import reduce
 
-import msgspec
 from numpy import sign
+from msgspec import json
 from websockets.protocol import State
 from websockets.asyncio.client import ClientConnection as WebSocket
 
@@ -109,7 +109,12 @@ class BaseWebSocketAPI(ABC):
         self._callback_raw_msg = raw_msg
 
     def _get_url(self, channel_type: DataChannelType | Literal['public', 'private']) -> str:
-        return self.URLS[self._env][DataChannelType[channel_type.lower()]]
+        if self._env == Environment.SANDBOX:
+            env = Environment.LIVE
+            self._logger.warning(f'{self._env} environment is using LIVE data')
+        else:
+            env = self._env
+        return self.URLS[env][DataChannelType[channel_type.lower()]]
     
     def add_account(self, account: CryptoAccount) -> CryptoAccount:
         if account.name not in self._accounts:
@@ -283,7 +288,7 @@ class BaseWebSocketAPI(ABC):
     
     async def _send(self, ws: NamedWebSocket, msg: dict):
         try:
-            await ws.send(msgspec.json.encode(msg))
+            await ws.send(json.encode(msg))
             self._logger.debug(f'{ws.name} sent {msg}')
         except Exception:
             self._logger.exception(f'{ws.name} _send() exception:')

@@ -3,10 +3,10 @@ from pathlib import Path
 from pfund.exchanges.ws_api_base import BaseWebSocketAPI
 from pfund.enums import PublicDataChannel, PrivateDataChannel
 from pfund.enums import Environment
-from pfund.exchanges.binance.ws_api_spot import WebSocketAPISpot
-from pfund.exchanges.binance.ws_api_linear import WebSocketAPILinear
-from pfund.exchanges.binance.ws_api_inverse import WebSocketAPIInverse
-from pfund.exchanges.binance.ws_api_option import WebSocketAPIOption
+from pfund.exchanges.binance.ws_api_spot import SpotWebSocketAPI
+from pfund.exchanges.binance.ws_api_linear import LinearWebSocketAPI
+from pfund.exchanges.binance.ws_api_inverse import InverseWebSocketAPI
+from pfund.exchanges.binance.ws_api_option import OptionWebSocketAPI
 
 
 # TODO
@@ -15,10 +15,10 @@ class WebSocketAPI(BaseWebSocketAPI):
     
     def __init__(self, env: Environment):
         self._apis = {
-            "spot": WebSocketAPISpot(env),
-            "linear": WebSocketAPILinear(env),
-            "inverse": WebSocketAPIInverse(env),
-            "option": WebSocketAPIOption(env),
+            "spot": SpotWebSocketAPI(env),
+            "linear": LinearWebSocketAPI(env),
+            "inverse": InverseWebSocketAPI(env),
+            "option": OptionWebSocketAPI(env),
         }
     
     def _on_message(self, ws, msg):

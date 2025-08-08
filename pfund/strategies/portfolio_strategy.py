@@ -8,7 +8,6 @@ from pfund.strategies.rebalancing_strategy import RebalancingStrategy
 from pfund.strategies.diversification_strategy import DiversificationStrategy
 from pfund.strategies.optimization_strategy import OptimizationStrategy
 from pfund.strategies.allocation_strategy import AllocationStrategy
-from pfund.utils.envs import backtest
 from pfund.portfolios.portfolio import Portfolio
 from pfund.universes.universe import Universe
 from pfund.investment_profile import InvestmentProfile

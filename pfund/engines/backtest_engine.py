@@ -32,7 +32,8 @@ class BacktestEngine(BaseEngine):
         self,
         mode: Literal['vectorized', 'hybrid', 'event_driven']='vectorized',
         name: str='',
-        # FIXME: should use ray on only dataset, when a component is a ray actor and its true, raise error
+        # FIXME: should use ray on only dataset, when a component is a ray actor and its true, 
+        # should prevent the component from being a ray actor
         use_ray_on: Literal['dataset', 'component'] | None='dataset',
         data_tool: tDataTool='polars',
         data_range: str | DataRangeDict | Literal['ytd']='1d',
@@ -216,7 +217,7 @@ class BacktestEngine(BaseEngine):
         params = list(sig.parameters.values())
         if not params or params[0].name != 'df':
             raise Exception(f'{backtestee.name} backtest() must have "df" as its first arg, i.e. backtest(self, df)')
-        
+    
     def run(self, num_chunks: int=1, **ray_kwargs):
         super().run()
         assert num_chunks > 0, 'num_chunks must be greater than 0'

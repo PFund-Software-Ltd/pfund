@@ -115,37 +115,39 @@ class RESTfulAPI(BaseRESTfulAPI):
         params = {'category': category.lower()}
         schema = {
             '@data': ['result', 'list'],
-            'symbol': ['symbol'],
-            'base_asset': [
-                'baseCoin',
-                lambda base_asset: self._adapter(base_asset, group='asset'),
-            ],
-            'quote_asset': [
-                'quoteCoin',
-                lambda quote_asset: self._adapter(quote_asset, group='asset'),
-            ],
-            'asset_type': [
-                'contractType',
-                lambda asset_type: self._adapter(asset_type, group='asset_type'),
-                # NOTE: INVERSE-PERPETUAL cannot be converted to CryptoAssetType
-                lambda asset_type: CryptoAssetType[asset_type.upper()] if asset_type in CryptoAssetType.__members__ else asset_type,
-            ],
-            'tick_size': ['priceFilter', 'tickSize', str],
-            'lot_size': ['lotSizeFilter', 'qtyStep', str],
-            'expiration': (
-                'deliveryTime', 
-                lambda expiration: None if expiration == '0' else datetime.datetime.fromtimestamp(int(expiration) / 1000, tz=datetime.timezone.utc),
-            ),
-            'category': category,
+            'data': {
+                'symbol': ['symbol'],
+                'base_asset': [
+                    'baseCoin',
+                    lambda base_asset: self._adapter(base_asset, group='asset'),
+                ],
+                'quote_asset': [
+                    'quoteCoin',
+                    lambda quote_asset: self._adapter(quote_asset, group='asset'),
+                ],
+                'asset_type': [
+                    'contractType',
+                    lambda asset_type: self._adapter(asset_type, group='asset_type'),
+                    # NOTE: INVERSE-PERPETUAL cannot be converted to CryptoAssetType
+                    lambda asset_type: CryptoAssetType[asset_type.upper()] if asset_type in CryptoAssetType.__members__ else asset_type,
+                ],
+                'tick_size': ['priceFilter', 'tickSize', str],
+                'lot_size': ['lotSizeFilter', 'qtyStep', str],
+                'expiration': (
+                    'deliveryTime', 
+                    lambda expiration: None if expiration == '0' else datetime.datetime.fromtimestamp(int(expiration) / 1000, tz=datetime.timezone.utc),
+                ),
+                'category': category,
+            },
         }
         if schema:
             if category == ProductCategory.SPOT:
-                schema['expiration'] = None
-                schema['asset_type'] = CryptoAssetType.CRYPTO
-                schema['lot_size'] = ['lotSizeFilter', 'basePrecision', str]
+                schema['data']['expiration'] = None
+                schema['data']['asset_type'] = CryptoAssetType.CRYPTO
+                schema['data']['lot_size'] = ['lotSizeFilter', 'basePrecision', str]
             elif category == ProductCategory.OPTION:
-                schema['asset_type'] = CryptoAssetType.OPT
-                schema['option_type'] = ('optionsType', lambda option_type: OptionType[option_type.upper()])
-                schema['strike_price'] = ('symbol', lambda symbol: Decimal(symbol.split('-')[2]))
+                schema['data']['asset_type'] = CryptoAssetType.OPT
+                schema['data']['option_type'] = ('optionsType', lambda option_type: OptionType[option_type.upper()])
+                schema['data']['strike_price'] = ('symbol', lambda symbol: Decimal(symbol.split('-')[2]))
         result: Result | ApiResponse = await self._request(endpoint_name, schema, params=params)
         return result

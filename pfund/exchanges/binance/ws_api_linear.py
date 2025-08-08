@@ -5,7 +5,7 @@ Linear (PERP, FUT) in PFund = USDT-M Futures in Binance
 from pfund.exchanges.ws_api_base import BaseWebSocketAPI
 
 
-class WebSocketAPILinear(BaseWebSocketAPI):
+class LinearWebSocketAPI(BaseWebSocketAPI):
     # NOTE: Binance separates order endpoints and data streaming endpoints
     # using different ws urls
     URLS = {

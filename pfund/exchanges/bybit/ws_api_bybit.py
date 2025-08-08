@@ -8,8 +8,9 @@ import os
 import time
 import hmac
 import inspect
-import msgspec
 from decimal import Decimal
+
+from msgspec import json
 
 from pfund.parser import SchemaParser
 from pfund.exchanges.ws_api_base import BaseWebSocketAPI, NamedWebSocket
@@ -25,14 +26,7 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
     exch = CryptoExchange.BYBIT
     CATEGORY: ClassVar[BybitProduct.ProductCategory]
     VERSION = 'v5'
-    URLS = {
-        Environment.PAPER: {
-            DataChannelType.private: f'wss://stream-testnet.bybit.com/{VERSION}/private',
-        },
-        Environment.LIVE: {
-            DataChannelType.private: f'wss://stream.bybit.com/{VERSION}/private'
-        }
-    }
+    URLS = {}
     # it defines the maximum number of arguments allowed in the 'args' list of a WebSocket message: {'op': '...', 'args': [...]}
     PUBLIC_CHANNEL_ARGS_LIMIT = os.sys.maxsize
     
@@ -43,6 +37,12 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
             return '_'.join([account_name, 'ws']).lower()
         
     def _split_channels_into_batches(self, channels: list[str], channel_type: DataChannelType) -> list[list[str]]:
+        """Split channels into batches if public channel args limit is exceeded.
+        
+        For public channels, there's a limit on the number of arguments allowed in a single
+        WebSocket subscription message. If this limit is exceeded, the channels are split
+        into smaller batches that fit within the limit.
+        """
         num_channels = len(channels)
         is_exceeded_args_limit = (channel_type == DataChannelType.public) and (num_channels > self.PUBLIC_CHANNEL_ARGS_LIMIT)
         if not is_exceeded_args_limit:
@@ -86,7 +86,7 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
     
     async def _on_message(self, ws_name: str, raw_msg: bytes):
         try:
-            msg: dict = msgspec.json.decode(raw_msg)
+            msg: dict = json.decode(raw_msg)
             self._logger.debug(f'{ws_name} {msg=}')
 
             if 'op' in msg:
@@ -111,7 +111,7 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
                 
             if not self._callback_raw_msg:
                 msg = self._parse_message(msg)
-            result = self._callback(msg)
+            result = self._callback(ws_name, msg)
             if inspect.isawaitable(result):
                 await result
                 

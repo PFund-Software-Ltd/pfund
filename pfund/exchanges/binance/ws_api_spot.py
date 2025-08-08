@@ -13,7 +13,7 @@ Supports Binance's spot trading, including:
 from pfund.exchanges.ws_api_base import BaseWebSocketAPI
 
 
-class WebSocketAPISpot(BaseWebSocketAPI):
+class SpotWebSocketAPI(BaseWebSocketAPI):
     # NOTE: Binance separates order endpoints and data streaming endpoints
     # using different ws urls
     URLS = {

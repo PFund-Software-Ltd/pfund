@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from pfund.exchanges.rest_api_base import Result, ApiResponse
     from pfund.enums import CryptoExchange
     from pfund.datas.data_time_based import TimeBasedData
+    from pfund.datas.timeframe import TimeframeUnits
     from pfund._typing import tEnvironment, ProductName, AccountName, FullDataChannel
     from pfund.products.product_crypto import CryptoProduct
     from pfund.accounts.account_crypto import CryptoAccount
@@ -66,6 +67,11 @@ class BaseExchange(ABC):
     @property
     def accounts(self):
         return self._accounts
+    
+    @classmethod
+    @abstractmethod
+    def get_supported_resolutions(cls, product: CryptoProduct) -> dict[TimeframeUnits, list[int]]:
+        pass
     
     @classmethod
     def get_file_path(cls, filename: str) -> Path | None:
@@ -142,7 +148,7 @@ class BaseExchange(ABC):
             if not is_success:
                 self._logger.warning(f'failed to fetch market configs for {category}')
                 continue
-            configs = {config['symbol']: config for config in result['data']['message']}
+            configs = {config['symbol']: config for config in result['data']}
             existing_market_configs[category.upper()] = configs
         dump_yaml_file(market_configs_file_path, existing_market_configs)
 
@@ -170,7 +176,7 @@ class BaseExchange(ABC):
                 )
             self._products[product.name] = product
             self._ws_api.add_product(product)
-            self.adapter.add_mapping(product.type, product.name, product.symbol)
+            self.adapter.add_mapping(str(product.type), product.name, product.symbol)
         else:
             existing_product: CryptoProduct = self.get_product(product.name)
             # assert products are the same with the same name

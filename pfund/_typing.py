@@ -40,13 +40,11 @@ tOrderType = Literal['LIMIT', 'MARKET', 'STOP_MARKET', 'STOP_LIMIT']
 
 ComponentNameWithData: TypeAlias = ComponentName
 ComponentNameWithLogger: TypeAlias = ComponentName
-ZeroMQName = Union[
+ZeroMQSenderName = Union[
     Literal[
-        "proxy",  # ZeroMQ xsub-xpub proxy for messaging from trading venues -> engine -> components
-        "router",  # ZeroMQ router-pull for pulling messages from components (e.g. strategies/models) -> engine -> trading venues
-        "publisher",  # ZeroMQ publisher for broadcasting internal states to external apps
+        "data_engine",  # ZeroMQ data engine for pulling data from trading venues
+        "proxy",  # ZeroMQ publisher for broadcasting internal states to external apps
     ],
-    tTradingVenue,
     # each component has TWO ZeroMQ ports:
     # ComponentName is used for component's signals_zmq
     # ComponentNameWithData is used for component's data_zmq
@@ -86,7 +84,7 @@ class DataParamsDict(TypedDict, total=True):
 
 class BaseEngineSettingsDict(TypedDict, total=False):
     zmq_urls: dict[EngineName | tTradingVenue | ComponentName, str]
-    zmq_ports: dict[ZeroMQName, int]
+    zmq_ports: dict[ZeroMQSenderName, int]
 
 
 class TradeEngineSettingsDict(BaseEngineSettingsDict, total=False):

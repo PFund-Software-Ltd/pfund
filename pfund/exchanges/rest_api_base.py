@@ -29,12 +29,6 @@ EndpointPath: TypeAlias = str
 ApiResponse: TypeAlias = dict | list[dict]
 
     
-class ResultData(TypedDict):
-    exchange: CryptoExchange
-    account: str | None
-    message: dict | list[dict] | None
-
-
 class RequestData(TypedDict):
     endpoint_name: str
     endpoint: str
@@ -46,7 +40,9 @@ class Result(TypedDict):
     is_success: bool
     error: str | None
     request: RequestData
-    data: ResultData
+    exchange: CryptoExchange
+    account: str | None
+    data: dict | list[dict] | None
 
 
 class RequestMethod(StrEnum):
@@ -170,11 +166,9 @@ class BaseRESTfulAPI(ABC):
                 # 'data': data,  # FIXME: add data to result?
                 'params': params,
             },
-            'data': {
-                'exchange': self.exch,
-                'account': account.name if account else None,
-                'message': None,
-            }
+            'exchange': self.exch,
+            'account': account.name if account else None,
+            'data': None,
         }
         try:
             response: Response = await self._client.send(request)
@@ -185,8 +179,11 @@ class BaseRESTfulAPI(ABC):
             result['request']['status_code'] = response.status_code
             is_success = response.is_success and self._is_success(api_response)
             result['is_success'] = is_success
-            message: dict | list[dict] = SchemaParser.convert(api_response, schema) if is_success else api_response
-            result['data']['message'] = message
+            parsed_data: dict | list[dict] = SchemaParser.convert(api_response, schema) if is_success else api_response
+            if isinstance(parsed_data, dict):
+                result.update(parsed_data)
+            else:
+                result['data'] = parsed_data
             if not is_success:
                 self._logger.warning(f'"{endpoint_name}" failed: {api_response}')
         except (ParseApiResponseError, JSONDecodeError, RequestError, HTTPStatusError) as exc:

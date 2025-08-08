@@ -51,11 +51,15 @@ class BaseProduct(BaseModel):
         return data
     
     def model_post_init(self, __context: Any):
+        # calls __mixin_post_init__ in e.g. StockMixin if exists
         if hasattr(self, '__mixin_post_init__'):
             self.__mixin_post_init__()
         self.specs = self._create_specs()
         self.symbol = self.symbol or self._create_symbol()
-        self.name = self.name or self.symbol
+        self.name = self.name or self._create_name()
+    
+    def _create_name(self):
+        return self.symbol
     
     @property
     def tv(self) -> TradingVenue:

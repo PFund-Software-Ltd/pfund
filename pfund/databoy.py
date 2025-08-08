@@ -11,7 +11,7 @@ if TYPE_CHECKING:
         Component, 
         ProductName, 
         ResolutionRepr, 
-        ZeroMQName, 
+        ZeroMQSenderName, 
         DataConfigDict,
     )
 
@@ -25,7 +25,7 @@ from pfund.datas import QuoteData, TickData, BarData
 from pfund.products.product_base import BaseProduct
 from pfund.datas.data_config import DataConfig
 from pfund.datas.resolution import Resolution
-from pfund.enums import Event, Broker, CryptoExchange, PFundDataChannel, PFundDataTopic
+from pfund.enums import Event, Broker, CryptoExchange, PFundDataChannel, PrivateDataChannel
 
 
 MarketData = QuoteData | TickData | BarData
@@ -52,7 +52,7 @@ class DataBoy:
         # including even the local ones. if theres any performance issue, 
         # consider disabling using ZeroMQ for local components
         self._zmq_thread: Thread | None = None
-        self._zmq_ports_in_use: dict[ZeroMQName, int] = {}
+        self._zmq_ports_in_use: dict[ZeroMQSenderName, int] = {}
 
     @property
     def name(self) -> ComponentName:
@@ -77,22 +77,19 @@ class DataBoy:
     def logger(self) -> Logger:
         return self._component.logger
     
-    def _update_zmq_ports_in_use(self, zmq_ports: dict[ZeroMQName, int]):
-        self._zmq_ports_in_use.update(zmq_ports)
-    
     def is_remote(self) -> bool:
         return self._component.is_remote()
         
     @staticmethod
-    def _get_supported_resolutions(bkr: Broker, exch: CryptoExchange | str) -> dict:
-        if bkr == Broker.CRYPTO:
-            WebSocketAPI = getattr(importlib.import_module(f'pfund.exchanges.{exch.lower()}.ws_api'), 'WebSocketAPI')
-            supported_resolutions = WebSocketAPI.SUPPORTED_RESOLUTIONS
-        elif bkr == Broker.IB:
+    def _get_supported_resolutions(product: BaseProduct) -> dict:
+        if product.bkr == Broker.CRYPTO:
+            Exchange = getattr(importlib.import_module(f'pfund.exchanges.{product.exch.lower()}.exchange'), 'Exchange')
+            supported_resolutions = Exchange.get_supported_resolutions(product)
+        elif product.bkr == Broker.IB:
             IBApi = getattr(importlib.import_module('pfund.brokers.ib.ib_api'), 'IBApi')
             supported_resolutions = IBApi.SUPPORTED_RESOLUTIONS
         else:
-            raise NotImplementedError(f'{bkr=} is not supported')
+            raise NotImplementedError(f'broker {product.bkr} is not supported')
         return supported_resolutions
     
     def _add_data(self, product: BaseProduct, resolution: Resolution, data_config: DataConfig) -> TimeBasedData:
@@ -140,7 +137,7 @@ class DataBoy:
             data_config['data_source'] = data_source
             data_config['data_origin'] = data_origin
             data_config = DataConfig(**data_config)
-        supported_resolutions = self._get_supported_resolutions(product.bkr, product.exch)
+        supported_resolutions = self._get_supported_resolutions(product)
         is_auto_resampled = data_config.auto_resample(supported_resolutions)
         if is_auto_resampled:
             self.logger.warning(f'{product} resolution={data_config.primary_resolution} extra_resolutions={data_config.extra_resolutions} data is auto-resampled to:\n{pformat(data_config.resample)}')
@@ -206,60 +203,106 @@ class DataBoy:
         for data, timeout in self._stale_bar_timeouts.items():
             scheduler.add_job(lambda: self._flush_stale_bar(data), 'interval', seconds=timeout)
     
-    def _setup_messaging(self) -> dict[str, int]:
-        '''
-        Returns:
-            zmq_ports_in_use: dict[str, int] of zmq ports in use by the component
-        '''
+    def _setup_messaging(self):
         import zmq
         from pfeed.messaging.zeromq import ZeroMQ
         
         zmq_urls = self._component._settings.zmq_urls
         zmq_ports = self._component._settings.zmq_ports
-        
-        zmq_url = zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL)
-        
-        data_zmq_name = self.name+'_data'
+        component_name = self.name
+        component_zmq_url = zmq_urls.get(component_name, ZeroMQ.DEFAULT_URL)
+
+        data_zmq_name = component_name + '_data'
         self._data_zmq = ZeroMQ(
             name=data_zmq_name,
-            url=zmq_url,
-            port=zmq_ports.get(data_zmq_name, None),
-            receiver_socket_type=zmq.SUB,  # receive data from engine
-            sender_socket_type=zmq.PUSH,  # send component created data (e.g. orders) to engine
+            logger=self.logger,
+            sender_type=zmq.PUSH,  # send component created data (e.g. orders) to trade engine
+            receiver_type=zmq.SUB,  # receive data from data engine, order updates from trade engine
         )
+        self._data_zmq.bind(
+            socket=self._data_zmq.sender,
+            port=zmq_ports.get(data_zmq_name, None),
+            url=component_zmq_url,
+        )
+        data_zmq_port = self._data_zmq.get_ports_in_use(self._data_zmq.sender)[0]
         
-        signals_zmq_name = self.name
+        signals_zmq_name = component_name
         self._signals_zmq = ZeroMQ(
             name=signals_zmq_name,
-            url=zmq_url,
+            logger=self.logger,
+            sender_type=zmq.PUB,  # publish signals to other consumers
+            receiver_type=zmq.SUB,  # subscribe to signals from other components
+        )
+        self._signals_zmq.bind(
+            socket=self._signals_zmq.sender,
             port=zmq_ports.get(signals_zmq_name, None),
-            receiver_socket_type=zmq.SUB,  # subscribe to signals from other components
-            sender_socket_type=zmq.PUB,  # publish signals to other consumers
+            url=component_zmq_url,
         )
+        signals_zmq_port = self._signals_zmq.get_ports_in_use(self._signals_zmq.sender)[0]
         
-        self._update_zmq_ports_in_use(
-            {q.name: q.port for q in [self._data_zmq, self._signals_zmq]}
-        )
+        self._update_zmq_ports_in_use({
+            data_zmq_name: data_zmq_port,
+            signals_zmq_name: signals_zmq_port
+        })
     
-    def _get_zmq_ports_in_use(self) -> dict[ZeroMQName, int]:
+    def _get_zmq_ports_in_use(self) -> dict[ZeroMQSenderName, int]:
         '''Gets ALL zmq ports in use even the ones used in components'''
         for component in self.components:
             self._zmq_ports_in_use.update(component._get_zmq_ports_in_use())
         return self._zmq_ports_in_use
+
+    def _update_zmq_ports_in_use(self, zmq_ports: dict[ZeroMQSenderName, int]):
+        self._zmq_ports_in_use.update(zmq_ports)
     
     def subscribe(self):
+        import zmq
+        from pfeed.messaging.zeromq import ZeroMQ, ZeroMQDataChannel
         zmq_ports = self._get_zmq_ports_in_use()
-        # subscribe to engine's data proxied from trading venues (e.g. bybit's websocket)
-        engine_proxy_port = zmq_ports['proxy']
+        engine_name = self._component._engine.name
+        engine_zmq_url = self._component._settings.zmq_urls.get(engine_name, ZeroMQ.DEFAULT_URL)
+        # subscribe to proxy's order updates and data engine's data
+        for zmq_name in ['proxy', 'data_engine']:
+            zmq_port = zmq_ports.get(zmq_name, None)
+            self._data_zmq.connect(
+                socket=self._data_zmq.receiver,
+                port=zmq_port,
+                url=engine_zmq_url,
+            )
+            self.logger.debug(f'{self._data_zmq.name} connected to {zmq_name} at {engine_zmq_url}:{zmq_port}')
+        
+        # subscribe to private channels: positions, balances, orders, etc.
+        if self._component.is_strategy():
+            accounts = list(self._component.accounts.values())
+            channels = list(PrivateDataChannel.__members__)
+            for account, channel in zip(accounts, channels):
+                zmq_channel: str = ZeroMQDataChannel.create_private_channel(
+                    account=account,
+                    channel=channel,
+                )
+                self._data_zmq.receiver.setsockopt(zmq.SUBSCRIBE, zmq_channel.encode())
+        
+        # subscribe to data channels: quote, tick, bar, etc.
         for data in self.get_datas():
-            self._data_zmq.connect(engine_proxy_port, channel=data.zmq_channel)
-            # TODO: setsockopt(zmq.SUBSCRIBE, data.zmq_channel.encode())
-            self.logger.debug(f'{self.name} subscribed to {data.zmq_channel} on port {engine_proxy_port}')
+            if isinstance(data, MarketData):
+                zmq_channel = ZeroMQDataChannel.create_market_data_channel(
+                    data_source=data.source,
+                    product=data.product,
+                    resolution=data.resolution,
+                )
+                self._data_zmq.receiver.setsockopt(zmq.SUBSCRIBE, zmq_channel.encode())
+            else:
+                raise NotImplementedError(f'Unhandled data type: {type(data)}')
 
         for component in self.components:
-            component_port = zmq_ports[component.name]
-            self._signals_zmq.connect(component_port)
-            self.logger.debug(f'{self.name} subscribed to {component.name} on port {component_port}')
+            component_name = component._name
+            component_zmq_url = self._component._settings.zmq_urls.get(component_name, ZeroMQ.DEFAULT_URL)
+            component_zmq_port = zmq_ports.get(component_name, None)
+            self._signals_zmq.connect(
+                socket=self._signals_zmq.receiver,
+                port=component_zmq_port,
+                url=component_zmq_url,
+            )
+            self.logger.debug(f'{self._signals_zmq.name} connected to {component_name} at {component_zmq_url}:{component_zmq_port}')
     
     # FIXME
     def pong(self):
@@ -268,19 +311,14 @@ class DataBoy:
         self._zmq.send(*zmq_msg, receiver='engine')
 
     def start(self):
-        if self._data_zmq:
-            self._data_zmq.start()
-        if self._signals_zmq:
-            self._signals_zmq.start()
+        # set the ZMQPubHandler's receiver ready to flush the buffered log messages
+        if self.is_remote():
+            self.logger.handlers[0].set_receiver_ready()
         if self._data_zmq or self._signals_zmq:
             self._zmq_thread = Thread(target=self._collect, daemon=True)
             self._zmq_thread.start()
 
     def stop(self):
-        if self._data_zmq:
-            self._data_zmq.stop()
-        if self._signals_zmq:
-            self._signals_zmq.stop()
         if self._zmq_thread and self._zmq_thread.is_alive():
             self.logger.debug(f"{self.name} waiting for data thread to finish")
             self._zmq_thread.join()  # Blocks until thread finishes
@@ -293,8 +331,9 @@ class DataBoy:
         '''
         while self._component.is_running():
             if self._data_zmq:
-                channel, topic, data, pub_ts = self._data_zmq.recv()
-                print(f'{self.name} recv:', channel, topic, data, pub_ts)
+                if msg := self._data_zmq.recv():
+                    channel, topic, data, msg_ts = msg
+                    # print(f'{self.name} recv:', channel, topic, data, msg_ts)
                 # TODO: e.g. if component is a model:
                 # output = self._component.predict(...)
                 # self._signals_zmq.send(output)

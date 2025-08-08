@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Any
 
 from enum import StrEnum
 
@@ -19,7 +20,6 @@ class BybitProduct(CryptoProduct):
     exchange: CryptoExchange = CryptoExchange.BYBIT
     category: ProductCategory | None = None
 
-    @model_validator(mode='after')
     def _derive_product_category(self):
         if self.asset_type == CryptoAssetType.CRYPTO:
             category = self.ProductCategory.SPOT
@@ -29,8 +29,11 @@ class BybitProduct(CryptoProduct):
             category = self.ProductCategory.OPTION
         else:
             category = self.ProductCategory.LINEAR
-        self.category = category
-        return self
+        return category
+    
+    def model_post_init(self, __context: Any):
+        self.category = self._derive_product_category()
+        super().model_post_init(__context)
     
     # TODO: move to BaseProduct and add back SUPPORTED_ASSET_TYPES to BaseExchange?
     @model_validator(mode='after')
@@ -39,6 +42,9 @@ class BybitProduct(CryptoProduct):
         if str(self.asset_type) not in Bybit.SUPPORTED_ASSET_TYPES:
             raise ValueError(f"Invalid asset type: {self.asset_type}")
         return self
+    
+    def _create_name(self):
+        return self.symbol + '_' + self.category.value
     
     def _create_symbol(self):
         from pfund.exchanges import Bybit

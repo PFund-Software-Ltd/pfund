@@ -34,16 +34,16 @@ class WebSocketAPI(BaseWebSocketAPI):
     
     @staticmethod
     def _get_api_class(category: ProductCategory | tProductCategory) -> type[BybitWebSocketAPI]:
-        from pfund.exchanges.bybit.ws_api_linear import WebSocketAPILinear
-        from pfund.exchanges.bybit.ws_api_inverse import WebSocketAPIInverse
-        from pfund.exchanges.bybit.ws_api_spot import WebSocketAPISpot
-        from pfund.exchanges.bybit.ws_api_option import WebSocketAPIOption
+        from pfund.exchanges.bybit.ws_api_linear import LinearWebSocketAPI
+        from pfund.exchanges.bybit.ws_api_inverse import InverseWebSocketAPI
+        from pfund.exchanges.bybit.ws_api_spot import SpotWebSocketAPI
+        from pfund.exchanges.bybit.ws_api_option import OptionWebSocketAPI
         category = ProductCategory[category.upper()]
         return {
-            ProductCategory.LINEAR: WebSocketAPILinear,
-            ProductCategory.INVERSE: WebSocketAPIInverse,
-            ProductCategory.SPOT: WebSocketAPISpot,
-            ProductCategory.OPTION: WebSocketAPIOption,
+            ProductCategory.LINEAR: LinearWebSocketAPI,
+            ProductCategory.INVERSE: InverseWebSocketAPI,
+            ProductCategory.SPOT: SpotWebSocketAPI,
+            ProductCategory.OPTION: OptionWebSocketAPI,
         }[category]
         
     def get_api(self, category: tProductCategory | None=None):

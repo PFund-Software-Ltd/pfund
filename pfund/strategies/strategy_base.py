@@ -155,6 +155,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         self._assert_not_frozen()
         trading_venue = TradingVenue[trading_venue.upper()]
         account: BaseAccount = self._create_account(trading_venue, name=name, **kwargs)
+        self.accounts[account.name] = account
         self.positions[account.name] = {}
         self.balances[account.name] = {}
         self.orders[account.name] = []

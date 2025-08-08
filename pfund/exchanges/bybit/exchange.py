@@ -2,7 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfund.exchanges.rest_api_base import Result, ApiResponse
-    from pfund.products.product_base import BaseProduct
+    from pfund.products.product_bybit import BybitProduct
+    from pfund.datas.timeframe import TimeframeUnits
 
 import asyncio
 import datetime
@@ -35,6 +36,15 @@ class Exchange(BaseExchange):
     # TODO: may allow configure exchange behaviours such as use place_order over place_batch_orders for rate limit control
     # def configure(self, ...):
     #     pass
+
+    @classmethod
+    def get_supported_resolutions(cls, product: BybitProduct) -> dict[TimeframeUnits, list[int]]:
+        import importlib
+        from pfeed.utils.utils import to_camel_case
+        name = cls.name.lower()
+        Category = to_camel_case(product.category.value)
+        WebSocketAPI = getattr(importlib.import_module(f'pfund.exchanges.{name}.ws_api_{Category.lower()}'), f'{Category}WebSocketAPI')
+        return WebSocketAPI.SUPPORTED_RESOLUTIONS    
 
     '''
     Functions using REST API
@@ -266,7 +276,7 @@ class Exchange(BaseExchange):
                 trades = categorized_trades
         return trades
 
-    def place_order(self, account: CryptoAccount, product: BaseProduct, order: CryptoOrder, expires_in: int=5000):
+    def place_order(self, account: CryptoAccount, product: BybitProduct, order: CryptoOrder, expires_in: int=5000):
         '''
         Args:
             expires_in: time in milliseconds, specify how long the HTTP request is valid.
@@ -312,7 +322,7 @@ class Exchange(BaseExchange):
         update['status'] = 'O---'
         return update
 
-    def cancel_order(self, account: CryptoAccount, product: BaseProduct, order: CryptoOrder):
+    def cancel_order(self, account: CryptoAccount, product: BybitProduct, order: CryptoOrder):
         schema = {
             '@data': 'result',
             'ts': 'time',
@@ -338,10 +348,10 @@ class Exchange(BaseExchange):
 
     # NOTE, bybit only supports place_batch_orders for category `options`
     # TODO, come back to this if bybit supports more
-    def place_batch_orders(self, account: CryptoAccount, product: BaseProduct, orders: list[CryptoOrder]):
+    def place_batch_orders(self, account: CryptoAccount, product: BybitProduct, orders: list[CryptoOrder]):
         assert len(orders) <= self.MAX_NUM_OF_PLACE_BATCH_ORDERS
 
     # NOTE, bybit only supports cancel_batch_orders for category `options`
     # TODO, come back to this if bybit supports more
-    def cancel_batch_orders(self, account: CryptoAccount, product: BaseProduct, orders: list[CryptoOrder]):
+    def cancel_batch_orders(self, account: CryptoAccount, product: BybitProduct, orders: list[CryptoOrder]):
         assert len(orders) <= self._MAX_NUM_OF_CANCEL_BATCH_ORDERS

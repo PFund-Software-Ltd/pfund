@@ -20,14 +20,11 @@ from pfund.brokers.broker_base import BaseBroker
 
 class TradeBroker(BaseBroker):
     def __init__(self, env: Environment | tEnvironment=Environment.SANDBOX):
-        from pfund.managers.connection_manager import ConnectionManager
         from pfund.engines.trade_engine import TradeEngine
 
         super().__init__(env=env)
         self._settings: TradeEngineSettings | None = getattr(TradeEngine, "_settings", None)
         
-        # FIXME: still keep connection manager?
-        # self._connection_manager = ConnectionManager(self)
         # TODO: use other data source, e.g. databento, only support TradFi Broker
         # TODO: create feed for streaming and somehow pass it to connection manager
         # self._data_feed: MarketFeed | None = None
@@ -45,7 +42,6 @@ class TradeBroker(BaseBroker):
     def start(self):
         # TODO: check if all product names and account names are unique
         self._add_default_private_channels()
-        self._connection_manager.connect()
         if self._settings.cancel_all_at['start']:
             self.cancel_all_orders(reason='start')
         self._logger.debug(f'broker {self._name} started')
@@ -53,7 +49,6 @@ class TradeBroker(BaseBroker):
     def stop(self):
         if self._settings.cancel_all_at['stop']:
             self.cancel_all_orders(reason='stop')
-        self._connection_manager.disconnect()
         self._logger.debug(f'broker {self._name} stopped')
 
     # TODO
@@ -68,10 +63,11 @@ class TradeBroker(BaseBroker):
             self._order_manager.handle_msgs(topic, info)
         elif channel == 3:
             self._portfolio_manager.handle_msgs(topic, info)
-        elif channel == 4:  # from api processes to connection manager 
-            self._connection_manager.handle_msgs(topic, info)
-            if topic == 3 and self._settings.get('cancel_all_at', {}).get('disconnect', True):  # on disconnected
-                self.cancel_all_orders(reason='disconnect')
+        # FIXME
+        # elif channel == 4:  # from api processes to connection manager 
+        #     self._connection_manager.handle_msgs(topic, info)
+        #     if topic == 3 and self._settings.get('cancel_all_at', {}).get('disconnect', True):  # on disconnected
+        #         self.cancel_all_orders(reason='disconnect')
 
     # FIXME: move to mtflow
     def schedule_jobs(self: CryptoBroker | IBBroker, scheduler: BackgroundScheduler):
@@ -79,7 +75,7 @@ class TradeBroker(BaseBroker):
         scheduler.add_job(self.reconcile_positions, 'interval', seconds=10)
         scheduler.add_job(self.reconcile_orders, 'interval', seconds=10)
         scheduler.add_job(self.reconcile_trades, 'interval', seconds=10)
-        for manager in [self._connection_manager, self._order_manager, self._portfolio_manager]:
+        for manager in [self._order_manager, self._portfolio_manager]:
             manager.schedule_jobs(scheduler)
             
     @abstractmethod

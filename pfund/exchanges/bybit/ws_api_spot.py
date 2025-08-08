@@ -4,7 +4,7 @@ from pfund.products.product_bybit import BybitProduct
 from pfund.datas.timeframe import TimeframeUnits
 
 
-class WebSocketAPISpot(BybitWebSocketAPI):
+class SpotWebSocketAPI(BybitWebSocketAPI):
     CATEGORY = BybitProduct.ProductCategory.SPOT
     VERSION = BybitWebSocketAPI.VERSION
     URLS = {

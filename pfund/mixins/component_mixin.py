@@ -134,7 +134,7 @@ class ComponentMixin:
         if not self.is_wasm():
             self.databoy._setup_messaging()
     
-    def _setup_logging(self: Component, logging_config: dict) -> dict[str, int]:
+    def _setup_logging(self: Component, logging_config: dict):
         '''Sets up logging for component running in remote process, uses zmq's PUBHandler to send logs to engine'''
         from pfund._logging.zmq_pub_handler import ZMQPubHandler
         from pfeed.messaging.zeromq import ZeroMQ
@@ -163,7 +163,7 @@ class ComponentMixin:
         zmq_handler.setFormatter(zmq_formatter)
         self.logger.addHandler(zmq_handler)
         self.databoy._update_zmq_ports_in_use(
-            {self.name+'_logger': zmq_port}
+            {self.name + '_logger': zmq_port}
         )
     
     def _get_zmq_ports_in_use(self) -> dict[str, int]:
@@ -312,6 +312,9 @@ class ComponentMixin:
     def _set_name(self, name: str):
         if not name:
             return
+        # avoid zeromq binding issues with confusing component name
+        assert not name.endswith("_data") and not name.endswith("_logger"), \
+            f"name cannot end with '_data' or '_logger', got {name}"
         self.name = name
         if self.component_type not in self.name.lower():
             self.name += f"_{self.component_type}"
@@ -717,8 +720,8 @@ class ComponentMixin:
             # TODO:
             # self._add_datas_from_consumer_if_none()
             # TODO:
-            # self.store._freeze()
-            # self.store._materialize()
+            # self.store.freeze()
+            # self.store.materialize()
             # self._prepare_df()
             for component in self.components:
                 component._gather()
@@ -730,10 +733,7 @@ class ComponentMixin:
         if not self.is_running():
             self._is_running = True
             self.on_start()
-            if not self.is_wasm():
-                # set the ZMQPubHandler's receiver ready to flush the buffered log messages
-                self.logger.handlers[0].set_receiver_ready()
-                self.databoy.start()
+            self.databoy.start()
             for component in self.components:
                 component.start()
             self.logger.info(f"'{self.name}' has started")

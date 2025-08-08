@@ -23,11 +23,6 @@ class BaseData(ABC):
     def category(self) -> DataCategory:
         pass
     
-    @property
-    @abstractmethod
-    def key(self) -> str:
-        pass
-    
     def is_time_based(self):
         return False
     

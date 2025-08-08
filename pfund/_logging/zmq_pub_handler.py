@@ -17,7 +17,7 @@ class ZMQPubHandler(PUBHandler):
         
     def emit(self, record: logging.LogRecord):
         try:
-            channel = PFundDataChannel.zmq_logging
+            channel = PFundDataChannel.logging
             topic = record.levelname
             text = self.format(record)
             data = orjson.dumps(text)
