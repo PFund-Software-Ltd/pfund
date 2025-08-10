@@ -159,6 +159,8 @@ class TradeEngine(BaseEngine):
                     # TODO: receive components orders
                     if msg := self._worker.recv():
                         pass
+                except Exception:
+                    logger.exception(f"Exception in {self.name} run():")
                 except KeyboardInterrupt:
                     logger.warning(f'KeyboardInterrupt received, ending {self.name}')
                     break

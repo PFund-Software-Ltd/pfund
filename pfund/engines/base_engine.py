@@ -27,6 +27,7 @@ from pfeed.enums import DataTool
 from pfund import cprint, get_config
 from pfund.engines.meta_engine import MetaEngine
 from pfund.proxies.actor_proxy import ActorProxy
+from pfund.proxies.engine_proxy import EngineProxy
 from pfund.enums import (
     Environment, 
     Broker, 
@@ -173,6 +174,10 @@ class BaseEngine(metaclass=MetaEngine):
         return self._settings
     
     @property
+    def data_tool(self) -> DataTool:
+        return self._data_tool
+    
+    @property
     def data_start(self) -> datetime.date:
         return self._data_start
     
@@ -275,14 +280,10 @@ class BaseEngine(metaclass=MetaEngine):
             strategy = ActorProxy(strategy, name=name, ray_actor_options=ray_actor_options, **ray_kwargs)
             strategy._set_proxy(strategy)
         strategy._hydrate(
-            env=self._env,
             name=strat,
             run_mode=run_mode,
             resolution=resolution,
-            engine=None if is_remote else self,
-            settings=self._settings,
-            logging_config=self._logging_config,
-            data_params=self.get_data_params(),
+            engine=EngineProxy.from_engine(self) if is_remote else self,
         )
         strategy._set_top_strategy(True)
 

@@ -207,8 +207,9 @@ class DataBoy:
         import zmq
         from pfeed.messaging.zeromq import ZeroMQ
         
-        zmq_urls = self._component._settings.zmq_urls
-        zmq_ports = self._component._settings.zmq_ports
+        settings = self._component._engine.settings
+        zmq_urls = settings.zmq_urls
+        zmq_ports = settings.zmq_ports
         component_name = self.name
         component_zmq_url = zmq_urls.get(component_name, ZeroMQ.DEFAULT_URL)
 
@@ -259,7 +260,8 @@ class DataBoy:
         from pfeed.messaging.zeromq import ZeroMQ, ZeroMQDataChannel
         zmq_ports = self._get_zmq_ports_in_use()
         engine_name = self._component._engine.name
-        engine_zmq_url = self._component._settings.zmq_urls.get(engine_name, ZeroMQ.DEFAULT_URL)
+        settings = self._component._engine.settings
+        engine_zmq_url = settings.zmq_urls.get(engine_name, ZeroMQ.DEFAULT_URL)
         # subscribe to proxy's order updates and data engine's data
         for zmq_name in ['proxy', 'data_engine']:
             zmq_port = zmq_ports.get(zmq_name, None)
@@ -295,7 +297,7 @@ class DataBoy:
 
         for component in self.components:
             component_name = component._name
-            component_zmq_url = self._component._settings.zmq_urls.get(component_name, ZeroMQ.DEFAULT_URL)
+            component_zmq_url = settings.zmq_urls.get(component_name, ZeroMQ.DEFAULT_URL)
             component_zmq_port = zmq_ports.get(component_name, None)
             self._signals_zmq.connect(
                 socket=self._signals_zmq.receiver,

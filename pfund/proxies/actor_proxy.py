@@ -20,7 +20,8 @@ class ActorProxy:
         self.name = component_name
         self.resolution = component.resolution
     
-    def _create_actor(self, component: Component, ray_actor_options: dict, **ray_kwargs):
+    @staticmethod
+    def _create_actor(component: Component, ray_actor_options: dict, **ray_kwargs) -> ActorHandle:
         import ray
         Component = component.__class__
         try:

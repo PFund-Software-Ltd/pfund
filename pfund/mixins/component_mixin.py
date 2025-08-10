@@ -13,9 +13,8 @@ if TYPE_CHECKING:
         IndicatorT, 
         FeatureT, 
         DataConfigDict, 
-        DataParamsDict,
         tTradingVenue, 
-        Component, 
+        Component,
         ComponentName,
     )
     from pfund.datas.data_bar import Bar
@@ -25,10 +24,10 @@ if TYPE_CHECKING:
     from pfund.datas import QuoteData, TickData, BarData
     from pfund.engines.base_engine import BaseEngine
     from pfund.strategies.strategy_base import BaseStrategy
+    from pfund.proxies.engine_proxy import EngineProxy
     from pfund.models.model_base import BaseModel
     from pfund.features.feature_base import BaseFeature
     from pfund.indicators.indicator_base import BaseIndicator
-    from pfund.engines.base_engine_settings import BaseEngineSettings
 
 import time
 import logging
@@ -57,16 +56,13 @@ class ComponentMixin:
         cls.load_config()
         cls.load_params()
         
-        self._env: Environment | None = None
         self.name = self._get_default_name()
         self._run_mode: RunMode | None = None
         self._resolution: Resolution | None = None
         
         self.logger: logging.Logger = logging.getLogger('pfund')
         self._proxy: ActorProxy | None = None
-        self._engine: BaseEngine | None = None
-        self._settings: BaseEngineSettings | None = None
-        self._logging_config: dict | None = None
+        self._engine: BaseEngine | EngineProxy | None = None
         self._consumers: list[Component | ActorProxy] = []
         self.store: TradingStore | None = None
         self.databoy = DataBoy(self)
@@ -89,48 +85,43 @@ class ComponentMixin:
         self._is_gathered = False
         self._assert_functions_signatures()
     
+    @property
+    def env(self) -> Environment:
+        return self._engine.env
+    
+    @property
+    def run_mode(self):
+        return self._run_mode
+    
     # TODO: also check on_bar, on_tick, on_quote etc.
     def _assert_functions_signatures(self):
         pass
 
     def _hydrate(
         self: Component,
-        env: Environment | str,
         name: ComponentName,
         run_mode: RunMode,
         resolution: Resolution | str,
-        engine: BaseEngine | None,
-        settings: BaseEngineSettings,
-        logging_config: dict,
-        data_params: DataParamsDict,
+        engine: BaseEngine | EngineProxy,
     ):
         """
         Hydrates the component with necessary attributes after initialization.
-        
-        This method sets up essential properties like name, run mode, resolution, engine, and settings
-        which are not predefined in the constructor to improve developer experience (DX) for users
-        creating custom component classes (strategies, models, features, etc.).
         
         Args:
             name (ComponentName): The name to assign to this component.
             run_mode (RunMode): The mode in which the component will run (e.g., local or remote).
             resolution (Resolution | str): The data resolution used by this component.
-            engine (BaseEngine | None): The engine instance associated with this component. It is None if the component is running in a remote process.
-            settings (BaseEngineSettings): Configuration settings for the engine and component.
-            logging_config (dict): Configuration for logging.
-            data_params (DataParamsDict): Data parameters for the component's data store
+            engine (BaseEngine | EngineProxy): The engine instance associated with this component. It is None if the component is running in a remote process.
         """
         from mtflow.stores.trading_store import TradingStore
-        self._env = Environment[env.upper()]
-        self._run_mode = run_mode
         self._engine = engine
-        self._settings = settings
-        if self.is_remote():
-            self._setup_logging(logging_config)
+        self._run_mode = run_mode
         self._set_name(name)
         self._set_resolution(resolution)
-        self.store = TradingStore(env=self._env, data_params=data_params)
-        self.databoy._update_zmq_ports_in_use(settings.zmq_ports)
+        if self.is_remote():
+            self._setup_logging(self._engine.logging_config)
+        self.store = TradingStore(env=self._engine.env, data_params=self._engine.get_data_params())
+        self.databoy._update_zmq_ports_in_use(self._engine.settings.zmq_ports)
         if not self.is_wasm():
             self.databoy._setup_messaging()
     
@@ -144,7 +135,6 @@ class ComponentMixin:
         # configure logging based on pfund's logging config, e.g. log_level, log_file, log_format, etc.
         logging_configurator = LoggingDictConfigurator(logging_config)
         logging_configurator.configure()
-        self._logging_config = logging_config
         self.logger = logging.getLogger('pfund')
         
         # remove existing handlers
@@ -153,7 +143,7 @@ class ComponentMixin:
             handler.close()
             
         # add zmq PUBhandler
-        zmq_url = self._settings.zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL)
+        zmq_url = self._engine.settings.zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL)
         zmq_port = get_free_port()
         zmq_handler = ZMQPubHandler(f'{zmq_url}:{zmq_port}')
         zmq_formatter = logging.Formatter(
@@ -204,9 +194,10 @@ class ComponentMixin:
     def to_dict(self: Component) -> dict:
         metadata = {
             'class': self.__class__.__name__,
+            'env': self.env.value,
             'name': self.name,
             'component_type': self.component_type.value,
-            'run_mode': self._run_mode.value,
+            'run_mode': self.run_mode.value,
             'config': self.config,
             'params': self.params,
             'consumers': [consumer.name for consumer in self._consumers],
@@ -218,10 +209,6 @@ class ComponentMixin:
             'data_signatures': self.databoy._data_signatures,
         }
         return metadata
-    
-    @property
-    def env(self: Component) -> Environment:
-        return self._env
     
     @property
     def datas(self: Component) -> dict[BaseProduct, dict[Resolution, TimeBasedData]]:
@@ -357,8 +344,8 @@ class ComponentMixin:
         Returns:
             bool: True if the component (or any of its ancestors) is remote.
         """
-        assert self._run_mode is not None, f"{self.name} has no run mode"
-        is_remote = self._run_mode == RunMode.REMOTE
+        assert self.run_mode is not None, f"{self.name} has no run mode"
+        is_remote = self.run_mode == RunMode.REMOTE
         if is_remote or direct_only:
             return is_remote
         # if not remote, walk up the consumer chain to check if any of the ancestors is remote
@@ -368,7 +355,7 @@ class ComponentMixin:
         return False
     
     def is_wasm(self: Component) -> bool:
-        return self._run_mode == RunMode.WASM
+        return self.run_mode == RunMode.WASM
     
     def _create_product(
         self,
@@ -381,7 +368,7 @@ class ComponentMixin:
     ) -> BaseProduct:
         from pfund.brokers import create_broker
         # NOTE: broker is only used to create product but nothing else
-        broker = create_broker(env=self._env, bkr=TradingVenue[trading_venue.upper()].broker)
+        broker = create_broker(env=self.env, bkr=TradingVenue[trading_venue.upper()].broker)
         if broker.name == Broker.CRYPTO:
             exch = trading_venue
             product = broker.add_product(exch=exch, basis=basis, name=name, symbol=symbol, **specs)
@@ -565,14 +552,10 @@ class ComponentMixin:
                 component = ActorProxy(component, name=component_name, ray_actor_options=ray_actor_options, **ray_kwargs)
                 component._set_proxy(component)
             component._hydrate(
-                env=self._env,
                 name=component_name,
                 run_mode=run_mode,
                 resolution=self._resolution,
                 engine=self._engine,
-                settings=self._settings,
-                logging_config=self._logging_config,
-                data_params=self.store._data_params,
             )
             
             if signal_cols:
