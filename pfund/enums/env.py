@@ -7,6 +7,5 @@ class Environment(StrEnum):
     PAPER = 'PAPER'
     LIVE = 'LIVE'
 
-    @property
     def is_simulated(self):
         return self in [Environment.BACKTEST, Environment.SANDBOX]

@@ -155,13 +155,13 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
     def _parse_message(msg: dict) -> dict:
         channel: str = msg['topic']
         if channel.startswith('kline'):
-            return BybitWebSocketAPI._parse_kline(msg)
+            return BybitWebSocketAPI._parse_candlestick(msg)
         else:
             raise NotImplementedError(f'{BybitWebSocketAPI.exch} {channel=} is not supported')
     
     # REVIEW: schema only for linear products?
     @staticmethod
-    def _parse_kline(msg: dict) -> dict:
+    def _parse_candlestick(msg: dict) -> dict:
         # since timestamp in bybit is in mts
         def adjust_ts(ms: int) -> float:
             return ms / 10**3
@@ -189,8 +189,10 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
         data: dict = SchemaParser.convert(msg, schema)
         data['data'] = data['data'][0]  # only one element in the list, access it
         data['extra_data'] = data['extra_data'][0]  # only one element in the list, access it
+        data['is_incremental'] = True  # if True, it is an incremental bar update, otherwise it is a full bar update
         return data
 
+    # FIXME: to be removed
     def _process_message(self, ws, msg: dict) -> dict | None:
         ws_name = ws.name
         channel = msg['topic']
@@ -199,7 +201,7 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
         elif channel.startswith('publicTrade'):
             return self._process_tradebook_msg(channel, msg)
         elif channel.startswith('kline'):
-            return self._parse_kline(msg)
+            return self._parse_candlestick(msg)
         # TODO, EXTEND, custom data
         # elif channel.startswith('tickers'):
         #     pass
@@ -295,7 +297,7 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
                 'qty': ('v', float, abs),
                 'ts': ('T', float),
             },
-            # NOTE: extra_data only exists in public data, e.g. orderbook, tradebook, kline etc.
+            # NOTE: extra_data only exists in public data, e.g. orderbook, tradebook, candlestick etc.
             'extra_data': {
                 # 'trade_id': ('i',),
                 'taker_side': ('S',),

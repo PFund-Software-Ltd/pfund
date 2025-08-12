@@ -25,7 +25,7 @@ class BaseProduct(BaseModel):
             Note that the derived symbol might not be correct, it would be better to provide it manually when it is wrong.
         '''
     )
-    name: str = Field(default='', description='unique product name, if not provided, symbol will be used')
+    name: str = Field(default='', description='unique product name, if not provided, trading_venue + symbol will be used')
     tick_size: Decimal | None=None
     lot_size: Decimal | None=None
     
@@ -58,8 +58,8 @@ class BaseProduct(BaseModel):
         self.symbol = self.symbol or self._create_symbol()
         self.name = self.name or self._create_name()
     
-    def _create_name(self):
-        return self.symbol
+    def _create_name(self) -> str:
+        return '_'.join([self.trading_venue.value, self.symbol])
     
     @property
     def tv(self) -> TradingVenue:

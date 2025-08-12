@@ -43,8 +43,8 @@ class BybitProduct(CryptoProduct):
             raise ValueError(f"Invalid asset type: {self.asset_type}")
         return self
     
-    def _create_name(self):
-        return self.symbol + '_' + self.category.value
+    def _create_name(self) -> str:
+        return '_'.join([self.trading_venue.value, self.symbol, self.category.value])
     
     def _create_symbol(self):
         from pfund.exchanges import Bybit

@@ -3,8 +3,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from logging import Logger
     from pfeed.messaging.zeromq import ZeroMQ
+    from pfeed.messaging.streaming_message import StreamingMessage
+    from pfeed.messaging import BarMessage
     from pfeed._typing import tDataSource
-    from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
     from pfund._typing import (
         ComponentName, 
@@ -15,23 +16,18 @@ if TYPE_CHECKING:
         DataConfigDict,
     )
 
-import time
 import importlib
 from pprint import pformat
 from threading import Thread
 from collections import defaultdict
 
-from pfund.datas import QuoteData, TickData, BarData
+from pfund.datas import QuoteData, TickData, BarData, MarketData
 from pfund.products.product_base import BaseProduct
 from pfund.datas.data_config import DataConfig
 from pfund.datas.resolution import Resolution
-from pfund.enums import Event, Broker, CryptoExchange, PFundDataChannel, PrivateDataChannel
+from pfund.enums import Event, Broker, PublicDataChannel, PrivateDataChannel
 
 
-MarketData = QuoteData | TickData | BarData
-
-
-# NOTE: conceptually it's similar to the messenger in engine.
 class DataBoy:
     def __init__(self, component: Component):
         '''
@@ -40,7 +36,7 @@ class DataBoy:
             _subscribed_data: all data in `datas` + data subscribed on behalf of local components
         '''
         self._component: Component = component
-        self._datas: dict[BaseProduct, dict[Resolution, MarketData]] = defaultdict(dict)
+        self._datas: dict[ProductName, dict[ResolutionRepr, MarketData]] = defaultdict(dict)
         self._stale_bar_timeouts: dict[BarData, int] = {}
         self._data_zmq: ZeroMQ | None = None
         self._signals_zmq: ZeroMQ | None = None
@@ -67,7 +63,7 @@ class DataBoy:
         return self._component.consumers
 
     @property
-    def datas(self) -> dict[BaseProduct, dict[Resolution, MarketData]]:
+    def datas(self) -> dict[ProductName, dict[ResolutionRepr, MarketData]]:
         return self._datas
     
     def get_datas(self) -> list[MarketData]:
@@ -117,12 +113,15 @@ class DataBoy:
                 skip_first_bar=data_config.skip_first_bar.get(resolution, True)
             )
             self._stale_bar_timeouts[data] = data_config.stale_bar_timeout[resolution]
-        self.datas[product][resolution] = data
+        self.datas[product.name][repr(resolution)] = data
         return data
     
-    def get_data(self, product: BaseProduct, resolution: ResolutionRepr | Resolution) -> MarketData:
-        resolution = Resolution(resolution)
-        return self.datas[product][resolution]
+    def get_data(self, product: ProductName, resolution: ResolutionRepr | Resolution) -> MarketData | None:
+        if product not in self.datas:
+            return None
+        if isinstance(resolution, Resolution):
+            resolution = repr(resolution)
+        return self.datas[product].get(resolution, None)
     
     def add_data(
         self, 
@@ -137,6 +136,7 @@ class DataBoy:
             data_config['data_source'] = data_source
             data_config['data_origin'] = data_origin
             data_config = DataConfig(**data_config)
+
         supported_resolutions = self._get_supported_resolutions(product)
         is_auto_resampled = data_config.auto_resample(supported_resolutions)
         if is_auto_resampled:
@@ -144,60 +144,53 @@ class DataBoy:
         
         datas: list[MarketData] = []
         for resolution in data_config.resolutions:
-            if resolution not in self.datas[product]:
+            if repr(resolution) not in self.datas[product.name]:
                 data = self._add_data(product, resolution, data_config)
             else:
-                data = self.get_data(product, resolution)
+                data = self.get_data(product.name, resolution)
             datas.append(data)
         
         # mutually bind data_resampler and data_resamplee
         for resamplee_resolution, resampler_resolution in data_config.resample.items():
-            data_resamplee = self.get_data(product, resamplee_resolution)
-            data_resampler = self.get_data(product, resampler_resolution)
+            data_resamplee = self.get_data(product.name, resamplee_resolution)
+            data_resampler = self.get_data(product.name, resampler_resolution)
             data_resamplee.bind_resampler(data_resampler)
             self.logger.debug(f'{product} resolution={resampler_resolution} (resampler) added listener resolution={resamplee_resolution} (resamplee) data')
         
         return datas
 
-    def _update_quote(self, product: ProductName, quote: dict):
+    def _update_quote(self, data: QuoteData, msg):
         ts = quote['ts']
         update = quote['data']
         extra_data = quote['extra_data']
         bids, asks = update['bids'], update['asks']
         data = self.get_data(product, '1q')
         data.on_quote(bids, asks, ts, **extra_data)
-        self._deliver(data, event=Event.quote, **extra_data)
+        self._deliver(data, **extra_data)
 
-    def _update_tick(self, product: ProductName, tick: dict):
+    def _update_tick(self, data: TickData, msg):
         update = tick['data']
         extra_data = tick['extra_data']
         px, qty, ts = update['px'], update['qty'], update['ts']
         data = self.get_data(product, '1t')
         data.on_tick(px, qty, ts, **extra_data)
-        self._deliver(data, event=Event.tick, **extra_data)
+        self._deliver(data, **extra_data)
 
-    def _update_bar(self, product: ProductName, bar: dict, is_incremental: bool=True):
+    def _update_bar(self, data: BarData, msg: BarMessage):
+        '''update bar data from streaming message
+        if ready, deliver the bar data to the component
         '''
-        Args:
-            is_incremental: if True, the bar update is incremental, otherwise it is a full bar update
-                some exchanges may push incremental bar updates, some may only push when the bar is complete
-        '''
-        resolution: ResolutionRepr = bar['resolution']
-        update = bar['data']
-        extra_data = bar['extra_data']
-        o, h, l, c, v, ts = update['open'], update['high'], update['low'], update['close'], update['volume'], update['ts']
-        data = self.get_data(product, resolution)
-        if not is_incremental:  # means the bar is complete
-            data.on_bar(o, h, l, c, v, ts, is_incremental=is_incremental, **extra_data)
-            self._deliver(data, event=Event.bar, **extra_data)
+        if not msg.is_incremental:  # means the bar is complete
+            data.on_bar(msg)
+            self._deliver(data)
         else:
-            if data.is_ready(now=ts):
-                self._deliver(data, event=Event.bar, **extra_data)
-            data.on_bar(o, h, l, c, v, ts, is_incremental=is_incremental, **extra_data)
+            if data.is_ready(now=msg.ts):
+                self._deliver(data)
+            data.on_bar(msg)
     
-    def _flush_stale_bar(self, data: BaseData):
+    def _flush_stale_bar(self, data: BarData):
         if data.is_ready():
-            self._deliver(data, event=Event.bar)
+            self._deliver(data)
     
     def schedule_jobs(self, scheduler: BackgroundScheduler):
         for data, timeout in self._stale_bar_timeouts.items():
@@ -210,6 +203,8 @@ class DataBoy:
         settings = self._component._engine.settings
         zmq_urls = settings.zmq_urls
         zmq_ports = settings.zmq_ports
+        self._update_zmq_ports_in_use(zmq_ports)
+        
         component_name = self.name
         component_zmq_url = zmq_urls.get(component_name, ZeroMQ.DEFAULT_URL)
 
@@ -296,7 +291,7 @@ class DataBoy:
                 raise NotImplementedError(f'Unhandled data type: {type(data)}')
 
         for component in self.components:
-            component_name = component._name
+            component_name = component.name
             component_zmq_url = settings.zmq_urls.get(component_name, ZeroMQ.DEFAULT_URL)
             component_zmq_port = zmq_ports.get(component_name, None)
             self._signals_zmq.connect(
@@ -325,59 +320,83 @@ class DataBoy:
             self.logger.debug(f"{self.name} waiting for data thread to finish")
             self._zmq_thread.join()  # Blocks until thread finishes
             self.logger.debug(f"{self.name} data thread finished")
-        
-    def _collect(self, msg=None):
+    
+    # TODO:
+    def _send_signal(self, signal):
+        # self._signals_zmq.send(signal)
+        pass
+    
+    def _collect(self, msg: StreamingMessage | None=None):
         '''
         Args:
             msg: message will only be passed in in WASM mode (i.e. data_zmq is None)
         '''
-        while self._component.is_running():
-            if self._data_zmq:
-                if msg := self._data_zmq.recv():
-                    channel, topic, data, msg_ts = msg
-                    # print(f'{self.name} recv:', channel, topic, data, msg_ts)
-                # TODO: e.g. if component is a model:
-                # output = self._component.predict(...)
-                # self._signals_zmq.send(output)
-            # TODO:
-            # if self._signals_zmq:
-            else:
-                # TODO: listener.databoy._collect()
-                if topic == 1:  # quote data
-                    bkr, exch, pdt, quote = msg
-                    product = self._component.get_product(exch=exch, pdt=pdt)
-                    data = self.get_data(product, '1q')
-                    self._component._on_quote(data)
-                elif topic == 2:  # tick data
-                    bkr, exch, pdt, tick = msg
-                    product = self._component.get_product(exch=exch, pdt=pdt)
-                    data = self.get_data(product, '1t')
-                    self._component._on_tick(data)
-                elif topic == 3:  # bar data
-                    bkr, exch, pdt, bar = msg
-                    product = self._component.get_product(exch=exch, pdt=pdt)
-                    data = self.get_data(product, ...)
-                    self._component._on_bar(data, now=time.time())
-                break
-    
-    def _deliver(self, data: BaseData, event: Event, **extra_data):
-        # TODO
-        if self._component.is_remote():
-            raise NotImplementedError('parallel strategy is not implemented')
-            # self._zmq
+        if not self._component.is_wasm():
+            while self._component.is_running():
+                if msg_tuple := self._data_zmq.recv():
+                    channel, topic, msg, msg_ts = msg_tuple
+                    
+                    # TEMP
+                    print('databoy data_zmq recv:', channel, topic, msg, msg_ts)
+                    
+                    product: BaseProduct = self._component.get_product(msg.product)
+                    resolution = Resolution(msg.resolution)
+                    data: MarketData = self.get_data(product, resolution)
+                    if topic == PublicDataChannel.orderbook:
+                        self._update_quote(data, msg)
+                    elif topic == PublicDataChannel.tradebook:
+                        self._update_tick(data, msg)
+                    elif topic == PublicDataChannel.candlestick:
+                        self._update_bar(data, msg)
+                    else:
+                        raise NotImplementedError(f'{topic=} is not supported')
+                # TODO:
+                if msg_tuple := self._signals_zmq.recv():
+                    pass
+                
+                # TODO: check if signals are ready, if yes, call back on trade(X)
         else:
-            if self._component.is_running():
-                if event == Event.quote:
-                    self._component._update_quote(data, **extra_data)
-                    for data_resamplee in data.get_resamplees():
-                        self._deliver(data_resamplee, event=event)
-                elif event == Event.tick:
-                    self._component._update_tick(data, **extra_data)
-                    for data_resamplee in data.get_resamplees():
-                        self._deliver(data_resamplee, event=event)
-                elif event == Event.bar:
-                    self._component._update_bar(data, **extra_data)
-                    for data_resamplee in data.get_resamplees():
-                        if data_resamplee.is_ready(now=data.end_ts) and not data_resamplee.skip_first_bar():
-                            self._deliver(data_resamplee, event=event)
-                    data.clear()
+            if not self._component.is_running():
+                self.logger.warning(f'{self.name} is not running, skipping data update')
+                return
+            else:
+                # TEMP
+                print(f'databoy getting {msg=}')
+
+                assert msg is not None, 'msg is None'
+                for component in self.components:
+                    component.collect_data(msg=msg)
+                product: BaseProduct | None = self._component.get_product(msg.product)
+                if product is None or product not in self.datas:
+                    return
+                resolution = Resolution(msg.resolution)
+                data: MarketData | None = self.get_data(product, resolution)
+                if data is None:
+                    return
+                if resolution.is_quote():
+                    self._update_quote(data, msg)
+                elif resolution.is_tick():
+                    self._update_tick(data, msg)
+                elif resolution.is_bar():
+                    self._update_bar(data, msg)
+    
+    def _deliver(self, data: MarketData):
+        '''Deliver data to the component'''
+        if self._component.is_remote():
+            # TODO
+            self._send_signal(...)
+        else:
+            if data.resolution.is_quote():
+                self._component._on_quote(data)
+                for data_resamplee in data.get_resamplees():
+                    self._deliver(data_resamplee)
+            elif data.resolution.is_tick():
+                self._component._on_tick(data)
+                for data_resamplee in data.get_resamplees():
+                    self._deliver(data_resamplee)
+            elif data.resolution.is_bar():
+                self._component._on_bar(data)
+                for data_resamplee in data.get_resamplees():
+                    if data_resamplee.is_ready(now=data.end_ts) and not data_resamplee.skip_first_bar():
+                        self._deliver(data_resamplee)
+                data.clear()

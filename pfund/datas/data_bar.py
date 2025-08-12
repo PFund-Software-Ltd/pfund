@@ -1,7 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    import datetime
+    from datetime import datetime
+    from pfeed.messaging import BarMessage
     from pfeed.enums import DataSource
     from pfund.datas.resolution import Resolution
     from pfund.datas.timeframe import Timeframe
@@ -87,7 +88,7 @@ class Bar:
     def is_empty(self):
         return not self.open
 
-    def is_ready(self, now: float | None=None):
+    def is_ready(self, now: float | None=None) -> bool:
         # if not ready, check if the bar is ready
         if not self._is_ready:
             now = now or time.time()
@@ -165,21 +166,18 @@ class BarData(MarketData):
     kline = bar
     candlestick = bar
     
-    def skip_first_bar(self) -> bool:
-        if self._skip_first_bar:
-            self._skip_first_bar = False
-        return self._skip_first_bar
-
     # TODO: handle backfilling
-    def on_bar(self, o, h, l, c, v, ts: float, is_incremental=True, is_backfill=False, **extra_data):
+    def on_bar(self, msg: BarMessage, is_backfill=False):
         '''
         Args:
             is_incremental: if True, the bar update is incremental, otherwise it is a full bar update
                 some exchanges may push incremental bar updates, some may only push when the bar is complete
         '''
-        self._bar.update(o, h, l, c, v, ts, is_incremental)
-        self.update_ts(ts)
-        self.update_extra_data(extra_data)
+        o, h, l, c, v, ts = msg.open, msg.high, msg.low, msg.close, msg.volume, msg.ts
+        self._bar.update(o, h, l, c, v, ts, msg.is_incremental)
+        self.update_timestamps(msg.ts, msg_ts=msg.msg_ts)
+        self.update_extra_data(msg.extra_data)
+        self.update_custom_data(msg.custom_data)
         for resamplee in self._resamplees:
             resamplee.on_bar(o, h, l, c, v, ts, is_incremental=True)
 
@@ -200,8 +198,13 @@ class BarData(MarketData):
     def is_day(self):
         return self.bar._timeframe.is_day()
 
-    def is_ready(self, now: float | None=None):
-        return self._bar.is_ready(now=now)
+    def is_ready(self, now: float | None=None) -> bool:
+        is_ready = self._bar.is_ready(now=now)
+        if is_ready and self._skip_first_bar:
+            self._skip_first_bar = False
+            self.clear()
+            return False
+        return is_ready
     
     def clear(self):
         self._bar.clear()

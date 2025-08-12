@@ -64,6 +64,7 @@ class BaseRESTfulAPI(ABC):
     
     def __init__(self, env: Environment | tEnvironment):
         self._env = Environment[env.upper()]
+        assert self._env != Environment.BACKTEST, f'{self._env=} is not supported in RESTful API'
         self._logger = logging.getLogger(self.exch.lower())
         self._dev_mode = False
         Exchange: type[BaseExchange] = getattr(importlib.import_module(f'pfund.exchanges.{self.exch.lower()}.exchange'), 'Exchange')
@@ -116,10 +117,11 @@ class BaseRESTfulAPI(ABC):
             method, endpoint_path = self.PUBLIC_ENDPOINTS[endpoint_name]
         else:
             method, endpoint_path = self.PRIVATE_ENDPOINTS[endpoint_name]
-        # NOTE: allows access to public endpoints in backtest/sandbox environment
-        if self._env.is_simulated and is_public_endpoint:
+        # NOTE: allows access to public endpoints in sandbox environment
+        if self._env == Environment.SANDBOX and is_public_endpoint:
             live_url = self.URLS[Environment.LIVE]
             endpoint = live_url + endpoint_path
+            self._logger.warning(f'{self._env} environment is using LIVE data for public endpoint "{endpoint_name}"')
         else:
             endpoint = self._url + endpoint_path
         return method, endpoint
@@ -151,7 +153,7 @@ class BaseRESTfulAPI(ABC):
         Args:
             schema: schema to parse the returned message, if None, return the raw message
         '''
-        if self._env.is_simulated:
+        if self._env.is_simulated():
             assert account is None, f"Simulated environment {self._env} can only access public endpoints, account should NOT be provided"
 
         method, endpoint = self.get_endpoint(endpoint_name)

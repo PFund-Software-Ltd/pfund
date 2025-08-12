@@ -5,8 +5,8 @@ if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
     import polars as pl
-    from mtflow.stores.trading_store import TradingStore
     from pfeed._typing import tDataSource
+    from pfeed.messaging.streaming_message import StreamingMessage
     from pfund._typing import (
         StrategyT, 
         ModelT, 
@@ -16,7 +16,10 @@ if TYPE_CHECKING:
         tTradingVenue, 
         Component,
         ComponentName,
+        ProductName,
+        ResolutionRepr,
     )
+    from pfund.datas.data_market import MarketData
     from pfund.datas.data_bar import Bar
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
@@ -28,11 +31,13 @@ if TYPE_CHECKING:
     from pfund.models.model_base import BaseModel
     from pfund.features.feature_base import BaseFeature
     from pfund.indicators.indicator_base import BaseIndicator
+    from pfund.stores.signal_store import LatestSignal
 
 import time
 import logging
 import datetime
 
+from pfund.stores.trading_store import TradingStore
 from pfund.datas.resolution import Resolution
 from pfund.datas.data_config import DataConfig
 from pfund.proxies.actor_proxy import ActorProxy
@@ -67,17 +72,15 @@ class ComponentMixin:
         self.store: TradingStore | None = None
         self.databoy = DataBoy(self)
 
-        self.products: dict[str, BaseProduct] = {}
+        self.products: dict[ProductName, BaseProduct] = {}
         self.models: dict[str, BaseModel | ActorProxy] = {}
         self.features: dict[str, BaseFeature | ActorProxy] = {}
         self.indicators: dict[str, BaseIndicator | ActorProxy] = {}
 
-        # NOTE: current model's signal is consumer's prediction
-        self.predictions = {}  # {model_name: pred_y}
-        self._signals = {}  # {data: signal}, signal = output of predict()
-        self._last_signal_ts = {}  # {data: ts}
-        self._signal_cols = []
-        self._num_signal_cols = 0
+        # FIXME: to be removed, should return dict with keys as column names in predict()
+        # otherwise, use default cols
+        self._signal_cols: list[str] = []
+        
 
         # FIXME
         # self._is_ready = defaultdict(bool)  # {data: bool}
@@ -113,19 +116,17 @@ class ComponentMixin:
             resolution (Resolution | str): The data resolution used by this component.
             engine (BaseEngine | EngineProxy): The engine instance associated with this component. It is None if the component is running in a remote process.
         """
-        from mtflow.stores.trading_store import TradingStore
         self._engine = engine
         self._run_mode = run_mode
         self._set_name(name)
         self._set_resolution(resolution)
         if self.is_remote():
-            self._setup_logging(self._engine.logging_config)
+            self._setup_logging()
         self.store = TradingStore(env=self._engine.env, data_params=self._engine.get_data_params())
-        self.databoy._update_zmq_ports_in_use(self._engine.settings.zmq_ports)
         if not self.is_wasm():
             self.databoy._setup_messaging()
     
-    def _setup_logging(self: Component, logging_config: dict):
+    def _setup_logging(self: Component):
         '''Sets up logging for component running in remote process, uses zmq's PUBHandler to send logs to engine'''
         from pfund._logging.zmq_pub_handler import ZMQPubHandler
         from pfeed.messaging.zeromq import ZeroMQ
@@ -133,9 +134,8 @@ class ComponentMixin:
         from pfund.utils.utils import get_free_port
 
         # configure logging based on pfund's logging config, e.g. log_level, log_file, log_format, etc.
-        logging_configurator = LoggingDictConfigurator(logging_config)
+        logging_configurator = LoggingDictConfigurator(self._engine.logging_config)
         logging_configurator.configure()
-        self.logger = logging.getLogger('pfund')
         
         # remove existing handlers
         for handler in self.logger.handlers[:]:
@@ -210,6 +210,16 @@ class ComponentMixin:
         }
         return metadata
     
+    def get_default_signal_cols(self, num_cols: int) -> list[str]:
+        if num_cols == 1:
+            columns = [self.name]
+        else:
+            columns = [f'{self.name}-{i}' for i in range(num_cols)]
+        return columns
+   
+    def _set_signal_cols(self, columns: list[str]):
+        self._signal_cols = [f'{self.name}-{col}' if not col.startswith(self.name) else col for col in columns]
+    
     @property
     def datas(self: Component) -> dict[BaseProduct, dict[Resolution, TimeBasedData]]:
         return self.databoy.datas
@@ -262,9 +272,11 @@ class ComponentMixin:
         # TODO: self.store.load_data(...)
         return self.get_df(copy=False)
 
-    @property
-    def signals(self: Component):
-        return self._signals
+    def get_signals(self: Component):
+        return self.store.signal_store.signals
+    
+    def get_latest_signal(self: Component, data: BaseData) -> LatestSignal:
+        return self.store.signal_store.get_latest_signal(data)
     
     @property
     def INDEX(self: Component):
@@ -386,38 +398,24 @@ class ComponentMixin:
             assert existing_product == product, f"{product.name=} is already used by {existing_product}, cannot use it for {product}"
         return self.products[product.name]
     
-    def get_product(self: Component, name: str) -> BaseProduct:
-        return self.products[name]
+    def get_product(self: Component, name: ProductName) -> BaseProduct | None:
+        return self.products.get(name, None)
     
-    def get_data(self: Component, product: BaseProduct, resolution: str) -> TimeBasedData:
-        data: TimeBasedData | None = self.databoy.get_data(product, resolution)
-        if data is None:
-            raise ValueError(f"data for {product} {resolution} not found")
-        return data
+    def get_data(self: Component, product: ProductName, resolution: ResolutionRepr) -> MarketData | None:
+        return self.databoy.get_data(product, resolution)
+    
+    def collect_data(self, msg: StreamingMessage):
+        return self.databoy._collect(msg=msg)
     
     def _prepare_df(self: Component):
         return self.data_tool.prepare_df(ts_col_type='timestamp')
     
-    def _append_to_df(self: Component, data: BaseData, **extra_data):
-        return self.data_tool.append_to_df(data, self.predictions, **extra_data)
+    def _append_to_df(self: Component, data: BaseData):
+        return self.data_tool.append_to_df(data, self.predictions)
     
     def _get_default_name(self: Component):
         return self.__class__.__name__
     
-    def get_default_signal_cols(self: Component, num_cols: int) -> list[str]:
-        if num_cols == 1:
-            columns = [self.name]
-        else:
-            columns = [f'{self.name}-{i}' for i in range(num_cols)]
-        return columns
-   
-    def get_signal_cols(self: Component) -> list[str]:
-        return self._signal_cols
-    
-    def _set_signal_cols(self: Component, columns: list[str]):
-        self._signal_cols = [f'{self.name}-{col}' if not col.startswith(self.name) else col for col in columns]
-        self._num_signal_cols = len(columns)
-                
     def add_data(
         self, 
         trading_venue: tTradingVenue,
@@ -478,10 +476,10 @@ class ComponentMixin:
         return datas
 
     def get_orderbook(self: Component, product: BaseProduct) -> TimeBasedData | None:
-        return self.databoy.get_data(product, '1q')
+        return self.get_data(product, '1q')
     
     def get_tradebook(self: Component, product: BaseProduct) -> TimeBasedData | None:
-        return self.databoy.get_data(product, '1t')
+        return self.get_data(product, '1t')
     
     def _add_component(
         self: Component, 
@@ -493,7 +491,7 @@ class ComponentMixin:
         signal_cols: list[str] | None=None,
         ray_actor_options: dict | None=None,
         **ray_kwargs
-    ) -> StrategyT | ModelT | FeatureT | IndicatorT | ActorProxy:
+    ) -> StrategyT | ModelT | FeatureT | IndicatorT | ActorProxy | None:
         '''Adds a model component to the current component.
         A model component is a model, feature, or indicator.
         Args:
@@ -519,12 +517,7 @@ class ComponentMixin:
 
         Component = component.__class__
         ComponentName = Component.__name__
-        if component.is_strategy():
-            assert self.component_type == ComponentType.strategy, \
-                f"cannot add strategy '{ComponentName}' to {self.component_type} '{self.name}'"
-            components = self.strategies
-            BaseClass = BaseStrategy
-        elif component.is_model():
+        if component.is_model():
             from pfund.models.model_base import BaseModel
             components = self.models
             BaseClass = BaseModel
@@ -562,17 +555,16 @@ class ComponentMixin:
                 component._set_signal_cols(signal_cols)
 
             # FIXME: check if min_data, max_data and group_data are needed when component_type is strategy
-            if not component.is_strategy():
-                if min_data:
-                    component._set_min_data(min_data)
-                if max_data:
-                    component._set_max_data(max_data)
-                component._set_group_data(group_data)
+            if min_data:
+                component._set_min_data(min_data)
+            if max_data:
+                component._set_max_data(max_data)
+            component._set_group_data(group_data)
         else:
             is_remote = True
         component._add_consumer(self._proxy if is_remote else self)
         components[component.name] = component
-        self.logger.debug(f"added {component.name}")
+        self.logger.debug(f"{self.name} added {component.name}")
     
         if self.is_remote() and not is_remote:
             # NOTE: returns None when adding a local component to a remote component to avoid returning a serialized (copied) object
@@ -590,7 +582,7 @@ class ComponentMixin:
         signal_cols: list[str] | None=None,
         ray_actor_options: dict | None=None,
         **ray_kwargs
-    ) -> ModelT | ActorProxy:
+    ) -> ModelT | ActorProxy | None:
         return self._add_component(
             component=model,
             name=name,
@@ -615,7 +607,7 @@ class ComponentMixin:
         signal_cols: list[str] | None=None,
         ray_actor_options: dict | None=None,
         **ray_kwargs
-    ) -> FeatureT | ActorProxy:
+    ) -> FeatureT | ActorProxy | None:
         return self._add_component(
             component=feature, 
             name=name, 
@@ -640,7 +632,7 @@ class ComponentMixin:
         signal_cols: list[str] | None=None,
         ray_actor_options: dict | None=None,
         **ray_kwargs
-    ) -> IndicatorT | ActorProxy:
+    ) -> IndicatorT | ActorProxy | None:
         return self._add_component(
             component=indicator,
             name=name,
@@ -655,34 +647,35 @@ class ComponentMixin:
     def get_indicator(self, name: str) -> BaseIndicator | ActorProxy:
         return self.indicators[name]
 
-    def _on_quote(self: Component, data: QuoteData, **extra_data):
+    def _on_quote(self: Component, data: QuoteData):
         product, bids, asks, ts = data.product, data.bids, data.asks, data.ts
-        # TODO: wait for remote components' outputs
         local_components = self._local_components.get(data, [])
         for component in local_components:
-            component._on_quote(data, **extra_data)
-            self._update_outputs(data, component)
-        # TODO: add to trading store, self.store
-        self._append_to_df(data, **extra_data)
-        self.on_quote(product, bids, asks, ts, **extra_data)
+            component._on_quote(data)
+            self._update_signals(data, component)
+        self._append_to_df(data)
+        self.on_quote(product, bids, asks, ts)
 
-    def _on_tick(self: Component, data: TickData, **extra_data):
+    def _on_tick(self: Component, data: TickData):
         product, px, qty, ts = data.product, data.px, data.qty, data.ts
         for listener in self._listeners[data]:
-            listener._on_tick(data, **extra_data)
-            self._update_outputs(data, listener)
-        self._append_to_df(data, **extra_data)
-        self.on_tick(product, px, qty, ts, **extra_data)
+            listener._on_tick(data)
+            self._update_signals(data, listener)
+        self._append_to_df(data)
+        self.on_tick(product, px, qty, ts)
     
-    def _on_bar(self: Component, data: BarData, **extra_data):
+    def _on_bar(self: Component, data: BarData):
         product, bar, ts = data.product, data.bar, data.bar.end_ts
+        # TODO: wait for remote components' outputs
         for listener in self._listeners[data]:
-            listener._on_bar(data, **extra_data)
-            self._update_outputs(data, listener)
-        self._append_to_df(data, **extra_data)
-        self.on_bar(product, bar, ts, **extra_data)
+            listener._on_bar(data)
+            self._update_signals(data, listener)
+        # TODO: non-wasm: send_signal, wasm: loop consumers.on_signal
+        # TODO: add to trading store, self.store
+        self._append_to_df(data)
+        self.on_bar(product, bar, ts)
 
-    def _update_outputs(self: Component, data: BaseData, listener: BaseStrategy | BaseModel):
+    def _update_signals(self: Component, data: BaseData, listener: BaseStrategy | BaseModel):
         pred_y: torch.Tensor | np.ndarray | None = listener._next(data)
         if pred_y is not None:
             signal_cols = listener.get_signal_cols()

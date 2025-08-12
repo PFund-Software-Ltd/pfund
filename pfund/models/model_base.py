@@ -154,6 +154,7 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
     def _next(self, data: BaseData) -> Tensor | ndarray | None:
         '''Returns the next prediction in event-driven manner.'''
         from numpy import isnan
+        # FIXME
         if data in self._last_signal_ts and self._last_signal_ts[data] == data.ts:
             return self._signals[data]
         

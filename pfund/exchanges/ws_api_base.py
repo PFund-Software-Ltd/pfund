@@ -42,6 +42,7 @@ class BaseWebSocketAPI(ABC):
 
     def __init__(self, env: Environment | tEnvironment):
         self._env = Environment[env.upper()]
+        assert self._env != Environment.BACKTEST, f'{self._env=} is not supported in WebSocket API'
         self._bkr = Broker.CRYPTO
         self._logger = logging.getLogger(self.exch.lower())
         Exchange: type[BaseExchange] = getattr(importlib.import_module(f'pfund.exchanges.{self.exch.lower()}.exchange'), 'Exchange')

@@ -105,6 +105,7 @@ class BaseEngine(metaclass=MetaEngine):
                 If None, no data will be written.
         '''
         from mtflow.kernel import TradeKernel
+        from pfund.engines.risk_engine import RiskEngine
         
         cls = self.__class__
         if not hasattr(cls, "_initialized"):
@@ -152,6 +153,8 @@ class BaseEngine(metaclass=MetaEngine):
         if "engine" not in self.name.lower():
             self.name += "_engine"
         self._kernel = TradeKernel(database=cls._database, external_listeners=cls._external_listeners)
+        # TODO: add risk engine?
+        # self._risk_engine = RiskEngine()  
         self.brokers: dict[Broker, BaseBroker] = {}
         self.strategies: dict[str, BaseStrategy | ActorProxy] = {}
         self._is_running: bool = False
@@ -185,7 +188,7 @@ class BaseEngine(metaclass=MetaEngine):
     def data_end(self) -> datetime.date:
         return self._data_end
     
-    def is_wasm(self):
+    def is_wasm(self) -> bool:
         return self._run_mode == RunMode.WASM
     
     @classmethod
@@ -387,7 +390,6 @@ class BaseEngine(metaclass=MetaEngine):
         if not self.is_running():
             self._is_running = True
             self.gather()
-            self._is_gathered = True
             self._kernel.run()
             # TODO: start brokers
             # for broker in self.brokers.values():

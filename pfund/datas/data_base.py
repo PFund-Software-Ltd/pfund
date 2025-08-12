@@ -13,6 +13,8 @@ class BaseData(ABC):
         self.source: DataSource = data_source
         self.origin: str = data_origin or data_source.value
         self.product: BaseProduct | None = product
+        self._extra_data: dict[str, Any] = {}
+        self._custom_data: dict[Any, Any] = {}
         
     @abstractmethod
     def to_dict(self) -> dict:
@@ -22,6 +24,20 @@ class BaseData(ABC):
     @abstractmethod
     def category(self) -> DataCategory:
         pass
+    
+    @property
+    def extra_data(self):
+        return self._extra_data
+    
+    @property
+    def custom_data(self):
+        return self._custom_data
+    
+    def update_extra_data(self, extra_data: dict):
+        self._extra_data = extra_data
+    
+    def update_custom_data(self, custom_data: dict):
+        self._custom_data = custom_data
     
     def is_time_based(self):
         return False

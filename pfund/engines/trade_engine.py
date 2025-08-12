@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfeed._typing import tDataTool
+    from pfeed.messaging.streaming_message import StreamingMessage
     from pfeed.messaging.zeromq import ZeroMQ
     from pfund.datas.data_time_based import TimeBasedData
     from pfund._typing import DataRangeDict, TradeEngineSettingsDict, tDatabase, ExternalListenersDict
@@ -112,9 +113,9 @@ class TradeEngine(BaseEngine):
             logger.debug(f"zmq worker connected to {zmq_name} at {zmq_url}:{zmq_port}")
     
     def gather(self):
-        super().gather()
         if self._is_gathered:
             return
+        super().gather()
         for strategy in self.strategies.values():
             datas: list[TimeBasedData] = strategy._get_datas_in_use()
             for data in datas:
@@ -125,26 +126,29 @@ class TradeEngine(BaseEngine):
                 .stream(
                     product=str(data.product.basis),
                     resolution=repr(data.resolution),
+                    to_storage=None,
                     **data.product.specs
                 )
-                # NOTE: load(to_storage=...) is not called here so that users can manually call
-                # gather() and add transform() to the feeds in data engine.
+                # NOTE: load(to_storage=...) is not called here so that users can manually call gather()
+                # and add transform() to the feeds in data engine.
+        self._is_gathered = True
     
-    def run(self, **ray_kwargs):
+    def run(self, num_data_workers: int | None=None, **ray_kwargs):
         '''
         Args:
-            ray_kwargs: keyword arguments passed to pfeed's data engine run() method
-                'num_cpus' specifies the number of Ray workers to create in the data engine
-                if not specified, all available system CPUs will be used
+            ray_kwargs: keyword arguments for ray.init()
+            num_data_workers: number of Ray workers to create in the data engine
+                if not specified, all available system CPUs will be used.
+                it is ignored in WASM mode when Ray is not in use.
         '''
         super().run()
         if not self.is_wasm():
-            self._setup_worker()
             # NOTE: need to init ray in the main thread to avoid "SIGTERM handler is not set because current thread is not the main thread"
             import ray
             if not ray.is_initialized():
                 ray.init(**ray_kwargs)
-            self._run_data_engine()
+            self._setup_worker()
+            self._run_data_engine(num_workers=num_data_workers)
             while self.is_running():
                 try:
                     # TODO: receive positions, balances etc.
@@ -169,38 +173,53 @@ class TradeEngine(BaseEngine):
             if ray.is_initialized():
                 ray.shutdown()
         else:
-            # TODO: get msg from data engine
-            msg = ...
-            for strategy in self.strategies.values():
-                strategy.databoy._collect(msg)
+            def _send_msg_to_databoy(msg: StreamingMessage):
+                for strategy in self.strategies.values():
+                    strategy.collect_data(msg=msg)
+                return msg
+            for feed in self._data_engine.feeds:
+                # NOTE: pass callback to transform() to get transformed msg from pfeed
+                feed.transform(_send_msg_to_databoy)
+            self._run_data_engine()
+            if self.is_running():
+                self.end()
     
-    def _run_data_engine(self):
-        def _run():
-            self._data_engine_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self._data_engine_loop)
-            self._data_engine_task = self._data_engine_loop.create_task(self._data_engine.run_async())
-            try:
-                self._data_engine_loop.run_until_complete(self._data_engine_task)
-            except Exception:
-                logger.exception("Exception in data engine thread:")
-            finally:
-                self._data_engine_loop.close()
-                self._data_engine_loop = None
-                self._data_engine_task = None
-        
-        # add storage to feeds in data engine
-        for feed in self._data_engine.feeds:
-            dataflow = feed.streaming_dataflows[0]
-            if dataflow.sink is None:
-                feed.load(to_storage=config.storage)
-        
-        self._data_engine_thread = Thread(target=_run, daemon=True)
-        self._data_engine_thread.start()
+    def _run_data_engine(self, num_workers: int | None=None):
+        if not self.is_wasm():
+            def _run():
+                ray_kwargs = {}
+                if num_workers is not None:
+                    ray_kwargs['num_cpus'] = num_workers
+                self._data_engine_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self._data_engine_loop)
+                self._data_engine_task = self._data_engine_loop.create_task(
+                    self._data_engine.run_async(**ray_kwargs)
+                )
+                try:
+                    self._data_engine_loop.run_until_complete(self._data_engine_task)
+                except Exception:
+                    logger.exception("Exception in data engine thread:")
+                finally:
+                    self._data_engine_loop.close()
+                    self._data_engine_loop = None
+                    self._data_engine_task = None
+            
+            # add storage to feeds in data engine
+            for feed in self._data_engine.feeds:
+                dataflow = feed.streaming_dataflows[0]
+                if dataflow.sink is None:
+                    feed.load(to_storage=config.storage)
+            
+            self._data_engine_thread = Thread(target=_run, daemon=True)
+            self._data_engine_thread.start()
+        else:
+            self._data_engine.run()
     
     def _end_data_engine(self):
         logger.debug(f'{self.name} ending data engine')
-        if self._data_engine_task and self._data_engine_loop and not self._data_engine_task.done():
-            self._data_engine_loop.call_soon_threadsafe(self._data_engine_task.cancel)
+        if not self.is_wasm():
+            if self._data_engine_task and self._data_engine_loop and not self._data_engine_task.done():
+                self._data_engine_loop.call_soon_threadsafe(self._data_engine_task.cancel)
         
     def end(self):
         super().end()

@@ -7,8 +7,6 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfund.datas.resolution import Resolution
 
-import time
-
 from pfund.datas.data_base import BaseData
 
 
@@ -20,16 +18,20 @@ class TimeBasedData(BaseData):
         product: BaseProduct,
         resolution: Resolution
     ):
+        '''
+        Args:
+            ts: is the timestamp of the last updated data, e.g. timestamp of a candlestick
+            msg_ts: is the timestamp of the data sent by the trading venue
+        '''
         super().__init__(data_source, data_origin, product=product)
         self._ts = 0.0
-        self._latency = None
+        self._msg_ts = 0.0
         self.resolution: Resolution = resolution
         self.period: int = resolution.period
         self.timeframe: Timeframe = resolution.timeframe
         self._resamplers = set()  # data used to be resampled into another data
         self._resamplees = set()  # opposite of resampler
-        self._extra_data = {}
-
+    
     def __eq__(self, other):
         if not isinstance(other, TimeBasedData):
             return NotImplemented
@@ -43,28 +45,18 @@ class TimeBasedData(BaseData):
         return self._ts
     
     @property
-    def latency(self):
-        return self._latency
-    
-    @property
-    def extra_data(self):
-        return self._extra_data
+    def msg_ts(self):
+        return self._msg_ts
     
     @property
     def dt(self) -> datetime.datetime | None:
         from pfund.utils.utils import convert_ts_to_dt
         return convert_ts_to_dt(self._ts) if self._ts else None
     
-    def update_extra_data(self, extra_data):
-        self._extra_data = extra_data
-    
-    def update_ts(self, ts: float | None):
-        if ts:
-            self._ts = ts
-            self.update_latency(ts)
-    
-    def update_latency(self, ts: float):
-        self._latency = time.time() - ts
+    def update_timestamps(self, ts: float, msg_ts: float | None=None):
+        self._ts = ts
+        if msg_ts:
+            self._msg_ts = msg_ts
     
     def is_time_based(self):
         return True
