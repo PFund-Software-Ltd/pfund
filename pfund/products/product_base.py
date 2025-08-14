@@ -29,7 +29,6 @@ class BaseProduct(BaseModel):
     tick_size: Decimal | None=None
     lot_size: Decimal | None=None
     
-    
     @field_validator('basis', mode='before')
     @classmethod
     def _create_product_basis(cls, basis: str):
@@ -152,6 +151,10 @@ class BaseProduct(BaseModel):
     
     def is_commodity(self) -> bool:
         return self.asset_type.is_commodity()
+    
+    def is_derivative(self) -> bool:
+        from pfund.products.mixins.derivative import DerivativeMixin
+        return isinstance(self, DerivativeMixin)
     
     def __str__(self):
         return '|'.join([

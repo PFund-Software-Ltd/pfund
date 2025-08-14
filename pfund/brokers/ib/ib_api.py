@@ -1,12 +1,16 @@
 """This is mainly a wrapper class of IB's official API.
 Conceptually, this is equivalent to ws_api_base.py in crypto
 """
+from typing import Callable, TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund._typing import tEnvironment
+    from pfund.enums import Environment
+    from pfund.datas.resolution import Resolution
+    from pfund.products.product_ib import IBProduct
+    
 import time
-import os
 import logging
 from collections import defaultdict
-
-from typing import Callable
 
 from pfund.brokers.ib.ib_client import IBClient
 from pfund.brokers.ib.ib_wrapper import *
@@ -14,7 +18,7 @@ from pfund.enums import PublicDataChannel, PrivateDataChannel
 from pfund.datas.timeframe import TimeframeUnits
 
 
-class IBApi(IBClient, IBWrapper):
+class IBAPI(IBClient, IBWrapper):
     DEFAULT_ORDERBOOK_LEVEL = 2
     DEFAULT_ORDERBOOK_DEPTH = 5
     SUPPORTED_ORDERBOOK_LEVELS = [1, 2]
@@ -27,7 +31,7 @@ class IBApi(IBClient, IBWrapper):
     # product types which cannot subscribe to 'Last'/'AllLast' in reqTickByTickData()
     PTYPES_WITHOUT_TICK_BY_TICK_LAST_DATA = ['OPT', 'FX']
 
-    def __init__(self, env, adapter):
+    def __init__(self, env: Environment | tEnvironment):
         IBClient.__init__(self)
         IBWrapper.__init__(self)
         self.env = env.upper()
@@ -60,6 +64,16 @@ class IBApi(IBClient, IBWrapper):
     just like ws_api_base.py for crypto exchanges
     ---------------------------------------------------
     """
+    def add_product(self, product: IBProduct) -> IBProduct:
+        if product.name not in self._products:
+            self._products[product.name] = product
+            self._logger.debug(f'websocket added product {product.symbol}')
+        else:
+            existing_product = self._products[product.name]
+            if existing_product != product:
+                raise ValueError(f'product {product.symbol} has already been used for {existing_product}')
+        return product
+    
     def reconnect(self):
         if not self._is_reconnecting:
             self.logger.warning(f'{self.bkr} is reconnecting')
@@ -108,7 +122,7 @@ class IBApi(IBClient, IBWrapper):
         else:
             self.logger.warning(f'{self.bkr} is already disconnected')
 
-    def _create_public_channel(self, channel: PublicDataChannel, product, **kwargs):
+    def _create_public_channel(self, product: IBProduct, resolution: Resolution):
         """Creates publich channel for internal use.
         Since IB's subscription does not require channel name,
         this function creates channel only for internal use, clarity and consistency.
@@ -252,28 +266,3 @@ class IBApi(IBClient, IBWrapper):
             self._zmq.send(*zmq_msg, receiver='engine')
         except:
             self.logger.exception(f'_update_orderbook exception ({position=} {operation=} {side=} {px=} {qty=} {kwargs=}):')
-
-    def pong(self):
-        """Pongs back to Engine's ping to show that it is alive"""
-        zmq_msg = (4, 0, (self.bkr, '', 'pong'))
-        self._zmq.send(*zmq_msg, receiver='engine')
-
-    def get_zmqs(self) -> list:
-        return [self._zmq]
-
-    def start_zmqs(self):
-        from pfund.engines.trade_engine import TradeEngine
-        zmq_ports = TradeEngine.settings['zmq_ports']
-        self._zmq = ZeroMQ(self.name)
-        self._zmq.start(
-            logger=self.logger,
-            send_port=zmq_ports[self.name],
-            recv_ports=[zmq_ports['engine']]
-        )
-        # send the process ID to engine
-        zmq_msg = (4, 1, (self.bkr, '', os.getpid(),))
-        self._zmq.send(*zmq_msg, receiver='engine')
-
-    def stop_zmqs(self):
-        self._zmq.stop()
-        self._zmq = None

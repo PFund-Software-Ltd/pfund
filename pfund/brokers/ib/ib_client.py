@@ -3,14 +3,11 @@ It should be a part of ib_api.py, but for the sake of clarity,
 it is separated to manage functions in IB's EClient.
 It should never be used alone.
 """
+from typing import Literal
 
 import time
 from threading import Thread
 
-from typing import Literal
-
-# NOTE: do NOT write `from external.ibapi.cilent import *`
-# it will lead to a different __name__ for the logger = logging.getLogger(__name__) in external/ibapi/client.py
 from ibapi.client import EClient
 from ibapi.account_summary_tags import *
 

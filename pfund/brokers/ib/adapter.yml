@@ -1,24 +1,32 @@
----
-channels:
-  public: []
-  private: ['account_update', 'account_summary']
-...
----
-adapter:
-  balance_types: {
-    wallet: 'TotalCashBalance',
-    available: 'AvailableFunds',
-    margin: 'EquityWithLoanValue',
-  }
-  pdts: {}
-  # FIXME: calling symbols 'ccys' is weird
-  ccys: {
-    # EXTEND: should follow EUREX symbols instead of IB ones
-    # TODO: should also include exchange name
-    'FCE': 'CAC40',  # French index futures
-    'FDAX': 'DAX',  # German index futures
-    'FTUK': 'Z',  # UK index futures
-  }
-  ptypes: {}
-  sides: {1: 'Buy', -1: 'Sell'}
-...
+# ---
+# channels:
+#   public: []
+#   private: ['account_update', 'account_summary']
+# ...
+# ---
+# adapter:
+balance_types: {
+  wallet: 'TotalCashBalance',
+  available: 'AvailableFunds',
+  margin: 'EquityWithLoanValue',
+}
+# FIXME: calling symbols 'ccys' is weird
+symbol: {
+  # EXTEND: should follow EUREX symbols instead of IB ones
+  # TODO: should also include exchange name
+  'FCE': 'CAC40',  # French index futures
+  'FDAX': 'DAX',  # German index futures
+  'FTUK': 'Z',  # UK index futures
+}
+asset: {}
+asset_type: {
+  'FOREX': 'CASH',
+  'ETF': 'STK',
+  'INDEX': 'IND',
+}
+option_type: {
+  'CALL': 'C',
+  'PUT': 'P',
+}
+order_type: {}
+sides: {1: 'Buy', -1: 'Sell', 0: 'None'}

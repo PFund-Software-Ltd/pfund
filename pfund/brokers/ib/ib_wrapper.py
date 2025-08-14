@@ -4,11 +4,10 @@ it is separated to manage functions in IB's EWrapper
 It should never be used alone.
 """
 import time
+from decimal import Decimal
 from collections import defaultdict
 
 from numpy import sign
-# NOTE: do NOT write `from external.ibapi.wrapper import *`
-# it will lead to a different __name__ for the logger = logging.getLogger(__name__) in external/ibapi/wrapper.py
 from ibapi.wrapper import *
 
 

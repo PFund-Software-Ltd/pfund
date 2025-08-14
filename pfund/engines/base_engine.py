@@ -233,8 +233,7 @@ class BaseEngine(metaclass=MetaEngine):
                     url=engine_zmq_url,
                 )
                 logger.debug(f"zmq proxy connected to {zmq_name} at {engine_zmq_url}:{zmq_port}")
-        cls = self.__class__
-        cls._settings.zmq_ports.update({ sender_name: proxy_zmq_port })
+        self._settings.zmq_ports.update({ sender_name: proxy_zmq_port })
     
     # TODO: create EngineMetadata class (typed dict/dataclass/pydantic model)
     def to_dict(self) -> dict:
@@ -358,7 +357,6 @@ class BaseEngine(metaclass=MetaEngine):
         - registers components, data to mtstore
         - freezes mtstore.
         '''
-        cls = self.__class__
         if not self._is_gathered:
             engine_metadata = self.to_dict()
             self._kernel.register_engine(engine_metadata)
@@ -368,7 +366,7 @@ class BaseEngine(metaclass=MetaEngine):
                 strategy._gather()
                 
                 # updates zmq ports in settings
-                cls._settings.zmq_ports.update(strategy._get_zmq_ports_in_use())
+                self._settings.zmq_ports.update(strategy._get_zmq_ports_in_use())
                 
                 # registers accounts
                 accounts: list[BaseAccount] = strategy.get_accounts()

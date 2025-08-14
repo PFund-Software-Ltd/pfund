@@ -2,85 +2,71 @@ from typing import Any
 
 from decimal import Decimal
 
-# FIXME: use pfund-ibapi
-from pfund.externals.ibapi.contract import Contract
+from ibapi.contract import Contract
+
 from pfund.enums import TradingVenue, Broker, TraditionalAssetType
 from pfund.products.product_base import BaseProduct
 
 
-# FIXME
-# product types that will contribute to your total assets
-PRODUCT_TYPES_AS_ASSETS = ['CRYPTO', 'STK', 'ETF', 'OPT', 'FX', 'BOND', 'MTF', 'CMDTY']  
+DEFAULT_EXCHANGES = {
+    TraditionalAssetType.STK: "SMART",
+    TraditionalAssetType.ETF: "SMART",
+    TraditionalAssetType.OPT: "SMART",        # US equity options
+    TraditionalAssetType.BOND: "SMART",       # bonds
+    TraditionalAssetType.FX: "IDEALPRO",    # FX spot & spot metals
+    TraditionalAssetType.CMDTY: "IDEALPRO",   # spot metals like XAUUSD
+    TraditionalAssetType.FUND: "FUNDSERV",    # mutual funds
+    TraditionalAssetType.CRYPTO: None,        # PAXOS or ZEROHASH depending on account
+    TraditionalAssetType.FUT: None,           # must set actual exchange (GLOBEX, NYMEX, EUREX, etc.)
+    TraditionalAssetType.INDEX: None,           # indices, market data only, exchange-specific
+    # EXTEND: FOP = futures options, WAR = warrants
+    # "CFD": "SMART",        # many CFDs
+    # "FOP": None,           # must set actual exchange
+    # "WAR": None,           # warrants, usually exchange-specific (e.g., FWB)
+    # "BAG": "SMART",        # combos/spreads, can be regional
+}
 
 
-class IBProduct(Contract, BaseProduct):
+class IBProduct(BaseProduct):
     trading_venue: TradingVenue = TradingVenue.IB
     broker: Broker = Broker.IB
     exchange: str=''
 
     def model_post_init(self, __context: Any):
         super().model_post_init(__context)
-        self.exchange = self.exchange.upper()
-
-    @staticmethod
-    def create_product_name(bccy, qccy, ptype, *args, **kwargs):
-        from pfund.utils.utils import convert_to_uppercases
-        bccy, qccy, ptype, *args = convert_to_uppercases(bccy, qccy, ptype, *args)
-        name = TradFiProduct.create_product_name(bccy, qccy, ptype, *args, **kwargs)
-        if ptype in ['FUT', 'OPT']:
-            
-            if 'lastTradeDateOrContractMonth' in kwargs:
-                name += '_' + kwargs['lastTradeDateOrContractMonth']
-            elif 'localSymbol' in kwargs:
-                name += '_' + kwargs['localSymbol']
-            else:
-                raise Exception(f'IB product {name} is missing "lastTradeDateOrContractMonth" or "localSymbol"')
-            
-            if ptype == 'OPT':
-                assert 'strike' in kwargs
-                assert 'right' in kwargs  # option's right, "C" or "P"
-                name += '_'.join([kwargs['right'], kwargs['strike']])
-        return name
-
-    # TODO
-    @staticmethod
-    def parse_product_name(pdt):
-        return pdt.upper().split('_')
+        if not self.exchange:
+            self._derive_exchange()
+        else:
+            self.exchange = self.exchange.upper()
     
+    def _derive_exchange(self):
+        if default_exchange := DEFAULT_EXCHANGES[self.asset_type]:
+            self.exchange = default_exchange
+        else:
+            raise ValueError(f'IB product {self.name} is missing "exchange"')
+    
+    def to_contract(self) -> Contract:
+        from pfund.brokers.ib.broker_ib import IBBroker
+        adapter = IBBroker.adapter
+        contract = Contract()
+        contract.exchange = self.exchange
+        contract.symbol = adapter(self.base_asset, group='asset')
+        contract.currency = adapter(self.quote_asset, group='asset')
+        contract.secType = adapter(str(self.asset_type), group='asset_type')
+        if self.is_stock() or self.is_etf():
+            default_exchange = DEFAULT_EXCHANGES[self.asset_type]
+            is_exchange_specified = self.exchange != default_exchange
+            if is_exchange_specified:
+                contract.primaryExchange = self.exchange
+                contract.exchange = default_exchange
+        elif self.is_derivative():
+            # contract.multiplier = self.contract_size  # TODO
+            contract.lastTradeDateOrContractMonth = str(self.expiration)
+            if self.is_option():
+                contract.strike = float(self.strike_price)
+                contract.right = adapter(str(self.option_type), group='option_type')
+        return contract
+
+    # FIXME
     def is_asset(self):
         return True if self.product_type in self._PRODUCT_TYPES_AS_ASSETS else False
-
-    def __init__(
-        self, 
-        exch: str,
-        base_currency: str,
-        quote_currency: str,
-        product_type: str,
-        *args, 
-        **kwargs
-    ):
-        TradFiProduct.__init__(self, 'IB', exch, base_currency, quote_currency, product_type, *args, **kwargs)
-        Contract.__init__(self)  # inherits attributes from `Contract` (official class from IB)
-        assert self.product_type in TradFiProductType.__members__, f'{self.product_type} is not supported, supported product types: {list(TradFiProductType.__members__)}'
-
-        self.symbol = self.base_currency
-        self.currency = self.quote_currency
-        self.secType = self.product_type
-        
-        # set kwargs for IB contract
-        for k, v in kwargs.items():
-            if hasattr(self, k):
-                setattr(self, k, v)
-
-        # EXTEND
-        self.exchange = self.exch
-        if self.ptype == 'STK':
-            if self.exch != 'SMART':  # if specified by user
-                self.primaryExchange = self.exch.upper()
-                self.exchange = 'SMART'
-                
-        # FIXME
-        # self.name = self.pdt = self.create_product_name(exch, base_currency, quote_currency, product_type, *args, **kwargs)
-
-    def is_crypto(self):
-        return True if self.secType == 'CRYPTO' else False

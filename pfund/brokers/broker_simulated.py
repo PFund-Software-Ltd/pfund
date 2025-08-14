@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfund.engines.backtest_engine_settings import BacktestEngineSettings
     from pfund.products.product_base import BaseProduct
-    from pfund.brokers.broker_trade import TradeBroker
+    from pfund.brokers.broker_base import BaseBroker
 
 from collections import defaultdict
 
@@ -11,7 +11,7 @@ from pfund.enums import Environment, Broker
 from pfund.accounts.account_simulated import SimulatedAccount
 
 
-def SimulatedBrokerFactory(broker: str) -> type[TradeBroker]:
+def SimulatedBrokerFactory(broker: str) -> type[BaseBroker]:
     from pfund.enums import Broker
     BrokerClass = Broker[broker.upper()].broker_class
     return type("Simulated" + BrokerClass.__name__, (SimulatedBroker, BrokerClass), {"__module__": __name__})
@@ -31,24 +31,24 @@ class SimulatedBroker:
         # self._initial_positions = None
     
     # TODO
-    def _safety_check(self: SimulatedBroker | TradeBroker):
+    def _safety_check(self: SimulatedBroker | BaseBroker):
         assert all(isinstance(account, SimulatedAccount) for account in self._accounts.values()), 'all accounts must be SimulatedAccount'
         # TODO: add a function to override all the existing functions in live broker
 
-    def start(self: SimulatedBroker | TradeBroker):
+    def start(self: SimulatedBroker | BaseBroker):
         self._safety_check()
         self._logger.debug(f'broker {self.name} started')
         self.initialize_balances()
         
-    def stop(self: SimulatedBroker | TradeBroker):
+    def stop(self: SimulatedBroker | BaseBroker):
         self._logger.debug(f'broker {self.name} stopped')
     
-    def _create_account(self: SimulatedBroker | TradeBroker, name: str, **kwargs):
+    def _create_account(self: SimulatedBroker | BaseBroker, name: str, **kwargs):
         # TODO: add initial_balances, initial_positions to SimulatedAccount, should not be broker's attributes
         return SimulatedAccount(env=self._env, bkr=self.name, name=name)
     
     def add_account(
-        self: SimulatedBroker | TradeBroker, 
+        self: SimulatedBroker | BaseBroker, 
         name: str='', 
         initial_balances: dict[str, float] | None=None,
         initial_positions: dict[BaseProduct, float]|None=None,
@@ -63,46 +63,46 @@ class SimulatedBroker:
         return account
 
     # FIXME, what if a strategy needs to get_xxx before e.g. placing an order
-    def get_balances(self: SimulatedBroker | TradeBroker, *args, **kwargs):
+    def get_balances(self: SimulatedBroker | BaseBroker, *args, **kwargs):
         pass
     
     # FIXME, what if a strategy needs to get_xxx before e.g. placing an order
-    def get_positions(self: SimulatedBroker | TradeBroker, *args, **kwargs):
+    def get_positions(self: SimulatedBroker | BaseBroker, *args, **kwargs):
         pass
     
     # FIXME, what if a strategy needs to get_xxx before e.g. placing an order
-    def get_orders(self: SimulatedBroker | TradeBroker, *args, **kwargs):
+    def get_orders(self: SimulatedBroker | BaseBroker, *args, **kwargs):
         pass
     
     # FIXME, what if a strategy needs to get_xxx before e.g. placing an order
-    def get_trades(self: SimulatedBroker | TradeBroker, *args, **kwargs):
+    def get_trades(self: SimulatedBroker | BaseBroker, *args, **kwargs):
         pass
     
-    def get_initial_balances(self: SimulatedBroker | TradeBroker):
+    def get_initial_balances(self: SimulatedBroker | BaseBroker):
         return self._initial_balances
     
-    def initialize_balances(self: SimulatedBroker | TradeBroker):
+    def initialize_balances(self: SimulatedBroker | BaseBroker):
         for trading_venue in self._initial_balances:
             for acc, initial_balances in self._initial_balances[trading_venue].items():
                 updates = {'ts': None, 'data': {k: {'wallet': v, 'available': v, 'margin': v} for k, v in initial_balances.items()}}
                 self._portfolio_manager.update_balances(trading_venue, acc, updates)
     
     # TODO
-    def place_orders(self: SimulatedBroker | TradeBroker, account, product, orders):
+    def place_orders(self: SimulatedBroker | BaseBroker, account, product, orders):
         pass
         # self.order_manager.handle_msgs(...)
         # self.portfolio_manager.handle_msgs(...)
 
     # TODO
-    def cancel_orders(self: SimulatedBroker | TradeBroker, account, product, orders):
+    def cancel_orders(self: SimulatedBroker | BaseBroker, account, product, orders):
         pass
         # self.order_manager.handle_msgs(...)
     
     # TODO
-    def cancel_all_orders(self: SimulatedBroker | TradeBroker):
+    def cancel_all_orders(self: SimulatedBroker | BaseBroker):
         pass
         # self.order_manager.handle_msgs(...)
 
     # TODO
-    def amend_orders(self: SimulatedBroker | TradeBroker, account, product, orders):
+    def amend_orders(self: SimulatedBroker | BaseBroker, account, product, orders):
         pass

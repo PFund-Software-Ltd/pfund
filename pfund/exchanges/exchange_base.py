@@ -199,6 +199,7 @@ class BaseExchange(ABC):
     
     def add_public_channel(self, channel: PublicDataChannel | FullDataChannel, data: TimeBasedData | None=None):
         if channel.lower() in PublicDataChannel.__members__:
+            assert data is not None, 'data object is required for public channels'
             channel: FullDataChannel = self._ws_api._create_public_channel(data.product, data.resolution)
         self._ws_api.add_channel(channel, channel_type='public')
     

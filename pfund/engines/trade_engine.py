@@ -89,8 +89,7 @@ class TradeEngine(BaseEngine):
         )
         data_engine_zmq = self._data_engine._msg_queue
         data_engine_port = data_engine_zmq.get_ports_in_use(data_engine_zmq.sender)[0]
-        cls = self.__class__
-        cls._settings.zmq_ports.update({ sender_name: data_engine_port })
+        self._settings.zmq_ports.update({ sender_name: data_engine_port })
     
     def _setup_worker(self):
         import zmq

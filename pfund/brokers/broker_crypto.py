@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from pfund.orders.order_base import BaseOrder
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.exchanges.exchange_base import BaseExchange
-    from pfund._typing import tCryptoExchange, tEnvironment, FullDataChannel
+    from pfund._typing import tCryptoExchange, tEnvironment, FullDataChannel, AccountName, ProductName
     from pfund.enums import OrderSide, PublicDataChannel
 
 import inspect
@@ -18,20 +18,13 @@ from pfund.balances.balance_crypto import CryptoBalance
 from pfund.accounts.account_crypto import CryptoAccount
 from pfund.utils.utils import convert_to_uppercases
 from pfund.enums import CryptoExchange, PrivateDataChannel
-from pfund.brokers.broker_trade import TradeBroker
+from pfund.brokers.broker_base import BaseBroker
 
 
-class CryptoBroker(TradeBroker):
+class CryptoBroker(BaseBroker):
     name = Broker.CRYPTO
     
     def __init__(self, env: Environment | tEnvironment=Environment.SANDBOX):
-        '''
-        Args:
-            fetch_market_configs: 
-                if True, refetch markets (e.g. tick sizes, lot sizes, listed markets) from exchanges
-                even if the config files exist.
-                if False, markets will be automatically refetched on a weekly basis
-        '''
         super().__init__(env=env)
         self.exchanges: dict[CryptoExchange, BaseExchange] = {}
     
@@ -56,7 +49,7 @@ class CryptoBroker(TradeBroker):
     def _add_default_private_channels(self):
         for exch in self.exchanges:
             for channel in PrivateDataChannel:
-                self.add_channel(exch, channel, channel_type='private')
+                self.add_private_channel(exch, channel)
     
     def add_public_channel(self, exch: tCryptoExchange, channel: PublicDataChannel | FullDataChannel, data: TimeBasedData | None=None):
         exchange = self.get_exchange(exch)
@@ -66,10 +59,10 @@ class CryptoBroker(TradeBroker):
         exchange = self.get_exchange(exch)
         exchange.add_private_channel(channel)
         
-    def get_account(self, exch: tCryptoExchange, name: str) -> CryptoAccount:
+    def get_account(self, exch: tCryptoExchange, name: AccountName) -> CryptoAccount:
         return self._accounts[CryptoExchange[exch.upper()]][name]
     
-    def add_account(self, exch: tCryptoExchange, name: str='', key: str='', secret: str='') -> CryptoAccount:
+    def add_account(self, exch: tCryptoExchange, name: AccountName='', key: str='', secret: str='') -> CryptoAccount:
         exchange = self.add_exchange(exch)
         if name not in self._accounts[exchange.name]:
             account = CryptoAccount(env=self._env, exchange=exch, name=name, key=key, secret=secret)
@@ -79,14 +72,14 @@ class CryptoBroker(TradeBroker):
             raise ValueError(f'account name {name} has already been added')
         return account
     
-    def get_product(self, exch: tCryptoExchange, name: str) -> CryptoProduct:
+    def get_product(self, exch: tCryptoExchange, name: ProductName) -> CryptoProduct:
         '''
         Args:
             name: product name (product.name)
         '''
         return self._products[CryptoExchange[exch.upper()]][name]
     
-    def add_product(self, exch: tCryptoExchange, basis: str, name: str='', symbol: str='', **specs) -> CryptoProduct:
+    def add_product(self, exch: tCryptoExchange, basis: str, name: ProductName='', symbol: str='', **specs) -> CryptoProduct:
         '''
         Args:
             name: product name (product.name)
@@ -103,13 +96,7 @@ class CryptoBroker(TradeBroker):
             if existing_product == product:
                 product = existing_product
             else:
-                raise ValueError(
-                    f'''
-                    product name {name} has already been used for {existing_product}\n
-                    please provide a unique product name for {product}\n
-                    in add_data(..., product_name='<your_unique_product_name>')
-                    '''
-                )
+                raise ValueError(f'product name {name} has already been used for {existing_product}')
         return product
     
     def get_exchange(self, exch: tCryptoExchange) -> BaseExchange:

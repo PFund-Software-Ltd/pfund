@@ -18,7 +18,7 @@ class AllAssetType(StrEnum):
     PERPETUAL = PERP = 'PERPETUAL'
     OPTION = OPT = 'OPTION'
     FOREX = FX = 'FOREX'
-    CRYPTO = 'CRYPTO'
+    CRYPTOCURRENCY = CRYPTO = 'CRYPTO'
     COMMODITY = CMDTY = 'COMMODITY'
     ETF = 'ETF'  # exchange-traded fund
     FUND = 'FUND'  # mutual fund
@@ -47,8 +47,8 @@ class TraditionalAssetType(StrEnum):
     STOCK = STK = AllAssetType.STOCK
     FUTURE = FUT = AllAssetType.FUTURE
     OPTION = OPT = AllAssetType.OPTION
-    FOREX = FX = SPOT = AllAssetType.FOREX
-    CRYPTO = AllAssetType.CRYPTO
+    FOREX = FX = AllAssetType.FOREX
+    CRYPTOCURRENCY = CRYPTO = AllAssetType.CRYPTO
     COMMODITY = CMDTY = AllAssetType.COMMODITY
     ETF = AllAssetType.ETF
     FUND = AllAssetType.FUND  # mutual fund
@@ -60,7 +60,7 @@ class CryptoAssetType(StrEnum):
     FUTURE = FUT = AllAssetType.FUTURE
     PERPETUAL = PERP = AllAssetType.PERPETUAL
     OPTION = OPT = AllAssetType.OPTION
-    CRYPTO = SPOT = AllAssetType.CRYPTO
+    CRYPTOCURRENCY = CRYPTO = SPOT = AllAssetType.CRYPTO
     INDEX = AllAssetType.INDEX
 
 

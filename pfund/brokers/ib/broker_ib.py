@@ -2,148 +2,102 @@
 Conceptually, this is the equivalent of broker_crypto.py + exchange_base.py in crypto
 """
 from __future__ import annotations
-from typing import Literal, TYPE_CHECKING
-
-from pfund.config import Configuration
+from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfund._typing import tEnvironment
-    from pfund.datas.data_base import BaseData
-    from pfund.datas.data_config import DataConfig
+    from pfund._typing import tEnvironment, FullDataChannel, AccountName, ProductName
     from pfund.datas.data_time_based import TimeBasedData
 
 from pfund.adapter import Adapter
-from pfund.products.brokers.product_ib import IBProduct
+from pfund.products.product_ib import IBProduct
 from pfund.accounts.account_ib import IBAccount
 from pfund.orders.order_ib import IBOrder
 from pfund.positions.position_ib import IBPosition
 from pfund.balances.balance_ib import IBBalance
 from pfund.utils.utils import convert_to_uppercases
-from pfund.brokers.broker_trade import TradeBroker
-from pfund.brokers.ib.ib_api import IBApi
-from pfund.enums import PublicDataChannel, PrivateDataChannel, DataChannelType
+from pfund.brokers.broker_base import BaseBroker
+from pfund.brokers.ib.ib_api import IBAPI
+from pfund.enums import PublicDataChannel, PrivateDataChannel, Environment, Broker
 
 
-class IBBroker(TradeBroker):
-    def __init__(self, env: tEnvironment='SANDBOX', **configs):
-        super().__init__(env, 'IB', **configs)
-        config_path = f'{PROJ_CONFIG_PATH}/{self._name.value.lower()}'
-        self.configs = Configuration(config_path, 'config')
-        self.adapter = Adapter(config_path, self.configs.load_config_section('adapter'))
+class IBBroker(BaseBroker):
+    name = Broker.IB
+    adapter = Adapter(name)
+    
+    def __init__(self, env: Environment | tEnvironment=Environment.SANDBOX):
+        super().__init__(env=env)
+        # FIXME: check if only supports one account
         self.account = None
-        
-        # API
-        self._api = IBApi(self._env, self.adapter)
-        self._connection_manager.add_api(self._api)
+        self._accounts: dict[Literal[Broker.IB], dict[AccountName, IBAccount]] = { self.name: {} }
+        self._api = IBAPI(self._env)
 
     @property
     def accounts(self):
-        return self._accounts[self._name]
+        return self._accounts[self.name]
     
-    def start(self, zmq=None):
-        super().start(zmq=zmq)
-
-    # EXTEND
-    @staticmethod
-    def _derive_exch(product_basis: str):
-        bccy, qccy, ptype, *args = IBProduct.parse_product_name(product_basis)
-        if ptype == 'FX':
-            exch = 'IDEALPRO'
-        elif ptype == 'CRYPTO':
-            raise Exception(f'when product type is {ptype}, `exch` must be provided in add_data(exch=...)')
-        else:
-            exch = 'SMART'
-        return exch
-
-    # EXTEND
-    @staticmethod
-    def _standardize_ptype(ptype: str):
-        if ptype in ['CASH', 'CURRENCY', 'FX', 'FOREX', 'SPOT']:
-            ptype = 'FX'
-        elif ptype in ['CRYPTO', 'CRYPTOCURRENCY']:
-            ptype = 'CRYPTO'
-        elif ptype in ['FUT', 'FUTURE']:
-            ptype = 'FUT'
-        elif ptype in ['OPT', 'OPTION']:
-            ptype = 'OPT'
-        return ptype
-
-    def add_channel(
-        self, 
-        channel: PublicDataChannel | PrivateDataChannel | str, 
-        channel_type: DataChannelType,
-        data: BaseData | None=None,
-        **kwargs
-    ):
-        if type_.lower() == 'public':
-            assert 'product' in kwargs, 'Keyword argument "product" is missing'
-            if channel == PublicDataChannel.candlestick:
-                assert 'period' in kwargs and 'timeframe' in kwargs, 'Keyword arguments "period" or/and "timeframe" is missing'
-        elif type_.lower() == 'private':
-            assert 'account' in kwargs, 'Keyword argument "account" is missing'
-        self._api.add_channel(channel, type_, **kwargs)
-
-    def add_data_channel(self, data: TimeBasedData, **kwargs):
-        if data.is_time_based():
-            if data.is_resamplee():
-                return
-            timeframe = data.timeframe
-            if timeframe.is_quote():
-                channel = PublicDataChannel.orderbook
-            elif timeframe.is_tick():
-                channel = PublicDataChannel.tradebook
-            else:
-                channel = PublicDataChannel.candlestick
-            self.add_channel(channel, 'public', product=data.product, period=data.period, timeframe=str(timeframe), **kwargs)
-        else:
-            raise NotImplementedError
+    def _add_default_private_channels(self):
+        for channel in list(PrivateDataChannel.__members__) + ['account_update', 'account_summary']:
+            self.add_private_channel(channel)
     
-    def create_product(self, exch: str, pdt: str, symbol: str='', **kwargs) -> IBProduct:
-        bccy, qccy, ptype, *args = IBProduct.parse_product_name(pdt)
-        product = IBProduct(exch, bccy, qccy, ptype, *args, **kwargs)
-        return product
+    def add_public_channel(self, channel: PublicDataChannel | FullDataChannel, data: TimeBasedData | None=None):
+        if channel.lower() in PublicDataChannel.__members__:
+            assert data is not None, 'data object is required for public channels'
+            channel: FullDataChannel = self._api._create_public_channel(data.product, data.resolution)
+        self._api.add_channel(channel, channel_type='public')
+    
+    def add_private_channel(self, channel: PrivateDataChannel | FullDataChannel):
+        if channel.lower() in PrivateDataChannel.__members__:
+            channel: FullDataChannel = self._api._create_private_channel(channel)
+        self._api.add_channel(channel, channel_type='private')
 
-    def get_product(self, pdt: str, exch: str='') -> IBProduct | None:
-        exch = exch or self._derive_exch(pdt)
-        return self._products[exch.upper()].get(pdt.upper(), None)
+    def get_account(self, name: AccountName) -> IBAccount:
+        return self.accounts[name]
 
-    def add_product(self, basis: str, exch: str='', name: str='', symbol: str='', **specs) -> IBProduct:
-        basis = basis.upper()
-        exch = exch or self._derive_exch(basis)
-        if not (product := self.get_product(exch=exch, pdt=basis)):
-            product = self.create_product(exch, basis, symbol=symbol, **specs)
-            self._products[exch][str(product)] = product
-            self._api.add_product(product, **specs)
-        return product
-
-    def get_account(self, acc: str) -> IBAccount | None:
-        return self.accounts.get(acc.upper(), None)
-
-    def _create_account(self, name: str, host: str, port: int | None, client_id: int | None) -> IBAccount:
-        return IBAccount(env=self._env, name=name, host=host, port=port, client_id=client_id)
-
-    def add_account(
-        self, 
-        name: str='', 
-        host: str='', 
-        port: int | None=None, 
-        client_id: int | None=None, 
-    ) -> IBAccount:
-        if not (account := self.get_account(name)):
-            account = self._create_account(
-                name=name, 
-                host=host, 
-                port=port, 
-                client_id=client_id,
-            )
+    def add_account(self, name: AccountName='', host: str='', port: int | None=None, client_id: int | None=None) -> IBAccount:
+        if name not in self.accounts:
+            account = IBAccount(env=self._env, name=name, host=host, port=port, client_id=client_id)
             self.accounts[account.name] = account
             self.account = account
             self._api.add_account(account)
-            self._logger.debug(f'added {account=}')
         else:
-            # TODO
-            if account.name != name.upper():
-                raise Exception(f'Only one primary account is supported and account {self.account} is already set up')
+            raise ValueError(f'account name {name} has already been added')
+            # FIXME
+            # if account.name != name.upper():
+            #     raise Exception(f'Only one primary account is supported and account {self.account} is already set up')
         return account
+    
+    def get_product(self, name: ProductName, exch: str='') -> IBProduct:
+        if exch:
+            return self._products[exch.upper()][name]
+        else:
+            products = [_name for _exch in self._products for _name in self._products[_exch] if _name == name]
+            if len(products) == 1:
+                return products[0]
+            else:
+                raise ValueError(f'product name {name} has multiple products across exchanges, please specify `exch`')
+    
+    def add_product(self, basis: str, exch: str='', name: ProductName='', symbol: str='', **specs) -> IBProduct:
+        exch = exch.upper() or self._derive_exchange(basis)
+        product: IBProduct = self.create_product(basis, exch=exch, name=name, symbol=symbol, **specs)
+        if product.name not in self._products[exch]:
+            # TODO: load market configs
+            # market_configs = self.load_market_configs()
+            # if product.symbol not in market_configs[product.category]:
+            #     raise ValueError(
+            #         f"The symbol '{product.symbol}' is not found in the market configurations. "
+            #         f"It might be delisted, or your market configurations could be outdated. "
+            #         f"Please set 'refetch_market_configs=True' in TradeEngine's settings to refetch the latest market configurations."
+            #     )
+            self._products[exch][product.name] = product
+            self._api.add_product(product, **specs)
+            self.adapter.add_mapping(str(product.type), product.name, product.symbol)
+        else:
+            existing_product: IBProduct = self.get_product(product.name, exch=exch)
+            # assert products are the same with the same name
+            if existing_product == product:
+                product = existing_product
+            else:
+                raise ValueError(f'product name {name} has already been used for {existing_product}')
+        return product
 
     def add_balance(self, acc: str, ccy: str) -> IBBalance | None:
         acc, ccy = convert_to_uppercases(acc, ccy)

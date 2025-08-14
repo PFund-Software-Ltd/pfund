@@ -39,6 +39,7 @@ dependencies = [
 
 [project.optional-dependencies]
 core = [
+    "pfund-ibapi>=10.39.1",
     "mtflow[core]>=0.0.1.dev2",
     "pfolio[core]>=0.0.2",
     "python-telegram-bot>=22.3.0",
