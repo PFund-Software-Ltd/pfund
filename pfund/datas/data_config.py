@@ -63,6 +63,8 @@ class DataConfig(BaseModel):
     @model_validator(mode='before')
     @classmethod
     def validate_before(cls, data: dict) -> dict:
+        if isinstance(data['data_source'], str):
+            data['data_source'] = DataSource[data['data_source'].upper()]
         if isinstance(data['primary_resolution'], str):
             data['primary_resolution'] = Resolution(data['primary_resolution'])
         data['extra_resolutions'] = list(set(Resolution(resolution) for resolution in data.get('extra_resolutions', [])))

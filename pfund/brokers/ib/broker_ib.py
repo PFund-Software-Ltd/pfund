@@ -15,7 +15,6 @@ from pfund.positions.position_ib import IBPosition
 from pfund.balances.balance_ib import IBBalance
 from pfund.utils.utils import convert_to_uppercases
 from pfund.brokers.broker_base import BaseBroker
-from pfund.brokers.ib.ib_api import IBAPI
 from pfund.enums import PublicDataChannel, PrivateDataChannel, Environment, Broker
 
 
@@ -24,6 +23,8 @@ class IBBroker(BaseBroker):
     adapter = Adapter(name)
     
     def __init__(self, env: Environment | tEnvironment=Environment.SANDBOX):
+        from pfund.brokers.ib.ib_api import IBAPI
+
         super().__init__(env=env)
         # FIXME: check if only supports one account
         self.account = None
@@ -76,10 +77,9 @@ class IBBroker(BaseBroker):
                 raise ValueError(f'product name {name} has multiple products across exchanges, please specify `exch`')
     
     def add_product(self, basis: str, exch: str='', name: ProductName='', symbol: str='', **specs) -> IBProduct:
-        exch = exch.upper() or self._derive_exchange(basis)
         product: IBProduct = self.create_product(basis, exch=exch, name=name, symbol=symbol, **specs)
-        if product.name not in self._products[exch]:
-            # TODO: load market configs
+        if product.name not in self._products[product.exchange]:
+            # TODO: no market configs to load, get from reqContractDetails()
             # market_configs = self.load_market_configs()
             # if product.symbol not in market_configs[product.category]:
             #     raise ValueError(
@@ -87,11 +87,11 @@ class IBBroker(BaseBroker):
             #         f"It might be delisted, or your market configurations could be outdated. "
             #         f"Please set 'refetch_market_configs=True' in TradeEngine's settings to refetch the latest market configurations."
             #     )
-            self._products[exch][product.name] = product
-            self._api.add_product(product, **specs)
+            self._products[product.exchange][product.name] = product
+            self._api.add_product(product)
             self.adapter.add_mapping(str(product.type), product.name, product.symbol)
         else:
-            existing_product: IBProduct = self.get_product(product.name, exch=exch)
+            existing_product: IBProduct = self.get_product(product.name, exch=product.exchange)
             # assert products are the same with the same name
             if existing_product == product:
                 product = existing_product
@@ -208,3 +208,10 @@ class IBBroker(BaseBroker):
     def place_order(self, o):
         self._order_manager.on_submitted(o)
         self._api.placeOrder(o.orderId, o.contract, o)
+
+    def place_orders(self, *args, **kwargs) -> list[IBOrder]:
+        raise NotImplementedError(f'{self.name} does not support place_orders')
+
+    def cancel_all_orders(self, reason=None):
+        raise NotImplementedError(f'{self.name} does not support cancel_all_orders')
+    

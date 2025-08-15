@@ -64,7 +64,6 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     
     # TODO: warning if sub-strategy adds risk guard
     def add_risk_guard(self, risk_guard: RiskGuard):
-        self._assert_not_frozen()
         raise NotImplementedError("RiskGuard is not implemented yet")
     
     def _set_top_strategy(self, is_top_strategy: bool):
@@ -131,12 +130,13 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         name: str='',
         initial_balances: dict[str, float] | None=None, 
         initial_positions: dict[BaseProduct, float] | None=None,
+        **kwargs,
     ) -> SimulatedAccount: ...
 
     def _create_account(self, trading_venue: tTradingVenue, name: str='', **kwargs) -> BaseAccount:
         from pfund.brokers import create_broker
-        # NOTE: broker is only used to create account but nothing else
-        broker = create_broker(env=self._env, bkr=TradingVenue[trading_venue.upper()].broker)
+        # NOTE: broker is only used to create account but does nothing else
+        broker = create_broker(env=self.env, bkr=TradingVenue[trading_venue.upper()].broker)
         if broker.name == Broker.CRYPTO:
             exch = trading_venue
             account =  broker.add_account(exch=exch, name=name or self.name, **kwargs)
@@ -152,7 +152,6 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def add_account(self, trading_venue: tTradingVenue, name: str='', **kwargs) -> BaseAccount:
         if self.is_sub_strategy():
             raise ValueError(f"Sub-strategy '{self.name}' cannot add accounts")
-        self._assert_not_frozen()
         trading_venue = TradingVenue[trading_venue.upper()]
         account: BaseAccount = self._create_account(trading_venue, name=name, **kwargs)
         self.accounts[account.name] = account
@@ -169,7 +168,6 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def add_strategy(self, strategy: StrategyT, name: str='') -> StrategyT:
         if strategy.is_top_strategy():
             raise ValueError(f"Top strategy '{self.name}' cannot be added as a sub-strategy")
-        self._assert_not_frozen()
         assert isinstance(strategy, BaseStrategy), \
             f"strategy '{strategy.__class__.__name__}' is not an instance of BaseStrategy. Please create your strategy using 'class {strategy.__class__.__name__}(pf.Strategy)'"
         if name:

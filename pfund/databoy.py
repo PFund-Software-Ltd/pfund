@@ -82,8 +82,8 @@ class DataBoy:
             Exchange = getattr(importlib.import_module(f'pfund.exchanges.{product.exch.lower()}.exchange'), 'Exchange')
             supported_resolutions = Exchange.get_supported_resolutions(product)
         elif product.bkr == Broker.IB:
-            IBApi = getattr(importlib.import_module('pfund.brokers.ib.ib_api'), 'IBApi')
-            supported_resolutions = IBApi.SUPPORTED_RESOLUTIONS
+            IBAPI = getattr(importlib.import_module('pfund.brokers.ib.ib_api'), 'IBAPI')
+            supported_resolutions = IBAPI.SUPPORTED_RESOLUTIONS
         else:
             raise NotImplementedError(f'broker {product.bkr} is not supported')
         return supported_resolutions
@@ -140,7 +140,7 @@ class DataBoy:
         supported_resolutions = self._get_supported_resolutions(product)
         is_auto_resampled = data_config.auto_resample(supported_resolutions)
         if is_auto_resampled:
-            self.logger.warning(f'{product} resolution={data_config.primary_resolution} extra_resolutions={data_config.extra_resolutions} data is auto-resampled to:\n{pformat(data_config.resample)}')
+            self.logger.warning(f'{product.name} resolution={data_config.primary_resolution} extra_resolutions={data_config.extra_resolutions} data is auto-resampled to:\n{pformat(data_config.resample)}')
         
         datas: list[MarketData] = []
         for resolution in data_config.resolutions:
@@ -155,7 +155,7 @@ class DataBoy:
             data_resamplee = self.get_data(product.name, resamplee_resolution)
             data_resampler = self.get_data(product.name, resampler_resolution)
             data_resamplee.bind_resampler(data_resampler)
-            self.logger.debug(f'{product} resolution={resampler_resolution} (resampler) added listener resolution={resamplee_resolution} (resamplee) data')
+            self.logger.debug(f'{product.name} resolution={resampler_resolution} (resampler) added listener resolution={resamplee_resolution} (resamplee) data')
         
         return datas
 
@@ -250,7 +250,7 @@ class DataBoy:
     def _update_zmq_ports_in_use(self, zmq_ports: dict[ZeroMQSenderName, int]):
         self._zmq_ports_in_use.update(zmq_ports)
     
-    def subscribe(self):
+    def _subscribe(self):
         import zmq
         from pfeed.messaging.zeromq import ZeroMQ, ZeroMQDataChannel
         zmq_ports = self._get_zmq_ports_in_use()
@@ -341,7 +341,9 @@ class DataBoy:
                     
                     product: BaseProduct = self._component.get_product(msg.product)
                     resolution = Resolution(msg.resolution)
-                    data: MarketData = self.get_data(product, resolution)
+                    data: MarketData = self.get_data(product.name, resolution)
+                    if data is None:
+                        raise ValueError(f'data {product.name} {resolution} is not found in {self.datas}')
                     if topic == PublicDataChannel.orderbook:
                         self._update_quote(data, msg)
                     elif topic == PublicDataChannel.tradebook:
@@ -370,7 +372,7 @@ class DataBoy:
                 if product is None or product not in self.datas:
                     return
                 resolution = Resolution(msg.resolution)
-                data: MarketData | None = self.get_data(product, resolution)
+                data: MarketData | None = self.get_data(product.name, resolution)
                 if data is None:
                     return
                 if resolution.is_quote():

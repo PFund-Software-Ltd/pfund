@@ -691,7 +691,7 @@ class ComponentMixin:
             self.add_features()
             self.add_indicators()
             if not self.is_wasm():
-                self.databoy.subscribe()
+                self.databoy._subscribe()
             self._is_gathered = True
             # TODO:
             # self._add_datas_from_consumer_if_none()

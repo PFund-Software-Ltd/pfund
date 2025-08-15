@@ -14,7 +14,7 @@ from msgspec import json
 
 from pfund.parser import SchemaParser
 from pfund.exchanges.ws_api_base import BaseWebSocketAPI, NamedWebSocket
-from pfund.enums import Environment, CryptoExchange, PublicDataChannel, DataChannelType
+from pfund.enums import CryptoExchange, PublicDataChannel, DataChannelType
 from pfund.products.product_bybit import BybitProduct
 from pfund.datas.timeframe import TimeframeUnits
 
@@ -130,7 +130,7 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
             supported_orderbook_depths = self.SUPPORTED_RESOLUTIONS[TimeframeUnits.QUOTE][product.category]
             if orderbook_level not in supported_orderbook_levels:
                 raise NotImplementedError(f"{self.exch} ({channel}.{product.symbol}) orderbook_level={orderbook_level} is not supported, supported levels: {supported_orderbook_levels}")
-            if orderbook_depth not in supported_orderbook_depths:
+            if orderbook_level == 1 and orderbook_depth not in supported_orderbook_depths:
                 raise NotImplementedError(f"{self.exch} ({channel}.{product.symbol}) orderbook_depth={orderbook_depth} is not supported, supported depths: {supported_orderbook_depths}")
             full_channel = '.'.join([echannel, str(orderbook_depth), product.symbol])
         elif resolution.is_tick():

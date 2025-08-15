@@ -22,7 +22,7 @@ class Bar:
         self._period: int = resolution.period
         self._timeframe: Timeframe = resolution.timeframe
         self._resolution_in_seconds: int = resolution.to_seconds()
-        self._shift_in_seconds: int = self._calculate_shift_in_seconds(shift)
+        self._shift_in_seconds: int = self._calculate_shift_in_seconds(shift) if shift != 0 else 0
         self.clear()
 
     def clear(self):

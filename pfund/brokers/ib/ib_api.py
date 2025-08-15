@@ -1,244 +1,197 @@
 """This is mainly a wrapper class of IB's official API.
 Conceptually, this is equivalent to ws_api_base.py in crypto
 """
-from typing import Callable, TYPE_CHECKING
+from __future__ import annotations
+from typing import Callable, TYPE_CHECKING, Awaitable, Literal
 if TYPE_CHECKING:
-    from pfund._typing import tEnvironment
+    from pfund._typing import tEnvironment, ProductName, AccountName, FullDataChannel
+    from pfund.accounts.account_ib import IBAccount
     from pfund.enums import Environment
     from pfund.datas.resolution import Resolution
     from pfund.products.product_ib import IBProduct
     
-import time
 import logging
 from collections import defaultdict
 
 from pfund.brokers.ib.ib_client import IBClient
+from pfund.brokers.ib.ib_wrapper import IBWrapper
 from pfund.brokers.ib.ib_wrapper import *
-from pfund.enums import PublicDataChannel, PrivateDataChannel
 from pfund.datas.timeframe import TimeframeUnits
+from pfund.enums import Environment, Broker, PublicDataChannel, PrivateDataChannel, TraditionalAssetType, DataChannelType
 
 
+# this is similar to ws_api_base.py for crypto exchanges
 class IBAPI(IBClient, IBWrapper):
-    DEFAULT_ORDERBOOK_LEVEL = 2
-    DEFAULT_ORDERBOOK_DEPTH = 5
     SUPPORTED_ORDERBOOK_LEVELS = [1, 2]
     SUPPORTED_RESOLUTIONS = {
         TimeframeUnits.TICK: [1],
         TimeframeUnits.SECOND: [5],
     }
-    # EXTEND
-    PTYPES_WITHOUT_TICK_BY_TICK_DATA = ['OPT']
-    # product types which cannot subscribe to 'Last'/'AllLast' in reqTickByTickData()
-    PTYPES_WITHOUT_TICK_BY_TICK_LAST_DATA = ['OPT', 'FX']
+    CHECK_FREQ = 10  # check connections frequency (in seconds)
+    PING_FREQ = 20  # application-level ping to exchange (in seconds)
+    
+    ASSET_TYPES_WITHOUT_TICK_BY_TICK_DATA = [
+        TraditionalAssetType.OPT,
+        # EXTEND
+        # TraditionalAssetType.INDEX,
+        # TraditionalAssetType.COMBO
+    ]
+    # asset types that cannot subscribe to 'Last'/'AllLast' in reqTickByTickData()
+    ASSET_TYPES_WITHOUT_TICK_BY_TICK_LAST_DATA = [
+        TraditionalAssetType.OPT, 
+        TraditionalAssetType.FX,
+    ]
 
     def __init__(self, env: Environment | tEnvironment):
+        from pfund.brokers.ib.broker_ib import IBBroker
+        
         IBClient.__init__(self)
         IBWrapper.__init__(self)
-        self.env = env.upper()
-        self.name = self.bkr = 'IB'
-        self.logger = logging.getLogger(self.name.lower())
-        self._adapter = adapter
-        self._full_channels = {'public': [], 'private': []}
-        self._ib_params_for_channels_subscription = {}
-        self._products = {}  # {pdt1: product1, pdt2: product2}
+        self._env = Environment[env.upper()]
+        self._bkr = Broker.IB
+        self._logger = logging.getLogger(self._bkr.lower())
+        self._adapter = IBBroker.adapter
+        self._callback: Callable[[str], Awaitable[None] | None] | None = None
+        self._callback_raw_msg: bool = False
+
+        self._products: dict[ProductName, IBProduct] = {}
+        self._accounts: dict[AccountName, IBAccount] = {}
+        self._channels: dict[DataChannelType, list[str]] = {
+            DataChannelType.public: [],
+            DataChannelType.private: []
+        }
+        
+        # FIXME
         self.account = None
-        self._bids = defaultdict(list)
-        self._asks = defaultdict(list)
-        self._zmq = None
-        self._sub_num = 0
-        self._num_subscribed = 0
-        self._is_connected = False
-        self._is_reconnecting = False
+        self._ib_params_for_channels_subscription = {}
+        
+        self._sub_num = self._num_subscribed = 0
+        
         self._background_task_freq = 10  # in seconds
         self._background_thread = None
-        self._orderbook_level = {}
-        self._orderbook_depth = {}
+
         # since reqMktData will subscribe to bid/ask + last price/quantity automatically,
         # use this to save down which tick types the system has subscribed
         self._subscribed_market_data_tick_types = defaultdict(list)
         self._ib_thread = None
-    
 
-    """
-    PFund's functions for controlling the API's connectivity,
-    just like ws_api_base.py for crypto exchanges
-    ---------------------------------------------------
-    """
+    def set_callback(self, callback: Callable[[str], Awaitable[None] | None], raw_msg: bool=False):
+        '''
+        Args:
+            raw_msg: 
+                if True, the callback will receive the raw messages.
+                if False, the callback will receive parsed messages.
+        '''
+        self._callback = callback
+        self._callback_raw_msg = raw_msg
+    
+    def add_account(self, account: IBAccount) -> IBAccount:
+        if account.name not in self._accounts:
+            self._accounts[account.name] = account
+            self._logger.debug(f'added account {account}')
+        else:
+            raise ValueError(f'account name {account.name} has already been added')
+        return account
+        
     def add_product(self, product: IBProduct) -> IBProduct:
         if product.name not in self._products:
             self._products[product.name] = product
-            self._logger.debug(f'websocket added product {product.symbol}')
+            self._logger.debug(f'added product {product.name}')
         else:
             existing_product = self._products[product.name]
             if existing_product != product:
-                raise ValueError(f'product {product.symbol} has already been used for {existing_product}')
+                raise ValueError(f'product {product.name} has already been used for {existing_product}')
         return product
     
-    def reconnect(self):
-        if not self._is_reconnecting:
-            self.logger.warning(f'{self.bkr} is reconnecting')
-            self._is_reconnecting = True
-            self.disconnect()
-            self.connect()
-            self._is_reconnecting = False
-        else:
-            self.logger.debug(f'{self.bkr} is already reconnecting, do not reconnect again')
+    def add_channel(self, channel: FullDataChannel, *, channel_type: Literal['public', 'private']): 
+        channel_type: DataChannelType = DataChannelType[channel_type.lower()]
+        if channel not in self._channels[channel_type]:
+            self._channels[channel_type].append(channel)
+            self._logger.debug(f'added {channel_type} channel {channel}')
     
-    def add_account(self, account):
-        self.account = account
-        self.logger.debug(f'added account {account.name}')
-            
-    def add_product(self, product, **kwargs):
-        self._products[str(product)] = product
-        self.logger.debug(f'added product {str(product)}')
-            
-    def add_channel(self, channel, type_, product=None, account=None, **kwargs):
-        if type_ == 'public':
-            full_channel = self._create_public_channel(channel, product, **kwargs)
-        elif type_ == 'private':
-            full_channel = self._create_private_channel(channel, account, **kwargs)
-        if full_channel not in self._full_channels[type_]:
-            self._full_channels[type_].append(full_channel)
-            self.logger.debug(f'added {full_channel=}')
-
-    def is_connected(self):
-        return self._is_connected
-    
-    def _on_connected(self):
-        if not self._is_connected:
-            self._is_connected = True
-            zmq_msg = (4, 2, (self.bkr, '', 'connected'),)
-            self._zmq.send(*zmq_msg, receiver='engine')
-            self.logger.debug(f'{self.bkr} is connected')
-        else:
-            self.logger.warning(f'{self.bkr} is already connected')
-
-    def _on_disconnected(self):
-        if self._is_connected:
-            self._is_connected = False
-            zmq_msg = (4, 3, (self.bkr, '', 'disconnected'))
-            self._zmq.send(*zmq_msg, receiver='engine')
-            self.logger.debug(f'{self.bkr} is disconnected')
-        else:
-            self.logger.warning(f'{self.bkr} is already disconnected')
-
     def _create_public_channel(self, product: IBProduct, resolution: Resolution):
         """Creates publich channel for internal use.
         Since IB's subscription does not require channel name,
         this function creates channel only for internal use, clarity and consistency.
         """
-        pdt = str(product)
-        epdt = self._adapter(pdt)
-        echannel = self._adapter(channel)
-        if channel in PublicDataChannel:
-            if channel == PublicDataChannel.orderbook:
-                full_channel = '.'.join([channel, pdt])
-                self._orderbook_level[pdt] = int(kwargs.get('orderbook_level', self.DEFAULT_ORDERBOOK_LEVEL))
-                if self._orderbook_level[pdt] not in self.SUPPORTED_ORDERBOOK_LEVELS:
-                    raise NotImplementedError(f'{pdt} orderbook_level={self._orderbook_level[pdt]} is not supported')
-                if 'orderbook_depth' in kwargs:
-                    self._orderbook_depth[pdt] = int(kwargs['orderbook_depth'])
-                elif 'num_rows' in kwargs:  # `num_rows` is a params in IB's reqMktDepth(...)
-                    self._orderbook_depth[pdt] = int(kwargs['num_rows'])
-                else:
-                    self._orderbook_depth[pdt] = self.DEFAULT_ORDERBOOK_DEPTH
-            elif channel == PublicDataChannel.tradebook:
-                full_channel = '.'.join([echannel, epdt])
-            elif channel == PublicDataChannel.candlestick:
-                period, timeframe = kwargs['period'], kwargs['timeframe']
-                if timeframe not in self.SUPPORTED_RESOLUTIONS.keys():
-                    raise NotImplementedError(f'({channel}.{pdt}) {timeframe=} for kline is not supported, only timeframes in {list(self.SUPPORTED_RESOLUTIONS)} are supported')
-                resolution = str(period) + timeframe
-                full_channel = '.'.join([echannel, epdt, resolution])
+        self.add_product(product)
+        if resolution.is_quote():
+            channel = PublicDataChannel.orderbook
+            echannel = self._adapter(channel.value, group='channel')
+            orderbook_level = resolution.orderbook_level
+            # TODO: how to handle orderbook_depth when received the orderbook data? shouldn't send the whole orderbook to engine's data object
+            supported_orderbook_levels = self.SUPPORTED_ORDERBOOK_LEVELS
+            if orderbook_level not in supported_orderbook_levels:
+                raise NotImplementedError(f"{self.exch} ({channel}.{product.symbol}) orderbook_level={orderbook_level} is not supported, supported levels: {supported_orderbook_levels}")
+            full_channel = '.'.join([echannel, product.symbol])
+            # TODO
+            # if 'num_rows' in kwargs:  # `num_rows` is a params in IB's reqMktDepth(...)
+        elif resolution.is_tick():
+            channel = PublicDataChannel.tradebook
+            echannel = self._adapter(channel.value, group='channel')
+            full_channel = '.'.join([echannel, product.symbol])
+        elif resolution.is_bar():
+            channel = PublicDataChannel.candlestick
+            echannel = self._adapter(channel.value, group='channel')
+            period, timeframe = resolution.period, resolution.timeframe
+            if timeframe.unit not in self.SUPPORTED_RESOLUTIONS:
+                raise ValueError(f'{self.exch} ({channel}.{product.symbol}) {resolution=} (timeframe={timeframe.unit.name}) is not supported, supported timeframes: {[tf.name for tf in self.SUPPORTED_RESOLUTIONS]}')
+            elif period not in self.SUPPORTED_RESOLUTIONS[timeframe.unit]:
+                raise ValueError(f'{self.exch} ({channel}.{product.symbol}) {resolution=} ({period=}) is not supported, supported periods: {self.SUPPORTED_RESOLUTIONS[timeframe.unit]}')
+            eresolution = self._adapter(repr(resolution), group='resolution')
+            full_channel = '.'.join([echannel, product.symbol, eresolution])
+        else:
+            raise NotImplementedError(f'{resolution=} is not supported for creating public channel')
+        return full_channel
+
+    def _create_private_channel(self, channel: PrivateDataChannel):
+        channel = PrivateDataChannel[channel.lower()]
+        return self._adapter(channel, group='channel')
+
+    def _subscribe(self, channels: list[str], channel_type: DataChannelType):
+        # TODO
+        # ib_params = self._ib_params_for_channels_subscription[full_channel]
+        for channel in channels:
+            self._sub_num += 1
+            if channel_type == DataChannelType.public:
+                pass
+                # if channel == 'kline':
+                #     self._request_real_time_bar(**ib_params)
+                
+                # if channel == 'orderbook':
+                #     if self._orderbook_level[pdt] == 1:
+                #         if product.ptype not in self.ASSET_TYPES_WITHOUT_TICK_BY_TICK_DATA:
+                #             tick_type = ib_params.get('tickType', 'BidAsk')
+                #             assert tick_type in ['MidPoint', 'BidAsk'], f'tickType={tick_type} is not supported for trade channel'
+                #             self._request_tick_by_tick_data(tick_type, **ib_params)
+                #         else:
+                #             self._request_market_data(**ib_params)
+                #             self._subscribed_market_data_tick_types[pdt].extend([TickTypeEnum.BID, TickTypeEnum.BID_SIZE, TickTypeEnum.ASK, TickTypeEnum.ASK_SIZE])
+                #     elif self._orderbook_level[pdt] == 2:
+                #         self._request_market_depth(**ib_params)
+                # elif channel == 'tradebook':
+                #     if product.ptype not in self.ASSET_TYPES_WITHOUT_TICK_BY_TICK_DATA + self.ASSET_TYPES_WITHOUT_TICK_BY_TICK_LAST_DATA:
+                #         tick_type = ib_params.get('tickType', 'Last')
+                #         assert tick_type in ['Last', 'AllLast'], f'tickType={tick_type} is not supported for trade channel'
+                #         self._request_tick_by_tick_data(tick_type, **ib_params)
+                #     else:
+                #         self._request_market_data(**ib_params)
+                #         self._subscribed_market_data_tick_types[pdt].extend([TickTypeEnum.LAST, TickTypeEnum.LAST_SIZE])
+                
+                # if did not request market data but defined related params for it, request for it anyways
+                # if not self._subscribed_market_data_tick_types[pdt] and \
+                #     any(params in ib_params for params in ['genericTickList', 'snapshot', 'regulatorySnapshot']):
+                #     self._request_market_data(**ib_params)
             else:
-                raise NotImplementedError(f'{channel=} is not supported')
-        else:
-            full_channel = channel
-        kwargs.update({'product': product})
-        self._ib_params_for_channels_subscription[full_channel] = kwargs
-        return full_channel
-
-    def _create_private_channel(self, channel: PrivateDataChannel, **kwargs):
-        echannel = self._adapter(channel)
-        account = kwargs['account']
-        full_channel = '.'.join([echannel, account.name])
-        self._ib_params_for_channels_subscription[full_channel] = kwargs
-        return full_channel
-
-    def _wait(self, condition_func: Callable, reason: str='', timeout: int=10):
-        while timeout:
-            if condition_func():
-                self.logger.debug(f'{reason} is successful')
-                return True
-            timeout -= 1
-            time.sleep(1)
-            self.logger.debug(f'waiting for {reason}')
-        else:
-            self.logger.error(f'failed waiting for {reason}')
-            return False
-        
-    def _subscribe(self):
-        # subscribe to public channels
-        for type_, full_channels in self._full_channels.items():
-            self._sub_num += len(full_channels)
-            if not full_channels:
-                continue
-            for full_channel in full_channels:
-                ib_params = self._ib_params_for_channels_subscription[full_channel]
-                if type_ == 'public':
-                    channel, pdt, *_ = full_channel.split('.')
-                    product = self._products[pdt]
-                    if channel == 'orderbook':
-                        if self._orderbook_level[pdt] == 1:
-                            if product.ptype not in self.PTYPES_WITHOUT_TICK_BY_TICK_DATA:
-                                tick_type = ib_params.get('tickType', 'BidAsk')
-                                assert tick_type in ['MidPoint', 'BidAsk'], f'tickType={tick_type} is not supported for trade channel'
-                                self._request_tick_by_tick_data(tick_type, **ib_params)
-                            else:
-                                self._request_market_data(**ib_params)
-                                self._subscribed_market_data_tick_types[pdt].extend([TickTypeEnum.BID, TickTypeEnum.BID_SIZE, TickTypeEnum.ASK, TickTypeEnum.ASK_SIZE])
-                        elif self._orderbook_level[pdt] == 2:
-                            self._request_market_depth(**ib_params)
-                    elif channel == 'tradebook':
-                        if product.ptype not in self.PTYPES_WITHOUT_TICK_BY_TICK_DATA + self.PTYPES_WITHOUT_TICK_BY_TICK_LAST_DATA:
-                            tick_type = ib_params.get('tickType', 'Last')
-                            assert tick_type in ['Last', 'AllLast'], f'tickType={tick_type} is not supported for trade channel'
-                            self._request_tick_by_tick_data(tick_type, **ib_params)
-                        else:
-                            self._request_market_data(**ib_params)
-                            self._subscribed_market_data_tick_types[pdt].extend([TickTypeEnum.LAST, TickTypeEnum.LAST_SIZE])
-                    elif channel == 'kline':
-                        self._request_real_time_bar(**ib_params)
-                    
-                    # if did not request market data but defined related params for it, request for it anyways
-                    if not self._subscribed_market_data_tick_types[pdt] and \
-                        any(params in ib_params for params in ['genericTickList', 'snapshot', 'regulatorySnapshot']):
-                        self._request_market_data(**ib_params)
-                else:
-                    channel, acc = full_channel.split('.')
-                    if channel == 'account_update':
-                        self._request_account_updates(acc)
-                    elif channel == 'account_summary':
-                        self._request_account_summary(**ib_params)
-
-            self.logger.debug(f'{self.bkr} subscribes {full_channels}')
+                if channel == 'account_update':
+                    self._request_account_updates(acc)
+                elif channel == 'account_summary':
+                    self._request_account_summary(**ib_params)
     
     def _unsubscribe(self):
         self._sub_num = 0
         self._num_subscribed = 0
     
-    def _check_connection(self):
-        if reconnect_ws_names := [ws_name for ws_name, ws in self._websockets.items() if not (self._is_connected[ws_name] and ws.sock and ws.sock.connected)]:
-            self.reconnect()
-
-    def _run_background_tasks(self):
-        while _is_running:=self._websockets:
-            self._check_connection()
-            time.sleep(self._background_task_freq)
-
-    def _is_all_subscribed(self):
-        return (self._num_subscribed == self._sub_num and self._num_subscribed != 0 and self._sub_num != 0)
-
     def _update_orderbook(self, req_id, position: int, operation: int, side: int, px, qty, **kwargs):
         '''
         Args:
@@ -262,7 +215,7 @@ class IBAPI(IBClient, IBWrapper):
             else:
                 bids, asks = self._bids[pdt], None
                 _update(bids)
-            zmq_msg = (1, 1, (self.bkr, product.exch, str(product), bids, asks, None, kwargs))
+            zmq_msg = (1, 1, (self._bkr, product.exch, str(product), bids, asks, None, kwargs))
             self._zmq.send(*zmq_msg, receiver='engine')
         except:
-            self.logger.exception(f'_update_orderbook exception ({position=} {operation=} {side=} {px=} {qty=} {kwargs=}):')
+            self._logger.exception(f'_update_orderbook exception ({position=} {operation=} {side=} {px=} {qty=} {kwargs=}):')

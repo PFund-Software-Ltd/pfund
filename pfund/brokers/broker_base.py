@@ -28,7 +28,7 @@ class BaseBroker(ABC):
         from pfund.engines.trade_engine import TradeEngine
 
         self._env = Environment[env.upper()]
-        self._logger = logging.getLogger('pfund')
+        self._logger: logging.Logger | None = None
         self._settings: TradeEngineSettings | None = getattr(TradeEngine, "_settings", None)
         
         self._products: defaultdict[ExchangeName, dict[ProductName, BaseProduct]] = defaultdict(dict)

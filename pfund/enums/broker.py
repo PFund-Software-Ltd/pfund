@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.brokers.broker_base import BaseBroker
+    from pfund.accounts.account_base import BaseAccount
 
 from enum import StrEnum
 
@@ -21,3 +22,4 @@ class Broker(StrEnum):
             Broker.DAPP: 'DappBroker',
         }[self]
         return getattr(pf, broker_name)
+     

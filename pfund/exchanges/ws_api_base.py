@@ -42,7 +42,6 @@ class BaseWebSocketAPI(ABC):
 
     def __init__(self, env: Environment | tEnvironment):
         self._env = Environment[env.upper()]
-        assert self._env != Environment.BACKTEST, f'{self._env=} is not supported in WebSocket API'
         self._bkr = Broker.CRYPTO
         self._logger = logging.getLogger(self.exch.lower())
         Exchange: type[BaseExchange] = getattr(importlib.import_module(f'pfund.exchanges.{self.exch.lower()}.exchange'), 'Exchange')
@@ -128,11 +127,11 @@ class BaseWebSocketAPI(ABC):
     def add_product(self, product: CryptoProduct) -> CryptoProduct:
         if product.name not in self._products:
             self._products[product.name] = product
-            self._logger.debug(f'websocket added product {product.symbol}')
+            self._logger.debug(f'websocket added product {product.name}')
         else:
             existing_product = self._products[product.name]
             if existing_product != product:
-                raise ValueError(f'product {product.symbol} has already been used for {existing_product}')
+                raise ValueError(f'product {product.name} has already been used for {existing_product}')
         return product
         
     def add_channel(self, channel: FullDataChannel, *, channel_type: Literal['public', 'private']): 

@@ -28,7 +28,6 @@ from pfund import get_config
 
 
 config = get_config()
-logger = logging.getLogger('pfund')
 
 
 class TradeEngine(BaseEngine):
@@ -62,7 +61,6 @@ class TradeEngine(BaseEngine):
         # self.DataTool.set_max_rows(df_max_rows)
 
         self._data_engine = DataEngine(
-            env=self._env,
             data_tool=self._data_tool,
             use_ray=not self.is_wasm(),
             use_deltalake=config.use_deltalake
@@ -95,7 +93,7 @@ class TradeEngine(BaseEngine):
         import zmq
         from pfeed.messaging.zeromq import ZeroMQ
         # pull from components, e.g. orders
-        self._worker = ZeroMQ(name=self.name+"_worker", logger=logger, receiver_type=zmq.PULL)
+        self._worker = ZeroMQ(name=self.name+"_worker", logger=self._logger, receiver_type=zmq.PULL)
         for zmq_name, zmq_port in self._settings.zmq_ports.items():
             if zmq_name in ['proxy', 'data_engine'] or zmq_name.endswith("_logger"):
                 continue
@@ -109,23 +107,27 @@ class TradeEngine(BaseEngine):
                 port=zmq_port,
                 url=zmq_url,
             )
-            logger.debug(f"zmq worker connected to {zmq_name} at {zmq_url}:{zmq_port}")
+            self._logger.debug(f"zmq worker connected to {zmq_name} at {zmq_url}:{zmq_port}")
     
     def gather(self):
         if self._is_gathered:
             return
         super().gather()
+        if not self.is_wasm():
+            self._setup_worker()
         for strategy in self.strategies.values():
             datas: list[TimeBasedData] = strategy._get_datas_in_use()
             for data in datas:
                 if data.is_resamplee():
                     continue
+                # TODO: if add IB feed and data source is also IB (not sth like databento), requires passing account that includes host, port, client_id to add_feed()
                 self._data_engine \
                 .add_feed(data.source, data.category) \
                 .stream(
                     product=str(data.product.basis),
                     resolution=repr(data.resolution),
                     to_storage=None,
+                    env=self._env,
                     **data.product.specs
                 )
                 # NOTE: load(to_storage=...) is not called here so that users can manually call gather()
@@ -146,7 +148,6 @@ class TradeEngine(BaseEngine):
             import ray
             if not ray.is_initialized():
                 ray.init(**ray_kwargs)
-            self._setup_worker()
             self._run_data_engine(num_workers=num_data_workers)
             while self.is_running():
                 try:
@@ -156,16 +157,16 @@ class TradeEngine(BaseEngine):
                         if channel == PFundDataChannel.logging:
                             log_level: str = topic
                             log_level: int = logging._nameToLevel.get(log_level.upper(), logging.DEBUG)
-                            logger.log(log_level, f'{data}')
+                            self._logger.log(log_level, f'{data}')
                         else:
-                            logger.debug(f'{channel} {topic} {data} {msg_ts}')
+                            self._logger.debug(f'{channel} {topic} {data} {msg_ts}')
                     # TODO: receive components orders
                     if msg := self._worker.recv():
                         pass
                 except Exception:
-                    logger.exception(f"Exception in {self.name} run():")
+                    self._logger.exception(f"Exception in {self.name} run():")
                 except KeyboardInterrupt:
-                    logger.warning(f'KeyboardInterrupt received, ending {self.name}')
+                    self._logger.warning(f'KeyboardInterrupt received, ending {self.name}')
                     break
             if self.is_running():
                 self.end()
@@ -197,7 +198,7 @@ class TradeEngine(BaseEngine):
                 try:
                     self._data_engine_loop.run_until_complete(self._data_engine_task)
                 except Exception:
-                    logger.exception("Exception in data engine thread:")
+                    self._logger.exception("Exception in data engine thread:")
                 finally:
                     self._data_engine_loop.close()
                     self._data_engine_loop = None
@@ -215,7 +216,7 @@ class TradeEngine(BaseEngine):
             self._data_engine.run()
     
     def _end_data_engine(self):
-        logger.debug(f'{self.name} ending data engine')
+        self._logger.debug(f'{self.name} ending data engine')
         if not self.is_wasm():
             if self._data_engine_task and self._data_engine_loop and not self._data_engine_task.done():
                 self._data_engine_loop.call_soon_threadsafe(self._data_engine_task.cancel)
@@ -224,9 +225,9 @@ class TradeEngine(BaseEngine):
         super().end()
         self._end_data_engine()
         if self._data_engine_thread:
-            logger.debug(f"{self.name} waiting for data engine thread to finish")
+            self._logger.debug(f"{self.name} waiting for data engine thread to finish")
             self._data_engine_thread.join(timeout=10)
             if self._data_engine_thread.is_alive():
-                logger.debug(f"{self.name} data engine thread is still running after timeout")
+                self._logger.debug(f"{self.name} data engine thread is still running after timeout")
             else:
-                logger.debug(f"{self.name} data engine thread finished")
+                self._logger.debug(f"{self.name} data engine thread finished")

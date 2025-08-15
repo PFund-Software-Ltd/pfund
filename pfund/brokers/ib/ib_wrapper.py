@@ -8,6 +8,7 @@ from decimal import Decimal
 from collections import defaultdict
 
 from numpy import sign
+from ibapi.wrapper import EWrapper, TickerId
 from ibapi.wrapper import *
 
 
@@ -16,17 +17,21 @@ class IBWrapper(EWrapper):
         super().__init__()
         self._last_tick_pxs = defaultdict(dict)
 
-    # TODO
-    def error(self, reqId: TickerId, errorCode: int, errorString: str, advancedOrderRejectJson=''):
-        super().error(reqId, errorCode, errorString, advancedOrderRejectJson=advancedOrderRejectJson)
+    def error(
+        self,
+        reqId: TickerId,
+        errorTime: int,
+        errorCode: int,
+        errorString: str,
+        advancedOrderRejectJson="",
+    ):
+        super().error(reqId, errorTime, errorCode, errorString, advancedOrderRejectJson=advancedOrderRejectJson)
 
     def connectAck(self):
         super().connectAck()
-        self._on_connected()
 
     def connectionClosed(self):
         super().connectionClosed()
-        self._on_disconnected()
 
     """
     public channels    
@@ -61,7 +66,7 @@ class IBWrapper(EWrapper):
             px = Decimal(self._last_tick_pxs[reqId][tickType])
             # When tickPrice and tickSize are reported as -1, this indicates that there is no data currently available.
             if px < 0 or size < 0:
-                self.logger.warning(f'{self.bkr} {px=} or {size=} < 0')
+                self._logger.warning(f'{self.bkr} {px=} or {size=} < 0')
                 return
             if tickType == TickTypeEnum.BID_SIZE:
                 bids = ((px, size),)
@@ -76,7 +81,7 @@ class IBWrapper(EWrapper):
                 self._zmq.send(*zmq_msg)
         else:
             # TEMP, this is normal, but wanna log it to confirm
-            self.logger.warning(f'{reqId=} {tickType=} {size=} cannot find matching tick price')
+            self._logger.warning(f'{reqId=} {tickType=} {size=} cannot find matching tick price')
         super().tickSize(reqId, tickType, size)
 
     def tickByTickBidAsk(self, reqId: int, time: int, bidPrice: float, askPrice: float,

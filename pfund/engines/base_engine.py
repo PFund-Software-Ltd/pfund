@@ -47,7 +47,6 @@ ENV_COLORS = {
     Environment.LIVE: 'bold green on #e0ffe0',
 }
 config = get_config()
-logger = logging.getLogger('pfund')
 
 
 class BaseEngine(metaclass=MetaEngine):
@@ -150,6 +149,7 @@ class BaseEngine(metaclass=MetaEngine):
 
 
         self.name = name or self._get_default_name()
+        self._logger = logging.getLogger('pfund')
         if "engine" not in self.name.lower():
             self.name += "_engine"
         self._kernel = TradeKernel(database=cls._database, external_listeners=cls._external_listeners)
@@ -210,7 +210,7 @@ class BaseEngine(metaclass=MetaEngine):
         from pfeed.messaging.zeromq import ZeroMQ
         self._proxy = ZeroMQ(
             name=self.name+"_proxy",
-            logger=logger,
+            logger=self._logger,
             io_threads=2,
             sender_type=zmq.XPUB,  # publish to external listeners
             receiver_type=zmq.XSUB,  # subscribe to data engine, component's logs (if using ray) etc.
@@ -224,7 +224,7 @@ class BaseEngine(metaclass=MetaEngine):
             url=engine_zmq_url,
         )
         proxy_zmq_port= self._proxy.get_ports_in_use(self._proxy.sender)[0]
-        logger.debug(f"zmq proxy binded to {engine_zmq_url}:{proxy_zmq_port}")
+        self._logger.debug(f"zmq proxy binded to {engine_zmq_url}:{proxy_zmq_port}")
         for zmq_name, zmq_port in zmq_ports.items():
             if zmq_name == 'data_engine' or zmq_name.endswith("_logger"):
                 self._proxy.connect(
@@ -232,7 +232,7 @@ class BaseEngine(metaclass=MetaEngine):
                     port=zmq_port,
                     url=engine_zmq_url,
                 )
-                logger.debug(f"zmq proxy connected to {zmq_name} at {engine_zmq_url}:{zmq_port}")
+                self._logger.debug(f"zmq proxy connected to {zmq_name} at {engine_zmq_url}:{zmq_port}")
         self._settings.zmq_ports.update({ sender_name: proxy_zmq_port })
     
     # TODO: create EngineMetadata class (typed dict/dataclass/pydantic model)
@@ -290,7 +290,7 @@ class BaseEngine(metaclass=MetaEngine):
         strategy._set_top_strategy(True)
 
         self.strategies[strat] = strategy
-        logger.debug(f"added '{strat}'")
+        self._logger.debug(f"added '{strat}'")
         return strategy
     
     def get_data_params(self) -> DataParamsDict:
@@ -313,7 +313,7 @@ class BaseEngine(metaclass=MetaEngine):
         if bkr not in self.brokers:
             broker = create_broker(env=self._env, bkr=bkr)
             self.brokers[bkr] = broker
-            logger.debug(f'added broker {bkr}')
+            self._logger.debug(f'added broker {bkr}')
         return self.brokers[bkr]
     
     def get_broker(self, bkr: tBroker) -> BaseBroker:
@@ -338,7 +338,7 @@ class BaseEngine(metaclass=MetaEngine):
             broker.add_product(exch=product.exch, basis=str(product.basis), name=product.name, symbol=product.symbol, **product.specs)
         else:
             raise NotImplementedError(f"Broker {broker.name} is not supported")
-        logger.debug(f'added product {product.symbol}')
+        self._logger.debug(f'added product {product.symbol}')
     
     def _register_account(self, account: BaseAccount):
         broker: BaseBroker = self._add_broker(account.trading_venue)
@@ -348,7 +348,7 @@ class BaseEngine(metaclass=MetaEngine):
             account = broker.add_account(name=account.name, host=account._host, port=account._port, client_id=account._client_id)
         else:
             raise NotImplementedError(f"Broker {broker.name} is not supported")
-        logger.debug(f'added account {account}')
+        self._logger.debug(f'added account {account}')
     
     def gather(self):
         '''
@@ -382,7 +382,7 @@ class BaseEngine(metaclass=MetaEngine):
                 metadata = strategy.to_dict()
                 self._register_component(metadata)
         else:
-            logger.debug(f'{self.name} is already gathered')
+            self._logger.debug(f'{self.name} is already gathered')
     
     def run(self):
         if not self.is_running():
@@ -395,7 +395,7 @@ class BaseEngine(metaclass=MetaEngine):
             for strategy in self.strategies.values():
                 strategy.start()
         else:
-            logger.debug(f'{self.name} is already running')
+            self._logger.debug(f'{self.name} is already running')
 
     def end(self):
         if self.is_running():
@@ -408,4 +408,4 @@ class BaseEngine(metaclass=MetaEngine):
                 self._proxy.terminate()
             self._kernel.end()
         else:
-            logger.debug(f'{self.name} is not running')
+            self._logger.debug(f'{self.name} is not running')

@@ -17,21 +17,12 @@ class BaseAccount:
     def _get_default_name(self):
         return f"{self.__class__.__name__}-{self._next_account_id()}"
     
-    def __init__(
-        self, 
-        env: tEnvironment, 
-        trading_venue: tTradingVenue, 
-        name: str='',
-        key: str='',
-        secret: str='',
-    ):
+    def __init__(self, env: tEnvironment, trading_venue: tTradingVenue, name: str=''):
         self._env = Environment[env.upper()]
         self.trading_venue = TradingVenue[trading_venue.upper()]
         self.name = name or self._get_default_name()
         if 'account' not in self.name.lower():
             self.name += "_account"
-        self._key = key or os.getenv(f'{self.tv}_API_KEY', '')
-        self._secret = secret or os.getenv(f'{self.tv}_API_SECRET', '')
         
     @property
     def tv(self) -> TradingVenue:

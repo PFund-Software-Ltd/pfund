@@ -3,7 +3,11 @@ It should be a part of ib_api.py, but for the sake of clarity,
 it is separated to manage functions in IB's EClient.
 It should never be used alone.
 """
-from typing import Literal
+from __future__ import annotations
+from typing import ClassVar, Literal, TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.brokers.ib.ib_api import IBAPI
+    from pfund.accounts.account_ib import IBAccount
 
 import time
 from threading import Thread
@@ -14,41 +18,46 @@ from ibapi.account_summary_tags import *
 
 
 class IBClient(EClient):
+    _request_id: ClassVar[int] = 1
+    
     def __init__(self):
-        # pass in IBApi() object (child of EWrapper) as EClient needs EWrapper
+        # pass in IBAPI() object (child of EWrapper) as EClient needs EWrapper
         super().__init__(self)
-        self._request_id = 1
         self._req_id_to_product = {}
         self._pdts_requested_market_data = []
+    
+    @classmethod
+    def _next_request_id(cls):
+        cls._request_id += 1
 
-    def connect(self):
-        account = self.account
+    def connect(self: IBAPI | IBClient):
+        # account = self.account
+        # TEMP
+        account: IBAccount = self._accounts['DU954568_account']
 
         super().connect(host=account.host, port=account.port, clientId=account.client_id)
-        self._ib_thread = Thread(name=f'{self.bkr}_api', target=self.run, daemon=True)
+        self._ib_thread = Thread(name='IBClientThread', target=self.run, daemon=True)
         self._ib_thread.start()
-        self.logger.debug(f'{self.bkr} thread started')
+        self._logger.debug(f'{self._bkr} thread started')
 
-        if self._wait(self.is_connected, reason='connection'):
-            # need to wait for the EReader to get ready; otherwise,
-            # if subscribe too early and the subscription failed,
-            # it will somehow lead to disconnection from IB
-            time.sleep(1)
-            self._subscribe()
-            # wait for subscription
-                # self._background_thread = Thread(target=self._run_background_tasks, daemon=True)
-                # self._background_thread.start()
+        # TODO
+        # if self._wait(self.is_connected, reason='connection'):
+        #     # need to wait for the EReader to get ready; otherwise,
+        #     # if subscribe too early and the subscription failed,
+        #     # it will somehow lead to disconnection from IB
+        #     time.sleep(1)
+        #     self._subscribe()
+        #     # wait for subscription
+        #     self._background_thread = Thread(target=self._run_background_tasks, daemon=True)
+        #     self._background_thread.start()
 
     def disconnect(self):
         super().disconnect()
         self._unsubscribe()
 
-    def _increment_request_id(self):
-        self._request_id += 1
-
     def _update_request_id_and_corresponding_product(self, product):
         self._req_id_to_product[self._request_id] = product
-        self._increment_request_id()
+        self._next_request_id()
 
 
     """
@@ -62,7 +71,7 @@ class IBClient(EClient):
         # if e.g. the 'orderbook' channel has already requested market data, 
         # do not request again for the 'tradebook' channel
         if str(product) in self._pdts_requested_market_data:
-            self.logger.debug(f'{self.bkr} has already requested {str(product)} market data, do not request again')
+            self._logger.debug(f'{self._bkr} has already requested {str(product)} market data, do not request again')
             return
         self.reqMktData(
             self._request_id,
@@ -73,7 +82,7 @@ class IBClient(EClient):
             kwargs.get('regulatorySnapshot', False),
             []
         )
-        self.logger.debug(f'{self.bkr} requested (req_id={self._request_id}) {str(product)} market data')
+        self._logger.debug(f'{self._bkr} requested (req_id={self._request_id}) {str(product)} market data')
         self._pdts_requested_market_data.append(str(product))
         self._update_request_id_and_corresponding_product(product)
 
@@ -88,7 +97,7 @@ class IBClient(EClient):
             kwargs.get('numberOfTicks', 0),
             kwargs.get('ignoreSize', False),
         )
-        self.logger.debug(f'{self.bkr} requested (req_id={self._request_id}) {str(product)} tick by tick data ({tick_type=})')
+        self._logger.debug(f'{self._bkr} requested (req_id={self._request_id}) {str(product)} tick by tick data ({tick_type=})')
         self._update_request_id_and_corresponding_product(product)
 
     def _request_market_depth(self, **kwargs):
@@ -102,7 +111,7 @@ class IBClient(EClient):
             kwargs.get('isSmartDepth', False), 
             []  # for IB internal use only                       
         )
-        self.logger.debug(f'{self.bkr} requested (req_id={self._request_id}) {str(product)} market depth ({orderbook_depth=})')
+        self._logger.debug(f'{self._bkr} requested (req_id={self._request_id}) {str(product)} market depth ({orderbook_depth=})')
         self._update_request_id_and_corresponding_product(product)
 
     def _request_real_time_bar(self, **kwargs):
@@ -116,7 +125,7 @@ class IBClient(EClient):
             kwargs.get('useRTH', False),
             []  # for IB internal use only
         )
-        self.logger.debug(f'{self.bkr} requested (req_id={self._request_id}) {str(product)} real time bar ({bar_size=})')
+        self._logger.debug(f'{self._bkr} requested (req_id={self._request_id}) {str(product)} real time bar ({bar_size=})')
         self._update_request_id_and_corresponding_product(product)
 
 
@@ -124,8 +133,12 @@ class IBClient(EClient):
     private channels    
     ---------------------------------------------------
     """
-    def _request_account_updates(self, acc: str):
-        self.reqAccountUpdates(True, acc)
+    def _request_account_updates(self, account_code: str):
+        '''
+        Args:
+            account_code: e.g. U1234567
+        '''
+        self.reqAccountUpdates(True, account)
 
     # TODO
     def _request_account_updates_multi(self):

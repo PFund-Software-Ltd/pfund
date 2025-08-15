@@ -1,7 +1,5 @@
 from typing import Any
 
-from decimal import Decimal
-
 from ibapi.contract import Contract
 
 from pfund.enums import TradingVenue, Broker, TraditionalAssetType
@@ -40,7 +38,7 @@ class IBProduct(BaseProduct):
             self.exchange = self.exchange.upper()
     
     def _derive_exchange(self):
-        if default_exchange := DEFAULT_EXCHANGES[self.asset_type]:
+        if default_exchange := DEFAULT_EXCHANGES[str(self.asset_type)]:
             self.exchange = default_exchange
         else:
             raise ValueError(f'IB product {self.name} is missing "exchange"')
@@ -54,7 +52,7 @@ class IBProduct(BaseProduct):
         contract.currency = adapter(self.quote_asset, group='asset')
         contract.secType = adapter(str(self.asset_type), group='asset_type')
         if self.is_stock() or self.is_etf():
-            default_exchange = DEFAULT_EXCHANGES[self.asset_type]
+            default_exchange = DEFAULT_EXCHANGES[str(self.asset_type)]
             is_exchange_specified = self.exchange != default_exchange
             if is_exchange_specified:
                 contract.primaryExchange = self.exchange
