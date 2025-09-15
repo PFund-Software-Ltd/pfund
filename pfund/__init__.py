@@ -22,16 +22,14 @@ if TYPE_CHECKING:
     )
     from pfund.exchanges import Bybit
 
-import sys
 from importlib.metadata import version
 
 from rich.console import Console
 
 from pfund.config import get_config, configure
-# FIXME: install by pfund-ibapi
-from pfund.const.paths import PROJ_PATH
-# add python path so that for files like "ibapi" (official python code from IB) can find their modules
-sys.path.append(f'{PROJ_PATH}/externals')
+
+
+config = get_config()
 
 
 def what_is(alias: str) -> str | None:
@@ -106,7 +104,7 @@ __version__ = version('pfund')
 __all__ = (
     '__version__',
     'configure',
-    'get_config',
+    'config',
     'print_error',
     'print_warning',
     'cprint',

@@ -44,7 +44,11 @@ class BybitProduct(CryptoProduct):
         return self
     
     def _create_name(self) -> str:
-        return '_'.join([self.trading_venue.value, self.symbol, self.category.value])
+        if self.is_spot() or self.is_perpetual():
+            # NOTE: spots and perpetuals have duplicated symbols, e.g. BTCUSDT, use basis instead to make them unique
+            return '_'.join([str(self.trading_venue), str(self.basis)])
+        else:
+            return super()._create_name()
     
     def _create_symbol(self):
         from pfund.exchanges import Bybit
@@ -52,21 +56,28 @@ class BybitProduct(CryptoProduct):
         equote_asset = Bybit.adapter(self.quote_asset, group='asset')
         if self.asset_type == CryptoAssetType.PERP:
             if equote_asset == 'USDC':
-                symbol = ebase_asset + str(self.asset_type)
+                symbol = ebase_asset + 'PERP'
             else:
                 symbol = ebase_asset + equote_asset
         elif self.asset_type == AssetTypeModifier.INV + '-' + CryptoAssetType.PERP:
-            assert equote_asset == 'USD', 'only USD-denominated inverse perpetual contracts are supported'
+            assert equote_asset == 'USD', f'Only USD-denominated inverse perpetual contracts are supported. Did you mean {self.base_asset}_USD_{self.asset_type}?'
             symbol = ebase_asset + equote_asset
         elif self.asset_type == CryptoAssetType.CRYPTO:
             symbol = ebase_asset + equote_asset
         elif self.asset_type == CryptoAssetType.FUT:
             # symbol = e.g. BTC-13DEC24
-            expiration = self.expiration.strftime("%d%b%y")
-            symbol = '-'.join([ebase_asset, expiration])
+            if equote_asset == 'USDC':
+                expiration = self.expiration.strftime("%d%b%y").upper()
+                symbol = '-'.join([ebase_asset, expiration])
+            # symbol = e.g. BTCUSDT-22AUG25
+            elif equote_asset == 'USDT':
+                expiration = self.expiration.strftime("%d%b%y").upper()
+                symbol = '-'.join([ebase_asset+equote_asset, expiration])
+            else:
+                raise ValueError(f'Only USDC and USDT are supported, not {equote_asset}')
         elif self.asset_type == AssetTypeModifier.INV + '-' + CryptoAssetType.FUT:
             # symbol = e.g. BTCUSDH25
-            assert equote_asset == 'USD', 'only USD-denominated inverse perpetual contracts are supported'
+            assert equote_asset == 'USD', f'Only USD-denominated inverse futures are supported. Did you mean {self.base_asset}_USD_{self.asset_type}?'
             symbol = ebase_asset + equote_asset + self.contract_code
         elif self.asset_type == CryptoAssetType.OPT:
             expiration = self.expiration.strftime("%d%b%y")

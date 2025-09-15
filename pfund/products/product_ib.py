@@ -1,6 +1,7 @@
-from typing import Any
-
-from ibapi.contract import Contract
+from __future__ import annotations
+from typing import Any, TYPE_CHECKING
+if TYPE_CHECKING:
+    from ibapi.contract import Contract
 
 from pfund.enums import TradingVenue, Broker, TraditionalAssetType
 from pfund.products.product_base import BaseProduct
@@ -41,9 +42,10 @@ class IBProduct(BaseProduct):
         if default_exchange := DEFAULT_EXCHANGES[str(self.asset_type)]:
             self.exchange = default_exchange
         else:
-            raise ValueError(f'IB product {self.name} is missing "exchange"')
+            raise ValueError(f'IB product {self.name} is missing "exchange", please add "exchange" as a kwarg, e.g. exchange="NASDAQ"')
     
     def to_contract(self) -> Contract:
+        from ibapi.contract import Contract
         from pfund.brokers.ib.broker_ib import IBBroker
         adapter = IBBroker.adapter
         contract = Contract()

@@ -31,7 +31,6 @@ if TYPE_CHECKING:
     from pfund.models.model_base import BaseModel
     from pfund.features.feature_base import BaseFeature
     from pfund.indicators.indicator_base import BaseIndicator
-    from pfund.stores.signal_store import LatestSignal
 
 import time
 import logging
@@ -272,12 +271,6 @@ class ComponentMixin:
         # TODO: self.store.load_data(...)
         return self.get_df(copy=False)
 
-    def get_signals(self: Component):
-        return self.store.signal_store.signals
-    
-    def get_latest_signal(self: Component, data: BaseData) -> LatestSignal:
-        return self.store.signal_store.get_latest_signal(data)
-    
     @property
     def INDEX(self: Component):
         return self.data_tool.INDEX

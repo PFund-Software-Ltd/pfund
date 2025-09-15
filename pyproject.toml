@@ -24,8 +24,10 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "mtflow>=0.0.1.dev2",
+    "pfeed>=0.0.5",
     "pfolio>=0.0.2",
+    "mtflow>=0.0.1.dev2",
+    "rich>=13.9.4",
     "click>=8.1.8",
     "trogon>=0.6.0",
     "platformdirs>=4.3.8",
@@ -33,17 +35,15 @@ dependencies = [
     "pyyaml>=6.0.2",
     "httpx>=0.28.1",
     "websockets>=15.0.1",
-    "ta>=0.11.0",
-    "scikit-learn>=1.7.1",
+    "scikit-learn>=1.7.2",
+    "numba>=0.61.2",
+    "pfund-ibapi>=10.39.1",
+    # "python-telegram-bot>=22.3.0",
 ]
 
 [project.optional-dependencies]
-core = [
-    "pfund-ibapi>=10.39.1",
-    "mtflow[core]>=0.0.1.dev2",
-    "pfolio[core]>=0.0.2",
-    "python-telegram-bot>=22.3.0",
-]
+ta = ['ta-lib>=0.6.7']
+jupyter = ["pfund-plot[jupyter]>=0.0.1.dev2"]
 
 [project.scripts]
 pfund = "pfund.main:run_cli"
@@ -55,15 +55,22 @@ documentation = "https://pfund-docs.pfund.ai"
 
 [dependency-groups]
 dev = [
-    "ruff>=0.11.12",
     "pybit>=5.11.0",
-    "ta-lib>=0.6.4",
-    "torch>=2.6.0",
+    "torch>=2.8.0",
+    "ruff>=0.13.0",
+    "pre-commit>=4.3.0",
+    "commitizen>=4.9.1",
+    "python-semantic-release>=10.4.1",
+    "pdoc>=15.0.4",
 ]
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.8.17,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "pfund"
+module-root = ""
 
 [tool.uv.sources]
 pfeed = { path = "../pfeed", editable = true }
@@ -71,8 +78,12 @@ pfolio = { path = "../pfolio", editable = true }
 pfund-plot = { path = "../pfund-plot", editable = true }
 mtflow = { path = "../mtflow", editable = true }
 
-[tool.hatch.build.targets.sdist]
-include = ['/pfund', 'logging.yml', 'docker-compose.yml']
+# [build-system]
+# requires = ["hatchling"]
+# build-backend = "hatchling.build"
 
-[tool.hatch.build.targets.wheel]
-include = ['/pfund', 'logging.yml', 'docker-compose.yml']
+# [tool.hatch.build.targets.sdist]
+# include = ['/pfund', 'logging.yml', 'docker-compose.yml']
+
+# [tool.hatch.build.targets.wheel]
+# include = ['/pfund', 'logging.yml', 'docker-compose.yml']

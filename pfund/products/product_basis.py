@@ -2,7 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from pfund.enums.asset_type import AssetTypeModifier, AllAssetType, ASSET_TYPE_ALIASES
+from pfund.enums.asset_type import AssetTypeModifier, AllAssetType, TraditionalAssetType, CryptoAssetType, DappAssetType, ASSET_TYPE_ALIASES
 
 
 class ProductAssetType(BaseModel):
@@ -20,8 +20,15 @@ class ProductAssetType(BaseModel):
         for i, atm in enumerate(asset_types_and_modifiers):
             if atm in AssetTypeModifier.__members__:
                 asset_types_and_modifiers[i] = AssetTypeModifier[atm]
+            # NOTE: some aliases are not in AllAssetType, e.g. 'SPOT' only exists in CryptoAssetType
             elif atm in AllAssetType.__members__:
                 asset_types_and_modifiers[i] = AllAssetType[atm]
+            elif atm in TraditionalAssetType.__members__:
+                asset_types_and_modifiers[i] = TraditionalAssetType[atm]
+            elif atm in CryptoAssetType.__members__:
+                asset_types_and_modifiers[i] = CryptoAssetType[atm]
+            elif atm in DappAssetType.__members__:
+                asset_types_and_modifiers[i] = DappAssetType[atm]
             else:
                 raise ValueError(f"Invalid asset type: {atm}")
         return tuple(asset_types_and_modifiers)
@@ -107,15 +114,20 @@ class ProductBasis(BaseModel):
     @field_validator('basis', mode='before')
     @classmethod
     def validate_product(cls, basis: str) -> str:
-        # use regex to validate product string format, it must be like "XXX_YYY_ZZZ"
+        # use regex to validate product string format, it must be like "XXX_YYY_ZZZ" or "XXX_YYY_ZZZ-ZZZ"
         # where the maximum length of each part is 10
         import re
         max_len = 10
-        pattern = r'^[A-Za-z]{1,' + str(max_len) + '}_[A-Za-z]{1,' + str(max_len) + '}_[A-Za-z]{1,' + str(max_len) + '}$'
+        pattern = (
+            r'^[A-Za-z0-9.]{1,' + str(max_len) + '}'
+            + r'_[A-Za-z]{1,' + str(max_len) + '}'
+            + r'_[A-Za-z]{1,' + str(max_len) + '}'
+            + r'(?:-[A-Za-z]{1,' + str(max_len) + '})?$'
+        )
         if not re.match(pattern, basis):
             raise ValueError(
                 f'Invalid product basis format: `{basis}`. '
-                'Product basis must be in format "XXX_YYY_ZZZ" (e.g. "TSLA_USD_STK", "BTC_USDT_SPOT", "ETH_USDT_PERP") where each part contains only letters '
+                'Product basis must be in format "XXX_YYY_ZZZ" or "XXX_YYY_ZZZ-ZZZ" (e.g. "TSLA_USD_STK", "BTC_USDT_SPOT", "ETH_USDT_PERP", "BTC_USD_INVERSE-PERP") where each part contains only letters '
                 f'and maximum {max_len} characters long.'
             )
         return basis

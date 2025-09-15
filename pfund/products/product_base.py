@@ -41,9 +41,12 @@ class BaseProduct(BaseModel):
         missing_fields = []
         missing_fields_msg = f'"{data["basis"]}" is missing the following required fields:'
         for field_name in required_specs:
-            if field_name not in data:
+            if field_name not in data['specs']:
                 missing_fields.append(field_name)
                 missing_fields_msg += f'\n- "{field_name}"'
+            else:
+                # bring fields such as "expiration" to the top level
+                data[field_name] = data['specs'][field_name]
         missing_fields_msg += f'\nplease add them as kwargs, e.g. {"=..., ".join(missing_fields)+"=..."} \n'
         if missing_fields:
             raise ValueError('\n\033[1m' + missing_fields_msg + '\033[0m')
@@ -58,7 +61,7 @@ class BaseProduct(BaseModel):
         self.name = self.name or self._create_name()
     
     def _create_name(self) -> str:
-        return '_'.join([self.trading_venue.value, self.symbol])
+        return '_'.join([str(self.trading_venue), self.symbol])
     
     @property
     def tv(self) -> TradingVenue:

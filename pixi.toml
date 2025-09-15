@@ -2,6 +2,8 @@
 authors = ["softwareentrepreneer <softwareentrepreneer+pfund@gmail.com>"]
 channels = ["conda-forge"]
 name = "pfund"
+# NOTE: if encounter bug in pixi when running "pixi lock", remove pixi.lock, then set platforms = ["osx-arm64"] first
+# then manually add back other platforms
 platforms = ["osx-arm64", "linux-64"]
 version = "0.0.2"
 
@@ -10,57 +12,82 @@ version = "0.0.2"
 
 [tasks.test-all]
 depends-on = [
-  { task = "test", environment = "test-py311" },
-  { task = "test", environment = "test-py312" },
-  { task = "test", environment = "test-py313" },
+  { task = "test", environment = "py311" },
+  { task = "test", environment = "py312" },
+  { task = "test", environment = "py313" },
+  # { task = "test", environment = "py314" },
 ]
 
 [dependencies]
 python = ">=3.11"
-uv = ">=0.7.11"
+uv = ">=0.8.17"
 
 [pypi-dependencies]
-mtflow = ">=0.0.1.dev1"
+pfeed = ">=0.0.5"
 pfolio = ">=0.0.2"
+mtflow = ">=0.0.1.dev2"
+rich = ">=13.9.4"
 click = ">=8.1.8"
 trogon = ">=0.6.0"
-platformdirs = ">=4.2.2"
-python-dotenv = ">=1.1.0"
+platformdirs = ">=4.3.8"
+python-dotenv = ">=1.1.1"
 pyyaml = ">=6.0.2"
-orjson = ">=3.10.18"
 httpx = ">=0.28.1"
 websockets = ">=15.0.1"
-ta = ">=0.11.0"
-scikit-learn = ">=1.7.0"
+scikit-learn = ">=1.7.2"
+numba = ">=0.61.2"
+pfund-ibapi = ">=10.39.1"
 
 [environments]
-# core = ["core"]
-dev = ["dev"]
-test-py311 = ["py311", "test"]
-test-py312 = ["py312", "test"]
-test-py313 = ["py313", "test"]
+dev = ["py311", "dev", "editable", "optional"]
+py311 = ["py311", "test", "editable", "optional"]
+py312 = ["py312", "test", "editable", "optional"]
+py313 = ["py313", "test", "editable", "optional"]
+# py314 = ["py314", "test", "editable", "optional"]
 
-# FIXME: need to create editable to solve dependency issues, skip for now
-# [feature.core.pypi-dependencies]
-# mtflow = { version = ">=0.0.1.dev2", extras = ["core"] }
-# pfolio = { version = ">=0.0.2", extras = ["core"] }
-# pyzmq = ">=26.4.0"
-# order-book = ">=0.6.1"
-# python-telegram-bot = ">=22.1"
+[feature.optional.pypi-dependencies]
+ta-lib = ">=0.6.7"
+pfund-plot = { version = ">=0.0.1.dev2", extras = ["jupyter"] }
+
+[feature.optional.dependencies]
+libta-lib = ">=0.6.4"
+
+[feature.editable.pypi-dependencies]
+pfeed = { path = "../pfeed", editable = true }
+pfolio = { path = "../pfolio", editable = true }
+pfund-plot = { path = "../pfund-plot", editable = true }
+mtflow = { path = "../mtflow", editable = true }
 
 [feature.dev.pypi-dependencies]
-ruff = ">=0.11.12"
 pybit = ">=5.11.0"
-ta-lib = ">=0.6.4"
-torch = ">=2.6.0"
+torch = ">=2.8.0"
+ruff = ">=0.13.0"
+pre-commit = ">=4.3.0"
+commitizen = ">=4.9.1"
+python-semantic-release = ">=10.4.0"
+pdoc = ">=15.0.4"
+[feature.dev.tasks]
+precommit = "pre-commit run --all-files"
+lint = "ruff check ."
+lint-fix = "ruff check --fix ."
+fmt = "ruff format ."
+typecheck = "uvx ty check"
 
-[feature.test.dependencies]
-pytest = ">=8.4.0"
-pytest-cov = ">=6.1.1"
-pytest-mock = ">=3.14.1"
-pytest-xdist = ">=3.7.0"
+[feature.dev.dependencies]
+mystmd = ">=1.6.1"
+
+[feature.test.pypi-dependencies]
+pytest = ">=8.4.2"
+pytest-cov = ">=7.0.0"
+pytest-mock = ">=3.15.0"
+pytest-xdist = ">=3.8.0"
+pytest-asyncio = ">=1.1.0"
+pytest-recording = ">=0.13.4"
+testcontainers = ">=4.13.0"
 [feature.test.tasks]
 test = "pytest"
+test-new = "pytest --record-mode=all"  # record new interactions, useful to update recordings in case data formats returned have changed
+test-ci = "pytest --record-mode=none"  # fail a test if no recording is found
 
 [feature.py311.dependencies]
 python = "3.11.*"
@@ -71,3 +98,5 @@ python = "3.12.*"
 [feature.py313.dependencies]
 python = "3.13.*"
 
+# [feature.py314.dependencies]
+# python = "3.14.*"

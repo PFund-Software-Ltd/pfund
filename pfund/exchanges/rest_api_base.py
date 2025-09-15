@@ -14,8 +14,7 @@ from abc import ABC, abstractmethod
 from enum import StrEnum
 from pathlib import Path
 
-from httpx import AsyncClient
-from httpx import RequestError, HTTPStatusError
+from httpx import AsyncClient, RequestError, HTTPStatusError
 from json import JSONDecodeError
 
 from pfund.errors import ParseApiResponseError

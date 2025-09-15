@@ -46,7 +46,7 @@ class BaseBroker(ABC):
         else:
             trading_venue = cls.name
         Product = ProductFactory(trading_venue=trading_venue, basis=basis)
-        return Product(basis=basis, exchange=exch, name=name, symbol=symbol, **specs)
+        return Product(basis=basis, exchange=exch, name=name, symbol=symbol, specs=specs)
 
     @property
     def products(self):
