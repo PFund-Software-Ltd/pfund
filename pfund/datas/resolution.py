@@ -33,7 +33,7 @@ class Resolution:
         self._resolution = self._standardize(resolution)
 
         # split resolution (e.g. '1m') into period (e.g. '1') and timeframe (e.g. 'm')
-        period, timeframe = re.split('(\d+)', self._resolution.strip())[1:]
+        period, timeframe = re.split(r'(\d+)', self._resolution.strip())[1:]
         self.period = int(period)
         assert self.period > 0
         self.timeframe = Timeframe(timeframe)
@@ -50,7 +50,7 @@ class Resolution:
         '''Standardize resolution
         e.g. convert '1minute' to '1m'
         '''
-        period, timeframe = re.split('(\d+)', resolution.strip())[1:]
+        period, timeframe = re.split(r'(\d+)', resolution.strip())[1:]
         if timeframe.lower() in ['mon', 'mons', 'month', 'months'] or timeframe == 'M':
             timeframe = 'M'
         else:

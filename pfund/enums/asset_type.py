@@ -33,7 +33,9 @@ class AllAssetType(StrEnum):
         from pfund.products.mixins.option import OptionMixin
         from pfund.products.mixins.forex import ForexMixin
         from pfund.products.mixins.crypto import CryptoMixin
+        from pfund.products.mixins.index import IndexMixin
         return {
+            AllAssetType.INDEX: IndexMixin,
             AllAssetType.STOCK: StockMixin,
             AllAssetType.FUTURE: FutureMixin,
             AllAssetType.PERPETUAL: PerpetualMixin,
