@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from pfund.enums import CryptoExchange
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.datas.timeframe import TimeframeUnits
-    from pfund._typing import tEnvironment, ProductName, AccountName, FullDataChannel
+    from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
     from pfund.products.product_crypto import CryptoProduct
     from pfund.accounts.account_crypto import CryptoAccount
     from pfund.engines.trade_engine_settings import TradeEngineSettings
@@ -91,7 +91,7 @@ class BaseExchange(ABC):
             return None
     
     def load_market_configs(self):
-        from pfund.utils.utils import load_yaml_file
+        from pfund.utils import load_yaml_file
         market_configs_file_path = self.get_file_path(self.MARKET_CONFIGS_FILENAME)
         market_configs: dict[str, dict] = load_yaml_file(market_configs_file_path)
         return market_configs
@@ -102,7 +102,7 @@ class BaseExchange(ABC):
         If so, refetch the market configs and return True.
         If not, return False.
         '''
-        from pfund.utils.utils import get_last_modified_time
+        from pfund.utils import get_last_modified_time
 
         filename = self.MARKET_CONFIGS_FILENAME
         file_path = self.get_file_path(filename)
@@ -139,7 +139,7 @@ class BaseExchange(ABC):
         - Listed markets/trading pairs
         and then append them to the existing market configs.
         '''
-        from pfund.utils.utils import load_yaml_file, dump_yaml_file
+        from pfund.utils import load_yaml_file, dump_yaml_file
         markets: dict[ProductCategory, Result] = self.get_markets()
         market_configs_file_path = self.get_file_path(self.MARKET_CONFIGS_FILENAME)
         existing_market_configs = load_yaml_file(market_configs_file_path) or {}

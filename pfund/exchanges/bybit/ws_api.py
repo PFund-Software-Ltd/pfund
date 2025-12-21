@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Callable, Awaitable
 if TYPE_CHECKING:
     from pfund.accounts.account_crypto import CryptoAccount
-    from pfund._typing import tEnvironment, FullDataChannel
+    from pfund.typing import tEnvironment, FullDataChannel
     from pfund.datas.resolution import Resolution
     from pfund.exchanges.bybit.exchange import tProductCategory
     from pfund.exchanges.bybit.ws_api_bybit import BybitWebSocketAPI

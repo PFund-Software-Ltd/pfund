@@ -9,7 +9,7 @@ def print_all_loggers():
             
 
 def setup_logging_config(log_path, logging_config_file_path, user_logging_config: dict | None=None) -> dict:
-    from pfund.utils.utils import load_yaml_file
+    from pfund.utils import load_yaml_file
     def deep_update(default_dict, override_dict, raise_if_key_not_exist=False):
         '''Updates a default dictionary with an override dictionary, supports nested dictionaries.'''
         for key, value in override_dict.items():

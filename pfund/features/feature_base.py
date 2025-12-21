@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from numpy import ndarray
-    from pfeed._typing import GenericFrame
+    from pfeed.typing import GenericFrame
 
 from abc import abstractmethod
 
@@ -26,7 +26,7 @@ class BaseFeature(BaseModel):
         return self.extract(X, *args, **kwargs)
     
     def _assert_functions_signatures(self):
-        from pfund.utils.utils import get_args_and_kwargs_from_function
+        from pfund.utils import get_args_and_kwargs_from_function
         super()._assert_functions_signatures()
         def _assert_predict_function():
             args, kwargs, _, _ = get_args_and_kwargs_from_function(self.extract)

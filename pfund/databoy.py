@@ -5,9 +5,9 @@ if TYPE_CHECKING:
     from pfeed.messaging.zeromq import ZeroMQ
     from pfeed.messaging.streaming_message import StreamingMessage
     from pfeed.messaging import BarMessage
-    from pfeed._typing import tDataSource
+    from pfeed.typing import tDataSource
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund._typing import (
+    from pfund.typing import (
         ComponentName, 
         Component, 
         ProductName, 

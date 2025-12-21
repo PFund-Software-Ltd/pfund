@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from numpy import ndarray
     import torch.nn as nn
     from sklearn.base import BaseEstimator
-    from pfeed._typing import GenericFrame
+    from pfeed.typing import GenericFrame
     from pfund.indicators.indicator_base import TaFunction, TalibFunction
     MachineLearningModel = Union[
         nn.Module,
@@ -45,7 +45,7 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         }
     
     def _assert_functions_signatures(self):
-        from pfund.utils.utils import get_args_and_kwargs_from_function
+        from pfund.utils import get_args_and_kwargs_from_function
         super()._assert_functions_signatures()
         def _assert_predict_function():
             args, kwargs, _, _ = get_args_and_kwargs_from_function(self.predict)
@@ -97,7 +97,7 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
     
     def load(self) -> dict:
         import joblib
-        from pfund.utils.utils import short_path
+        from pfund.utils import short_path
         file_path = self._get_file_path()
         if os.path.exists(file_path):
             obj: dict = joblib.load(file_path)
@@ -109,7 +109,7 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
     
     def dump(self, obj: dict[str, Any] | None=None):
         import joblib
-        from pfund.utils.utils import short_path
+        from pfund.utils import short_path
         if obj is None:
             obj = {}
         obj.update({

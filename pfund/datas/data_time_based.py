@@ -50,7 +50,7 @@ class TimeBasedData(BaseData):
     
     @property
     def dt(self) -> datetime.datetime | None:
-        from pfund.utils.utils import convert_ts_to_dt
+        from pfund.utils import convert_ts_to_dt
         return convert_ts_to_dt(self._ts) if self._ts else None
     
     def update_timestamps(self, ts: float, msg_ts: float | None=None):

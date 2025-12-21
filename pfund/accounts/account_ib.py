@@ -1,6 +1,6 @@
 import os
 
-from pfund._typing import tEnvironment
+from pfund.typing import tEnvironment
 from pfund.accounts.account_base import BaseAccount
 from pfund.enums import Environment
 

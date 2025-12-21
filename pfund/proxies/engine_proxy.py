@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.enums import DataTool
     from pfund.enums import Environment, RunMode
-    from pfund._typing import DataParamsDict
+    from pfund.typing import DataParamsDict
     from pfund.engines.base_engine import BaseEngine
     from pfund.engines.base_engine_settings import BaseEngineSettings
 

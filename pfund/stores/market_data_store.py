@@ -2,11 +2,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, TypeAlias
 if TYPE_CHECKING:
     import datetime
-    from pfeed._typing import tDataSource, GenericFrame
+    from pfeed.typing import tDataSource, GenericFrame
     from pfeed.enums import DataStorage
     from pfeed.feeds.market_feed import MarketFeed
     from pfeed.data_models.market_data_model import MarketDataModel
-    from pfund._typing import ComponentName
+    from pfund.typing import ComponentName
     from pfund.datas.resolution import Resolution
     from pfund.products.product_base import BaseProduct
 

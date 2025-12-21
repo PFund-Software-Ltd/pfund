@@ -26,20 +26,6 @@ yaml.SafeDumper.add_multi_representer(
 )
 
 
-class Singleton:
-    _instances = {}
-    
-    def __new__(cls, *args, **kwargs):
-        if cls not in cls._instances:
-            cls._instances[cls] = super().__new__(cls)
-        return cls._instances[cls]
-    
-    @classmethod
-    def _remove_singleton(cls):
-        if cls in cls._instances:
-            del cls._instances[cls]
-
-
 def get_free_port() -> int:
     """Get a free port by binding to port 0 and letting the OS assign one."""
     import socket

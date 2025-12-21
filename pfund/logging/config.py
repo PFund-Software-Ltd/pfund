@@ -4,8 +4,8 @@ import logging
 from logging.config import DictConfigurator
 from logging.handlers import TimedRotatingFileHandler
 
-from pfund._logging.filters import FullPathFilter
-from pfund._logging.formatter import ColoredFormatter
+from pfund.logging.filters import FullPathFilter
+from pfund.logging.formatter import ColoredFormatter
 
 
 LEVELS = {

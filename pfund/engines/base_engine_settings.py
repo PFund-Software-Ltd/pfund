@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, ConfigDict
 
-from pfund._typing import ComponentName, EngineName, ZeroMQSenderName
+from pfund.typing import ComponentName, EngineName, ZeroMQSenderName
 
 
 class BaseEngineSettings(BaseModel):

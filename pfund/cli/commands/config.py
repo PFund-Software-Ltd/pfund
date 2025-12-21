@@ -4,7 +4,7 @@ import importlib.resources
 
 import click
 
-from pfund.const.paths import PROJ_NAME, CONFIG_PATH, CONFIG_FILENAME
+from pfund.const.paths import PROJ_NAME, CONFIG_PATH, CONFIG_FILENAME, CONFIG_FILE_PATH
 
 
 @click.group()
@@ -25,7 +25,6 @@ def list(ctx):
     """List all available options."""
     from pprint import pformat
     from dataclasses import asdict
-    from pfund.const.paths import CONFIG_FILE_PATH
     config_dict = asdict(ctx.obj['config'])
     content = click.style(pformat(config_dict), fg='green')
     click.echo(f"File: {CONFIG_FILE_PATH}\n{content}")

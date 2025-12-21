@@ -40,7 +40,7 @@ class Exchange(BaseExchange):
     @classmethod
     def get_supported_resolutions(cls, product: BybitProduct) -> dict[TimeframeUnits, list[int]]:
         import importlib
-        from pfeed.utils.utils import to_camel_case
+        from pfeed.utils import to_camel_case
         name = cls.name.lower()
         Category = to_camel_case(product.category.value)
         WebSocketAPI = getattr(importlib.import_module(f'pfund.exchanges.{name}.ws_api_{Category.lower()}'), f'{Category}WebSocketAPI')

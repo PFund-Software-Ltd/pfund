@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Union
 if TYPE_CHECKING:
-    from pfeed._typing import tStorage
-    from pfund._typing import tEnvironment
+    from pfeed.typing import tStorage
+    from pfund.typing import tEnvironment
     
 import os
 import sys
@@ -18,7 +18,7 @@ from dataclasses import dataclass, asdict, field, MISSING
 
 from pfeed.enums import DataStorage
 from pfund.enums import Environment
-from pfund.utils.utils import load_yaml_file, dump_yaml_file
+from pfund.utils import load_yaml_file, dump_yaml_file
 from pfund.const.paths import (
     PROJ_NAME, 
     LOG_PATH,
@@ -74,7 +74,7 @@ class Configuration:
     cache_path: Path = CACHE_PATH
     logging_config_file_path: Path = CONFIG_PATH / 'logging.yml'
     docker_compose_file_path: Path = CONFIG_PATH / 'docker-compose.yml'
-    custom_excepthook: bool = True
+    custom_excepthook: bool = False
     debug: bool = False
     storage: DataStorage = DataStorage.LOCAL
     storage_options: dict = field(default_factory=dict)

@@ -5,9 +5,9 @@ if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
     import polars as pl
-    from pfeed._typing import tDataSource
+    from pfeed.typing import tDataSource
     from pfeed.messaging.streaming_message import StreamingMessage
-    from pfund._typing import (
+    from pfund.typing import (
         StrategyT, 
         ModelT, 
         IndicatorT, 
@@ -40,7 +40,7 @@ from pfund.stores.trading_store import TradingStore
 from pfund.datas.resolution import Resolution
 from pfund.datas.data_config import DataConfig
 from pfund.proxies.actor_proxy import ActorProxy
-from pfund.utils.utils import load_yaml_file
+from pfund.utils import load_yaml_file
 from pfund.enums import ComponentType, RunMode, Environment, Broker, TradingVenue
 
     
@@ -127,10 +127,10 @@ class ComponentMixin:
     
     def _setup_logging(self: Component):
         '''Sets up logging for component running in remote process, uses zmq's PUBHandler to send logs to engine'''
-        from pfund._logging.zmq_pub_handler import ZMQPubHandler
+        from pfund.logging.zmq_pub_handler import ZMQPubHandler
         from pfeed.messaging.zeromq import ZeroMQ
-        from pfund._logging.config import LoggingDictConfigurator
-        from pfund.utils.utils import get_free_port
+        from pfund.logging.config import LoggingDictConfigurator
+        from pfund.utils import get_free_port
 
         # configure logging based on pfund's logging config, e.g. log_level, log_file, log_format, etc.
         logging_configurator = LoggingDictConfigurator(self._engine.logging_config)
@@ -281,7 +281,7 @@ class ComponentMixin:
 
     @staticmethod
     def dt(ts: float) -> datetime.datetime:
-        from pfund.utils.utils import convert_ts_to_dt
+        from pfund.utils import convert_ts_to_dt
         return convert_ts_to_dt(ts)
     
     @staticmethod
@@ -506,7 +506,7 @@ class ComponentMixin:
                 Options for Ray actor.
                 will be passed to ray actor like this: Actor.options(**ray_options).remote(**ray_kwargs)
         '''
-        from pfund.utils.utils import derive_run_mode
+        from pfund.utils import derive_run_mode
 
         Component = component.__class__
         ComponentName = Component.__name__

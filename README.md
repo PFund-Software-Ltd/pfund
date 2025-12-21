@@ -1,16 +1,14 @@
 # PFund: A Complete Algo-Trading Framework powered by Machine Learning and Data Engineering, TradFi, CeFi and DeFi ready.
 
 [![Twitter Follow](https://img.shields.io/twitter/follow/pfund_ai?style=social)](https://x.com/pfund_ai)
-![GitHub stars](https://img.shields.io/github/stars/PFund-Software-Ltd/pfund?style=social)
+<!-- ![GitHub stars](https://img.shields.io/github/stars/PFund-Software-Ltd/pfund?style=social) -->
 ![PyPI downloads](https://img.shields.io/pypi/dm/pfund)
 [![PyPI](https://img.shields.io/pypi/v/pfund.svg)](https://pypi.org/project/pfund)
 ![PyPI - Support Python Versions](https://img.shields.io/pypi/pyversions/pfund)
-![Discussions](https://img.shields.io/badge/Discussions-Let's%20Chat-green)
+[![Discussions](https://img.shields.io/badge/Discussions-Let's%20Chat-green)](https://github.com/PFund-Software-Ltd/pfund/discussions)
+[![afterpython](https://afterpython.org/shield.svg)](https://afterpython.org)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/PFund-Software-Ltd/pfund)
 <!-- [![marimo](https://marimo.io/shield.svg)](https://marimo.io) -->
-<!-- [![Jupyter Book Badge](https://raw.githubusercontent.com/PFund-Software-Ltd/pfund/main/docs/images/jupyterbook.svg
-)](https://jupyterbook.org) -->
-<!-- [![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/) -->
 
 [TradFi]: https://www.techopedia.com/definition/traditional-finance-tradfi
 [CeFi]: https://www.techopedia.com/definition/centralized-finance-cefi

@@ -12,11 +12,11 @@ message queue.
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfeed._typing import tDataTool
+    from pfeed.typing import tDataTool
     from pfeed.messaging.streaming_message import StreamingMessage
     from pfeed.messaging.zeromq import ZeroMQ
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund._typing import DataRangeDict, TradeEngineSettingsDict, tDatabase, ExternalListenersDict
+    from pfund.typing import DataRangeDict, TradeEngineSettingsDict, tDatabase, ExternalListenersDict
 
 import asyncio
 import logging

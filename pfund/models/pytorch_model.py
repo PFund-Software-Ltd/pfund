@@ -5,7 +5,7 @@ import pandas as pd
 import polars as pl
 
 from pfund.models.model_base import BaseModel
-from pfund.utils.utils import short_path
+from pfund.utils import short_path
 
 
 class PytorchModel(BaseModel):

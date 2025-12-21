@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.enums import DataTool, DataStorage
-    from pfeed._typing import GenericData
+    from pfeed.typing import GenericData
     from pfeed.sources.pfund.engine_feed import PFundEngineFeed
     from pfeed.sources.pfund.data_model import PFundDataModel
     from pfeed.storages.base_storage import BaseStorage

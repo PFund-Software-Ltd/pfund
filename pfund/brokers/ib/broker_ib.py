@@ -4,7 +4,7 @@ Conceptually, this is the equivalent of broker_crypto.py + exchange_base.py in c
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfund._typing import tEnvironment, FullDataChannel, AccountName, ProductName
+    from pfund.typing import tEnvironment, FullDataChannel, AccountName, ProductName
     from pfund.datas.data_time_based import TimeBasedData
 
 from pfund.adapter import Adapter
@@ -13,7 +13,7 @@ from pfund.accounts.account_ib import IBAccount
 from pfund.orders.order_ib import IBOrder
 from pfund.positions.position_ib import IBPosition
 from pfund.balances.balance_ib import IBBalance
-from pfund.utils.utils import convert_to_uppercases
+from pfund.utils import convert_to_uppercases
 from pfund.brokers.broker_base import BaseBroker
 from pfund.enums import PublicDataChannel, PrivateDataChannel, Environment, Broker
 

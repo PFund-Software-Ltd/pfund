@@ -4,7 +4,7 @@ Conceptually, this is equivalent to ws_api_base.py in crypto
 from __future__ import annotations
 from typing import Callable, TYPE_CHECKING, Awaitable, Literal
 if TYPE_CHECKING:
-    from pfund._typing import tEnvironment, ProductName, AccountName, FullDataChannel
+    from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
     from pfund.accounts.account_ib import IBAccount
     from pfund.enums import Environment
     from pfund.datas.resolution import Resolution

@@ -13,7 +13,7 @@ import time
 
 from pfund.datas.resolution import Resolution
 from pfund.datas.data_market import MarketData
-from pfund.utils.utils import convert_ts_to_dt
+from pfund.utils import convert_ts_to_dt
 
 
 class Bar:

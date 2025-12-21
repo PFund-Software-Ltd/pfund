@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, TypedDict, Literal, ClassVar, TypeAlias
 if TYPE_CHECKING:
-    from pfund._typing import tEnvironment
+    from pfund.typing import tEnvironment
     from pfund.adapter import Adapter
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.accounts.account_crypto import CryptoAccount
@@ -19,7 +19,7 @@ from json import JSONDecodeError
 
 from pfund.errors import ParseApiResponseError
 from pfund.parser import SchemaParser
-from pfund.utils.utils import load_yaml_file, dump_yaml_file
+from pfund.utils import load_yaml_file, dump_yaml_file
 from pfund.enums import Environment, CryptoExchange
 
 

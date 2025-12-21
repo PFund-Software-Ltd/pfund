@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from pfund.orders.order_base import BaseOrder
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.exchanges.exchange_base import BaseExchange
-    from pfund._typing import tCryptoExchange, tEnvironment, FullDataChannel, AccountName, ProductName
+    from pfund.typing import tCryptoExchange, tEnvironment, FullDataChannel, AccountName, ProductName
     from pfund.enums import OrderSide, PublicDataChannel
 
 import inspect
@@ -16,7 +16,7 @@ from pfund.orders.order_crypto import CryptoOrder
 from pfund.positions.position_crypto import CryptoPosition
 from pfund.balances.balance_crypto import CryptoBalance
 from pfund.accounts.account_crypto import CryptoAccount
-from pfund.utils.utils import convert_to_uppercases
+from pfund.utils import convert_to_uppercases
 from pfund.enums import CryptoExchange, PrivateDataChannel
 from pfund.brokers.broker_base import BaseBroker
 

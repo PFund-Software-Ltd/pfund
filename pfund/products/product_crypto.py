@@ -29,7 +29,7 @@ class CryptoProduct(BaseProduct):
     def _load_config(self):
         from pfund.config import get_config
         from pfund import print_warning
-        from pfund.utils.utils import load_yaml_file
+        from pfund.utils import load_yaml_file
         config = get_config()
         file_path = f'{config.cache_path}/{self.exchange.lower()}/market_configs.yml'
         if not os.path.exists(file_path):

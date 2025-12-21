@@ -29,9 +29,6 @@ from rich.console import Console
 from pfund.config import get_config, configure
 
 
-config = get_config()
-
-
 def what_is(alias: str) -> str | None:
     from pfund.const.aliases import ALIASES
     if alias in ALIASES or alias.upper() in ALIASES:
@@ -104,7 +101,7 @@ __version__ = version('pfund')
 __all__ = (
     '__version__',
     'configure',
-    'config',
+    'get_config',
     'print_error',
     'print_warning',
     'cprint',

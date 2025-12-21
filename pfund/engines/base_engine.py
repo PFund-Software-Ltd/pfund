@@ -1,12 +1,12 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, ClassVar
 if TYPE_CHECKING:
-    from pfeed._typing import tDataTool
+    from pfeed.typing import tDataTool
     from pfeed.messaging.zeromq import ZeroMQ
     from pfund.products.product_base import BaseProduct
     from pfund.accounts.account_base import BaseAccount
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund._typing import (
+    from pfund.typing import (
         StrategyT, 
         tEnvironment, 
         tBroker,
@@ -110,7 +110,7 @@ class BaseEngine(metaclass=MetaEngine):
         if not hasattr(cls, "_initialized"):
             from pfeed.feeds.time_based_feed import TimeBasedFeed
             from pfund.external_listeners import ExternalListeners
-            from pfund.utils.utils import derive_run_mode
+            from pfund.utils import derive_run_mode
 
             env = Environment[env.upper()]
             config._load_env_file(env)
@@ -193,8 +193,8 @@ class BaseEngine(metaclass=MetaEngine):
     
     @classmethod
     def _setup_logging(cls) -> dict:
-        from pfund._logging import setup_logging_config
-        from pfund._logging.config import LoggingDictConfigurator
+        from pfund.logging import setup_logging_config
+        from pfund.logging.config import LoggingDictConfigurator
         config = get_config()
         log_path = f'{config.log_path}/{cls._env}'
         user_logging_config = config.logging_config
@@ -266,7 +266,7 @@ class BaseEngine(metaclass=MetaEngine):
                 will be passed to ray actor like this: Actor.options(**ray_options).remote(**ray_kwargs)
         '''
         from pfund.strategies.strategy_base import BaseStrategy
-        from pfund.utils.utils import derive_run_mode
+        from pfund.utils import derive_run_mode
         
         Strategy = strategy.__class__
         StrategyName = Strategy.__name__
