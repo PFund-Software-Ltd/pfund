@@ -1,4 +1,7 @@
 from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.typing import ResolutionRepr
 
 import re
 
@@ -7,7 +10,7 @@ import re
 class Resolution:
     DEFAULT_ORDERBOOK_LEVEL = 1
     
-    def __init__(self, resolution: str | Resolution):
+    def __init__(self, resolution: Resolution | ResolutionRepr):
         '''
         Args:
             resolution: e.g. '1m', '1minute', '1quote_L1'
@@ -101,39 +104,72 @@ class Resolution:
     def is_day(self):
         return self.timeframe.is_day()
 
-    def higher(self, ignore_period: bool=True, orderbook_level: str='L1') -> Resolution:
+    def higher(self) -> Resolution:
         '''Rotate to the next higher resolution. e.g. 1m > 1h, higher resolution = lower timeframe'''
-        period = str(self.period) if not ignore_period else '1'
-        return Resolution(period + repr(self.timeframe.lower()) + '_' + orderbook_level)
+        if self.is_quote():
+            if self.orderbook_level < 3:
+                return Resolution('1' + repr(self.timeframe) + '_L' + str(self.orderbook_level + 1))
+            else:
+                return self
+        else:
+            return Resolution('1' + repr(self.timeframe.lower()))
     
-    def lower(self, ignore_period: bool=True) -> Resolution:
+    def lower(self) -> Resolution:
         '''Rotate to the next lower resolution. e.g. 1h < 1m, lower resolution = higher timeframe'''
-        period = str(self.period) if not ignore_period else '1'
-        return Resolution(period + repr(self.timeframe.higher()))
+        if self.is_quote() and self.orderbook_level > 1:
+            return Resolution('1' + repr(self.timeframe) + '_L' + str(self.orderbook_level - 1))
+        else:
+            return Resolution('1' + repr(self.timeframe.higher()))
+        
+    def to_unit(self) -> Resolution:
+        '''Convert to unit resolution. e.g. 5m -> 1m'''
+        timeframe = repr(self.timeframe)
+        if self.is_quote():
+            return Resolution('1' + timeframe + '_L' + str(self.orderbook_level))
+        else:
+            return Resolution('1' + timeframe)
     
-    def get_higher_resolutions(self, ignore_period: bool=True, highest_resolution: Resolution | str | None=None, orderbook_level: str='L1', exclude_quote: bool=False) -> list[Resolution]:
+    def get_higher_resolutions(self, ignore_period: bool=False, exclude_quote: bool=False) -> list[Resolution]:
+        """Get all resolutions with higher granularity (finer time intervals) than this one.
+
+        Args:
+            ignore_period: If False and this resolution has a period > 1 (e.g., 5m),
+                the unit resolution (e.g., 1m) is included as a higher resolution.
+                If True, only resolutions of different time units are considered.
+            exclude_quote: If True, stop before including quote/tick resolution.
+
+        Returns:
+            List of resolutions with higher granularity, ordered from closest to finest.
+        """
         higher_resolutions: list[Resolution] = []
         resolution = self
-        if isinstance(highest_resolution, str):
-            highest_resolution = Resolution(highest_resolution)
-        while (higher_resolution := resolution.higher(ignore_period=ignore_period, orderbook_level=orderbook_level)) != resolution:
-            if highest_resolution and higher_resolution > highest_resolution:
+        unit_resolution = self.to_unit()
+        if not ignore_period and resolution != unit_resolution:
+            higher_resolutions.append(unit_resolution)
+        while (higher_resolution := unit_resolution.higher()) != unit_resolution:
+            unit_resolution = higher_resolution
+            if higher_resolution.is_quote() and exclude_quote:
                 break
-            if not (exclude_quote and higher_resolution.is_quote()):
-                higher_resolutions.append(higher_resolution)
-            resolution = higher_resolution
+            higher_resolutions.append(higher_resolution)
         return higher_resolutions
     
-    def get_lower_resolutions(self, ignore_period: bool=True, lowest_resolution: Resolution | str | None=None) -> list[Resolution]:
+    def get_lower_resolutions(self, exclude_quote: bool=False) -> list[Resolution]:
+        """Get all resolutions with lower granularity (coarser time intervals) than this one.
+
+        Args:
+            exclude_quote: If True, skip quote/tick resolutions in the result
+                (they are still traversed but not included).
+
+        Returns:
+            List of resolutions with lower granularity, ordered from closest to coarsest.
+        """
         lower_resolutions: list[Resolution] = []
         resolution = self
-        if isinstance(lowest_resolution, str):
-            lowest_resolution = Resolution(lowest_resolution)
-        while (lower_resolution := resolution.lower(ignore_period=ignore_period)) != resolution:
-            if lowest_resolution and lower_resolution < lowest_resolution:
-                break
-            lower_resolutions.append(lower_resolution)
+        while (lower_resolution := resolution.lower()) != resolution:
             resolution = lower_resolution
+            if lower_resolution.is_quote() and exclude_quote:
+                continue
+            lower_resolutions.append(lower_resolution)
         return lower_resolutions
     
     def __str__(self):
