@@ -5,34 +5,10 @@ import importlib
 import inspect
 import datetime
 from pathlib import Path
-from enum import StrEnum
-from decimal import Decimal
 
 import yaml
 from pfund.enums import RunMode
 
-# HACK: need to add this to yaml so that StrEnum can be dumped to yaml
-yaml.SafeDumper.add_multi_representer(
-    StrEnum,
-    yaml.representer.SafeRepresenter.represent_str,
-)
-yaml.SafeDumper.add_multi_representer(
-    Decimal,
-    lambda dumper, data: dumper.represent_str(str(data))
-)
-yaml.SafeDumper.add_multi_representer(
-    Path,
-    lambda dumper, data: dumper.represent_str(str(data))
-)
-
-
-def get_free_port() -> int:
-    """Get a free port by binding to port 0 and letting the OS assign one."""
-    import socket
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(('127.0.0.1', 0))
-        return s.getsockname()[1]
-    
 
 def derive_run_mode(ray_kwargs: dict | None=None) -> RunMode:
     from mtflow.utils.utils import is_wasm
@@ -50,57 +26,12 @@ def derive_run_mode(ray_kwargs: dict | None=None) -> RunMode:
     return run_mode
 
 
-# used to explicitly mark a function that includes an api call
-def is_api_call(func):
-    return func
-
-
-def is_command_available(cmd):
-    import shutil
-    return shutil.which(cmd) is not None
-
-
-def convert_to_uppercases(*args):
-    return (s.upper() if type(s) is str else s for s in args)
-
-
-def convert_to_lowercases(*args):
-    return (s.lower() if type(s) is str else s for s in args)
-
-
 def convert_ts_to_dt(ts: float):
     return datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
 
 
 def get_local_timezone() -> datetime.timezone:
     return datetime.datetime.now().astimezone().tzinfo
-
-
-def lowercase(func):
-    """Convert all args and kwargs to lowercases, used as a decorator"""
-    def wrapper(*args, **kwargs):
-        args = (arg.lower() if type(arg) is str else arg for arg in args)
-        kwargs = {k: v.lower() if type(v) is str else v for k, v in kwargs.items()}
-        return func(*args, **kwargs)
-    return wrapper
-
-
-def load_yaml_file(file_path) -> dict | list[dict] | None:
-    if not os.path.exists(file_path):
-        return None
-    with open(file_path, 'r') as f:
-        contents = list(yaml.safe_load_all(f))
-        if not contents:
-            return {}
-        elif len(contents) == 1:
-            return contents[0]
-        else:
-            return contents
-
-
-def dump_yaml_file(file_path: str, data: dict | list[dict]):
-    with open(file_path, 'w') as f:
-        yaml.safe_dump(data, f, default_flow_style=False)
 
 
 def get_telegram_bot_updates(token):
@@ -111,13 +42,6 @@ def get_telegram_bot_updates(token):
         return ret.json()
     except Exception:
         return ret
-
-
-def get_last_modified_time(file_path: str) -> datetime.datetime:
-    # Get the last modified time in seconds since epoch
-    last_modified_time = os.path.getmtime(file_path)
-    # Convert to datetime object
-    return datetime.datetime.fromtimestamp(last_modified_time, tz=datetime.timezone.utc)
 
 
 def find_strategy_class(strat: str):

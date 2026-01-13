@@ -27,8 +27,8 @@ DEFAULT_EXCHANGES = {
 
 
 class IBProduct(BaseProduct):
-    trading_venue: TradingVenue = TradingVenue.IB
-    broker: Broker = Broker.IB
+    trading_venue: TradingVenue = TradingVenue.IBKR
+    broker: Broker = Broker.IBKR
     exchange: str=''
 
     def model_post_init(self, __context: Any):
@@ -46,8 +46,8 @@ class IBProduct(BaseProduct):
     
     def to_contract(self) -> Contract:
         from ibapi.contract import Contract
-        from pfund.brokers.ib.broker_ib import IBBroker
-        adapter = IBBroker.adapter
+        from pfund.brokers.interactive_brokers.broker import InteractiveBrokers as IBKR
+        adapter = IBKR.adapter
         contract = Contract()
         contract.exchange = self.exchange
         contract.symbol = adapter(self.base_asset, group='asset')

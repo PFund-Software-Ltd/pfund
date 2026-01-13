@@ -16,7 +16,7 @@ from pfund.orders.order_crypto import CryptoOrder
 from pfund.positions.position_crypto import CryptoPosition
 from pfund.balances.balance_crypto import CryptoBalance
 from pfund.accounts.account_crypto import CryptoAccount
-from pfund.utils import convert_to_uppercases
+from pfund_kit.utils.text import to_uppercase
 from pfund.enums import CryptoExchange, PrivateDataChannel
 from pfund.brokers.broker_base import BaseBroker
 
@@ -114,7 +114,7 @@ class CryptoBroker(BaseBroker):
         return exchange
     
     def add_balance(self, exch: tCryptoExchange, acc: str, ccy: str) -> CryptoBalance:
-        exch, acc, ccy = convert_to_uppercases(exch, acc, ccy)
+        exch, acc, ccy = to_uppercase(exch, acc, ccy)
         if not (balance := self.get_balances(exch, acc=acc, ccy=ccy)):
             self.add_exchange(exch)
             account = self.get_account(exch, acc)
@@ -124,7 +124,7 @@ class CryptoBroker(BaseBroker):
         return balance
 
     def add_position(self, exch: tCryptoExchange, acc: str, pdt: str) -> CryptoPosition:
-        exch, acc, pdt = convert_to_uppercases(exch, acc, pdt)
+        exch, acc, pdt = to_uppercase(exch, acc, pdt)
         if not (position := self.get_positions(exch, acc=acc, pdt=pdt)):
             account = self.get_account(exch, acc)
             product = self.add_product(exch, pdt=pdt)
@@ -142,7 +142,7 @@ class CryptoBroker(BaseBroker):
         Thread(target=work, name=func+'_thread', daemon=True).start()
 
     def get_orders(self, exch: tCryptoExchange, acc: str, pdt: str='', oid: str='', eoid: str='', is_api_call=False, **kwargs) -> dict | None:
-        exch, acc, pdt = convert_to_uppercases(exch, acc, pdt)
+        exch, acc, pdt = to_uppercase(exch, acc, pdt)
         if not is_api_call:
             return self._order_manager.get_orders(exch, acc, pdt=pdt, oid=oid, eoid=eoid)
         else:
@@ -159,7 +159,7 @@ class CryptoBroker(BaseBroker):
         Thread(target=work, name=func+'_thread', daemon=True).start()
 
     def get_trades(self, exch: tCryptoExchange, acc: str, pdt: str='', is_api_call=False, **kwargs) -> dict | None:
-        exch, acc, pdt = convert_to_uppercases(exch, acc, pdt)
+        exch, acc, pdt = to_uppercase(exch, acc, pdt)
         if not is_api_call:
             return self._order_manager.get_trades(...)
         else:
@@ -176,7 +176,7 @@ class CryptoBroker(BaseBroker):
         Thread(target=work, name=func+'_thread', daemon=True).start()
 
     def get_balances(self, exch: tCryptoExchange, acc: str='', ccy: str='', is_api_call=False, **kwargs) -> dict | None:
-        exch, acc, ccy = convert_to_uppercases(exch, acc, ccy)
+        exch, acc, ccy = to_uppercase(exch, acc, ccy)
         if not is_api_call:
             return self._portfolio_manager.get_balances(exch, acc, ccy=ccy)
         else:
@@ -193,7 +193,7 @@ class CryptoBroker(BaseBroker):
         Thread(target=work, name=func+'_thread', daemon=True).start()
 
     def get_positions(self, exch: tCryptoExchange, acc: str='', pdt: str='', is_api_call=False, **kwargs) -> dict | None:
-        exch, acc, pdt = convert_to_uppercases(exch, acc, pdt)
+        exch, acc, pdt = to_uppercase(exch, acc, pdt)
         if not is_api_call:
             return self._portfolio_manager.get_positions(exch, acc=acc, pdt=pdt)
         else:

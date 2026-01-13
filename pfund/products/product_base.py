@@ -108,7 +108,7 @@ class BaseProduct(BaseModel):
     def _create_specs(self) -> dict:
         '''Create specifications that make a product unique'''
         from pfund.products.product_crypto import CryptoProduct
-        # TODO: add DappProduct
+        # TODO: add DeFiProduct
         specification_fields = [
             field for field in self.__class__.model_fields 
             if field not in BaseProduct.model_fields

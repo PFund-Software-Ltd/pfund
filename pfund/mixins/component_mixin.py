@@ -36,11 +36,11 @@ import time
 import logging
 import datetime
 
+from pfund_kit.utils.yaml import load
 from pfund.stores.trading_store import TradingStore
 from pfund.datas.resolution import Resolution
 from pfund.datas.data_config import DataConfig
 from pfund.proxies.actor_proxy import ActorProxy
-from pfund.utils import load_yaml_file
 from pfund.enums import ComponentType, RunMode, Environment, Broker, TradingVenue
 
     
@@ -125,12 +125,13 @@ class ComponentMixin:
         if not self.is_wasm():
             self.databoy._setup_messaging()
     
+    # FIXME: integrate pfund_kit logging instead
     def _setup_logging(self: Component):
         '''Sets up logging for component running in remote process, uses zmq's PUBHandler to send logs to engine'''
         from pfund.logging.zmq_pub_handler import ZMQPubHandler
         from pfeed.messaging.zeromq import ZeroMQ
         from pfund.logging.config import LoggingDictConfigurator
-        from pfund.utils import get_free_port
+        from pfund_kit.utils import get_free_port
 
         # configure logging based on pfund's logging config, e.g. log_level, log_file, log_format, etc.
         logging_configurator = LoggingDictConfigurator(self._engine.logging_config)
@@ -177,7 +178,7 @@ class ComponentMixin:
         if config:
             cls.config = config
         elif file_path:
-            if config := load_yaml_file(file_path):
+            if config := load(file_path):
                 cls.config = config
     
     @classmethod
@@ -185,7 +186,7 @@ class ComponentMixin:
         if params:
             cls.params = params
         elif file_path:
-            if params := load_yaml_file(file_path):
+            if params := load(file_path):
                 cls.params = params
     
     # TODO: add versioning, run_id etc.
@@ -377,7 +378,7 @@ class ComponentMixin:
         if broker.name == Broker.CRYPTO:
             exch = trading_venue
             product = broker.add_product(exch=exch, basis=basis, name=name, symbol=symbol, **specs)
-        elif broker.name == Broker.IB:
+        elif broker.name == Broker.IBKR:
             product = broker.add_product(exch=exch, basis=basis, name=name, symbol=symbol, **specs)
         else:
             raise NotImplementedError(f"Broker {broker.name} is not supported")

@@ -12,7 +12,7 @@ from ibapi.wrapper import EWrapper, TickerId
 from ibapi.wrapper import *
 
 
-class IBWrapper(EWrapper):
+class InteractiveBrokersWrapper(EWrapper):
     def __init__(self):
         super().__init__()
         self._last_tick_pxs = defaultdict(dict)

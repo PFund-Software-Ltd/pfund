@@ -60,6 +60,8 @@ class TradeEngine(BaseEngine):
         # self.DataTool.set_min_rows(df_min_rows)
         # self.DataTool.set_max_rows(df_max_rows)
 
+        # TODO: move it out of init, it should be sth thats provided, if not provided, create a default one
+        # FIXME: data engine sohuld be shared by multiple engines, not one per engine
         self._data_engine = DataEngine(
             data_tool=self._data_tool,
             use_ray=not self.is_wasm(),

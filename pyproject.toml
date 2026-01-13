@@ -26,30 +26,25 @@ requires-python = ">=3.11"
 dependencies = [
     "pfeed>=0.0.5",
     "pfolio>=0.0.2",
-    "mtflow>=0.0.1.dev2",
-    "rich>=14.2.0",
-    "click>=8.1.8",
-    "trogon>=0.6.0",
-    "platformdirs>=4.2.2",
-    "python-dotenv>=1.2.1",
-    "pyyaml>=6.0.3",
+    "pfund-plot>=0.0.1.dev3",
+    "pfund-kit>=0.0.1.dev1",
+    "mtflow>=0.0.1.dev2",  # TODO: make it optional?
     "httpx>=0.28.1",
     "websockets>=15.0.1",
-    "scikit-learn>=1.8.0",
     "numba>=0.63.1",
 ]
 
 [project.optional-dependencies]
-default = [
-    "pfeed[duckdb]>=0.0.5",
-    "pfund-plot[marimo]>=0.0.1.dev3",
-]
+marimo = ["pfund-plot[marimo]>=0.0.1.dev3"]
+jupyter = ["pfund-plot[jupyter]>=0.0.1.dev3"]
 ibkr = ["pfund-ibapi>=10.39.1"]
 ta-lib = ["ta-lib>=0.6.4"]
-# telegram = ["python-telegram-bot>=22.3.0"]
 
 [project.scripts]
-pfund = "pfund.main:run_cli"
+pfund = "pfund.__main__:run_cli"
+
+[project.entry-points."pfund_shell.commands"]
+pfund = "pfund.cli:pfund_group"
 
 [project.urls]
 homepage = "https://pfund.ai"
@@ -57,7 +52,7 @@ repository = "https://github.com/PFund-Software-Ltd/pfund"
 documentation = "https://pfund-docs.pfund.ai"
 
 [build-system]
-requires = ["uv_build>=0.9.18,<0.10.0"]
+requires = ["uv_build>=0.9.24,<0.10.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
@@ -69,6 +64,7 @@ pfeed = { path = "../pfeed", editable = true }
 pfolio = { path = "../pfolio", editable = true }
 pfund-plot = { path = "../pfund-plot", editable = true }
 mtflow = { path = "../mtflow", editable = true }
+pfund-kit = { path = "../pfund-kit", editable = true }
 
 # [build-system]
 # requires = ["hatchling"]

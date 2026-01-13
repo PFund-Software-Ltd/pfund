@@ -1,24 +1,14 @@
-import click
-from trogon import tui
-
-from pfund.config import get_config
-from pfund.cli.commands.docker_compose import docker_compose
-from pfund.cli.commands.config import config
-from pfund.cli.commands.doc import doc
-from pfund.cli.commands.clear import clear
+from pfund_kit.cli import create_cli_group
+from pfund_kit.cli.commands import config, docker_compose, remove
 
 
-@tui(command='tui', help="Open terminal UI")
-@click.group(context_settings={"help_option_names": ["-h", "--help"]})
-@click.pass_context
-@click.version_option()
-def pfund_group(ctx):
-    """pfund's CLI"""
-    ctx.ensure_object(dict)
+def init_context(ctx):
+    """Initialize pfund-specific context"""
+    from pfund.config import get_config
     ctx.obj['config'] = get_config()
 
 
-pfund_group.add_command(docker_compose)
+pfund_group = create_cli_group('pfund', init_context=init_context)
 pfund_group.add_command(config)
-pfund_group.add_command(doc)
-pfund_group.add_command(clear)
+pfund_group.add_command(docker_compose)
+pfund_group.add_command(remove)

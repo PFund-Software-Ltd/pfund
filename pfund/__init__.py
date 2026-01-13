@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     # need these imports to support IDE hints:
     import pfund_plot as plot
-    from pfund.const.aliases import ALIASES as aliases
+    from pfund.aliases import ALIASES as alias
     from pfund.engines.backtest_engine import BacktestEngine
     from pfund.engines.trade_engine import TradeEngine
     from pfund.strategies.strategy_base import BaseStrategy as Strategy
@@ -13,31 +13,27 @@ if TYPE_CHECKING:
     from pfund.features.feature_base import BaseFeature as Feature
     from pfund.indicators.indicator_base import BaseIndicator as Indicator
     from pfund.indicators.talib_indicator import TalibIndicator
-    from pfund.indicators.ta_indicator import TaIndicator
     from pfund.brokers.broker_crypto import CryptoBroker
-    from pfund.brokers.broker_dapp import DappBroker
-    from pfund.brokers.ib.broker_ib import (
-        IBBroker,
-        IBBroker as IB,
+    from pfund.brokers.broker_defi import DeFiBroker
+    from pfund.brokers.interactive_brokers.broker import (
+        InteractiveBrokers as IBKR,
+        InteractiveBrokers as IB,
     )
     from pfund.exchanges import Bybit
 
 from importlib.metadata import version
 
-from rich.console import Console
-
 from pfund.config import get_config, configure
 
 
-def what_is(alias: str) -> str | None:
-    from pfund.const.aliases import ALIASES
-    if alias in ALIASES or alias.upper() in ALIASES:
-        return ALIASES.get(alias, ALIASES.get(alias.upper(), None))
+def what_is(alias: str) -> str:
+    from pfund.aliases import ALIASES
+    return ALIASES.resolve(alias)
 
 
 def __getattr__(name: str):
-    if name == 'aliases':
-        from pfund.const.aliases import ALIASES
+    if name == 'alias':
+        from pfund.aliases import ALIASES
         return ALIASES
     elif name == 'plot':
         import pfund_plot as plot
@@ -69,18 +65,15 @@ def __getattr__(name: str):
     elif name == "TalibIndicator":
         from pfund.indicators.talib_indicator import TalibIndicator
         return TalibIndicator
-    elif name == "TaIndicator":
-        from pfund.indicators.ta_indicator import TaIndicator
-        return TaIndicator
     elif name == "CryptoBroker":
         from pfund.brokers.broker_crypto import CryptoBroker
         return CryptoBroker
-    elif name in ("IBBroker", 'IB'):
-        from pfund.brokers.ib.broker_ib import IBBroker
-        return IBBroker
-    elif name == "DappBroker":
-        from pfund.brokers.broker_dapp import DappBroker
-        return DappBroker
+    elif name in ("InteractiveBrokers", "IBKR", "IB"):
+        from pfund.brokers.interactive_brokers.broker import InteractiveBrokers
+        return InteractiveBrokers
+    elif name == "DeFiBroker":
+        from pfund.brokers.broker_defi import DeFiBroker
+        return DeFiBroker
     elif name == "Bybit":
         from pfund.exchanges import Bybit
         return Bybit
@@ -94,7 +87,6 @@ def __getattr__(name: str):
 
 print_error = lambda msg: print(f'\033[91m{msg}\033[0m')
 print_warning = lambda msg: print(f'\033[93m{msg}\033[0m')
-cprint = Console().print
 
 
 __version__ = version('pfund')
@@ -104,8 +96,7 @@ __all__ = (
     'get_config',
     'print_error',
     'print_warning',
-    'cprint',
-    'aliases',
+    'alias',
     "what_is",
     'plot',
     'BacktestEngine',
@@ -118,9 +109,9 @@ __all__ = (
     'Indicator',
     'TalibIndicator',
     'TaIndicator',
-    'IBBroker', 'IB',
+    'IBKR', 'IB',
     'CryptoBroker',
-    'DappBroker',
+    'DeFiBroker',
     'Bybit',
     'Binance',
     'OKX',

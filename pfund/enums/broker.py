@@ -8,18 +8,18 @@ from enum import StrEnum
 
 
 class Broker(StrEnum):
-    IB = 'IB'
+    IBKR = 'IBKR'
     CRYPTO = 'CRYPTO'
-    DAPP = 'DAPP'
+    DEFI = 'DEFI'
 
     @property
     def broker_class(self) -> type[BaseBroker]:
         """Returns the corresponding Broker class for this broker."""
         import pfund as pf
         broker_name = {
-            Broker.IB: 'IBBroker',
+            Broker.IBKR: 'IBKR',
             Broker.CRYPTO: 'CryptoBroker',
-            Broker.DAPP: 'DappBroker',
+            Broker.DEFI: 'DeFiBroker',
         }[self]
         return getattr(pf, broker_name)
      

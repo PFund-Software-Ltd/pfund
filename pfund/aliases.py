@@ -1,24 +1,12 @@
-ALIASES = {
+from pfund_kit import AliasRegistry
+
+
+ALIASES = AliasRegistry({
     'proj': 'project',
     'config': 'configuration',
     'const': 'constant',
     'dir': 'directory',
     'env': 'environment',
-    'fh': 'file_handler',
-    'fh_name': 'file_handler_name',
-    'fh_kwargs': 'file_handler_keyword_arguments',
-    'fh_lv': 'file_handler_level',
-    'sh': 'stream_handler',
-    'sh_lv': 'stream_handler_level',
-    'th': 'telegram_handler',
-    'th_kwargs': 'telegram_handler_keyword_arguments',
-    'th_lv': 'telegram_handler_level',
-    'lv': 'level',
-    'rec': 'record',
-    'rec_fmt': 'log_record_format',
-    'ts': 'timestamp',
-    'ts_fmt': 'log_timestamp_format',
-    'fmt': 'format',
 
     'multi': 'multiplier',
     'tfee': 'taker_fee',
@@ -43,7 +31,7 @@ ALIASES = {
     'otype': 'order_type',
     'acc': 'account',
     'mdl': 'model',
-    'ftr': 'feature',
+    'feat': 'feature',
 
     'o': 'order',
     'ltp': 'last_traded_price',
@@ -51,17 +39,6 @@ ALIASES = {
     'lts': 'last_traded_size',
     'ltt': 'last_traded_time',
 
-    'SPOT': 'cryptocurrency',
-    'PERP': 'perpetual_contract',  # linear perpetual
-    'IPERP': 'inverse_perpetual_contract',
-    'FUT': 'futures_contract',  # linear futures
-    'IFUT': 'inverse_futures_contract',
-    'OPT': 'options_contract',  # linear options
-    'STK': 'stock',
-    'CMDTY': 'commodity',
-    'FX': 'forex',
-    'MTF': 'mutual_fund',
-    'ETF': 'exchange_traded_fund',
     'CW': 'current_week',
     'NW': 'next_week',
     'CM': 'current_month',
@@ -92,14 +69,13 @@ ALIASES = {
     'freq': 'frequency',
     'num': 'number',
     'tf': 'timeframe',
-    'mod': 'model',
     'agg': 'aggregate',
     'resol': 'resolution',
 
-    'IB': 'interactive brokers',
+    'IBKR': 'Interactive Brokers',
 
     'bg': 'background',
     'boa': 'bid_or_ask',
 
     'tv': 'trading_venue',
-}
+})

@@ -69,7 +69,7 @@ class CryptoAssetType(StrEnum):
 
 
 # TODO: add DeFi asset types
-class DappAssetType(StrEnum):
+class DeFiAssetType(StrEnum):
     INDEX = AllAssetType.INDEX
 
 

@@ -91,9 +91,9 @@ class BaseExchange(ABC):
             return None
     
     def load_market_configs(self):
-        from pfund.utils import load_yaml_file
+        from pfund_kit.utils.yaml import load
         market_configs_file_path = self.get_file_path(self.MARKET_CONFIGS_FILENAME)
-        market_configs: dict[str, dict] = load_yaml_file(market_configs_file_path)
+        market_configs: dict[str, dict] = load(market_configs_file_path)
         return market_configs
     
     def _check_if_refetch_market_configs(self):
@@ -102,7 +102,7 @@ class BaseExchange(ABC):
         If so, refetch the market configs and return True.
         If not, return False.
         '''
-        from pfund.utils import get_last_modified_time
+        from pfund_kit.utils import get_last_modified_time
 
         filename = self.MARKET_CONFIGS_FILENAME
         file_path = self.get_file_path(filename)
@@ -139,10 +139,10 @@ class BaseExchange(ABC):
         - Listed markets/trading pairs
         and then append them to the existing market configs.
         '''
-        from pfund.utils import load_yaml_file, dump_yaml_file
+        from pfund_kit.utils.yaml import load, dump
         markets: dict[ProductCategory, Result] = self.get_markets()
         market_configs_file_path = self.get_file_path(self.MARKET_CONFIGS_FILENAME)
-        existing_market_configs = load_yaml_file(market_configs_file_path) or {}
+        existing_market_configs = load(market_configs_file_path) or {}
         for category, result in markets.items():
             is_success = result['is_success']
             if not is_success:
@@ -150,7 +150,7 @@ class BaseExchange(ABC):
                 continue
             configs = {config['symbol']: config for config in result['data']}
             existing_market_configs[category.upper()] = configs
-        dump_yaml_file(market_configs_file_path, existing_market_configs)
+        dump(data=existing_market_configs, file_path=market_configs_file_path)
 
     @classmethod
     def create_product(cls, basis: str, name: str='', symbol: str='', **specs) -> CryptoProduct:

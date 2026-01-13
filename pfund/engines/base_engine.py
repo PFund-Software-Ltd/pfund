@@ -49,6 +49,7 @@ ENV_COLORS = {
 config = get_config()
 
 
+# REVIEW: pfund's engine is NOT thread-safe
 class BaseEngine(metaclass=MetaEngine):
     _num: ClassVar[int] = 0
     _initialized: ClassVar[bool]
@@ -83,6 +84,7 @@ class BaseEngine(metaclass=MetaEngine):
     ):
         '''
         Args:
+            # FIXME: move this part to mtflow
             external_listeners:
                 If any of the keys is set to True, a websocket server will be started.
                 This server listens to messages from ZeroMQ's PUB socket, and broadcasts them to connected external listeners.
@@ -104,6 +106,8 @@ class BaseEngine(metaclass=MetaEngine):
                 If None, no data will be written.
         '''
         from mtflow.kernel import TradeKernel
+        from pfund_kit.utils import load_env_file
+        from pfund.config import setup_logging
         from pfund.engines.risk_engine import RiskEngine
         
         cls = self.__class__
@@ -113,10 +117,11 @@ class BaseEngine(metaclass=MetaEngine):
             from pfund.utils import derive_run_mode
 
             env = Environment[env.upper()]
-            config._load_env_file(env)
+            load_env_file(env=env, verbose=True)
             
             cls._env = env
-            cls._logging_config = cls._setup_logging()
+            # FIXME: use get_logging_config() in pfund.config instead, no need to store it in class variable
+            cls._logging_config = setup_logging(env=env)
             cls._run_mode = derive_run_mode()
             cls._data_tool = DataTool[data_tool.lower()]
             cls._database = Database[database.upper()] if database else None
@@ -191,6 +196,7 @@ class BaseEngine(metaclass=MetaEngine):
     def is_wasm(self) -> bool:
         return self._run_mode == RunMode.WASM
     
+    # TODO: replace with pfund_kit.logging
     @classmethod
     def _setup_logging(cls) -> dict:
         from pfund.logging import setup_logging_config
@@ -334,7 +340,7 @@ class BaseEngine(metaclass=MetaEngine):
         broker: BaseBroker = self._add_broker(product.trading_venue)
         if broker.name == Broker.CRYPTO:
             broker.add_product(exch=product.exch, basis=str(product.basis), name=product.name, symbol=product.symbol, **product.specs)
-        elif broker.name == Broker.IB:
+        elif broker.name == Broker.IBKR:
             broker.add_product(exch=product.exch, basis=str(product.basis), name=product.name, symbol=product.symbol, **product.specs)
         else:
             raise NotImplementedError(f"Broker {broker.name} is not supported")
@@ -344,7 +350,7 @@ class BaseEngine(metaclass=MetaEngine):
         broker: BaseBroker = self._add_broker(account.trading_venue)
         if broker.name == Broker.CRYPTO:
             account = broker.add_account(exch=account.trading_venue, name=account.name, key=account._key, secret=account._secret)
-        elif broker.name == Broker.IB:
+        elif broker.name == Broker.IBKR:
             account = broker.add_account(name=account.name, host=account._host, port=account._port, client_id=account._client_id)
         else:
             raise NotImplementedError(f"Broker {broker.name} is not supported")

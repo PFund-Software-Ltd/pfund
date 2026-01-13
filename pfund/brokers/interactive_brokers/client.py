@@ -6,8 +6,8 @@ It should never be used alone.
 from __future__ import annotations
 from typing import ClassVar, Literal, TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.brokers.ib.ib_api import IBAPI
-    from pfund.accounts.account_ib import IBAccount
+    from pfund.brokers.interactive_brokers.api import InteractiveBrokersAPI
+    from pfund.accounts.account_ibkr import IBAccount
 
 import time
 from threading import Thread
@@ -17,11 +17,11 @@ from ibapi.account_summary_tags import *
 
 
 
-class IBClient(EClient):
+class InteractiveBrokersClient(EClient):
     _request_id: ClassVar[int] = 1
     
     def __init__(self):
-        # pass in IBAPI() object (child of EWrapper) as EClient needs EWrapper
+        # pass in InteractiveBrokersAPI() object (child of EWrapper) as EClient needs EWrapper
         super().__init__(self)
         self._req_id_to_product = {}
         self._pdts_requested_market_data = []
@@ -30,13 +30,13 @@ class IBClient(EClient):
     def _next_request_id(cls):
         cls._request_id += 1
 
-    def connect(self: IBAPI | IBClient):
+    def connect(self: InteractiveBrokersAPI | InteractiveBrokersClient):
         # account = self.account
         # TEMP
         account: IBAccount = self._accounts['DU954568_account']
 
         super().connect(host=account.host, port=account.port, clientId=account.client_id)
-        self._ib_thread = Thread(name='IBClientThread', target=self.run, daemon=True)
+        self._ib_thread = Thread(name='InteractiveBrokersClientThread', target=self.run, daemon=True)
         self._ib_thread.start()
         self._logger.debug(f'{self._bkr} thread started')
 

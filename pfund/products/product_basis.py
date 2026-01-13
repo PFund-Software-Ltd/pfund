@@ -2,7 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from pfund.enums.asset_type import AssetTypeModifier, AllAssetType, TraditionalAssetType, CryptoAssetType, DappAssetType, ASSET_TYPE_ALIASES
+from pfund.enums.asset_type import AssetTypeModifier, AllAssetType, TraditionalAssetType, CryptoAssetType, DeFiAssetType, ASSET_TYPE_ALIASES
 
 
 class ProductAssetType(BaseModel):
@@ -27,8 +27,8 @@ class ProductAssetType(BaseModel):
                 asset_types_and_modifiers[i] = TraditionalAssetType[atm]
             elif atm in CryptoAssetType.__members__:
                 asset_types_and_modifiers[i] = CryptoAssetType[atm]
-            elif atm in DappAssetType.__members__:
-                asset_types_and_modifiers[i] = DappAssetType[atm]
+            elif atm in DeFiAssetType.__members__:
+                asset_types_and_modifiers[i] = DeFiAssetType[atm]
             else:
                 raise ValueError(f"Invalid asset type: {atm}")
         return tuple(asset_types_and_modifiers)

@@ -7,72 +7,60 @@ disable_existing_loggers: False
 loggers:
   root:
     level: 'WARNING'
-    handlers: ['compressed_timed_rotating_file_handler', 'stream_path_handler']
-    propagate: False
-  pfund:
-    level: 'DEBUG'
-    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
-    propagate: False
-  mtflow:
-    level: 'DEBUG'
-    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
-    propagate: False
-  bybit:
-    level: 'DEBUG'
-    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
-    propagate: False
-  ib:
-    level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
   ibapi:  # controls ibapi's logger
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
-  orders:
+  pfund:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
-  balances:
+  pfund.mtflow:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
-  positions:
+  pfund.bybit:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  pfund.ibkr:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  pfund.orders:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  pfund.balances:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  pfund.positions:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
 handlers:
-  file_handler:
-    class: 'logging.FileHandler'
-    level: 'DEBUG'
-    formatter: 'file'
   compressed_timed_rotating_file_handler:
-    class: 'pfund.logging.handlers.CompressedTimedRotatingFileHandler'
+    class: 'pfund_kit.logging.handlers.CompressedTimedRotatingFileHandler'
     level: 'DEBUG'
     formatter: 'file'
     kwargs: {'when': 'midnight', 'backupCount': 7, 'utc': True, 'encoding': 'utf-8'}
+    filters: ['trimmedpath']
   stream_handler:
     class: 'logging.StreamHandler'
     level: 'INFO'
     formatter: 'console'
-  stream_path_handler:
-    class: 'logging.StreamHandler'
-    level: 'INFO'
-    formatter: 'path'
-  telegram_handler:
-    class: 'pfund.logging.handlers.TelegramHandler'
-    level: 'DEBUG'
-    formatter: 'console'
-    # TODO
-    token:
-    chat_id:
+    filters: ['trimmedpath']
 formatters:
-  path:
-    format: '%(asctime)s.%(msecs)03d | %(levelname)s | %(name)s | %(message)s | %(shortpath)s fn:%(funcName)s ln:%(lineno)d'
-    datefmt: '%Y-%m-%dT%H:%M:%S%z'
   file:
-    format: '%(asctime)s.%(msecs)03d | %(levelname)s | %(name)s | %(message)s | %(filename)s fn:%(funcName)s ln:%(lineno)d'
+    format: '%(asctime)s.%(msecs)03d | %(levelname)s | %(name)s | %(message)s | %(trimmedpath)s fn:%(funcName)s ln:%(lineno)d'
     datefmt: '%H:%M:%S%z'
   console:
-    format: '%(asctime)s.%(msecs)03d | %(levelname)s | %(name)s | %(message)s | %(filename)s fn:%(funcName)s ln:%(lineno)d'
+    (): pfund_kit.logging.formatters.ColoredFormatter
+    format: '%(asctime)s.%(msecs)03d | %(levelname)s | %(name)s | %(message)s | %(trimmedpath)s fn:%(funcName)s ln:%(lineno)d'
     datefmt: '%Y-%m-%dT%H:%M:%S%z'
+filters:
+  trimmedpath:
+    (): pfund_kit.logging.filters.TrimmedPathFilter

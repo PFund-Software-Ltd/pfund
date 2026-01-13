@@ -18,28 +18,24 @@ depends-on = [
 
 [dependencies]
 python = ">=3.11.14"
-uv = ">=0.9.18"
+uv = ">=0.9.24"
 
 [pypi-dependencies]
-pfund = { path = ".", editable = true }
 # TEMP
+pfund = { path = ".", editable = true }
 pfeed = { path = "../pfeed", editable = true }
 pfolio = { path = "../pfolio", editable = true }
 pfund-plot = { path = "../pfund-plot", editable = true }
+pfund-kit = { path = "../pfund-kit", editable = true }
 mtflow = { path = "../mtflow", editable = true }
-# pfeed = ">=0.0.5"
+# pfeed = { version = ">=0.0.5", extras = ["duckdb"] }
 # pfolio = ">=0.0.2"
+# pfund-plot = { version = ">=0.0.1.dev2", extras = ["marimo"] }
+# pfund-kit = ">=0.0.1.dev1"
 # mtflow = ">=0.0.1.dev2"
-rich = ">=14.2.0"
-click = ">=8.1.8"
-trogon = ">=0.6.0"
-platformdirs = ">=4.2.2"
-python-dotenv = ">=1.2.1"
-pyyaml = ">=6.0.3"
+numba = ">=0.63.1"
 httpx = ">=0.28.1"
 websockets = ">=15.0.1"
-scikit-learn = ">=1.8.0"
-numba = ">=0.63.1"
 
 [environments]
 default = ["py311", "dev", "optional"]
@@ -48,25 +44,26 @@ py312 = ["py312", "test", "optional"]
 py313 = ["py313", "test", "optional"]
 
 [feature.optional.pypi-dependencies]
-pfeed = { version = ">=0.0.5", extras = ["duckdb"] }
-pfund-plot = { version = ">=0.0.1.dev2", extras = ["marimo"] }
+pfund-plot = { version = ">=0.0.1.dev2", extras = ["jupyter"] }
 pfund-ibapi = ">=10.39.1"
 
 [feature.optional.dependencies]
 ta-lib = ">=0.6.4"
 
+# TEMP
 [pypi-options.dependency-overrides]
 pfund = { path = ".", editable = true }
-# TEMP
 pfeed = { path = "../pfeed", editable = true }
 pfolio = { path = "../pfolio", editable = true }
 pfund-plot = { path = "../pfund-plot", editable = true }
+pfund-kit = { path = "../pfund-kit", editable = true }
 mtflow = { path = "../mtflow", editable = true }
 
 [feature.dev.pypi-dependencies]
 afterpython = ">=0.1.1"
 pybit = ">=5.12.0"
 torch = ">=2.9.0"
+scikit-learn = ">=1.8.0"
 
 [feature.test.pypi-dependencies]
 pytest = ">=9.0.2"

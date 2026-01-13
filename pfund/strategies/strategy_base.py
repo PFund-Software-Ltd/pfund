@@ -13,13 +13,13 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfund.positions.position_base import BasePosition
     from pfund.positions.position_crypto import CryptoPosition
-    from pfund.positions.position_ib import IBPosition
+    from pfund.positions.position_ibkr import IBPosition
     from pfund.balances.balance_base import BaseBalance
     from pfund.balances.balance_crypto import CryptoBalance
-    from pfund.balances.balance_ib import IBBalance
+    from pfund.balances.balance_ibkr import IBBalance
     from pfund.accounts.account_base import BaseAccount
     from pfund.accounts.account_crypto import CryptoAccount
-    from pfund.accounts.account_ib import IBAccount
+    from pfund.accounts.account_ibkr import IBAccount
     from pfund.accounts.account_simulated import SimulatedAccount
     from pfund.orders.order_base import BaseOrder
     from pfund.datas.data_base import BaseData
@@ -140,7 +140,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         if broker.name == Broker.CRYPTO:
             exch = trading_venue
             account =  broker.add_account(exch=exch, name=name or self.name, **kwargs)
-        elif broker.name == Broker.IB:
+        elif broker.name == Broker.IBKR:
             account = broker.add_account(name=name or self.name, **kwargs)
         else:
             raise NotImplementedError(f"Broker {broker.name} is not supported")

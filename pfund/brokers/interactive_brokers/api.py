@@ -5,23 +5,23 @@ from __future__ import annotations
 from typing import Callable, TYPE_CHECKING, Awaitable, Literal
 if TYPE_CHECKING:
     from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
-    from pfund.accounts.account_ib import IBAccount
+    from pfund.accounts.account_ibkr import IBAccount
     from pfund.enums import Environment
     from pfund.datas.resolution import Resolution
-    from pfund.products.product_ib import IBProduct
+    from pfund.products.product_ibkr import IBProduct
     
 import logging
 from collections import defaultdict
 
-from pfund.brokers.ib.ib_client import IBClient
-from pfund.brokers.ib.ib_wrapper import IBWrapper
-from pfund.brokers.ib.ib_wrapper import *
+from pfund.brokers.interactive_brokers.client import InteractiveBrokersClient as IBClient
+from pfund.brokers.interactive_brokers.wrapper import InteractiveBrokersWrapper as IBWrapper
+from pfund.brokers.interactive_brokers.wrapper import *
 from pfund.datas.timeframe import TimeframeUnits
 from pfund.enums import Environment, Broker, PublicDataChannel, PrivateDataChannel, TraditionalAssetType, DataChannelType
 
 
 # this is similar to ws_api_base.py for crypto exchanges
-class IBAPI(IBClient, IBWrapper):
+class InteractiveBrokersAPI(IBClient, IBWrapper):
     SUPPORTED_ORDERBOOK_LEVELS = [1, 2]
     SUPPORTED_RESOLUTIONS = {
         TimeframeUnits.TICK: [1],
@@ -43,14 +43,14 @@ class IBAPI(IBClient, IBWrapper):
     ]
 
     def __init__(self, env: Environment | tEnvironment):
-        from pfund.brokers.ib.broker_ib import IBBroker
+        from pfund.brokers.interactive_brokers.broker import IBKR
         
         IBClient.__init__(self)
         IBWrapper.__init__(self)
         self._env = Environment[env.upper()]
-        self._bkr = Broker.IB
+        self._bkr = Broker.IBKR
         self._logger = logging.getLogger(self._bkr.lower())
-        self._adapter = IBBroker.adapter
+        self._adapter = IBKR.adapter
         self._callback: Callable[[str], Awaitable[None] | None] | None = None
         self._callback_raw_msg: bool = False
 

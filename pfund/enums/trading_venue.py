@@ -11,7 +11,7 @@ from enum import StrEnum
 
 
 class TradingVenue(StrEnum):
-    IB = 'IB'
+    IBKR = 'IBKR'
     BYBIT = 'BYBIT'
     
     @property
@@ -26,7 +26,7 @@ class TradingVenue(StrEnum):
 
     @property
     def order_class(self) -> type[BaseOrder]:
-        if self == TradingVenue.IB:
+        if self == TradingVenue.IBKR:
             class_name = f'{self}Order'
         else:
             class_name = f'{self.capitalize()}Order'
@@ -35,7 +35,7 @@ class TradingVenue(StrEnum):
     
     @property
     def product_class(self) -> type[BaseProduct]:
-        if self == TradingVenue.IB:
+        if self == TradingVenue.IBKR:
             class_name = f'{self}Product'
         else:
             class_name = f'{self.capitalize()}Product'
@@ -45,7 +45,7 @@ class TradingVenue(StrEnum):
     @property
     def account_class(self) -> type[BaseAccount]:
         from pfund.enums import CryptoExchange
-        if self == TradingVenue.IB:
+        if self == TradingVenue.IBKR:
             class_name = f'{self}Account'
         elif self.value in CryptoExchange.__members__:
             class_name = 'CryptoAccount'

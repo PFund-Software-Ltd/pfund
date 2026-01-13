@@ -4,7 +4,6 @@ from pfund.typing import tTradingVenue
 from pathlib import Path
 
 from pfund.enums import TradingVenue
-from pfund.utils import load_yaml_file
 
 
 class Adapter:
@@ -31,6 +30,7 @@ class Adapter:
     def groups(self) -> list[str]:
         return list(self._adapter.keys())
     
+    # FIXME: PROJ_PATH doesn't exist anymore
     def get_file_path(self) -> Path:
         '''Gets the file path of the adapter.yml'''
         from pfund.const.paths import PROJ_PATH
@@ -40,7 +40,8 @@ class Adapter:
     
     def _load_config(self, file_path: Path):
         '''Loads adapter.yml'''
-        config: dict = load_yaml_file(file_path)
+        from pfund_kit.utils.yaml import load
+        config: dict = load(file_path)
         for group in config:
             if config[group]:
                 for k, v in config[group].items():

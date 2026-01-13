@@ -8,28 +8,28 @@ if TYPE_CHECKING:
     from pfund.datas.data_time_based import TimeBasedData
 
 from pfund.adapter import Adapter
-from pfund.products.product_ib import IBProduct
-from pfund.accounts.account_ib import IBAccount
-from pfund.orders.order_ib import IBOrder
-from pfund.positions.position_ib import IBPosition
-from pfund.balances.balance_ib import IBBalance
-from pfund.utils import convert_to_uppercases
+from pfund.products.product_ibkr import IBProduct
+from pfund.accounts.account_ibkr import IBAccount
+from pfund.orders.order_ibkr import IBOrder
+from pfund.positions.position_ibkr import IBPosition
+from pfund.balances.balance_ibkr import IBBalance
+from pfund_kit.utils.text import to_uppercase
 from pfund.brokers.broker_base import BaseBroker
 from pfund.enums import PublicDataChannel, PrivateDataChannel, Environment, Broker
 
 
-class IBBroker(BaseBroker):
-    name = Broker.IB
+class InteractiveBrokers(BaseBroker):
+    name = Broker.IBKR
     adapter = Adapter(name)
     
     def __init__(self, env: Environment | tEnvironment=Environment.SANDBOX):
-        from pfund.brokers.ib.ib_api import IBAPI
+        from pfund.brokers.interactive_brokers.api import InteractiveBrokersAPI
 
         super().__init__(env=env)
         # FIXME: check if only supports one account
         self.account = None
-        self._accounts: dict[Literal[Broker.IB], dict[AccountName, IBAccount]] = { self.name: {} }
-        self._api = IBAPI(self._env)
+        self._accounts: dict[Literal[Broker.IBKR], dict[AccountName, IBAccount]] = { self.name: {} }
+        self._api = InteractiveBrokersAPI(self._env)
 
     @property
     def accounts(self):
@@ -100,7 +100,7 @@ class IBBroker(BaseBroker):
         return product
 
     def add_balance(self, acc: str, ccy: str) -> IBBalance | None:
-        acc, ccy = convert_to_uppercases(acc, ccy)
+        acc, ccy = to_uppercase(acc, ccy)
         if not (balance := self.get_balances(acc=acc, ccy=ccy)):
             account = self.get_account(acc)
             balance = IBBalance(account, ccy)
@@ -109,7 +109,7 @@ class IBBroker(BaseBroker):
         return balance
     
     def add_position(self, exch: str, acc: str, pdt: str) -> IBPosition | None:
-        exch, acc, pdt = convert_to_uppercases(exch, acc, pdt)
+        exch, acc, pdt = to_uppercase(exch, acc, pdt)
         if not (position := self.get_positions(exch=exch, acc=acc, pdt=pdt)):
             account = self.get_account(acc)
             product = self.add_product(exch, pdt)
@@ -119,7 +119,7 @@ class IBBroker(BaseBroker):
         return position
 
     def add_order(self, exch: str, acc: str, pdt: str) -> IBOrder | None:
-        exch, acc, pdt = convert_to_uppercases(exch, acc, pdt)
+        exch, acc, pdt = to_uppercase(exch, acc, pdt)
         if not (order := self.get_orders(acc)):
             product = self.add_product(exch, pdt)
             order = IBOrder(self._env, acc, product)
@@ -160,7 +160,7 @@ class IBBroker(BaseBroker):
             acc: account name. If empty, use primary account by default.
             ccy: currency name.
         """
-        acc, ccy = convert_to_uppercases(acc, ccy)
+        acc, ccy = to_uppercase(acc, ccy)
         if not acc:
             acc = self.account.acc
         balances = self.balances[acc]
@@ -186,7 +186,7 @@ class IBBroker(BaseBroker):
             exch: exchange name.
             pdt: product name.
         """
-        exch, acc, pdt = convert_to_uppercases(exch, acc, pdt)
+        exch, acc, pdt = to_uppercase(exch, acc, pdt)
         # FIXME, positions should be acc -> pdt -> exch? havan't decided yet
         if not acc:
             acc = self.account.name

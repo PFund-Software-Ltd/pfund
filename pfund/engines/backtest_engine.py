@@ -14,12 +14,11 @@ if TYPE_CHECKING:
 import os
 import inspect
 import time
-import logging
-from logging.handlers import QueueHandler, QueueListener
 
-from tqdm import tqdm
 import polars as pl
 
+from pfund_kit.utils.progress_bar import track, ProgressBar
+from pfund_kit.style import RichColor
 from pfund import cprint
 from pfund.enums import BacktestMode, ComponentType
 from pfund.engines.base_engine import BaseEngine
@@ -251,7 +250,7 @@ class BacktestEngine(BaseEngine):
         
         return backtest_results
 
-    def _backtest(self, backtestee: BaseStrategy | BaseModel, num_chunks: int=1, ray_kwargs: dict | None=None) -> dict:
+    def _backtest(self, backtestee: BaseStrategy | BaseModel, num_chunks: int=1, ray_kwargs: dict | None=None) -> dict:       
         backtest_result = {}
         dtl = backtestee.dtl
         df = backtestee.get_df(copy=True)
@@ -269,8 +268,8 @@ class BacktestEngine(BaseEngine):
         
         # Backtesting
         if not self._use_ray:
-            tqdm_desc = f'Backtesting {backtestee.name} (per chunk)'
-            tqdm_bar = tqdm(total=num_chunks, desc=tqdm_desc, colour='green')
+            progress_desc = f'Backtesting {backtestee.name} (per chunk)'
+            progress_bar = track(total=num_chunks, description=progress_desc)
         else:
             ray_tasks = []
             if 'num_cpus' not in ray_kwargs:
@@ -291,23 +290,20 @@ class BacktestEngine(BaseEngine):
                 elif self._backtest_mode == BacktestMode.event_driven:
                     df_chunk = dtl.preprocess_event_driven_df(df_chunk)
                     self._event_driven_backtest(df_chunk, chunk_num=chunk_num)
-                tqdm_bar.update(1)
+                progress_bar.advance(1)
             
         if self._use_ray:
             import atexit
             import ray
             from ray.util.queue import Queue
+            from pfeed.logging import setup_logger_in_ray_task, ray_logging_context
             
             atexit.register(lambda: ray.shutdown())
             
             @ray.remote
             def _run_task(log_queue: Queue,  _df_chunk: pd.DataFrame | pl.LazyFrame, _chunk_num: int, _batch_num: int):
                 try:
-                    logger = backtestee.logger
-                    if not logger.handlers:
-                        logger.addHandler(QueueHandler(log_queue))
-                        logger.setLevel(logging.DEBUG)
-                        logger.propagate = False
+                    logger =setup_logger_in_ray_task(backtestee.logger.name, log_queue)
                     if self._backtest_mode == BacktestMode.vectorized:
                         _df_chunk = dtl.preprocess_vectorized_df(_df_chunk, backtestee)
                         backtestee.backtest(_df_chunk)
@@ -319,32 +315,26 @@ class BacktestEngine(BaseEngine):
                     return False
                 return True
 
-            try:
-                log_listener = None
-                logger = backtestee.logger
-                self._init_ray(**ray_kwargs)
-                log_queue = Queue()
-                log_listener = QueueListener(log_queue, *logger.handlers, respect_handler_level=True)
-                log_listener.start()
-                batch_size = ray_kwargs['num_cpus']
-                batches = [ray_tasks[i: i + batch_size] for i in range(0, len(ray_tasks), batch_size)]
-                with tqdm(
-                    total=len(batches),
-                    desc=f'Backtesting {backtestee.name} ({batch_size} chunks per batch)', 
-                    colour='green'
-                ) as tqdm_bar:
-                    for batch_num, batch in enumerate(batches):
-                        futures = [_run_task.remote(log_queue, *task, batch_num) for task in batch]
-                        results = ray.get(futures)
-                        if not all(results):
-                            logger.warning(f'Some backtesting tasks in batch{batch_num} failed, check {logger.name}.log for details')
-                        tqdm_bar.update(1)
-            except Exception:
-                logger.exception('Error in backtesting:')
-            finally:
-                if log_listener:
-                    log_listener.stop()
-                self._shutdown_ray()
+            logger = backtestee.logger
+            self._init_ray(**ray_kwargs)
+            with ray_logging_context(logger) as log_queue:
+                try:
+                    batch_size = ray_kwargs['num_cpus']
+                    batches = [ray_tasks[i: i + batch_size] for i in range(0, len(ray_tasks), batch_size)]
+                    with ProgressBar(
+                        total=len(batches),
+                        description=f'Backtesting {backtestee.name} ({batch_size} chunks per batch)', 
+                    ) as progress_bar:
+                        for batch_num, batch in enumerate(batches):
+                            futures = [_run_task.remote(log_queue, *task, batch_num) for task in batch]
+                            results = ray.get(futures)
+                            if not all(results):
+                                logger.warning(f'Some backtesting tasks in batch{batch_num} failed, check {logger.name}.log for details')
+                            progress_bar.advance(1)
+                except Exception:
+                    logger.exception('Error in backtesting:')
+                finally:
+                    self._shutdown_ray()
         end_time = time.time()
         cprint(f'Backtest elapsed time: {end_time - start_time:.3f}(s)', style='bold')
         
@@ -366,11 +356,11 @@ class BacktestEngine(BaseEngine):
             df_chunk = df_chunk.collect().to_pandas()
         
         # OPTIMIZE: critical loop
-        for row in tqdm(
+        for row in track(
             df_chunk.itertuples(index=False), 
             total=df_chunk.shape[0], 
-            desc=f'Backtest-Chunk{chunk_num}-Batch{batch_num} (per row)', 
-            colour='yellow'
+            description=f'Backtest-Chunk{chunk_num}-Batch{batch_num} (per row)', 
+            bar_style=RichColor.BRIGHT_YELLOW.value,
         ):
             # TODO: don't use product objects, use product name instead
             # users should use self.product to get the product object

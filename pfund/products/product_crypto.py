@@ -29,12 +29,12 @@ class CryptoProduct(BaseProduct):
     def _load_config(self):
         from pfund.config import get_config
         from pfund import print_warning
-        from pfund.utils import load_yaml_file
+        from pfund_kit.utils.yaml import load
         config = get_config()
         file_path = f'{config.cache_path}/{self.exchange.lower()}/market_configs.yml'
         if not os.path.exists(file_path):
             return
-        config = load_yaml_file(file_path)[self.category]
+        config = load(file_path)[self.category]
         if str(self) not in config:
             print_warning(
                 f'{self} not found in {self.exchange} market configs,\n'

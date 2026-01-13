@@ -17,9 +17,9 @@ from pathlib import Path
 from httpx import AsyncClient, RequestError, HTTPStatusError
 from json import JSONDecodeError
 
+from pfund_kit.utils.yaml import load, dump
 from pfund.errors import ParseApiResponseError
 from pfund.parser import SchemaParser
-from pfund.utils import load_yaml_file, dump_yaml_file
 from pfund.enums import Environment, CryptoExchange
 
 
@@ -132,12 +132,12 @@ class BaseRESTfulAPI(ABC):
         return Path(config.cache_path) / self.exch / self.SAMPLES_FILENAME
     
     def _append_sample_return(self, endpoint_name: EndpointName, api_response: ApiResponse):
-        existing_samples = load_yaml_file(self.sample_file_path) or {}
+        existing_samples = load(self.sample_file_path) or {}
         existing_samples[endpoint_name] = api_response
-        dump_yaml_file(self.sample_file_path, existing_samples)
+        dump(data=existing_samples, file_path=self.sample_file_path)
     
     def get_sample_return(self, endpoint_name: EndpointName) -> ApiResponse:
-        samples = load_yaml_file(self.sample_file_path)
+        samples = load(self.sample_file_path)
         return samples[endpoint_name]
     
     async def _request(
