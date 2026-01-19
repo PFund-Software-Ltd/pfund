@@ -12,7 +12,7 @@ class Resolution:
     DEFAULT_ORDERBOOK_LEVEL = 1
     ALLOWED_UNITS = (
         # 'y|year|years|'
-        # 'M|mon|mons|month|months|'
+        # 'mo|month|months|'
         # 'w|week|weeks|'
         'd|day|days|'
         'h|hour|hours|'
@@ -39,7 +39,7 @@ class Resolution:
 
         period, timeframe, orderbook_level = self._parse(resolution)
         self.period = int(period)
-        self.timeframe = Timeframe(timeframe[0])
+        self.timeframe = Timeframe(timeframe[0].lower())
         self.orderbook_level: int | None = self._resolve_orderbook_level(orderbook_level)
 
     def _parse(self, resolution: str) -> tuple[str, str, str | None]:
@@ -58,7 +58,7 @@ class Resolution:
         resolution = re.sub(r"^(\d+)[-_]", r"\1", resolution)
         
         # validate resolution pattern
-        assert re.match(rf"^[1-9]\d*({self.ALLOWED_UNITS})(?:_L[1-3])?$", resolution), (
+        assert re.match(rf"^[1-9]\d*({self.ALLOWED_UNITS})(?:_L[1-3])?$", resolution, re.IGNORECASE), (
             f"Invalid {resolution=}, pattern should be e.g. '1d', '2m', '3h', '1quote_L1' etc."
         )
         
@@ -243,13 +243,3 @@ class Resolution:
         if not isinstance(other, Resolution):
             return NotImplemented
         return self._value() <= other._value()
-
-if __name__ == "__main__":
-    print(Resolution("-1d"))
-    # print(Resolution("1h"))
-    # print(Resolution("1s"))
-    # print(Resolution("1t"))
-    # print(Resolution("1q"))
-    # print(Resolution("1q_L1"))
-    # print(Resolution("1q_L2"))
-    # print(Resolution("1q_L3"))
