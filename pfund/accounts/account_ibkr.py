@@ -5,7 +5,7 @@ from pfund.accounts.account_base import BaseAccount
 from pfund.enums import Environment
 
 
-class IBAccount(BaseAccount):
+class IBKRAccount(BaseAccount):
     _default_client_id = 0
     
     @classmethod

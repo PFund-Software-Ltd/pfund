@@ -24,7 +24,7 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "pfeed>=0.0.5",
+    "pfeed[duckdb]>=0.0.5",
     "pfolio>=0.0.2",
     "pfund-plot>=0.0.1.dev3",
     "pfund-kit>=0.0.1.dev1",

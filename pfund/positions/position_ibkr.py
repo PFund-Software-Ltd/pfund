@@ -7,7 +7,7 @@ from numpy import sign
 from pfund.positions.position_base import BasePosition
 
 
-class IBPosition(BasePosition):
+class IBKRPosition(BasePosition):
     # TODO, consider create IBStockPosition etc. to separate products
     @dataclass(frozen=True)
     class Position:

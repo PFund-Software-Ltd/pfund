@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import ClassVar, Literal, TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.brokers.interactive_brokers.api import InteractiveBrokersAPI
-    from pfund.accounts.account_ibkr import IBAccount
+    from pfund.accounts.account_ibkr import IBKRAccount
 
 import time
 from threading import Thread
@@ -33,7 +33,7 @@ class InteractiveBrokersClient(EClient):
     def connect(self: InteractiveBrokersAPI | InteractiveBrokersClient):
         # account = self.account
         # TEMP
-        account: IBAccount = self._accounts['DU954568_account']
+        account: IBKRAccount = self._accounts['DU954568_account']
 
         super().connect(host=account.host, port=account.port, clientId=account.client_id)
         self._ib_thread = Thread(name='InteractiveBrokersClientThread', target=self.run, daemon=True)

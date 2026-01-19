@@ -13,13 +13,13 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfund.positions.position_base import BasePosition
     from pfund.positions.position_crypto import CryptoPosition
-    from pfund.positions.position_ibkr import IBPosition
+    from pfund.positions.position_ibkr import IBKRPosition
     from pfund.balances.balance_base import BaseBalance
     from pfund.balances.balance_crypto import CryptoBalance
-    from pfund.balances.balance_ibkr import IBBalance
+    from pfund.balances.balance_ibkr import IBKRBalance
     from pfund.accounts.account_base import BaseAccount
     from pfund.accounts.account_crypto import CryptoAccount
-    from pfund.accounts.account_ibkr import IBAccount
+    from pfund.accounts.account_ibkr import IBKRAccount
     from pfund.accounts.account_simulated import SimulatedAccount
     from pfund.orders.order_base import BaseOrder
     from pfund.datas.data_base import BaseData
@@ -82,7 +82,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def get_position(self, account: CryptoAccount, pdt: str) -> CryptoPosition | None: ...
     
     @overload
-    def get_position(self, account: IBAccount, pdt: str) -> IBPosition | None: ...
+    def get_position(self, account: IBKRAccount, pdt: str) -> IBKRPosition | None: ...
     
     def get_position(self, account: BaseAccount, pdt: str) -> BasePosition | None:
         return self.positions[account].get(pdt, None)
@@ -91,7 +91,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def get_balance(self, account: CryptoAccount, ccy: str) -> CryptoBalance | None: ...
     
     @overload
-    def get_balance(self, account: IBAccount, ccy: str) -> IBBalance | None: ...
+    def get_balance(self, account: IBKRAccount, ccy: str) -> IBKRBalance | None: ...
     
     def get_balance(self, account: BaseAccount, ccy: str) -> BaseBalance | None:
         return self.balances[account].get(ccy, None)
@@ -121,7 +121,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         host: str='',
         port: int | None=None,
         client_id: int | None=None,
-    ) -> IBAccount: ...
+    ) -> IBKRAccount: ...
     
     @overload
     def add_account(

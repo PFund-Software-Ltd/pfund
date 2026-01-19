@@ -33,10 +33,12 @@ class Adapter:
     # FIXME: PROJ_PATH doesn't exist anymore
     def get_file_path(self) -> Path:
         '''Gets the file path of the adapter.yml'''
-        from pfund.const.paths import PROJ_PATH
+        from pfund import get_config
         from pfund.enums import CryptoExchange
+        config = get_config()
+        package_path = config._paths.package_path
         tv_type = 'exchanges' if self._trading_venue in CryptoExchange.__members__ else 'brokers'
-        return PROJ_PATH / tv_type / self._trading_venue.lower() / self.FILENAME
+        return package_path / tv_type / self._trading_venue.lower() / self.FILENAME
     
     def _load_config(self, file_path: Path):
         '''Loads adapter.yml'''

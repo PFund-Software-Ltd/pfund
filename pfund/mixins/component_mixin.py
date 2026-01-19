@@ -128,7 +128,7 @@ class ComponentMixin:
     # FIXME: integrate pfund_kit logging instead
     def _setup_logging(self: Component):
         '''Sets up logging for component running in remote process, uses zmq's PUBHandler to send logs to engine'''
-        from pfund.logging.zmq_pub_handler import ZMQPubHandler
+        from pfund.utils.zmq_pub_handler import ZMQPubHandler
         from pfeed.messaging.zeromq import ZeroMQ
         from pfund.logging.config import LoggingDictConfigurator
         from pfund_kit.utils import get_free_port

@@ -26,7 +26,7 @@ DEFAULT_EXCHANGES = {
 }
 
 
-class IBProduct(BaseProduct):
+class IBKRProduct(BaseProduct):
     trading_venue: TradingVenue = TradingVenue.IBKR
     broker: Broker = Broker.IBKR
     exchange: str=''

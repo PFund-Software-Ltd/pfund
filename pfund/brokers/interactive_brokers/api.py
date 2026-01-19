@@ -5,10 +5,10 @@ from __future__ import annotations
 from typing import Callable, TYPE_CHECKING, Awaitable, Literal
 if TYPE_CHECKING:
     from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
-    from pfund.accounts.account_ibkr import IBAccount
+    from pfund.accounts.account_ibkr import IBKRAccount
     from pfund.enums import Environment
     from pfund.datas.resolution import Resolution
-    from pfund.products.product_ibkr import IBProduct
+    from pfund.products.product_ibkr import IBKRProduct
     
 import logging
 from collections import defaultdict
@@ -54,8 +54,8 @@ class InteractiveBrokersAPI(IBClient, IBWrapper):
         self._callback: Callable[[str], Awaitable[None] | None] | None = None
         self._callback_raw_msg: bool = False
 
-        self._products: dict[ProductName, IBProduct] = {}
-        self._accounts: dict[AccountName, IBAccount] = {}
+        self._products: dict[ProductName, IBKRProduct] = {}
+        self._accounts: dict[AccountName, IBKRAccount] = {}
         self._channels: dict[DataChannelType, list[str]] = {
             DataChannelType.public: [],
             DataChannelType.private: []
@@ -85,7 +85,7 @@ class InteractiveBrokersAPI(IBClient, IBWrapper):
         self._callback = callback
         self._callback_raw_msg = raw_msg
     
-    def add_account(self, account: IBAccount) -> IBAccount:
+    def add_account(self, account: IBKRAccount) -> IBKRAccount:
         if account.name not in self._accounts:
             self._accounts[account.name] = account
             self._logger.debug(f'added account {account}')
@@ -93,7 +93,7 @@ class InteractiveBrokersAPI(IBClient, IBWrapper):
             raise ValueError(f'account name {account.name} has already been added')
         return account
         
-    def add_product(self, product: IBProduct) -> IBProduct:
+    def add_product(self, product: IBKRProduct) -> IBKRProduct:
         if product.name not in self._products:
             self._products[product.name] = product
             self._logger.debug(f'added product {product.name}')
@@ -109,7 +109,7 @@ class InteractiveBrokersAPI(IBClient, IBWrapper):
             self._channels[channel_type].append(channel)
             self._logger.debug(f'added {channel_type} channel {channel}')
     
-    def _create_public_channel(self, product: IBProduct, resolution: Resolution):
+    def _create_public_channel(self, product: IBKRProduct, resolution: Resolution):
         """Creates publich channel for internal use.
         Since IB's subscription does not require channel name,
         this function creates channel only for internal use, clarity and consistency.

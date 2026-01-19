@@ -15,7 +15,7 @@ For more details, please refer to:
 from pfund.balances.balance_base import BaseBalance
 
 
-class IBBalance(BaseBalance):
+class IBKRBalance(BaseBalance):
     def __init__(self, account, ccy):
         super().__init__(account, ccy)
 

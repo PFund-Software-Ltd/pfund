@@ -40,10 +40,10 @@ class SimulatedBroker:
     def _accounts_check(self: SimulatedBroker | BaseBroker):
         assert all(isinstance(account, SimulatedAccount) for account in self._accounts.values()), 'all accounts must be SimulatedAccount'
         if self.name == Broker.IBKR:
-            from pfund.accounts.account_ibkr import IBAccount
+            from pfund.accounts.account_ibkr import IBKRAccount
             account = list(self._accounts.values())[0]  # IB has only one account for SANDBOX trading
             # create an IB account to check if host, port, client_id are provided, if not, it raises an error
-            IBAccount(
+            IBKRAccount(
                 env=self._env, 
                 name=account.name,
                 host=getattr(account, 'host', ''),

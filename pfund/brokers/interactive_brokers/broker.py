@@ -8,11 +8,11 @@ if TYPE_CHECKING:
     from pfund.datas.data_time_based import TimeBasedData
 
 from pfund.adapter import Adapter
-from pfund.products.product_ibkr import IBProduct
-from pfund.accounts.account_ibkr import IBAccount
-from pfund.orders.order_ibkr import IBOrder
-from pfund.positions.position_ibkr import IBPosition
-from pfund.balances.balance_ibkr import IBBalance
+from pfund.products.product_ibkr import IBKRProduct
+from pfund.accounts.account_ibkr import IBKRAccount
+from pfund.orders.order_ibkr import IBKROrder
+from pfund.positions.position_ibkr import IBKRPosition
+from pfund.balances.balance_ibkr import IBKRBalance
 from pfund_kit.utils.text import to_uppercase
 from pfund.brokers.broker_base import BaseBroker
 from pfund.enums import PublicDataChannel, PrivateDataChannel, Environment, Broker
@@ -28,7 +28,7 @@ class InteractiveBrokers(BaseBroker):
         super().__init__(env=env)
         # FIXME: check if only supports one account
         self.account = None
-        self._accounts: dict[Literal[Broker.IBKR], dict[AccountName, IBAccount]] = { self.name: {} }
+        self._accounts: dict[Literal[Broker.IBKR], dict[AccountName, IBKRAccount]] = { self.name: {} }
         self._api = InteractiveBrokersAPI(self._env)
 
     @property
@@ -50,12 +50,12 @@ class InteractiveBrokers(BaseBroker):
             channel: FullDataChannel = self._api._create_private_channel(channel)
         self._api.add_channel(channel, channel_type='private')
 
-    def get_account(self, name: AccountName) -> IBAccount:
+    def get_account(self, name: AccountName) -> IBKRAccount:
         return self.accounts[name]
 
-    def add_account(self, name: AccountName='', host: str='', port: int | None=None, client_id: int | None=None) -> IBAccount:
+    def add_account(self, name: AccountName='', host: str='', port: int | None=None, client_id: int | None=None) -> IBKRAccount:
         if name not in self.accounts:
-            account = IBAccount(env=self._env, name=name, host=host, port=port, client_id=client_id)
+            account = IBKRAccount(env=self._env, name=name, host=host, port=port, client_id=client_id)
             self.accounts[account.name] = account
             self.account = account
             self._api.add_account(account)
@@ -66,7 +66,7 @@ class InteractiveBrokers(BaseBroker):
             #     raise Exception(f'Only one primary account is supported and account {self.account} is already set up')
         return account
     
-    def get_product(self, name: ProductName, exch: str='') -> IBProduct:
+    def get_product(self, name: ProductName, exch: str='') -> IBKRProduct:
         if exch:
             return self._products[exch.upper()][name]
         else:
@@ -76,8 +76,8 @@ class InteractiveBrokers(BaseBroker):
             else:
                 raise ValueError(f'product name {name} has multiple products across exchanges, please specify `exch`')
     
-    def add_product(self, basis: str, exch: str='', name: ProductName='', symbol: str='', **specs) -> IBProduct:
-        product: IBProduct = self.create_product(basis, exch=exch, name=name, symbol=symbol, **specs)
+    def add_product(self, basis: str, exch: str='', name: ProductName='', symbol: str='', **specs) -> IBKRProduct:
+        product: IBKRProduct = self.create_product(basis, exch=exch, name=name, symbol=symbol, **specs)
         if product.name not in self._products[product.exchange]:
             # TODO: no market configs to load, get from reqContractDetails()
             # market_configs = self.load_market_configs()
@@ -91,7 +91,7 @@ class InteractiveBrokers(BaseBroker):
             self._api.add_product(product)
             self.adapter.add_mapping(str(product.type), product.name, product.symbol)
         else:
-            existing_product: IBProduct = self.get_product(product.name, exch=product.exchange)
+            existing_product: IBKRProduct = self.get_product(product.name, exch=product.exchange)
             # assert products are the same with the same name
             if existing_product == product:
                 product = existing_product
@@ -99,35 +99,35 @@ class InteractiveBrokers(BaseBroker):
                 raise ValueError(f'product name {name} has already been used for {existing_product}')
         return product
 
-    def add_balance(self, acc: str, ccy: str) -> IBBalance | None:
+    def add_balance(self, acc: str, ccy: str) -> IBKRBalance | None:
         acc, ccy = to_uppercase(acc, ccy)
         if not (balance := self.get_balances(acc=acc, ccy=ccy)):
             account = self.get_account(acc)
-            balance = IBBalance(account, ccy)
+            balance = IBKRBalance(account, ccy)
             self._portfolio_manager.add_balance(balance)
             self._logger.debug(f'added {balance=}')
         return balance
     
-    def add_position(self, exch: str, acc: str, pdt: str) -> IBPosition | None:
+    def add_position(self, exch: str, acc: str, pdt: str) -> IBKRPosition | None:
         exch, acc, pdt = to_uppercase(exch, acc, pdt)
         if not (position := self.get_positions(exch=exch, acc=acc, pdt=pdt)):
             account = self.get_account(acc)
             product = self.add_product(exch, pdt)
-            position = IBPosition(account, product)
+            position = IBKRPosition(account, product)
             self._portfolio_manager.add_position(position)
             self._logger.debug(f'added {position=}')
         return position
 
-    def add_order(self, exch: str, acc: str, pdt: str) -> IBOrder | None:
+    def add_order(self, exch: str, acc: str, pdt: str) -> IBKROrder | None:
         exch, acc, pdt = to_uppercase(exch, acc, pdt)
         if not (order := self.get_orders(acc)):
             product = self.add_product(exch, pdt)
-            order = IBOrder(self._env, acc, product)
+            order = IBKROrder(self._env, acc, product)
             self.orders[acc][order.oid] = order
         return order
     
     # TODO
-    def get_orders(self, acc: str='', pdt: str='') -> dict | IBOrder:
+    def get_orders(self, acc: str='', pdt: str='') -> dict | IBKROrder:
         """Gets orders from an IB account.
         Account name `acc` will be automatically filled using the primary account if not provided.
         Therefore, `acc` is always non-empty
@@ -147,7 +147,7 @@ class InteractiveBrokers(BaseBroker):
         """
         return orders
 
-    def get_balances(self, acc: str='', ccy: str='') -> dict | IBBalance:
+    def get_balances(self, acc: str='', ccy: str='') -> dict | IBKRBalance:
         """Gets balances from an IB account.
         Account name `acc` will be automatically filled using the primary account if not provided.
         Therefore, `acc` is always non-empty
@@ -168,7 +168,7 @@ class InteractiveBrokers(BaseBroker):
             balances = balances[ccy]
         return balances
 
-    def get_positions(self, exch: str='', acc: str='', pdt: str='') -> dict | IBPosition:
+    def get_positions(self, exch: str='', acc: str='', pdt: str='') -> dict | IBKRPosition:
         """Gets positions from an IB account.
         Account name `acc` will be automatically filled using the primary account if not provided.
         Therefore, `acc` is always non-empty
@@ -203,13 +203,13 @@ class InteractiveBrokers(BaseBroker):
     def create_order(self, exch, acc, pdt, *args, **kwargs):
         account = self.get_account(acc)
         product = self.add_product(exch, pdt)    
-        return IBOrder(account, product, *args, **kwargs)
+        return IBKROrder(account, product, *args, **kwargs)
     
     def place_order(self, o):
         self._order_manager.on_submitted(o)
         self._api.placeOrder(o.orderId, o.contract, o)
 
-    def place_orders(self, *args, **kwargs) -> list[IBOrder]:
+    def place_orders(self, *args, **kwargs) -> list[IBKROrder]:
         raise NotImplementedError(f'{self.name} does not support place_orders')
 
     def cancel_all_orders(self, reason=None):
