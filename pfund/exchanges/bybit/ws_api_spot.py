@@ -1,7 +1,7 @@
 from pfund.exchanges.bybit.ws_api_bybit import BybitWebSocketAPI
 from pfund.enums import Environment, DataChannelType
 from pfund.products.product_bybit import BybitProduct
-from pfund.datas.timeframe import TimeframeUnits
+from pfund.datas.timeframe import TimeframeUnit
 
 
 class SpotWebSocketAPI(BybitWebSocketAPI):
@@ -19,10 +19,10 @@ class SpotWebSocketAPI(BybitWebSocketAPI):
     }
     SUPPORTED_ORDERBOOK_LEVELS = [1, 2]
     SUPPORTED_RESOLUTIONS = {
-        TimeframeUnits.QUOTE: [1, 50],
-        TimeframeUnits.TICK: [1],
-        TimeframeUnits.MINUTE: [1, 3, 5, 15, 30, 60, 120, 240, 360, 720],
-        TimeframeUnits.DAY: [1],
+        TimeframeUnit.QUOTE: [1, 50],
+        TimeframeUnit.TICK: [1],
+        TimeframeUnit.MINUTE: [1, 3, 5, 15, 30, 60, 120, 240, 360, 720],
+        TimeframeUnit.DAY: [1],
     }
     # REVIEW
     PUBLIC_CHANNEL_ARGS_LIMIT = 10

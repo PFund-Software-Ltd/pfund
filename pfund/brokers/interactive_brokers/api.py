@@ -16,7 +16,7 @@ from collections import defaultdict
 from pfund.brokers.interactive_brokers.client import InteractiveBrokersClient as IBClient
 from pfund.brokers.interactive_brokers.wrapper import InteractiveBrokersWrapper as IBWrapper
 from pfund.brokers.interactive_brokers.wrapper import *
-from pfund.datas.timeframe import TimeframeUnits
+from pfund.datas.timeframe import TimeframeUnit
 from pfund.enums import Environment, Broker, PublicDataChannel, PrivateDataChannel, TraditionalAssetType, DataChannelType
 
 
@@ -24,8 +24,8 @@ from pfund.enums import Environment, Broker, PublicDataChannel, PrivateDataChann
 class InteractiveBrokersAPI(IBClient, IBWrapper):
     SUPPORTED_ORDERBOOK_LEVELS = [1, 2]
     SUPPORTED_RESOLUTIONS = {
-        TimeframeUnits.TICK: [1],
-        TimeframeUnits.SECOND: [5],
+        TimeframeUnit.TICK: [1],
+        TimeframeUnit.SECOND: [5],
     }
     CHECK_FREQ = 10  # check connections frequency (in seconds)
     PING_FREQ = 20  # application-level ping to exchange (in seconds)

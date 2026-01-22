@@ -5,22 +5,53 @@ if TYPE_CHECKING:
     from pfund.typing import ResolutionRepr
 
 import re
+from enum import StrEnum
 
 
-# TODO use total_ordering from functools
+class ResolutionUnit(StrEnum):
+    # MEANING = canonical value, (aliases, ...)
+    YEAR = 'y', ('yr', 'year', 'years')
+    MONTH = 'mo', ('mon', 'mons', 'month', 'months')
+    WEEK = 'w', ('wk', 'week', 'weeks')
+    DAY = 'd', ('day', 'days')
+    HOUR = 'h', ('hour', 'hours')
+    MINUTE = 'm', ('min', 'mins', 'minute', 'minutes')
+    SECOND = 's', ('sec', 'secs', 'second', 'seconds')
+    TICK = 't', ('tick', 'ticks')
+    QUOTE = 'q', ('quote', 'quotes')
+
+    _aliases: tuple[str, ...]
+
+    def __new__(cls, value: str, aliases: tuple[str, ...] = ()):
+        obj = str.__new__(cls, value)
+        obj._value_ = value
+        obj._aliases = (value,) + aliases  # include canonical value
+        return obj
+
+    @property
+    def aliases(self) -> tuple[str, ...]:
+        return self._aliases
+
+    @classmethod
+    def standardize(cls, s: str) -> ResolutionUnit:
+        '''Standardize the resolution unit string to the canonical value.'''
+        s_lower = s.lower()
+        for unit in cls:
+            if s_lower in unit._aliases:
+                return unit
+        raise ValueError(f"Unknown resolution unit: {s}")
+
+    @classmethod
+    def pattern(cls) -> str:
+        """Generate regex pattern matching any alias for all units."""
+        all_aliases = []
+        for unit in cls:
+            all_aliases.extend(unit._aliases)
+        return '|'.join(all_aliases)
+
+
 class Resolution:
     DEFAULT_ORDERBOOK_LEVEL = 1
-    ALLOWED_UNITS = (
-        # 'y|year|years|'
-        # 'mo|month|months|'
-        # 'w|week|weeks|'
-        'd|day|days|'
-        'h|hour|hours|'
-        'm|min|mins|minute|minutes|'
-        's|sec|secs|second|seconds|'
-        't|tick|ticks|'
-        'q|quote|quotes'
-    )
 
     def __init__(self, resolution: Resolution | ResolutionRepr):
         """
@@ -39,7 +70,7 @@ class Resolution:
 
         period, timeframe, orderbook_level = self._parse(resolution)
         self.period = int(period)
-        self.timeframe = Timeframe(timeframe[0].lower())
+        self.timeframe = Timeframe(ResolutionUnit.standardize(timeframe))
         self.orderbook_level: int | None = self._resolve_orderbook_level(orderbook_level)
 
     def _parse(self, resolution: str) -> tuple[str, str, str | None]:
@@ -58,7 +89,7 @@ class Resolution:
         resolution = re.sub(r"^(\d+)[-_]", r"\1", resolution)
         
         # validate resolution pattern
-        assert re.match(rf"^[1-9]\d*({self.ALLOWED_UNITS})(?:_L[1-3])?$", resolution, re.IGNORECASE), (
+        assert re.match(rf"^[1-9]\d*({ResolutionUnit.pattern()})(?:_L[1-3])?$", resolution, re.IGNORECASE), (
             f"Invalid {resolution=}, pattern should be e.g. '1d', '2m', '3h', '1quote_L1' etc."
         )
         
@@ -118,6 +149,15 @@ class Resolution:
 
     def is_day(self):
         return self.timeframe.is_day()
+    
+    def is_week(self):
+        return self.timeframe.is_week()
+    
+    def is_month(self):
+        return self.timeframe.is_month()
+    
+    def is_year(self):
+        return self.timeframe.is_year()
 
     def higher(self) -> Resolution:
         """Rotate to the next higher resolution. e.g. 1m > 1h, higher resolution = lower timeframe"""

@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfund.exchanges.rest_api_base import Result, ApiResponse
     from pfund.products.product_bybit import BybitProduct
-    from pfund.datas.timeframe import TimeframeUnits
+    from pfund.datas.timeframe import TimeframeUnit
 
 import asyncio
 import datetime
@@ -38,7 +38,7 @@ class Exchange(BaseExchange):
     #     pass
 
     @classmethod
-    def get_supported_resolutions(cls, product: BybitProduct) -> dict[TimeframeUnits, list[int]]:
+    def get_supported_resolutions(cls, product: BybitProduct) -> dict[TimeframeUnit, list[int]]:
         import importlib
         from pfeed.utils import to_camel_case
         name = cls.name.lower()

@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from pfund.exchanges.rest_api_base import Result, ApiResponse
     from pfund.enums import CryptoExchange
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund.datas.timeframe import TimeframeUnits
+    from pfund.datas.timeframe import TimeframeUnit
     from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
     from pfund.products.product_crypto import CryptoProduct
     from pfund.accounts.account_crypto import CryptoAccount
@@ -70,7 +70,7 @@ class BaseExchange(ABC):
     
     @classmethod
     @abstractmethod
-    def get_supported_resolutions(cls, product: CryptoProduct) -> dict[TimeframeUnits, list[int]]:
+    def get_supported_resolutions(cls, product: CryptoProduct) -> dict[TimeframeUnit, list[int]]:
         pass
     
     @classmethod

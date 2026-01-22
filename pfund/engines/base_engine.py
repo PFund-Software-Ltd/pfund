@@ -112,7 +112,7 @@ class BaseEngine(metaclass=MetaEngine):
         
         cls = self.__class__
         if not hasattr(cls, "_initialized"):
-            from pfeed.feeds.time_based_feed import TimeBasedFeed
+            from pfeed.utils import parse_date_range
             from pfund.external_listeners import ExternalListeners
             from pfund.utils import derive_run_mode
 
@@ -136,7 +136,7 @@ class BaseEngine(metaclass=MetaEngine):
                     style='bold yellow'
                 )
             is_data_range_dict = isinstance(data_range, dict)
-            cls._data_start, cls._data_end = TimeBasedFeed._parse_date_range(
+            cls._data_start, cls._data_end = parse_date_range(
                 start_date=data_range['start_date'] if is_data_range_dict else '',
                 end_date=data_range.get('end_date', '') if is_data_range_dict else '',
                 rollback_period=data_range if not is_data_range_dict else '',

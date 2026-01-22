@@ -16,7 +16,7 @@ from pfund.parser import SchemaParser
 from pfund.exchanges.ws_api_base import BaseWebSocketAPI, NamedWebSocket
 from pfund.enums import CryptoExchange, PublicDataChannel, DataChannelType
 from pfund.products.product_bybit import BybitProduct
-from pfund.datas.timeframe import TimeframeUnits
+from pfund.datas.timeframe import TimeframeUnit
 
 
 ProductCategory = BybitProduct.ProductCategory
@@ -127,7 +127,7 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
             orderbook_level = resolution.orderbook_level
             orderbook_depth = resolution.period
             supported_orderbook_levels = self.SUPPORTED_ORDERBOOK_LEVELS[product.category]
-            supported_orderbook_depths = self.SUPPORTED_RESOLUTIONS[TimeframeUnits.QUOTE][product.category]
+            supported_orderbook_depths = self.SUPPORTED_RESOLUTIONS[TimeframeUnit.QUOTE][product.category]
             if orderbook_level not in supported_orderbook_levels:
                 raise NotImplementedError(f"{self.exch} ({channel}.{product.symbol}) orderbook_level={orderbook_level} is not supported, supported levels: {supported_orderbook_levels}")
             if orderbook_level == 1 and orderbook_depth not in supported_orderbook_depths:

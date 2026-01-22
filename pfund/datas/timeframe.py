@@ -3,22 +3,26 @@ from typing import Literal
 from enum import IntEnum
 
 
-class TimeframeUnits(IntEnum):
+class TimeframeUnit(IntEnum):
     QUOTE = q = -2
     TICK = t = -1
     SECOND = s = 1
     MINUTE = m = 60
     HOUR = h = 60 * 60
-    DAY = d = 60 * 60 * 24  # NOTE: This is not accurate because trading hours per day vary.
+    # NOTE: These are not accurate, e.g. trading hours per day vary.
+    DAY = d = 60 * 60 * 24 
+    WEEK = w = 60 * 60 * 24 * 7
+    MONTH = mo = 60 * 60 * 24 * 30
+    YEAR = y = 60 * 60 * 24 * 365
 
 
 class Timeframe:
-    def __init__(self, timeframe: Literal['q', 't', 's', 'm', 'h', 'd']):
-        self.unit = TimeframeUnits[timeframe]
+    def __init__(self, timeframe: Literal['q', 't', 's', 'm', 'h', 'd', 'w', 'mo', 'y']):
+        self.unit = TimeframeUnit[timeframe]
     
     def higher(self):
         """Rotate to the next higher timeframe. e.g. HOUR is higher than MINUTE."""
-        sorted_units = list(TimeframeUnits)  # Enum members in sorted order
+        sorted_units = list(TimeframeUnit)  # Enum members in sorted order
         current_index = sorted_units.index(self.unit)
         next_index = current_index + 1
         if next_index < len(sorted_units):
@@ -29,7 +33,7 @@ class Timeframe:
 
     def lower(self):
         """Rotate to the next lower timeframe."""
-        sorted_units = list(TimeframeUnits)  # Enum members in sorted order
+        sorted_units = list(TimeframeUnit)  # Enum members in sorted order
         current_index = sorted_units.index(self.unit)
         prev_index = current_index - 1
         if prev_index >= 0:
@@ -39,22 +43,31 @@ class Timeframe:
         return self  # Already at the lowest unit
     
     def is_quote(self):
-        return self.unit == TimeframeUnits.QUOTE
+        return self.unit == TimeframeUnit.QUOTE
 
     def is_tick(self):
-        return self.unit == TimeframeUnits.TICK
+        return self.unit == TimeframeUnit.TICK
 
     def is_second(self):
-        return self.unit == TimeframeUnits.SECOND
+        return self.unit == TimeframeUnit.SECOND
 
     def is_minute(self):
-        return self.unit == TimeframeUnits.MINUTE
+        return self.unit == TimeframeUnit.MINUTE
 
     def is_hour(self):
-        return self.unit == TimeframeUnits.HOUR
+        return self.unit == TimeframeUnit.HOUR
 
     def is_day(self):
-        return self.unit == TimeframeUnits.DAY
+        return self.unit == TimeframeUnit.DAY
+    
+    def is_week(self):
+        return self.unit == TimeframeUnit.WEEK
+    
+    def is_month(self):
+        return self.unit == TimeframeUnit.MONTH
+    
+    def is_year(self):
+        return self.unit == TimeframeUnit.YEAR
     
     def __str__(self):
         return str(self.unit.name)
