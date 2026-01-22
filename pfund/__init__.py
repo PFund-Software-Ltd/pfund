@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 from importlib.metadata import version
 
-from pfund.config import get_config, configure
+from pfund.config import get_config, configure, configure_logging
 
 
 def what_is(alias: str) -> str:
@@ -94,6 +94,7 @@ __all__ = (
     '__version__',
     'configure',
     'get_config',
+    'configure_logging',
     'print_error',
     'print_warning',
     'alias',

@@ -26,10 +26,10 @@ class BaseFeature(BaseModel):
         return self.extract(X, *args, **kwargs)
     
     def _assert_functions_signatures(self):
-        from pfund.utils import get_args_and_kwargs_from_function
+        from pfund_kit.utils.function import get_function_args_and_kwargs
         super()._assert_functions_signatures()
         def _assert_predict_function():
-            args, kwargs, _, _ = get_args_and_kwargs_from_function(self.extract)
+            args, kwargs, _, _ = get_function_args_and_kwargs(self.extract)
             if not args or args[0] != 'X':
                 raise Exception(f'{self.name} extract() must have "X" as its first arg, i.e. extract(self, X, *args, **kwargs)')
         _assert_predict_function()

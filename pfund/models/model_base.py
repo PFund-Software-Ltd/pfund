@@ -18,8 +18,12 @@ if TYPE_CHECKING:
 import os
 from abc import ABC, abstractmethod
 
+from pfund_kit.logging.filters.trimmed_path_filter import TrimmedPathFilter
 from pfund.models.model_meta import MetaModel
 from pfund.mixins.component_mixin import ComponentMixin
+
+
+trim_path = TrimmedPathFilter.trim_path
 
 
 class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
@@ -45,10 +49,10 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         }
     
     def _assert_functions_signatures(self):
-        from pfund.utils import get_args_and_kwargs_from_function
+        from pfund_kit.utils.function import get_function_args_and_kwargs
         super()._assert_functions_signatures()
         def _assert_predict_function():
-            args, kwargs, _, _ = get_args_and_kwargs_from_function(self.predict)
+            args, kwargs, _, _ = get_function_args_and_kwargs(self.predict)
             if not args or args[0] != 'X':
                 raise Exception(f'{self.name} predict() must have "X" as its first arg, i.e. predict(self, X, *args, **kwargs)')
         _assert_predict_function()
@@ -97,19 +101,17 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
     
     def load(self) -> dict:
         import joblib
-        from pfund.utils import short_path
         file_path = self._get_file_path()
         if os.path.exists(file_path):
             obj: dict = joblib.load(file_path)
             self.model = obj['model']
             self._assert_no_missing_datas(obj)
-            self.logger.debug(f"loaded '{self.name}' from {short_path(file_path)}")
+            self.logger.debug(f"loaded '{self.name}' from {trim_path(file_path)}")
             return obj
         return {}
     
     def dump(self, obj: dict[str, Any] | None=None):
         import joblib
-        from pfund.utils import short_path
         if obj is None:
             obj = {}
         obj.update({
@@ -119,7 +121,7 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         })
         file_path = self._get_file_path()
         joblib.dump(obj, file_path, compress=True)
-        self.logger.debug(f"dumped '{self.name}' to {short_path(file_path)}")
+        self.logger.debug(f"dumped '{self.name}' to {trim_path(file_path)}")
     
     def _convert_min_max_data_to_dict(self):
         '''Converts min_data and max_data from int to dict[product, dict[resolution, int]]'''

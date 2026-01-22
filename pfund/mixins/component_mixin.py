@@ -282,7 +282,7 @@ class ComponentMixin:
 
     @staticmethod
     def dt(ts: float) -> datetime.datetime:
-        from pfund.utils import convert_ts_to_dt
+        from pfund_kit.utils.temporal import convert_ts_to_dt
         return convert_ts_to_dt(ts)
     
     @staticmethod

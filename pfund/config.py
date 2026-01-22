@@ -20,11 +20,6 @@ __all__ = [
 project_name = 'pfund'
 _config: PFundConfig | None = None
 _logging_config: dict | None = None
-CONFIGURABLE_KEYS: set[str] = {
-    'data_path',
-    'log_path',
-    'cache_path',
-}
 
 
 def setup_logging(env: Environment | None=None, reset: bool=False):
@@ -84,12 +79,9 @@ def configure(
     config = get_config()
     config_dict = config.to_dict()
     config_dict.pop('__version__')
-    config_dict_keys = set(config_dict.keys())
-    assert config_dict_keys == CONFIGURABLE_KEYS, \
-        f"Config keys are not the same as CONFIGURABLE_KEYS: {config_dict_keys} != {CONFIGURABLE_KEYS}"
     
     # Apply updates for non-None values
-    for k in CONFIGURABLE_KEYS:
+    for k in config_dict:
         v = locals().get(k)
         if v is not None:
             if '_path' in k:
@@ -142,11 +134,15 @@ class PFundConfig(Configuration):
     def __init__(self):
         super().__init__(project_name=project_name, source_file=__file__)
         # TODO: when mtflow is ready
-        # artifact_path: str | None = None,  
-        # TODO: integrate with pfund_kit Configuration, confirm their usage, if confirmed, add them to CONFIGURABLE_KEYS
+        # artifact_path: str | None = None,
+        # TODO: integrate with pfund_kit Configuration, confirm their usage
         self.storage: DataStorage | None = None
         self.storage_options: dict | None = None
         self.use_deltalake: bool | None = None
+
+    def _initialize_from_data(self):
+        """No additional config attributes to initialize."""
+        pass
     
     # TODO: when compose.yml is in use
     def prepare_docker_context(self):

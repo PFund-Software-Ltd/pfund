@@ -38,8 +38,8 @@ class MetaModel(ABCMeta):
             not module_name.startswith('ray.')
         )
         if is_user_defined_class:
-            from pfund.utils import get_args_and_kwargs_from_function
-            init_args, _, _, _ = get_args_and_kwargs_from_function(cls.__original_init__)
+            from pfund_kit.utils.function import get_function_args_and_kwargs
+            init_args, _, _, _ = get_function_args_and_kwargs(cls.__original_init__)
             # assert users to include 'model'/'indicator' as the first argument in __init__()
             MetaModel._assert_required_arg(cls, init_args)
             

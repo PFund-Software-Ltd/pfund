@@ -5,7 +5,10 @@ import pandas as pd
 import polars as pl
 
 from pfund.models.model_base import BaseModel
-from pfund.utils import short_path
+from pfund_kit.logging.filters.trimmed_path_filter import TrimmedPathFilter
+
+
+trim_path = TrimmedPathFilter.trim_path
 
 
 class PytorchModel(BaseModel):
@@ -15,7 +18,7 @@ class PytorchModel(BaseModel):
             obj = torch.load(file_path)
             self.model.load_state_dict(obj['state_dict'])
             self._assert_no_missing_datas(obj)
-            self.logger.debug(f"loaded trained '{self.name}' from {short_path(file_path)}")
+            self.logger.debug(f"loaded trained '{self.name}' from {trim_path(file_path)}")
             return obj
         return {}
     
@@ -39,7 +42,7 @@ class PytorchModel(BaseModel):
         file_path = self._get_file_path(extension='.pt')
         # TODO: need to dump datasets (parquet.gz) as well?
         torch.save(obj, file_path)
-        self.logger.debug(f"dumped trained '{self.name}' to {short_path(file_path)}")
+        self.logger.debug(f"dumped trained '{self.name}' to {trim_path(file_path)}")
         
     def predict(
         self, 
