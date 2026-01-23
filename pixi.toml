@@ -45,7 +45,7 @@ py313 = ["py313", "test", "optional"]
 
 [feature.optional.pypi-dependencies]
 pfund-plot = { version = ">=0.0.1.dev2", extras = ["jupyter"] }
-pfund-ibapi = ">=10.39.1"
+pfund-ibapi = ">=10.42.1"
 
 [feature.optional.dependencies]
 ta-lib = ">=0.6.4"
