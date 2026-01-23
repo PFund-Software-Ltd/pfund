@@ -296,7 +296,7 @@ class BacktestEngine(BaseEngine):
             import atexit
             import ray
             from ray.util.queue import Queue
-            from pfeed.logging import setup_logger_in_ray_task, ray_logging_context
+            from pfeed.utils.ray_logging import setup_logger_in_ray_task, ray_logging_context
             
             atexit.register(lambda: ray.shutdown())
             

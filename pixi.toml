@@ -4,7 +4,7 @@ channels = ["conda-forge"]
 name = "pfund"
 platforms = ["osx-arm64", "linux-64"]
 # updating this needs to also update the version in the ci.yml and templates/ci-workflow-template.yml files
-requires-pixi = ">=0.62.1"  # command: pixi workspace requires-pixi set ">=0.60
+requires-pixi = ">=0.63.2"  # command: pixi workspace requires-pixi set ">=0.63.2"
 
 [tasks]
 
@@ -18,7 +18,7 @@ depends-on = [
 
 [dependencies]
 python = ">=3.11.14"
-uv = ">=0.9.24"
+uv = ">=0.9.26"
 
 [pypi-dependencies]
 # TEMP
@@ -31,7 +31,7 @@ mtflow = { path = "../mtflow", editable = true }
 # pfeed = { version = ">=0.0.5", extras = ["duckdb"] }
 # pfolio = ">=0.0.2"
 # pfund-plot = { version = ">=0.0.1.dev2", extras = ["marimo"] }
-# pfund-kit = ">=0.0.1.dev1"
+# pfund-kit = ">=0.1.0"
 # mtflow = ">=0.0.1.dev2"
 numba = ">=0.63.1"
 httpx = ">=0.28.1"
@@ -60,9 +60,9 @@ pfund-kit = { path = "../pfund-kit", editable = true }
 mtflow = { path = "../mtflow", editable = true }
 
 [feature.dev.pypi-dependencies]
-afterpython = ">=0.1.1"
-pybit = ">=5.12.0"
-torch = ">=2.9.0"
+afterpython = ">=0.1.4"
+pybit = ">=5.13.0"
+torch = ">=2.10.0"
 scikit-learn = ">=1.8.0"
 
 [feature.test.pypi-dependencies]
