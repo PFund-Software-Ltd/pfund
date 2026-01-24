@@ -38,7 +38,12 @@ def setup_logging(env: Environment | None=None, reset: bool=False):
     log_path.mkdir(parents=True, exist_ok=True)
 
     # ≈ logging.config.dictConfig(logging_config) with a custom configurator
-    logging_configurator = LoggingDictConfigurator(log_path=log_path, logging_config=logging_config, lazy=True)
+    logging_configurator = LoggingDictConfigurator(
+        log_path=log_path, 
+        logging_config=logging_config, 
+        lazy=True,
+        use_colored_logger=True,
+    )
     logging_configurator.configure()
     
     setup_exception_logging(logger_name=project_name)
