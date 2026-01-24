@@ -31,7 +31,7 @@ mtflow = { path = "../mtflow", editable = true }
 # pfeed = { version = ">=0.0.5", extras = ["duckdb"] }
 # pfolio = ">=0.0.2"
 # pfund-plot = { version = ">=0.0.1.dev2", extras = ["marimo"] }
-# pfund-kit = ">=0.1.0"
+# pfund-kit = ">=0.1.1"
 # mtflow = ">=0.0.1.dev2"
 numba = ">=0.63.1"
 httpx = ">=0.28.1"

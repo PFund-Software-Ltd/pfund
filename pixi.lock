@@ -7918,7 +7918,7 @@ packages:
 - pypi: ./
   name: pfund
   version: 0.0.2
-  sha256: 2ab9574c3206c4e336147b2f89c0f7e3968dfadfe9f0ce78ff776b1b905a71e1
+  sha256: cff51edc5f672776b9ada83ca72b1b6afc6c3bcd0aeb479bba9f83a7793650cc
   requires_dist:
   - pfeed[duckdb] @ file:///Users/stephenyau/pfund.ai/pfeed
   - pfolio @ file:///Users/stephenyau/pfund.ai/pfolio
@@ -7942,8 +7942,8 @@ packages:
   requires_python: '>=3.11'
 - pypi: ../pfund-kit
   name: pfund-kit
-  version: 0.1.0
-  sha256: 7e1d7ecccfb22e5724284ac02b18c928c0b07b1d330164447fb3e615328f2b61
+  version: 0.1.1
+  sha256: 79495ba1a6acb65300928240be73822f11f9e36cd7c65725893e2b9319c90b33
   requires_dist:
   - rich>=14.2.0
   - tqdm>=4.67.1
@@ -7959,7 +7959,7 @@ packages:
 - pypi: ../pfund-plot
   name: pfund-plot
   version: 0.0.1.dev3
-  sha256: 9610708fce0195d079b2ee6bb1715be9b48069ebddc4b8c8520138ccc6411682
+  sha256: dc117d23b826e8d0389a75fe5725302d921f5ec4beb336b3bf0e161699c476fd
   requires_dist:
   - pfeed @ file:///Users/stephenyau/pfund.ai/pfeed
   - panel>=1.8.4
@@ -7968,7 +7968,7 @@ packages:
   - ipywidgets-bokeh>=1.6.0
   - pywebview>=6.1
   - datashader>=0.18.2
-  - marimo[recommended,lsp]>=0.19.4 ; extra == 'marimo'
+  - marimo[recommended,lsp]>=0.19.6 ; extra == 'marimo'
   - basedpyright>=1.36.1 ; extra == 'marimo'
   - jupyter-bokeh>=4.0.5 ; extra == 'jupyter'
   - notebook>=7.5.0 ; extra == 'jupyter'
