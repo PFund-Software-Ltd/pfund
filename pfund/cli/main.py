@@ -11,4 +11,6 @@ def init_context(ctx):
 pfund_group = create_cli_group('pfund', init_context=init_context)
 pfund_group.add_command(config)
 pfund_group.add_command(docker_compose)
+pfund_group.add_command(docker_compose, name='compose')
 pfund_group.add_command(remove)
+pfund_group.add_command(remove, name='rm')

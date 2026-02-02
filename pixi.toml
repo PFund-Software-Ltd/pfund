@@ -18,20 +18,20 @@ depends-on = [
 
 [dependencies]
 python = ">=3.11.14"
-uv = ">=0.9.26"
+uv = ">=0.9.27"
 
 [pypi-dependencies]
 # TEMP
 pfund = { path = ".", editable = true }
-pfeed = { path = "../pfeed", editable = true }
+pfeed = { path = "../pfeed", editable = true, extras = ["duckdb", "yfinance", "hf"] }
 pfolio = { path = "../pfolio", editable = true }
-pfund-plot = { path = "../pfund-plot", editable = true }
+pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo", "jupyter"] }
 pfund-kit = { path = "../pfund-kit", editable = true }
 mtflow = { path = "../mtflow", editable = true }
 # pfeed = { version = ">=0.0.5", extras = ["duckdb"] }
 # pfolio = ">=0.0.2"
 # pfund-plot = { version = ">=0.0.1.dev2", extras = ["marimo"] }
-# pfund-kit = ">=0.1.1"
+# pfund-kit = ">=0.2.0"
 # mtflow = ">=0.0.1.dev2"
 numba = ">=0.63.1"
 httpx = ">=0.28.1"
@@ -44,7 +44,7 @@ py312 = ["py312", "test", "optional"]
 py313 = ["py313", "test", "optional"]
 
 [feature.optional.pypi-dependencies]
-pfund-plot = { version = ">=0.0.1.dev2", extras = ["jupyter"] }
+pfund-plot = { version = ">=0.0.1.dev2", extras = ["marimo", "jupyter"] }
 pfund-ibapi = ">=10.42.1"
 
 [feature.optional.dependencies]
@@ -53,17 +53,21 @@ ta-lib = ">=0.6.4"
 # TEMP
 [pypi-options.dependency-overrides]
 pfund = { path = ".", editable = true }
-pfeed = { path = "../pfeed", editable = true }
+pfeed = { path = "../pfeed", editable = true, extras = ["duckdb", "yfinance", "hf"] }
 pfolio = { path = "../pfolio", editable = true }
-pfund-plot = { path = "../pfund-plot", editable = true }
+pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo", "jupyter"] }
 pfund-kit = { path = "../pfund-kit", editable = true }
 mtflow = { path = "../mtflow", editable = true }
 
 [feature.dev.pypi-dependencies]
-afterpython = ">=0.1.4"
+afterpython = ">=0.2.0"
 pybit = ">=5.13.0"
 torch = ">=2.10.0"
 scikit-learn = ">=1.8.0"
+mlflow = ">=3.9.0"
+trackio = ">=0.15.0"
+optuna = ">=4.7.0"
+optuna-dashboard = ">=0.20.0"
 
 [feature.test.pypi-dependencies]
 pytest = ">=9.0.2"

@@ -45,7 +45,6 @@ class TradeEngine(BaseEngine):
         df_min_rows: int=1_000,
         df_max_rows: int=3_000,
     ):  
-        from pfeed.engine import DataEngine
         from pfund.engines.trade_engine_settings import TradeEngineSettings
         super().__init__(
             env=env,
@@ -59,37 +58,7 @@ class TradeEngine(BaseEngine):
         # TODO:
         # self.DataTool.set_min_rows(df_min_rows)
         # self.DataTool.set_max_rows(df_max_rows)
-
-        # TODO: move it out of init, it should be sth thats provided, if not provided, create a default one
-        # FIXME: data engine sohuld be shared by multiple engines, not one per engine
-        self._data_engine = DataEngine(
-            data_tool=self._data_tool,
-            use_ray=not self.is_wasm(),
-            use_deltalake=config.use_deltalake
-        )
-        self._data_engine_thread: Thread | None = None
-        self._data_engine_loop: asyncio.AbstractEventLoop | None = None
-        self._data_engine_task: asyncio.Task | None = None
         self._worker: ZeroMQ | None = None
-        if not self.is_wasm():
-            self._setup_data_engine()
-    
-    @property
-    def data_engine(self):
-        return self._data_engine
-    
-    def _setup_data_engine(self):
-        from pfeed.messaging.zeromq import ZeroMQ
-        sender_name = "data_engine"
-        self._data_engine._setup_messaging(
-            zmq_url=self._settings.zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL),
-            zmq_sender_port=self._settings.zmq_ports.get('data_engine', None),
-            # NOTE: zmq_receiver_port is not expected to be set manually
-            # zmq_receiver_port=...
-        )
-        data_engine_zmq = self._data_engine._msg_queue
-        data_engine_port = data_engine_zmq.get_ports_in_use(data_engine_zmq.sender)[0]
-        self._settings.zmq_ports.update({ sender_name: data_engine_port })
     
     def _setup_worker(self):
         import zmq
@@ -115,8 +84,7 @@ class TradeEngine(BaseEngine):
         if self._is_gathered:
             return
         super().gather()
-        if not self.is_wasm():
-            self._setup_worker()
+        self._setup_worker()
         for strategy in self.strategies.values():
             datas: list[TimeBasedData] = strategy._get_datas_in_use()
             for data in datas:
@@ -136,100 +104,37 @@ class TradeEngine(BaseEngine):
                 # and add transform() to the feeds in data engine.
         self._is_gathered = True
     
-    def run(self, num_data_workers: int | None=None, **ray_kwargs):
+    def run(self, **ray_kwargs):
         '''
         Args:
             ray_kwargs: keyword arguments for ray.init()
-            num_data_workers: number of Ray workers to create in the data engine
-                if not specified, all available system CPUs will be used.
-                it is ignored in WASM mode when Ray is not in use.
         '''
         super().run()
-        if not self.is_wasm():
-            # NOTE: need to init ray in the main thread to avoid "SIGTERM handler is not set because current thread is not the main thread"
-            import ray
-            if not ray.is_initialized():
-                ray.init(**ray_kwargs)
-            self._run_data_engine(num_workers=num_data_workers)
-            while self.is_running():
-                try:
-                    # TODO: receive positions, balances etc.
-                    if msg := self._proxy.recv():
-                        channel, topic, data, msg_ts = msg
-                        if channel == PFundDataChannel.logging:
-                            log_level: str = topic
-                            log_level: int = logging._nameToLevel.get(log_level.upper(), logging.DEBUG)
-                            self._logger.log(log_level, f'{data}')
-                        else:
-                            self._logger.debug(f'{channel} {topic} {data} {msg_ts}')
-                    # TODO: receive components orders
-                    if msg := self._worker.recv():
-                        pass
-                except Exception:
-                    self._logger.exception(f"Exception in {self.name} run():")
-                except KeyboardInterrupt:
-                    self._logger.warning(f'KeyboardInterrupt received, ending {self.name}')
-                    break
-            if self.is_running():
-                self.end()
-            if ray.is_initialized():
-                ray.shutdown()
-        else:
-            def _send_msg_to_databoy(msg: StreamingMessage):
-                for strategy in self.strategies.values():
-                    strategy.collect_data(msg=msg)
-                return msg
-            for feed in self._data_engine.feeds:
-                # NOTE: pass callback to transform() to get transformed msg from pfeed
-                feed.transform(_send_msg_to_databoy)
-            self._run_data_engine()
-            if self.is_running():
-                self.end()
+        # NOTE: need to init ray in the main thread to avoid "SIGTERM handler is not set because current thread is not the main thread"
+        import ray
+        if not ray.is_initialized():
+            ray.init(**ray_kwargs)
+        while self.is_running():
+            try:
+                # TODO: receive positions, balances etc.
+                if msg := self._proxy.recv():
+                    channel, topic, data, msg_ts = msg
+                    if channel == PFundDataChannel.logging:
+                        log_level: str = topic
+                        log_level: int = logging._nameToLevel.get(log_level.upper(), logging.DEBUG)
+                        self._logger.log(log_level, f'{data}')
+                    else:
+                        self._logger.debug(f'{channel} {topic} {data} {msg_ts}')
+                # TODO: receive components orders
+                if msg := self._worker.recv():
+                    pass
+            except Exception:
+                self._logger.exception(f"Exception in {self.name} run():")
+            except KeyboardInterrupt:
+                self._logger.warning(f'KeyboardInterrupt received, ending {self.name}')
+                break
+        if self.is_running():
+            self.end()
+        if ray.is_initialized():
+            ray.shutdown()
     
-    def _run_data_engine(self, num_workers: int | None=None):
-        if not self.is_wasm():
-            def _run():
-                ray_kwargs = {}
-                if num_workers is not None:
-                    ray_kwargs['num_cpus'] = num_workers
-                self._data_engine_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(self._data_engine_loop)
-                self._data_engine_task = self._data_engine_loop.create_task(
-                    self._data_engine.run_async(**ray_kwargs)
-                )
-                try:
-                    self._data_engine_loop.run_until_complete(self._data_engine_task)
-                except Exception:
-                    self._logger.exception("Exception in data engine thread:")
-                finally:
-                    self._data_engine_loop.close()
-                    self._data_engine_loop = None
-                    self._data_engine_task = None
-            
-            # add storage to feeds in data engine
-            for feed in self._data_engine.feeds:
-                dataflow = feed.streaming_dataflows[0]
-                if dataflow.sink is None:
-                    feed.load(to_storage=config.storage)
-            
-            self._data_engine_thread = Thread(target=_run, daemon=True)
-            self._data_engine_thread.start()
-        else:
-            self._data_engine.run()
-    
-    def _end_data_engine(self):
-        self._logger.debug(f'{self.name} ending data engine')
-        if not self.is_wasm():
-            if self._data_engine_task and self._data_engine_loop and not self._data_engine_task.done():
-                self._data_engine_loop.call_soon_threadsafe(self._data_engine_task.cancel)
-        
-    def end(self):
-        super().end()
-        self._end_data_engine()
-        if self._data_engine_thread:
-            self._logger.debug(f"{self.name} waiting for data engine thread to finish")
-            self._data_engine_thread.join(timeout=10)
-            if self._data_engine_thread.is_alive():
-                self._logger.debug(f"{self.name} data engine thread is still running after timeout")
-            else:
-                self._logger.debug(f"{self.name} data engine thread finished")

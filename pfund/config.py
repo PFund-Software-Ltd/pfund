@@ -38,7 +38,7 @@ def setup_logging(env: Environment | None=None, reset: bool=False):
     log_path.mkdir(parents=True, exist_ok=True)
 
     # ≈ logging.config.dictConfig(logging_config) with a custom configurator
-    logging_configurator = LoggingDictConfigurator(
+    logging_configurator = LoggingDictConfigurator.create(
         log_path=log_path, 
         logging_config=logging_config, 
         lazy=True,
@@ -138,8 +138,6 @@ def configure_logging(logging_config: dict | None=None, debug: bool=False) -> di
 class PFundConfig(Configuration):
     def __init__(self):
         super().__init__(project_name=project_name, source_file=__file__)
-        # TODO: when mtflow is ready
-        # artifact_path: str | None = None,
         # TODO: integrate with pfund_kit Configuration, confirm their usage
         self.storage: DataStorage | None = None
         self.storage_options: dict | None = None
@@ -149,37 +147,6 @@ class PFundConfig(Configuration):
         """No additional config attributes to initialize."""
         pass
     
-    # TODO: when compose.yml is in use
     def prepare_docker_context(self):
         pass
-        # import os
-        # os.environ['PFUND_DATA_PATH'] = self.data_path  # used in docker-compose.yml
     
-    # FIXME: add more @property methods for different paths, e.g. hub_path, strategy_path etc. remove get_path method
-    # TODO: also update cli command "pfund clear data" to use the new paths
-    # TODO: move to mtflow?
-    # def get_path(
-    #     self, 
-    #     name: Union[
-    #         Literal['config', 'cache', 'log', 'data'],
-    #         Literal['backtest', 'hub', 'template'],
-    #         Literal['strategy', 'model', 'feature', 'indicator'],
-    #         Literal['notebook', 'dashboard'],
-    #     ]
-    # ) -> Path:
-    #     if name == 'config':
-    #         return CONFIG_FILE_PATH
-    #     elif name in ['cache', 'log', 'data']:
-    #         return getattr(self, f'{name}_path')
-    #     elif name in ['backtest', 'template']:
-    #         return self.data_path / f'{name}s'
-    #     elif name == 'hub':
-    #         return self.data_path / 'hub'
-    #     elif name == 'strategy':
-    #         return self.data_path / 'hub' / 'strategies'
-    #     elif name in ['model', 'feature', 'indicator']:
-    #         return self.data_path / 'hub' / f'{name}s'
-    #     elif name in ['notebook', 'dashboard']:
-    #         return self.data_path / 'templates' / f'{name}s'
-    #     else:
-    #         raise ValueError(f'Invalid path name: {name}')

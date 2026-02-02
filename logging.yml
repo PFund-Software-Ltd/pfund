@@ -4,20 +4,16 @@ version: 1
 incremental: False  
 # disable_existing_loggers will be ignored if incremental is True
 disable_existing_loggers: False 
+root:
+  level: 'WARNING'
+  handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+  propagate: False
 loggers:
-  root:
-    level: 'WARNING'
-    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
-    propagate: False
   ibapi:  # controls ibapi's logger
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
   pfund:
-    level: 'DEBUG'
-    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
-    propagate: False
-  pfund.mtflow:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
@@ -46,8 +42,11 @@ handlers:
     class: 'pfund_kit.logging.handlers.CompressedTimedRotatingFileHandler'
     level: 'DEBUG'
     formatter: 'file'
-    kwargs: {'when': 'midnight', 'backupCount': 7, 'utc': True, 'encoding': 'utf-8'}
     filters: ['trimmedpath']
+    when: 'midnight'
+    backupCount: 7
+    utc: true
+    encoding: 'utf-8'
   stream_handler:
     class: 'logging.StreamHandler'
     level: 'INFO'

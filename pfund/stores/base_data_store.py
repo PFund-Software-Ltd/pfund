@@ -10,7 +10,6 @@ if TYPE_CHECKING:
 from abc import ABC, abstractmethod
 from logging import Logger
 
-from pfeed import create_storage
 from pfeed.enums import DataLayer
 
 
@@ -57,11 +56,12 @@ class BaseDataStore(ABC):
         '''
         Load data (e.g. market data) from the online store (TradingStore) to the offline store (pfeed's data lakehouse).
         '''
+        import pfeed as pe
         data_model: PFundDataModel = self._feed.create_data_model(...)
         data_layer = DataLayer.CURATED
         data_domain = 'trading_data'
         metadata = {}  # TODO
-        storage: BaseStorage = create_storage(
+        storage: BaseStorage = pe.create_storage(
             storage=self._storage.value,
             data_model=data_model,
             data_layer=data_layer.value,

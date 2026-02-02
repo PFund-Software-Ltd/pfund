@@ -331,56 +331,31 @@ class DataBoy:
         Args:
             msg: message will only be passed in in WASM mode (i.e. data_zmq is None)
         '''
-        if not self._component.is_wasm():
-            while self._component.is_running():
-                if msg_tuple := self._data_zmq.recv():
-                    channel, topic, msg, msg_ts = msg_tuple
-                    
-                    # TEMP
-                    print('databoy data_zmq recv:', channel, topic, msg, msg_ts)
-                    
-                    product: BaseProduct = self._component.get_product(msg.product)
-                    resolution = Resolution(msg.resolution)
-                    data: MarketData = self.get_data(product.name, resolution)
-                    if data is None:
-                        raise ValueError(f'data {product.name} {resolution} is not found in {self.datas}')
-                    if topic == PublicDataChannel.orderbook:
-                        self._update_quote(data, msg)
-                    elif topic == PublicDataChannel.tradebook:
-                        self._update_tick(data, msg)
-                    elif topic == PublicDataChannel.candlestick:
-                        self._update_bar(data, msg)
-                    else:
-                        raise NotImplementedError(f'{topic=} is not supported')
-                # TODO:
-                if msg_tuple := self._signals_zmq.recv():
-                    pass
+        while self._component.is_running():
+            if msg_tuple := self._data_zmq.recv():
+                channel, topic, msg, msg_ts = msg_tuple
                 
-                # TODO: check if signals are ready, if yes, call back on trade(X)
-        else:
-            if not self._component.is_running():
-                self.logger.warning(f'{self.name} is not running, skipping data update')
-                return
-            else:
                 # TEMP
-                print(f'databoy getting {msg=}')
-
-                assert msg is not None, 'msg is None'
-                for component in self.components:
-                    component.collect_data(msg=msg)
-                product: BaseProduct | None = self._component.get_product(msg.product)
-                if product is None or product not in self.datas:
-                    return
+                print('databoy data_zmq recv:', channel, topic, msg, msg_ts)
+                
+                product: BaseProduct = self._component.get_product(msg.product)
                 resolution = Resolution(msg.resolution)
-                data: MarketData | None = self.get_data(product.name, resolution)
+                data: MarketData = self.get_data(product.name, resolution)
                 if data is None:
-                    return
-                if resolution.is_quote():
+                    raise ValueError(f'data {product.name} {resolution} is not found in {self.datas}')
+                if topic == PublicDataChannel.orderbook:
                     self._update_quote(data, msg)
-                elif resolution.is_tick():
+                elif topic == PublicDataChannel.tradebook:
                     self._update_tick(data, msg)
-                elif resolution.is_bar():
+                elif topic == PublicDataChannel.candlestick:
                     self._update_bar(data, msg)
+                else:
+                    raise NotImplementedError(f'{topic=} is not supported')
+            # TODO:
+            if msg_tuple := self._signals_zmq.recv():
+                pass
+            
+            # TODO: check if signals are ready, if yes, call back on trade(X)
     
     def _deliver(self, data: MarketData):
         '''Deliver data to the component'''

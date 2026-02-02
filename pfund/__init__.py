@@ -83,6 +83,7 @@ def __getattr__(name: str):
     elif name.upper() == 'OKX':
         from pfund.exchanges import OKX
         return OKX
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
 print_error = lambda msg: print(f'\033[91m{msg}\033[0m')

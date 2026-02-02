@@ -122,8 +122,7 @@ class ComponentMixin:
         if self.is_remote():
             self._setup_logging()
         self.store = TradingStore(env=self._engine.env, data_params=self._engine.get_data_params())
-        if not self.is_wasm():
-            self.databoy._setup_messaging()
+        self.databoy._setup_messaging()
     
     # FIXME: integrate pfund_kit logging instead
     def _setup_logging(self: Component):
@@ -359,9 +358,6 @@ class ComponentMixin:
             if consumer.is_remote(direct_only=direct_only):
                 return True
         return False
-    
-    def is_wasm(self: Component) -> bool:
-        return self.run_mode == RunMode.WASM
     
     def _create_product(
         self,
@@ -684,8 +680,7 @@ class ComponentMixin:
             self.add_models()
             self.add_features()
             self.add_indicators()
-            if not self.is_wasm():
-                self.databoy._subscribe()
+            self.databoy._subscribe()
             self._is_gathered = True
             # TODO:
             # self._add_datas_from_consumer_if_none()

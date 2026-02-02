@@ -288,7 +288,7 @@ class BaseWebSocketAPI(ABC):
     
     async def _send(self, ws: NamedWebSocket, msg: dict):
         try:
-            await ws.send(json.encode(msg))
+            await ws.send(json.encode(msg), text=True)
             self._logger.debug(f'{ws.name} sent {msg}')
         except Exception:
             self._logger.exception(f'{ws.name} _send() exception:')

@@ -166,8 +166,7 @@ class BaseEngine(metaclass=MetaEngine):
         self._is_gathered: bool = False
         self._proxy: ZeroMQ | None = None
 
-        if not self.is_wasm():
-            self._setup_proxy()
+        self._setup_proxy()
     
     @property
     def env(self) -> Environment:
@@ -192,9 +191,6 @@ class BaseEngine(metaclass=MetaEngine):
     @property
     def data_end(self) -> datetime.date:
         return self._data_end
-    
-    def is_wasm(self) -> bool:
-        return self._run_mode == RunMode.WASM
     
     # TODO: replace with pfund_kit.logging
     @classmethod

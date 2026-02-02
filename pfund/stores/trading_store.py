@@ -119,13 +119,13 @@ class TradingStore:
         '''
         Load pfund's component (strategy/model/feature/indicator) data from the online store (TradingStore) to the offline store (pfeed's data lakehouse).
         '''
-        from pfeed import create_storage
+        import pfeed as pe
         
         data_model: PFundDataModel = self._feed.create_data_model(...)
         data_layer = DataLayer.CURATED
         data_domain = 'trading_data'
         metadata = {}  # TODO
-        storage: BaseStorage = create_storage(
+        storage: BaseStorage = pe.create_storage(
             storage=self._storage.value,
             data_model=data_model,
             data_layer=data_layer.value,
