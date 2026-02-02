@@ -21,6 +21,7 @@
 [Bybit]: https://bybit.com/
 [PyTorch]: https://pytorch.org/
 [Poetry]: https://python-poetry.org
+[uv]: https://docs.astral.sh/uv/
 [Futu]: https://www.futunn.com
 [FirstRate Data]: https://firstratedata.com
 
@@ -69,25 +70,21 @@ PFund (/piː fʌnd/), which stands for "**Personal Fund**", is an **algo-trading
 
 ## Installation
 
-### Using [Poetry] (Recommended)
+### Using [uv] (Recommended)
 ```bash
-# [RECOMMENDED]: Trading + Backtesting + Machine Learning + Feature Engineering (e.g. feast, tsfresh, ta) + Analytics
-poetry add "pfund[all]"
+uv add pfund
 
-# [Trading + Backtesting + Machine Learning + Feature Engineering]:
-poetry add "pfund[data,ml,fe]"
+# pick your data sources, e.g. yfinance for Yahoo Finance
+uv add pfeed[yfinance]
 
-# [Trading + Backtesting + Machine Learning]:
-poetry add "pfund[data,ml]"
+# [optional] install pfund-plot for plotting, pick your notebook, e.g. marimo notebook and/or jupyter notebook
+uv add pfund-plot[marimo,jupyter]
 
-# [Trading + Backtesting]:
-poetry add "pfund[data]"
-
-# [Trading only]:
-poetry add pfund
+# [optional] install mtflow for handling trading ops, e.g. adding monitors, running dashboards, etc.
+uv add mtflow
 
 # update to the latest version:
-poetry update pfund
+uv update pfund
 ```
 
 ### Using Pip

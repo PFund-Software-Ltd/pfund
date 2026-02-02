@@ -98,11 +98,3 @@ class TradeEngineSettingsDict(BaseEngineSettingsDict, total=False):
 class BacktestEngineSettingsDict(BaseEngineSettingsDict, total=False):
     retention_period: int
     commit_to_git: bool
-
-
-class ExternalListenersDict(TypedDict, total=False):
-    notebooks: list[str] | bool
-    dashboards: list[str] | bool
-    monitor: bool
-    recorder: bool
-    profiler: bool

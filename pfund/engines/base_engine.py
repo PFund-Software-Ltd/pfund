@@ -14,7 +14,6 @@ if TYPE_CHECKING:
         tTradingVenue,
         DataRangeDict, 
         DataParamsDict,
-        ExternalListenersDict, 
     )
     from pfund.brokers.broker_base import BaseBroker
     from pfund.strategies.strategy_base import BaseStrategy
@@ -24,7 +23,7 @@ import logging
 import datetime
 
 from pfeed.enums import DataTool
-from pfund import cprint, get_config
+from pfund import get_config
 from pfund.engines.meta_engine import MetaEngine
 from pfund.proxies.actor_proxy import ActorProxy
 from pfund.proxies.engine_proxy import EngineProxy
@@ -60,8 +59,6 @@ class BaseEngine(metaclass=MetaEngine):
     _data_end: ClassVar[datetime.date]
     _database: ClassVar[tDatabase | None]
     _settings: ClassVar[BaseEngineSettings]
-    _external_listeners: ClassVar[ExternalListenersDict | None]
-    _logging_config: ClassVar[dict]
     
     @classmethod
     def _next_engine_id(cls):
@@ -80,61 +77,26 @@ class BaseEngine(metaclass=MetaEngine):
         data_range: str | DataRangeDict | Literal['ytd'],
         database: tDatabase | None,
         settings: BaseEngineSettings,
-        external_listeners: ExternalListenersDict | None,
     ):
-        '''
-        Args:
-            # FIXME: move this part to mtflow
-            external_listeners:
-                If any of the keys is set to True, a websocket server will be started.
-                This server listens to messages from ZeroMQ's PUB socket, and broadcasts them to connected external listeners.
-                External listeners are programs typically created by mtflow and run outside the engine, such as:
-                - Data Recorder
-                - System Monitor
-                - Profiler
-                - Dashboards
-                - Notebook apps
-                These components subscribe to the broadcasted data in real-time.
-            database:
-                A database backend used for persisting data such as trades, orders, and internal states.
-                If provided:
-                    if `recorder` in `external_listeners` is set to True,
-                        the DataRecorder will handle writing data to the database.
-                    if `recorder` in `external_listeners` is set to False,
-                        the engine itself will write to the database,
-                        which will introduce latency and slow down engine's performance.
-                If None, no data will be written.
-        '''
-        from mtflow.kernel import TradeKernel
         from pfund_kit.utils import load_env_file
+        from pfund_kit.style import cprint, RichColor, TextStyle
         from pfund.config import setup_logging
         from pfund.engines.risk_engine import RiskEngine
         
         cls = self.__class__
         if not hasattr(cls, "_initialized"):
             from pfeed.utils import parse_date_range
-            from pfund.external_listeners import ExternalListeners
             from pfund.utils import derive_run_mode
 
             env = Environment[env.upper()]
             load_env_file(env=env, verbose=True)
+            setup_logging(env=env)
             
             cls._env = env
-            # FIXME: use get_logging_config() in pfund.config instead, no need to store it in class variable
-            cls._logging_config = setup_logging(env=env)
             cls._run_mode = derive_run_mode()
             cls._data_tool = DataTool[data_tool.lower()]
             cls._database = Database[database.upper()] if database else None
             cls._settings = settings
-            if cls._run_mode == RunMode.WASM:
-                assert not external_listeners, 'External listeners are not supported in WASM mode'
-            cls._external_listeners = ExternalListeners(**(external_listeners or {}))
-            if cls._external_listeners.recorder is False and cls._database is not None:
-                cprint(
-                    'WARNING: `database` is set but recorder is disabled in `external_listeners`, '
-                    'data will be written to the database by the engine itself, which will introduce latency',
-                    style='bold yellow'
-                )
             is_data_range_dict = isinstance(data_range, dict)
             cls._data_start, cls._data_end = parse_date_range(
                 start_date=data_range['start_date'] if is_data_range_dict else '',
@@ -146,7 +108,7 @@ class BaseEngine(metaclass=MetaEngine):
             cprint(f"{env} Engine is running", style=ENV_COLORS[env])
         else:
             assert cls._env == env, f'Current environment is {cls._env}, cannot change to {env}'
-            cprint("Engine already initialized — new inputs are ignored", style='bold yellow')
+            cprint("Engine already initialized — new inputs are ignored", style=TextStyle.BOLD + RichColor.YELLOW)
 
         
         # FIXME: do NOT allow LIVE env for now
@@ -157,7 +119,6 @@ class BaseEngine(metaclass=MetaEngine):
         self._logger = logging.getLogger('pfund')
         if "engine" not in self.name.lower():
             self.name += "_engine"
-        self._kernel = TradeKernel(database=cls._database, external_listeners=cls._external_listeners)
         # TODO: add risk engine?
         # self._risk_engine = RiskEngine()  
         self.brokers: dict[Broker, BaseBroker] = {}
@@ -191,21 +152,6 @@ class BaseEngine(metaclass=MetaEngine):
     @property
     def data_end(self) -> datetime.date:
         return self._data_end
-    
-    # TODO: replace with pfund_kit.logging
-    @classmethod
-    def _setup_logging(cls) -> dict:
-        from pfund.logging import setup_logging_config
-        from pfund.logging.config import LoggingDictConfigurator
-        config = get_config()
-        log_path = f'{config.log_path}/{cls._env}'
-        user_logging_config = config.logging_config
-        logging_config_file_path = config.logging_config_file_path
-        logging_config = setup_logging_config(log_path, logging_config_file_path, user_logging_config=user_logging_config)
-        # ≈ logging.config.dictConfig(logging_config) with a custom configurator
-        logging_configurator = LoggingDictConfigurator(logging_config)
-        logging_configurator.configure()
-        return logging_config
     
     def _setup_proxy(self):
         import zmq
@@ -247,7 +193,6 @@ class BaseEngine(metaclass=MetaEngine):
             'data_start': self._data_start.strftime('%Y-%m-%d'),
             'data_end': self._data_end.strftime('%Y-%m-%d'),
             'settings': self._settings.model_dump(),
-            'external_listeners': self._external_listeners.model_dump(),
         }
         
     def is_running(self) -> bool:
@@ -322,7 +267,6 @@ class BaseEngine(metaclass=MetaEngine):
         return self.brokers[bkr.upper()]
     
     def _register_component(self, component_metadata: dict):
-        self._kernel.register_component(component_metadata)
         # register sub-components (nested components)
         strategies: list[dict] = component_metadata.get('strategies', [])
         models: list[dict] = component_metadata.get('models', [])
@@ -360,8 +304,8 @@ class BaseEngine(metaclass=MetaEngine):
         - freezes mtstore.
         '''
         if not self._is_gathered:
+            # TODO: add engine metadata to mtflow
             engine_metadata = self.to_dict()
-            self._kernel.register_engine(engine_metadata)
 
             for strategy in self.strategies.values():
                 strategy: BaseStrategy | ActorProxy
@@ -390,7 +334,6 @@ class BaseEngine(metaclass=MetaEngine):
         if not self.is_running():
             self._is_running = True
             self.gather()
-            self._kernel.run()
             # TODO: start brokers
             # for broker in self.brokers.values():
             #     broker.start()
@@ -408,6 +351,5 @@ class BaseEngine(metaclass=MetaEngine):
                 broker.stop()
             if self._proxy:
                 self._proxy.terminate()
-            self._kernel.end()
         else:
             self._logger.debug(f'{self.name} is not running')

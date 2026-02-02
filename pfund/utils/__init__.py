@@ -1,6 +1,7 @@
 from pfund.enums import RunMode
 
 
+# FIXME: remove it
 def derive_run_mode(ray_kwargs: dict | None=None) -> RunMode:
     if ray_kwargs:
         # NOTE: if `num_cpus` is not set, Ray will only use 1 CPU for scheduling, and 0 CPU for running

@@ -13,14 +13,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfeed.typing import tDataTool
-    from pfeed.messaging.streaming_message import StreamingMessage
     from pfeed.messaging.zeromq import ZeroMQ
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund.typing import DataRangeDict, TradeEngineSettingsDict, tDatabase, ExternalListenersDict
+    from pfund.typing import DataRangeDict, TradeEngineSettingsDict, tDatabase
 
-import asyncio
 import logging
-from threading import Thread
 
 from pfund.engines.base_engine import BaseEngine
 from pfund.enums import PFundDataChannel
@@ -40,7 +37,6 @@ class TradeEngine(BaseEngine):
         data_range: str | DataRangeDict='ytd',
         database: tDatabase | None=None,
         settings: TradeEngineSettingsDict | None=None,
-        external_listeners: ExternalListenersDict | None=None,
         # TODO: move inside settings?
         df_min_rows: int=1_000,
         df_max_rows: int=3_000,
@@ -53,7 +49,6 @@ class TradeEngine(BaseEngine):
             data_range=data_range,
             database=database,
             settings=TradeEngineSettings(**(settings or {})),
-            external_listeners=external_listeners,
         )
         # TODO:
         # self.DataTool.set_min_rows(df_min_rows)
@@ -90,18 +85,6 @@ class TradeEngine(BaseEngine):
             for data in datas:
                 if data.is_resamplee():
                     continue
-                # TODO: if add IB feed and data source is also IB (not sth like databento), requires passing account that includes host, port, client_id to add_feed()
-                self._data_engine \
-                .add_feed(data.source, data.category) \
-                .stream(
-                    product=str(data.product.basis),
-                    resolution=repr(data.resolution),
-                    to_storage=None,
-                    env=self._env,
-                    **data.product.specs
-                )
-                # NOTE: load(to_storage=...) is not called here so that users can manually call gather()
-                # and add transform() to the feeds in data engine.
         self._is_gathered = True
     
     def run(self, **ray_kwargs):

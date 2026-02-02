@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from sklearn.model_selection import TimeSeriesSplit
     from pfeed.typing import tDataTool
     from pfund.typing import StrategyT, ModelT, FeatureT, IndicatorT, tDatabase
-    from pfund.typing import DataRangeDict, DatasetSplitsDict, BacktestEngineSettingsDict, ExternalListenersDict
+    from pfund.typing import DataRangeDict, DatasetSplitsDict, BacktestEngineSettingsDict
     from pfund.strategies.strategy_base import BaseStrategy
     from pfund.models.model_base import BaseModel
     from pfund.mixins.backtest_mixin import BacktestMixin
@@ -38,7 +38,6 @@ class BacktestEngine(BaseEngine):
         data_range: str | DataRangeDict | Literal['ytd']='1d',
         database: tDatabase | None=None,
         settings: BacktestEngineSettingsDict | None = None,
-        external_listeners: ExternalListenersDict | None=None,
         dataset_splits: int | DatasetSplitsDict | TimeSeriesSplit=721,
         cv_test_ratio: float=0.1,
         # TODO: move inside settings?
@@ -83,7 +82,6 @@ class BacktestEngine(BaseEngine):
             data_range=data_range,
             database=database,
             settings=BacktestEngineSettings(**(settings or {})),
-            external_listeners=external_listeners,
         )
         if cls._backtest_mode == BacktestMode.vectorized:
             self._kernel = None
