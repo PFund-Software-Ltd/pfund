@@ -18,8 +18,9 @@ if TYPE_CHECKING:
 
 import logging
 
-from pfund.engines.base_engine import BaseEngine, DataRangeDict
+from pfund.engines.base_engine import BaseEngine
 from pfund.enums import Environment, PFundDataChannel
+from pfund.engines.engine_context import DataRangeDict
 from pfund import get_config
 
 

@@ -1,15 +1,13 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, TypedDict
+from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from dynaconf import Dynaconf
     from pfund.datas.resolution import Resolution
     from pfund.products.product_base import BaseProduct
     from pfund.accounts.account_base import BaseAccount
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.typing import (
-        StrategyT, 
+        StrategyT,
         tBroker,
-        DataRangeDict, 
         DataParamsDict,
     )
     from pfund.brokers.broker_base import BaseBroker
@@ -22,10 +20,11 @@ import datetime
 from pfund import get_config
 from pfund.proxies.actor_proxy import ActorProxy
 from pfund.proxies.engine_proxy import EngineProxy
+from pfund.engines.engine_context import EngineContext, DataRangeDict
 from pfund.enums import (
-    Environment, 
-    Broker, 
-    RunMode, 
+    Environment,
+    Broker,
+    RunMode,
     TradingVenue,
 )
 
@@ -40,11 +39,6 @@ ENV_COLORS = {
     Environment.LIVE: 'bold green',
 }
 config = get_config()
-
-
-class DataRangeDict(TypedDict, total=False):
-    start_date: str
-    end_date: str
 
 
 
@@ -73,7 +67,6 @@ class BaseEngine:
             raise ValueError(f"{env=} is not allowed for now")
         
         setup_logging(env=env)
-        self._env = env
         self._logger = logging.getLogger('pfund')
         self.name = self._get_default_name()
         if name:
@@ -84,24 +77,24 @@ class BaseEngine:
         self.strategies: dict[str, BaseStrategy | ActorProxy] = {}
         # TODO: add risk engine?
         # self._risk_engine = RiskEngine()  
-        self._conf: Dynaconf | None = self._load_dynaconf(data_range)
-        cprint(f"{env} {self.name} is running (data_range=({self.data_start}, {self.data_end}))", style=ENV_COLORS[env])
+        self._context: EngineContext = EngineContext(env=env, data_range=data_range)
+        cprint(f"{self.env} {self.name} is running (data_range=({self.data_start}, {self.data_end}))", style=ENV_COLORS[self.env])
     
     @property
     def env(self) -> Environment:
-        return self._env
+        return self._context.env
 
     @property
     def settings(self) -> TradeEngineSettings | BacktestEngineSettings:
-        return self._conf.settings
+        return self._context.settings
     
     @property
     def data_start(self) -> datetime.date:
-        return self._conf.data_start
+        return self._context.data_start
     
     @property
     def data_end(self) -> datetime.date:
-        return self._conf.data_end
+        return self._context.data_end
     
     def is_running(self) -> bool:
         return self._is_running
@@ -118,78 +111,20 @@ class BaseEngine:
     
     def configure_settings(self, settings: TradeEngineSettings | BacktestEngineSettings):
         '''Overrides the loaded settings with the given settings object and saves it to settings.toml
-        
+
         Args:
             settings: settings object to override the current settings (if any)
         '''
         from pfund_kit.utils import toml
-        
+
         # write settings to settings.toml
-        env_section = self._env
+        env_section = self.env
         data = {env_section: settings.model_dump()}
         toml.dump(data, config.settings_file_path, mode='update', auto_inline=True)
-        
-        # update settings in dynaconf
-        if hasattr(self, '_conf') and self._conf is not None:
-            self._conf.update({'settings': settings})
+
+        # update settings in config
+        self._context.settings = settings
     
-    def _load_dynaconf(self, data_range: str | Resolution | DataRangeDict | Literal['ytd']):
-        '''Loads env variables, data range and engine's settings.toml into Dynaconf'''
-        from dynaconf import Dynaconf
-        from dotenv import find_dotenv, dotenv_values
-        from pfeed.utils import parse_date_range
-        from pfund_kit.utils import toml
-        from pfund.settings import TradeEngineSettings, BacktestEngineSettings
-
-        # load envs manually to avoid loading into os.environ
-        # NOTE: in this way, we can have multiple engines running with different envs in the same process
-        env_filename = f'.env.{self._env.lower()}'
-        env_file_path = find_dotenv(filename=env_filename, usecwd=True, raise_error_if_not_found=False)
-        env_vars = dotenv_values(env_file_path)
-        # add prefix PFUND_{env} to env vars to avoid name collisions, e.g. PFUND_LIVE_BYBIT_API_KEY
-        env_var_prefix = f'PFUND_{self._env.upper()}'
-        env_vars = {f'{env_var_prefix}_{k}': v for k, v in env_vars.items()}
-
-        # parse data range
-        is_data_range_dict = isinstance(data_range, dict)
-        data_start, data_end = parse_date_range(
-            start_date=data_range['start_date'] if is_data_range_dict else '',
-            end_date=data_range.get('end_date', '') if is_data_range_dict else '',
-            rollback_period=data_range if not is_data_range_dict else '',
-        )
-        
-        # load settings from settings.toml
-        settings_file_path = config.settings_file_path
-        conf = Dynaconf(
-            environments=True,
-            env=self._env,
-            load_dotenv=False,
-            settings_files=[settings_file_path],
-        )
-        
-        # convert settings to pydantic model
-        EngineSettings = BacktestEngineSettings if self._env == Environment.BACKTEST else TradeEngineSettings
-        settings = EngineSettings(
-            **{k.lower(): v for k, v in conf.as_dict().items() if k.lower() in EngineSettings.model_fields}
-        )
-        
-        # settings will be loaded to conf.settings, unset the keys in conf to avoid confusion
-        for k in EngineSettings.model_fields:
-            conf.unset(k, force=True)
-            
-        # load env vars, data range and settings to dynaconf
-        conf.update({
-            **env_vars, 
-            'settings': settings, 
-            'data_start': data_start, 
-            'data_end': data_end
-        })
-
-        # initialize settings with env section if not exists
-        if not settings_file_path.exists() or self._env not in toml.load(settings_file_path):
-            self.configure_settings(settings)
-        return conf
-
     # FIXME
     def get_data_params(self) -> DataParamsDict:
         '''Data params are used in components' data stores'''
@@ -207,7 +142,7 @@ class BaseEngine:
     def to_dict(self) -> dict:
         return {
             'name': self.name,
-            'env': self._env.value,
+            'env': self.env.value,
             'data_start': self.data_start.strftime('%Y-%m-%d'),
             'data_end': self.data_end.strftime('%Y-%m-%d'),
             'settings': self.settings.model_dump(),
@@ -262,7 +197,7 @@ class BaseEngine:
         from pfund.brokers import create_broker
         bkr: Broker = TradingVenue[trading_venue.upper()].broker
         if bkr not in self.brokers:
-            broker = create_broker(env=self._env, bkr=bkr)
+            broker = create_broker(env=self.env, bkr=bkr)
             self.brokers[bkr] = broker
             self._logger.debug(f'added broker {bkr}')
         return self.brokers[bkr]
@@ -316,7 +251,7 @@ class BaseEngine:
                 strategy._gather()
                 
                 # updates zmq ports in settings
-                self._conf.settings.zmq_ports.update(strategy._get_zmq_ports_in_use())
+                self._context.settings.zmq_ports.update(strategy._get_zmq_ports_in_use())
                 
                 # registers accounts
                 accounts: list[BaseAccount] = strategy.get_accounts()

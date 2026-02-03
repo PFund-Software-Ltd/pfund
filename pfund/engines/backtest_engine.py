@@ -18,7 +18,8 @@ import polars as pl
 from pfund_kit.utils.progress_bar import track, ProgressBar
 from pfund_kit.style import cprint, RichColor
 from pfund.enums import BacktestMode, ComponentType, Environment
-from pfund.engines.base_engine import BaseEngine, DataRangeDict
+from pfund.engines.base_engine import BaseEngine
+from pfund.engines.engine_context import DataRangeDict
 
 
 class BacktestEngine(BaseEngine):
