@@ -12,15 +12,14 @@ message queue.
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfeed.typing import tDataTool
     from pfeed.messaging.zeromq import ZeroMQ
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund.typing import DataRangeDict, TradeEngineSettingsDict, tDatabase
+    from pfund.datas.resolution import Resolution
 
 import logging
 
-from pfund.engines.base_engine import BaseEngine
-from pfund.enums import PFundDataChannel
+from pfund.engines.base_engine import BaseEngine, DataRangeDict
+from pfund.enums import Environment, PFundDataChannel
 from pfund import get_config
 
 
@@ -31,29 +30,45 @@ class TradeEngine(BaseEngine):
     def __init__(
         self,
         *,
-        env: Literal['SANDBOX', 'PAPER', 'LIVE'],
+        env: Literal['SANDBOX', 'PAPER', 'LIVE']=Environment.SANDBOX,
+        data_range: str | Resolution | DataRangeDict | Literal['ytd']='ytd',
         name: str='',
-        data_tool: tDataTool='polars',
-        data_range: str | DataRangeDict='ytd',
-        database: tDatabase | None=None,
-        settings: TradeEngineSettingsDict | None=None,
-        # TODO: move inside settings?
-        df_min_rows: int=1_000,
-        df_max_rows: int=3_000,
     ):  
-        from pfund.engines.trade_engine_settings import TradeEngineSettings
-        super().__init__(
-            env=env,
-            name=name,
-            data_tool=data_tool,
-            data_range=data_range,
-            database=database,
-            settings=TradeEngineSettings(**(settings or {})),
-        )
-        # TODO:
-        # self.DataTool.set_min_rows(df_min_rows)
-        # self.DataTool.set_max_rows(df_max_rows)
+        super().__init__(env=Environment[env.upper()], data_range=data_range, name=name)
+        self._proxy: ZeroMQ | None = None
         self._worker: ZeroMQ | None = None
+        self._setup_proxy()
+    
+    def _setup_proxy(self):
+        import zmq
+        from pfeed.messaging.zeromq import ZeroMQ
+        # FIXME: remove zmq.XPUB, use mtflow's ws_client to emit to mtflow's websocket server (external listeners)
+        self._proxy = ZeroMQ(
+            name=self.name+"_proxy",
+            logger=self._logger,
+            io_threads=2,
+            sender_type=zmq.XPUB,  # publish to external listeners
+            receiver_type=zmq.XSUB,  # subscribe to data engine, component's logs (if using ray) etc.
+        )
+        sender_name = "proxy"
+        zmq_ports = self._settings.zmq_ports
+        engine_zmq_url = self._settings.zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL)
+        self._proxy.bind(
+            socket=self._proxy.sender,
+            port=zmq_ports.get(sender_name, None),
+            url=engine_zmq_url,
+        )
+        proxy_zmq_port= self._proxy.get_ports_in_use(self._proxy.sender)[0]
+        self._logger.debug(f"zmq proxy binded to {engine_zmq_url}:{proxy_zmq_port}")
+        for zmq_name, zmq_port in zmq_ports.items():
+            if zmq_name == 'data_engine' or zmq_name.endswith("_logger"):
+                self._proxy.connect(
+                    socket=self._proxy.receiver,
+                    port=zmq_port,
+                    url=engine_zmq_url,
+                )
+                self._logger.debug(f"zmq proxy connected to {zmq_name} at {engine_zmq_url}:{zmq_port}")
+        self._settings.zmq_ports.update({ sender_name: proxy_zmq_port })
     
     def _setup_worker(self):
         import zmq
@@ -120,4 +135,11 @@ class TradeEngine(BaseEngine):
             self.end()
         if ray.is_initialized():
             ray.shutdown()
+    
+    def end(self):
+        super().end()
+        if self._proxy:
+            self._proxy.terminate()
+        if self._worker:
+            self._worker.terminate()
     

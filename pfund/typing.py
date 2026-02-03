@@ -54,17 +54,6 @@ ZeroMQSenderName = Union[
 ]
 
 
-class DatasetSplitsDict(TypedDict, total=True):
-    train: float
-    val: float
-    test: float
-
-
-class DataRangeDict(TypedDict, total=False):
-    start_date: str
-    end_date: str
-
-
 class DataConfigDict(TypedDict, total=False):  # total=False makes fields optional
     extra_resolutions: list[Resolution]
     resample: dict[Annotated[Resolution, "ResampleeResolution"], Annotated[Resolution, "ResamplerResolution"]]
@@ -73,6 +62,7 @@ class DataConfigDict(TypedDict, total=False):  # total=False makes fields option
     stale_bar_timeout: int
 
 
+# FIXME
 class DataParamsDict(TypedDict, total=True):
     data_start: datetime.date
     data_end: datetime.date
@@ -80,21 +70,3 @@ class DataParamsDict(TypedDict, total=True):
     storage: DataStorage
     storage_options: dict
     use_deltalake: bool
-
-
-class BaseEngineSettingsDict(TypedDict, total=False):
-    zmq_urls: dict[EngineName | tTradingVenue | ComponentName, str]
-    zmq_ports: dict[ZeroMQSenderName, int]
-
-
-class TradeEngineSettingsDict(BaseEngineSettingsDict, total=False):
-    cancel_all_at: dict[str, bool]
-    # force refetching market configs
-    refetch_market_configs: bool
-    # Always use the WebSocket API for actions like placing or canceling orders, even if REST is available.
-    websocket_first: bool
-
-
-class BacktestEngineSettingsDict(BaseEngineSettingsDict, total=False):
-    retention_period: int
-    commit_to_git: bool

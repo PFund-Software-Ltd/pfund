@@ -1,37 +1,31 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, ClassVar
+from typing import TYPE_CHECKING, Literal, TypedDict
 if TYPE_CHECKING:
-    from pfeed.typing import tDataTool
-    from pfeed.messaging.zeromq import ZeroMQ
+    from dynaconf import Dynaconf
+    from pfund.datas.resolution import Resolution
     from pfund.products.product_base import BaseProduct
     from pfund.accounts.account_base import BaseAccount
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.typing import (
         StrategyT, 
-        tEnvironment, 
         tBroker,
-        tDatabase, 
-        tTradingVenue,
         DataRangeDict, 
         DataParamsDict,
     )
     from pfund.brokers.broker_base import BaseBroker
     from pfund.strategies.strategy_base import BaseStrategy
-    from pfund.engines.base_engine_settings import BaseEngineSettings
+    from pfund.settings import TradeEngineSettings, BacktestEngineSettings
 
 import logging
 import datetime
 
-from pfeed.enums import DataTool
 from pfund import get_config
-from pfund.engines.meta_engine import MetaEngine
 from pfund.proxies.actor_proxy import ActorProxy
 from pfund.proxies.engine_proxy import EngineProxy
 from pfund.enums import (
     Environment, 
     Broker, 
     RunMode, 
-    Database, 
     TradingVenue,
 )
 
@@ -40,163 +34,184 @@ ENV_COLORS = {
     # 'yellow': 'bold yellow on #ffffe0',
     # 'magenta': 'bold magenta on #fff0ff',
     # 'TRAIN': 'bold cyan on #d0ffff',
-    Environment.BACKTEST: 'bold blue on #e0e0ff',
-    Environment.SANDBOX: 'bold black on #f0f0f0',
-    Environment.PAPER: 'bold red on #ffe0e0',
-    Environment.LIVE: 'bold green on #e0ffe0',
+    Environment.BACKTEST: 'bold blue',
+    Environment.SANDBOX: 'bold black',
+    Environment.PAPER: 'bold red',
+    Environment.LIVE: 'bold green',
 }
 config = get_config()
 
 
-# REVIEW: pfund's engine is NOT thread-safe
-class BaseEngine(metaclass=MetaEngine):
-    _num: ClassVar[int] = 0
-    _initialized: ClassVar[bool]
-    _env: ClassVar[Environment]
-    _run_mode: ClassVar[RunMode]
-    _data_tool: ClassVar[DataTool]
-    _data_start: ClassVar[datetime.date]
-    _data_end: ClassVar[datetime.date]
-    _database: ClassVar[tDatabase | None]
-    _settings: ClassVar[BaseEngineSettings]
-    
-    @classmethod
-    def _next_engine_id(cls):
-        cls._num += 1
-        return str(cls._num)
-    
-    def _get_default_name(self):
-        return f"{self.__class__.__name__}-{self._next_engine_id()}"
-        
+class DataRangeDict(TypedDict, total=False):
+    start_date: str
+    end_date: str
+
+
+
+class BaseEngine:
     def __init__(
         self, 
         *,
-        env: tEnvironment, 
-        name: str,
-        data_tool: tDataTool,
-        data_range: str | DataRangeDict | Literal['ytd'],
-        database: tDatabase | None,
-        settings: BaseEngineSettings,
+        env: Environment, 
+        data_range: str | Resolution | DataRangeDict | Literal['ytd'],
+        name: str='',
     ):
-        from pfund_kit.utils import load_env_file
-        from pfund_kit.style import cprint, RichColor, TextStyle
+        '''
+        Args:
+            data_range: range of data to be used for the engine,
+                when it is a string, it is a resolution, e.g. '1m', '1d', '1w', '1mo', '1y'
+                when it is a dict, it is a dict with keys 'start_date' and 'end_date', 
+                    e.g. {'start_date': '2024-01-01', 'end_date': '2024-12-31'}
+        '''
         from pfund.config import setup_logging
-        from pfund.engines.risk_engine import RiskEngine
+        from pfund_kit.style import cprint
         
-        cls = self.__class__
-        if not hasattr(cls, "_initialized"):
-            from pfeed.utils import parse_date_range
-            from pfund.utils import derive_run_mode
-
-            env = Environment[env.upper()]
-            load_env_file(env=env, verbose=True)
-            setup_logging(env=env)
-            
-            cls._env = env
-            cls._run_mode = derive_run_mode()
-            cls._data_tool = DataTool[data_tool.lower()]
-            cls._database = Database[database.upper()] if database else None
-            cls._settings = settings
-            is_data_range_dict = isinstance(data_range, dict)
-            cls._data_start, cls._data_end = parse_date_range(
-                start_date=data_range['start_date'] if is_data_range_dict else '',
-                end_date=data_range.get('end_date', '') if is_data_range_dict else '',
-                rollback_period=data_range if not is_data_range_dict else '',
-            )
-            cls._initialized = True
-            cls.lock()  # Locks any future class modifications
-            cprint(f"{env} Engine is running", style=ENV_COLORS[env])
-        else:
-            assert cls._env == env, f'Current environment is {cls._env}, cannot change to {env}'
-            cprint("Engine already initialized — new inputs are ignored", style=TextStyle.BOLD + RichColor.YELLOW)
-
+        env = Environment[env.upper()]
         
         # FIXME: do NOT allow LIVE env for now
-        assert cls._env != Environment.LIVE, f"{cls._env=} is not allowed for now"
-
-
-        self.name = name or self._get_default_name()
+        if env == Environment.LIVE:
+            raise ValueError(f"{env=} is not allowed for now")
+        
+        setup_logging(env=env)
+        self._env = env
         self._logger = logging.getLogger('pfund')
-        if "engine" not in self.name.lower():
-            self.name += "_engine"
-        # TODO: add risk engine?
-        # self._risk_engine = RiskEngine()  
-        self.brokers: dict[Broker, BaseBroker] = {}
-        self.strategies: dict[str, BaseStrategy | ActorProxy] = {}
+        self.name = self._get_default_name()
+        if name:
+            self._set_name(name)
         self._is_running: bool = False
         self._is_gathered: bool = False
-        self._proxy: ZeroMQ | None = None
-
-        self._setup_proxy()
+        self.brokers: dict[Broker, BaseBroker] = {}
+        self.strategies: dict[str, BaseStrategy | ActorProxy] = {}
+        # TODO: add risk engine?
+        # self._risk_engine = RiskEngine()  
+        self._conf: Dynaconf | None = self._load_dynaconf(data_range)
+        cprint(f"{env} {self.name} is running (data_range=({self.data_start}, {self.data_end}))", style=ENV_COLORS[env])
     
     @property
     def env(self) -> Environment:
         return self._env
-    
+
     @property
-    def run_mode(self) -> RunMode:
-        return self._run_mode
-    
-    @property
-    def settings(self) -> BaseEngineSettings:
-        return self._settings
-    
-    @property
-    def data_tool(self) -> DataTool:
-        return self._data_tool
+    def settings(self) -> TradeEngineSettings | BacktestEngineSettings:
+        return self._conf.settings
     
     @property
     def data_start(self) -> datetime.date:
-        return self._data_start
+        return self._conf.data_start
     
     @property
     def data_end(self) -> datetime.date:
-        return self._data_end
+        return self._conf.data_end
     
-    def _setup_proxy(self):
-        import zmq
-        from pfeed.messaging.zeromq import ZeroMQ
-        self._proxy = ZeroMQ(
-            name=self.name+"_proxy",
-            logger=self._logger,
-            io_threads=2,
-            sender_type=zmq.XPUB,  # publish to external listeners
-            receiver_type=zmq.XSUB,  # subscribe to data engine, component's logs (if using ray) etc.
-        )
-        sender_name = "proxy"
-        zmq_ports = self._settings.zmq_ports
-        engine_zmq_url = self._settings.zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL)
-        self._proxy.bind(
-            socket=self._proxy.sender,
-            port=zmq_ports.get(sender_name, None),
-            url=engine_zmq_url,
-        )
-        proxy_zmq_port= self._proxy.get_ports_in_use(self._proxy.sender)[0]
-        self._logger.debug(f"zmq proxy binded to {engine_zmq_url}:{proxy_zmq_port}")
-        for zmq_name, zmq_port in zmq_ports.items():
-            if zmq_name == 'data_engine' or zmq_name.endswith("_logger"):
-                self._proxy.connect(
-                    socket=self._proxy.receiver,
-                    port=zmq_port,
-                    url=engine_zmq_url,
-                )
-                self._logger.debug(f"zmq proxy connected to {zmq_name} at {engine_zmq_url}:{zmq_port}")
-        self._settings.zmq_ports.update({ sender_name: proxy_zmq_port })
+    def is_running(self) -> bool:
+        return self._is_running
     
+    def _get_default_name(self) -> str:
+        return f"{self.__class__.__name__}"
+    
+    def _set_name(self, name: str):
+        if not name:
+            return
+        self.name = name
+        if not self.name.lower().endswith("engine"):
+            self.name += "_engine"
+    
+    def configure_settings(self, settings: TradeEngineSettings | BacktestEngineSettings):
+        '''Overrides the loaded settings with the given settings object and saves it to settings.toml
+        
+        Args:
+            settings: settings object to override the current settings (if any)
+        '''
+        from pfund_kit.utils import toml
+        
+        # write settings to settings.toml
+        env_section = self._env
+        data = {env_section: settings.model_dump()}
+        toml.dump(data, config.settings_file_path, mode='update', auto_inline=True)
+        
+        # update settings in dynaconf
+        if hasattr(self, '_conf') and self._conf is not None:
+            self._conf.update({'settings': settings})
+    
+    def _load_dynaconf(self, data_range: str | Resolution | DataRangeDict | Literal['ytd']):
+        '''Loads env variables, data range and engine's settings.toml into Dynaconf'''
+        from dynaconf import Dynaconf
+        from dotenv import find_dotenv, dotenv_values
+        from pfeed.utils import parse_date_range
+        from pfund_kit.utils import toml
+        from pfund.settings import TradeEngineSettings, BacktestEngineSettings
+
+        # load envs manually to avoid loading into os.environ
+        # NOTE: in this way, we can have multiple engines running with different envs in the same process
+        env_filename = f'.env.{self._env.lower()}'
+        env_file_path = find_dotenv(filename=env_filename, usecwd=True, raise_error_if_not_found=False)
+        env_vars = dotenv_values(env_file_path)
+        # add prefix PFUND_{env} to env vars to avoid name collisions, e.g. PFUND_LIVE_BYBIT_API_KEY
+        env_var_prefix = f'PFUND_{self._env.upper()}'
+        env_vars = {f'{env_var_prefix}_{k}': v for k, v in env_vars.items()}
+
+        # parse data range
+        is_data_range_dict = isinstance(data_range, dict)
+        data_start, data_end = parse_date_range(
+            start_date=data_range['start_date'] if is_data_range_dict else '',
+            end_date=data_range.get('end_date', '') if is_data_range_dict else '',
+            rollback_period=data_range if not is_data_range_dict else '',
+        )
+        
+        # load settings from settings.toml
+        settings_file_path = config.settings_file_path
+        conf = Dynaconf(
+            environments=True,
+            env=self._env,
+            load_dotenv=False,
+            settings_files=[settings_file_path],
+        )
+        
+        # convert settings to pydantic model
+        EngineSettings = BacktestEngineSettings if self._env == Environment.BACKTEST else TradeEngineSettings
+        settings = EngineSettings(
+            **{k.lower(): v for k, v in conf.as_dict().items() if k.lower() in EngineSettings.model_fields}
+        )
+        
+        # settings will be loaded to conf.settings, unset the keys in conf to avoid confusion
+        for k in EngineSettings.model_fields:
+            conf.unset(k, force=True)
+            
+        # load env vars, data range and settings to dynaconf
+        conf.update({
+            **env_vars, 
+            'settings': settings, 
+            'data_start': data_start, 
+            'data_end': data_end
+        })
+
+        # initialize settings with env section if not exists
+        if not settings_file_path.exists() or self._env not in toml.load(settings_file_path):
+            self.configure_settings(settings)
+        return conf
+
+    # FIXME
+    def get_data_params(self) -> DataParamsDict:
+        '''Data params are used in components' data stores'''
+        return {
+            'data_start': self._data_start,
+            'data_end': self._data_end,
+            'data_tool': self._data_tool,
+            # FIXME
+            'storage': config.storage,
+            'storage_options': config.storage_options,
+            'use_deltalake': config.use_deltalake,
+        }
+        
     # TODO: create EngineMetadata class (typed dict/dataclass/pydantic model)
     def to_dict(self) -> dict:
         return {
             'name': self.name,
             'env': self._env.value,
-            'run_mode': self._run_mode.value,
-            'data_tool': self._data_tool.value,
-            'data_start': self._data_start.strftime('%Y-%m-%d'),
-            'data_end': self._data_end.strftime('%Y-%m-%d'),
-            'settings': self._settings.model_dump(),
+            'data_start': self.data_start.strftime('%Y-%m-%d'),
+            'data_end': self.data_end.strftime('%Y-%m-%d'),
+            'settings': self.settings.model_dump(),
         }
-        
-    def is_running(self) -> bool:
-        return self._is_running
     
     def add_strategy(
         self, 
@@ -240,21 +255,10 @@ class BaseEngine(metaclass=MetaEngine):
         self._logger.debug(f"added '{strat}'")
         return strategy
     
-    def get_data_params(self) -> DataParamsDict:
-        '''Data params are used in components' data stores'''
-        return {
-            'data_start': self._data_start,
-            'data_end': self._data_end,
-            'data_tool': self._data_tool,
-            'storage': config.storage,
-            'storage_options': config.storage_options,
-            'use_deltalake': config.use_deltalake,
-        }
-    
     def get_strategy(self, name: str) -> BaseStrategy | ActorProxy:
         return self.strategies[name]
     
-    def _add_broker(self, trading_venue: TradingVenue | tTradingVenue) -> BaseBroker:
+    def _add_broker(self, trading_venue: TradingVenue) -> BaseBroker:
         from pfund.brokers import create_broker
         bkr: Broker = TradingVenue[trading_venue.upper()].broker
         if bkr not in self.brokers:
@@ -312,7 +316,7 @@ class BaseEngine(metaclass=MetaEngine):
                 strategy._gather()
                 
                 # updates zmq ports in settings
-                self._settings.zmq_ports.update(strategy._get_zmq_ports_in_use())
+                self._conf.settings.zmq_ports.update(strategy._get_zmq_ports_in_use())
                 
                 # registers accounts
                 accounts: list[BaseAccount] = strategy.get_accounts()
@@ -349,7 +353,5 @@ class BaseEngine(metaclass=MetaEngine):
                 strategy.stop()
             for broker in self.brokers.values():
                 broker.stop()
-            if self._proxy:
-                self._proxy.terminate()
         else:
             self._logger.debug(f'{self.name} is not running')

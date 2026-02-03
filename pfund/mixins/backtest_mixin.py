@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 import numpy as np
 
-from pfund import cprint
+from pfund_kit.style import cprint
 from pfund.strategies.strategy_base import BaseStrategy
 from pfund.models.model_base import BaseModel
 from pfund.enums import BacktestMode

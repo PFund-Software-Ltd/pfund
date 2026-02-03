@@ -197,3 +197,6 @@ tests/data/
 *.egg-info
 
 .python-version
+
+# Ignore dynaconf secret files
+.secrets.*

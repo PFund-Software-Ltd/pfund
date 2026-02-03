@@ -1,5 +1,6 @@
 from pfund_kit.cli import create_cli_group
 from pfund_kit.cli.commands import config, docker_compose, remove
+from pfund.cli.commands.settings import settings
 
 
 def init_context(ctx):
@@ -14,3 +15,4 @@ pfund_group.add_command(docker_compose)
 pfund_group.add_command(docker_compose, name='compose')
 pfund_group.add_command(remove)
 pfund_group.add_command(remove, name='rm')
+pfund_group.add_command(settings)

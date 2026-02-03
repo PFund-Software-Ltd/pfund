@@ -13,6 +13,12 @@ from sklearn.model_selection import TimeSeriesSplit
 from pfund import print_warning
 
 
+class DatasetSplitsDict(TypedDict, total=True):
+    train: float
+    val: float
+    test: float
+    
+
 class DatasetPeriods(TypedDict):
     dataset: tuple[datetime.date, datetime.date]
     train_set: tuple[datetime.date, datetime.date]

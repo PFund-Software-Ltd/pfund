@@ -58,7 +58,7 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         _assert_predict_function()
     
     def featurize(self) -> GenericFrame:
-        from pfund import cprint
+        from pfund_kit.style import cprint
         cprint(
             f"WARNING: '{self.name}' is using the default featurize(), "
             "which assumes X = self.df, it could be a wrong input for predict(X).\n"

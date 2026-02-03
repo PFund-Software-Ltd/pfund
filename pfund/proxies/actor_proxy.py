@@ -4,7 +4,8 @@ if TYPE_CHECKING:
     from ray.actor import ActorHandle
     from pfund.typing import Component
 
-from pfund import cprint, print_warning, print_error
+from pfund import print_warning, print_error
+from pfund_kit.style import cprint, RichColor, TextStyle
 
 
 class ActorProxy:

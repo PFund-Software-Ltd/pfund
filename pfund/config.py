@@ -1,11 +1,11 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from pfeed.enums import DataStorage
+from typing import Literal
 
 from pathlib import Path
 
 from pfund.enums import Environment
+from pfund.enums.data_tool import DataTool
+from pfund.enums.database import Database
 from pfund_kit.config import Configuration
 
 
@@ -71,6 +71,8 @@ def configure(
     data_path: str | None = None,
     log_path: str | None = None,
     cache_path: str | None = None,
+    data_tool: Literal['pandas', 'polars'] | None = None,
+    database: Literal['duckdb'] | None = None,
     persist: bool = False,
 ) -> PFundConfig:
     '''
@@ -79,6 +81,8 @@ def configure(
         data_path: Path to the data directory.
         log_path: Path to the log directory.
         cache_path: Path to the cache directory.
+        data_tool: data tool to use for dataframe operations, e.g. "pandas", "polars"
+        database: database to use for storing data, e.g. "duckdb"
         persist: If True, the config will be saved to the config file.
     '''
     config = get_config()
@@ -91,6 +95,10 @@ def configure(
         if v is not None:
             if '_path' in k:
                 v = Path(v)
+            elif k == 'data_tool':
+                v = DataTool[v.lower()]
+            elif k == 'database':
+                v = Database[v.upper()]
             setattr(config, k, v)
     
     config.ensure_dirs()
@@ -136,16 +144,27 @@ def configure_logging(logging_config: dict | None=None, debug: bool=False) -> di
     
 
 class PFundConfig(Configuration):
+    SETTINGS_FILENAME = 'settings.toml'  # engine's settings toml file
+    
     def __init__(self):
         super().__init__(project_name=project_name, source_file=__file__)
-        # TODO: integrate with pfund_kit Configuration, confirm their usage
-        self.storage: DataStorage | None = None
-        self.storage_options: dict | None = None
-        self.use_deltalake: bool | None = None
+        self.settings_file_path.touch(exist_ok=True)
 
     def _initialize_from_data(self):
-        """No additional config attributes to initialize."""
-        pass
+        """Initialize PFundConfig-specific attributes from config data."""
+        self.data_tool = self._data.get('data_tool', DataTool.polars)
+        self.database = self._data.get('database', Database.DUCKDB)
+    
+    def to_dict(self) -> dict:
+        return {
+            **super().to_dict(),
+            'data_tool': self.data_tool,
+            'database': self.database,
+        }
+
+    @property
+    def settings_file_path(self):
+        return self.config_path / self.SETTINGS_FILENAME
     
     def prepare_docker_context(self):
         pass

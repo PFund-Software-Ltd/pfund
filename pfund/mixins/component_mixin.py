@@ -304,11 +304,8 @@ class ComponentMixin:
     def _set_name(self, name: str):
         if not name:
             return
-        # avoid zeromq binding issues with confusing component name
-        assert not name.endswith("_data") and not name.endswith("_logger"), \
-            f"name cannot end with '_data' or '_logger', got {name}"
         self.name = name
-        if self.component_type not in self.name.lower():
+        if not self.name.lower().endswith(self.component_type):
             self.name += f"_{self.component_type}"
     
     def _add_consumer(self: Component, consumer: Component | ActorProxy):

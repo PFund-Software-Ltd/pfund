@@ -1,5 +1,7 @@
 from pydantic import Field, model_validator
-from pfund.engines.base_engine_settings import BaseEngineSettings
+
+from pfund.settings.base_engine_settings import BaseEngineSettings
+from pfund.typing import ComponentName, EngineName, ZeroMQSenderName
 
 
 DEFAULT_CANCEL_ALL_AT: dict[str, bool] = {
@@ -9,6 +11,9 @@ DEFAULT_CANCEL_ALL_AT: dict[str, bool] = {
 
 
 class TradeEngineSettings(BaseEngineSettings):
+    # e.g. url='tcp://localhost'
+    zmq_urls: dict[EngineName | ComponentName, str] = Field(default_factory=dict)
+    zmq_ports: dict[ZeroMQSenderName, int] = Field(default_factory=dict)
     cancel_all_at: dict[str, bool] = Field(default_factory=dict)
     # force refetching market configs
     refetch_market_configs: bool = Field(default=False)
