@@ -1,16 +1,13 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.typing import StrategyT, tTradingVenue
-    from pfund.products.product_base import BaseProduct
+    from pfund.typing import StrategyT
     from pfund.data_tools import data_tool_backtest
     
 from pfund.mixins.backtest_mixin import BacktestMixin
 
 
-# HACK: since python doesn't support dynamic typing, true return type should be subclass of BacktestMixin and StrategyT
-# write -> BacktestMixin | StrategyT for better intellisense in IDEs 
-def BacktestStrategy(Strategy: type[StrategyT], *args, **kwargs) -> BacktestMixin | StrategyT:
+def BacktestStrategy(Strategy: type[StrategyT], *args, **kwargs) -> StrategyT:
     class _BacktestStrategy(BacktestMixin, Strategy):
         def __getattr__(self, name):
             if hasattr(super(), name):

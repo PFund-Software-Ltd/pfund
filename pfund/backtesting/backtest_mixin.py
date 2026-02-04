@@ -117,7 +117,7 @@ class BacktestMixin:
         elif BacktestEngine.mode == BacktestMode.vectorized:
             return True
         elif BacktestEngine.mode == BacktestMode.event_driven:
-            return BacktestEngine._use_signal_df
+            return BacktestEngine._reuse_signals
     
     def _check_if_append_to_df(self: BacktestMixin | BaseStrategy | BaseModel):
         if isinstance(self, BaseStrategy):

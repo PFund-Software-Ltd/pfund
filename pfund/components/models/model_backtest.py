@@ -12,7 +12,7 @@ from pfund.features.feature_base import BaseFeature
 from pfund.mixins.backtest_mixin import BacktestMixin
 
 
-def BacktestModel(Model: type[ModelT], model: MachineLearningModel, *args, **kwargs) -> BacktestMixin | ModelT:
+def BacktestModel(Model: type[ModelT], model: MachineLearningModel, *args, **kwargs) -> ModelT:
     class _BacktestModel(BacktestMixin, Model):
         def __getattr__(self, name):
             if hasattr(super(), name):

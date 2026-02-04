@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     from pfund.orders.order_base import BaseOrder
     from pfund.datas.data_base import BaseData
     from pfund.risk_guard import RiskGuard
-    from pfund.data_tools import data_tool_backtest
 
 from collections import deque
 from abc import ABC, abstractmethod
@@ -44,7 +43,6 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         # self._portfolio: Portfolio = ...
         # TODO: aggregate sub-strategies' portfolios
         # self._aggregated_portfolio: Portfolio = ...
-        # self._risk_guards: list[RiskGuard] = []
         self._is_top_strategy: bool = False
         
         # FIXME: move positions, balances, orders, all to account object!
@@ -57,10 +55,6 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         # self.trades: dict[AccountName, list[BaseTrade]] = {}
         
         self.__mixin_post_init__(*args, **kwargs)  # calls ComponentMixin.__mixin_post_init__()
-    
-    @abstractmethod
-    def backtest(self, df: data_tool_backtest.BacktestDataFrame):
-        pass
     
     # TODO: warning if sub-strategy adds risk guard
     def add_risk_guard(self, risk_guard: RiskGuard):

@@ -12,7 +12,7 @@ from decimal import Decimal
 
 from msgspec import json
 
-from pfund.parser import SchemaParser
+from pfund.utils.parser import SchemaParser
 from pfund.exchanges.ws_api_base import BaseWebSocketAPI, NamedWebSocket
 from pfund.enums import CryptoExchange, PublicDataChannel, DataChannelType
 from pfund.products.product_bybit import BybitProduct

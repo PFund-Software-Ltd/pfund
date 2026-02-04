@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     )
     from pfund.brokers.broker_base import BaseBroker
     from pfund.strategies.strategy_base import BaseStrategy
-    from pfund.settings import TradeEngineSettings, BacktestEngineSettings
+    from pfund.engines.engine_context import DataRangeDict
 
 import logging
 import datetime
@@ -20,7 +20,7 @@ import datetime
 from pfund import get_config
 from pfund.proxies.actor_proxy import ActorProxy
 from pfund.proxies.engine_proxy import EngineProxy
-from pfund.engines.engine_context import EngineContext, DataRangeDict
+from pfund.settings import TradeEngineSettings, BacktestEngineSettings
 from pfund.enums import (
     Environment,
     Broker,
@@ -59,6 +59,7 @@ class BaseEngine:
         '''
         from pfund.config import setup_logging
         from pfund_kit.style import cprint
+        from pfund.engines.engine_context import EngineContext
         
         env = Environment[env.upper()]
         
@@ -75,8 +76,6 @@ class BaseEngine:
         self._is_gathered: bool = False
         self.brokers: dict[Broker, BaseBroker] = {}
         self.strategies: dict[str, BaseStrategy | ActorProxy] = {}
-        # TODO: add risk engine?
-        # self._risk_engine = RiskEngine()  
         self._context: EngineContext = EngineContext(env=env, data_range=data_range)
         cprint(f"{self.env} {self.name} is running (data_range=({self.data_start}, {self.data_end}))", style=ENV_COLORS[self.env])
     
@@ -116,6 +115,9 @@ class BaseEngine:
             settings: settings object to override the current settings (if any)
         '''
         from pfund_kit.utils import toml
+
+        if not isinstance(settings, (TradeEngineSettings, BacktestEngineSettings)):
+            raise ValueError(f"Invalid settings type: {type(settings)}")
 
         # write settings to settings.toml
         env_section = self.env

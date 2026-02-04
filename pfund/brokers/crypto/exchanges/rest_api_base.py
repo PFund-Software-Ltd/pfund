@@ -19,7 +19,7 @@ from json import JSONDecodeError
 
 from pfund_kit.utils.yaml import load, dump
 from pfund.errors import ParseApiResponseError
-from pfund.parser import SchemaParser
+from pfund.utils.parser import SchemaParser
 from pfund.enums import Environment, CryptoExchange
 
 

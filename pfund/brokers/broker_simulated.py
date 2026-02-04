@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfund.engines.backtest_engine_settings import BacktestEngineSettings
+    from pfund.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.products.product_base import BaseProduct
     from pfund.brokers.broker_base import BaseBroker
 

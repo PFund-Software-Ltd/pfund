@@ -15,18 +15,15 @@ if TYPE_CHECKING:
     from pfeed.messaging.zeromq import ZeroMQ
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.datas.resolution import Resolution
+    from pfund.engines.engine_context import DataRangeDict
 
 import logging
 
 from pfund.engines.base_engine import BaseEngine
 from pfund.enums import Environment, PFundDataChannel
-from pfund.engines.engine_context import DataRangeDict
-from pfund import get_config
 
 
-config = get_config()
-
-
+# TODO: SANDBOX env + backtest data = replaying
 class TradeEngine(BaseEngine):
     def __init__(
         self,
