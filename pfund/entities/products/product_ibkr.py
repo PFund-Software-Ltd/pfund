@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     from ibapi.contract import Contract
 
 from pfund.enums import TradingVenue, Broker, TraditionalAssetType
-from pfund.products.product_base import BaseProduct
+from pfund.entities.products.product_base import BaseProduct
 
 
 DEFAULT_EXCHANGES = {

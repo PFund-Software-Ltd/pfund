@@ -12,7 +12,7 @@ For more details, please refer to:
 2. https://www.interactivebrokers.ca/en/index.php?f=4745&p=overview3
 """
 
-from pfund.balances.balance_base import BaseBalance
+from pfund.entities.balances.balance_base import BaseBalance
 
 
 class IBKRBalance(BaseBalance):

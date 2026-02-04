@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 
 from numpy import sign
 
-from pfund.positions.position_base import BasePosition
+from pfund.entities.positions.position_base import BasePosition
 
 
 class CryptoPosition(BasePosition):

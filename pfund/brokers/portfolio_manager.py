@@ -5,8 +5,8 @@ if TYPE_CHECKING:
 
 from collections import defaultdict
 
-from pfund.balances.balance_base import BaseBalance
-from pfund.positions.position_base import BasePosition
+from pfund.entities.balances.balance_base import BaseBalance
+from pfund.entities.positions.position_base import BasePosition
 from pfund.enums import Broker, Event, RunMode
 
 

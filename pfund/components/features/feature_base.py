@@ -6,7 +6,7 @@ if TYPE_CHECKING:
 
 from abc import abstractmethod
 
-from pfund.models.model_base import BaseModel
+from pfund.components.models.model_base import BaseModel
 
 
 class BaseFeature(BaseModel):

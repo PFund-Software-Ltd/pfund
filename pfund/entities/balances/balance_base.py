@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.accounts.account_base import BaseAccount
+    from pfund.entities.accounts.account_base import BaseAccount
 
 import time
 import logging

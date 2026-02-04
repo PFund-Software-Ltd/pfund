@@ -6,7 +6,7 @@ if TYPE_CHECKING:
 import pandas as pd
 import polars as pl
 
-from pfund.models.model_base import BaseModel
+from pfund.components.models.model_base import BaseModel
 
 
 class SklearnModel(BaseModel):

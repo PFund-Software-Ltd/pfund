@@ -1,4 +1,4 @@
-from pfund.strategies.strategy_base import BaseStrategy
+from pfund.components.strategies.strategy_base import BaseStrategy
 
 
 # TODO

@@ -2,8 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
-    from pfund.products.product_base import BaseProduct
-    from pfund.accounts.account_base import BaseAccount
+    from pfund.entities.products.product_base import BaseProduct
+    from pfund.entities.accounts.account_base import BaseAccount
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.typing import (
         StrategyT,
@@ -11,15 +11,15 @@ if TYPE_CHECKING:
         DataParamsDict,
     )
     from pfund.brokers.broker_base import BaseBroker
-    from pfund.strategies.strategy_base import BaseStrategy
+    from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.engines.engine_context import DataRangeDict
 
 import logging
 import datetime
 
 from pfund import get_config
-from pfund.proxies.actor_proxy import ActorProxy
-from pfund.proxies.engine_proxy import EngineProxy
+from pfund.components.actor_proxy import ActorProxy
+from pfund.engines.engine_proxy import EngineProxy
 from pfund.settings import TradeEngineSettings, BacktestEngineSettings
 from pfund.enums import (
     Environment,
@@ -164,7 +164,7 @@ class BaseEngine:
                 Options for Ray actor.
                 will be passed to ray actor like this: Actor.options(**ray_options).remote(**ray_kwargs)
         '''
-        from pfund.strategies.strategy_base import BaseStrategy
+        from pfund.components.strategies.strategy_base import BaseStrategy
         from pfund.utils import derive_run_mode
         
         Strategy = strategy.__class__

@@ -1,9 +1,9 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfund.models.model_base import BaseModel, MachineLearningModel
-    from pfund.indicators.indicator_base import BaseIndicator
-    from pfund.indicators.indicator_base import IndicatorFunction
+    from pfund.components.models.model_base import BaseModel, MachineLearningModel
+    from pfund.components.indicators.indicator_base import BaseIndicator
+    from pfund.components.indicators.indicator_base import IndicatorFunction
     
 
 from abc import ABCMeta
@@ -49,9 +49,9 @@ class MetaModel(ABCMeta):
     
     @staticmethod
     def _get_required_arg(cls) -> Literal['model', 'indicator', '']:
-        from pfund.models.model_base import BaseModel
-        from pfund.indicators.indicator_base import BaseIndicator
-        from pfund.features.feature_base import BaseFeature
+        from pfund.components.models.model_base import BaseModel
+        from pfund.components.indicators.indicator_base import BaseIndicator
+        from pfund.components.features.feature_base import BaseFeature
         if issubclass(cls, BaseFeature):
             return ''
         elif issubclass(cls, BaseIndicator):
@@ -104,21 +104,21 @@ class MetaModel(ABCMeta):
             BaseEstimator = None
 
         if nn is not None and isinstance(model, nn.Module):
-            from pfund.models.pytorch_model import PytorchModel
+            from pfund.components.models.pytorch_model import PytorchModel
             return PytorchModel
         elif BaseEstimator is not None and isinstance(model, BaseEstimator):
-            from pfund.models.sklearn_model import SklearnModel
+            from pfund.components.models.sklearn_model import SklearnModel
             return SklearnModel
         else:
-            from pfund.models.model_base import BaseModel
+            from pfund.components.models.model_base import BaseModel
             return BaseModel
     
     @staticmethod
     def _derive_indicator_class(indicator: IndicatorFunction) -> type[BaseIndicator]:
-        from pfund.indicators.talib_indicator import TalibFunction
+        from pfund.components.indicators.talib_indicator import TalibFunction
         if isinstance(indicator, TalibFunction):
-            from pfund.indicators.talib_indicator import TalibIndicator
+            from pfund.components.indicators.talib_indicator import TalibIndicator
             return TalibIndicator
         else:
-            from pfund.indicators.ta_indicator import TaIndicator
+            from pfund.components.indicators.ta_indicator import TaIndicator
             return TaIndicator

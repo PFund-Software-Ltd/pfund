@@ -1,14 +1,14 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.products.product_base import BaseProduct
+    from pfund.entities.products.product_base import BaseProduct
     
 from decimal import Decimal
 from datetime import date
 
 from pydantic import Field, field_validator
 
-from pfund.products.mixins.derivative import DerivativeMixin
+from pfund.entities.products.mixins.derivative import DerivativeMixin
 from pfund.enums.option_type import OptionType
 
 

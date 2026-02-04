@@ -5,10 +5,10 @@ from __future__ import annotations
 from typing import Callable, TYPE_CHECKING, Awaitable, Literal
 if TYPE_CHECKING:
     from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
-    from pfund.accounts.account_ibkr import IBKRAccount
+    from pfund.entities.accounts.account_ibkr import IBKRAccount
     from pfund.enums import Environment
     from pfund.datas.resolution import Resolution
-    from pfund.products.product_ibkr import IBKRProduct
+    from pfund.entities.products.product_ibkr import IBKRProduct
     
 import logging
 from collections import defaultdict

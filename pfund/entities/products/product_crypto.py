@@ -5,7 +5,7 @@ import os
 from decimal import Decimal
 
 from pfund.enums import CryptoExchange, Broker
-from pfund.products.product_base import BaseProduct
+from pfund.entities.products.product_base import BaseProduct
 
 
 class CryptoProduct(BaseProduct):

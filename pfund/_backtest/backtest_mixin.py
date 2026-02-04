@@ -9,13 +9,13 @@ if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.engines.backtest_engine import BacktestEngine
-    from pfund.models.dataset_splitter import DatasetPeriods, CrossValidatorDatasetPeriods
+    from pfund.components.models.dataset_splitter import DatasetPeriods, CrossValidatorDatasetPeriods
 
 import numpy as np
 
 from pfund_kit.style import cprint
-from pfund.strategies.strategy_base import BaseStrategy
-from pfund.models.model_base import BaseModel
+from pfund.components.strategies.strategy_base import BaseStrategy
+from pfund.components.models.model_base import BaseModel
 from pfund.enums import BacktestMode
 from pfund.engines.backtest_engine import BacktestEngine
 
@@ -266,7 +266,7 @@ class BacktestMixin:
         group_data: bool=True,
         signal_cols: list[str] | None=None,
     ) -> BacktestMixin | ModelT:
-        from pfund.models.model_backtest import BacktestModel
+        from pfund.components.models.model_backtest import BacktestModel
         name = name or model.get_default_name()
         model = BacktestModel(type(model), model.model, *model._args, **model._kwargs)
         return super().add_model(

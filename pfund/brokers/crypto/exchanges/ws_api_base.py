@@ -2,11 +2,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Callable, Literal, ClassVar, TypeAlias, Awaitable, Any
 if TYPE_CHECKING:
     from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
-    from pfund.adapter import Adapter
+    from pfund.utils.adapter import Adapter
     from pfund.datas.resolution import Resolution
-    from pfund.accounts.account_crypto import CryptoAccount
+    from pfund.entities.accounts.account_crypto import CryptoAccount
     from pfund.exchanges.exchange_base import BaseExchange
-    from pfund.products.product_crypto import CryptoProduct
+    from pfund.entities.products.product_crypto import CryptoProduct
 
 import time
 import logging

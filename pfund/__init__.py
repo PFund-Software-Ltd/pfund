@@ -6,13 +6,13 @@ if TYPE_CHECKING:
     from pfund.aliases import ALIASES as alias
     from pfund.engines.backtest_engine import BacktestEngine
     from pfund.engines.trade_engine import TradeEngine
-    from pfund.strategies.strategy_base import BaseStrategy as Strategy
-    from pfund.models.model_base import BaseModel as Model
-    from pfund.models.pytorch_model import PytorchModel
-    from pfund.models.sklearn_model import SklearnModel
-    from pfund.features.feature_base import BaseFeature as Feature
-    from pfund.indicators.indicator_base import BaseIndicator as Indicator
-    from pfund.indicators.talib_indicator import TalibIndicator
+    from pfund.components.strategies.strategy_base import BaseStrategy as Strategy
+    from pfund.components.models.model_base import BaseModel as Model
+    from pfund.components.models.pytorch_model import PytorchModel
+    from pfund.components.models.sklearn_model import SklearnModel
+    from pfund.components.features.feature_base import BaseFeature as Feature
+    from pfund.components.indicators.indicator_base import BaseIndicator as Indicator
+    from pfund.components.indicators.talib_indicator import TalibIndicator
     from pfund.brokers.broker_crypto import CryptoBroker
     from pfund.brokers.broker_defi import DeFiBroker
     from pfund.brokers.interactive_brokers.broker import (
@@ -45,25 +45,25 @@ def __getattr__(name: str):
         from pfund.engines.trade_engine import TradeEngine
         return TradeEngine
     elif name == "Strategy":
-        from pfund.strategies.strategy_base import BaseStrategy as Strategy
+        from pfund.components.strategies.strategy_base import BaseStrategy as Strategy
         return Strategy
     elif name == "Model":
-        from pfund.models.model_base import BaseModel as Model
+        from pfund.components.models.model_base import BaseModel as Model
         return Model
     elif name == "Feature":
-        from pfund.features.feature_base import BaseFeature as Feature
+        from pfund.components.features.feature_base import BaseFeature as Feature
         return Feature
     elif name == "PytorchModel":
-        from pfund.models.pytorch_model import PytorchModel
+        from pfund.components.models.pytorch_model import PytorchModel
         return PytorchModel
     elif name == "SklearnModel":
-        from pfund.models.sklearn_model import SklearnModel
+        from pfund.components.models.sklearn_model import SklearnModel
         return SklearnModel
     elif name == "Indicator":
-        from pfund.indicators.indicator_base import BaseIndicator as Indicator
+        from pfund.components.indicators.indicator_base import BaseIndicator as Indicator
         return Indicator
     elif name == "TalibIndicator":
-        from pfund.indicators.talib_indicator import TalibIndicator
+        from pfund.components.indicators.talib_indicator import TalibIndicator
         return TalibIndicator
     elif name == "CryptoBroker":
         from pfund.brokers.broker_crypto import CryptoBroker

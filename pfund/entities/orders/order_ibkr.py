@@ -3,7 +3,7 @@ from typing import Any
 from ibapi.order import Order
 from ibapi.contract import Contract
 
-from pfund.orders.order_base import BaseOrder
+from pfund.entities.orders.order_base import BaseOrder
 
 
 class IBKROrder(Order, BaseOrder):

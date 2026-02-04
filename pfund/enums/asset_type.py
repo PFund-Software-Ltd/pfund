@@ -6,7 +6,7 @@ class AssetTypeModifier(StrEnum):
     
     @property
     def Mixin(self):
-        from pfund.products.mixins.inverse import InverseMixin
+        from pfund.entities.products.mixins.inverse import InverseMixin
         return {
             AssetTypeModifier.INVERSE: InverseMixin,
         }[self]
@@ -27,14 +27,14 @@ class AllAssetType(StrEnum):
 
     @property
     def Mixin(self):
-        from pfund.products.mixins.stock import StockMixin
-        from pfund.products.mixins.future import FutureMixin
-        from pfund.products.mixins.perpetual import PerpetualMixin
-        from pfund.products.mixins.option import OptionMixin
-        from pfund.products.mixins.forex import ForexMixin
-        from pfund.products.mixins.crypto import CryptoMixin
-        from pfund.products.mixins.index import IndexMixin
-        from pfund.products.mixins.etf import ETFMixin
+        from pfund.entities.products.mixins.stock import StockMixin
+        from pfund.entities.products.mixins.future import FutureMixin
+        from pfund.entities.products.mixins.perpetual import PerpetualMixin
+        from pfund.entities.products.mixins.option import OptionMixin
+        from pfund.entities.products.mixins.forex import ForexMixin
+        from pfund.entities.products.mixins.crypto import CryptoMixin
+        from pfund.entities.products.mixins.index import IndexMixin
+        from pfund.entities.products.mixins.etf import ETFMixin
         return {
             AllAssetType.INDEX: IndexMixin,
             AllAssetType.ETF: ETFMixin,

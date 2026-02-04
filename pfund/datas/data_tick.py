@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.enums import DataSource
     from pfund.datas.resolution import Resolution
-    from pfund.products.product_base import BaseProduct
+    from pfund.entities.products.product_base import BaseProduct
 
 import time
 from collections import deque

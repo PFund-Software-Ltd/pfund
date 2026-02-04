@@ -3,11 +3,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.typing import StrategyT
 
-from pfund.strategies.strategy_base import BaseStrategy
-from pfund.strategies.rebalancing_strategy import RebalancingStrategy
-from pfund.strategies.diversification_strategy import DiversificationStrategy
-from pfund.strategies.optimization_strategy import OptimizationStrategy
-from pfund.strategies.allocation_strategy import AllocationStrategy
+from pfund.components.strategies.strategy_base import BaseStrategy
+from pfund.components.strategies.rebalancing_strategy import RebalancingStrategy
+from pfund.components.strategies.diversification_strategy import DiversificationStrategy
+from pfund.components.strategies.optimization_strategy import OptimizationStrategy
+from pfund.components.strategies.allocation_strategy import AllocationStrategy
 from pfund.portfolios.portfolio import Portfolio
 from pfund.universes.universe import Universe
 from pfund.investment_profile import InvestmentProfile

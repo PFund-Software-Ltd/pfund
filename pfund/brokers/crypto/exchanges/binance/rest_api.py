@@ -5,7 +5,7 @@ to handle different endpoints for spot and derivative trading
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.products.product_base import BaseProduct
+    from pfund.entities.products.product_base import BaseProduct
 
 from pathlib import Path
 

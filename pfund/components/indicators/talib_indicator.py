@@ -7,7 +7,7 @@ import pandas as pd
 import polars as pl
 from talib._ta_lib import Function as TalibFunction
 
-from pfund.indicators.indicator_base import BaseIndicator
+from pfund.components.indicators.indicator_base import BaseIndicator
 
 
 class TalibIndicator(BaseIndicator):

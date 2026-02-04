@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     import datetime
     from pfund.datas.timeframe import Timeframe
     from pfeed.enums import DataSource
-    from pfund.products.product_base import BaseProduct
+    from pfund.entities.products.product_base import BaseProduct
     from pfund.datas.resolution import Resolution
 
 from pfund.datas.data_base import BaseData

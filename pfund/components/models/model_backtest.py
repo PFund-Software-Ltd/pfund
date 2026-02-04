@@ -5,10 +5,10 @@ if TYPE_CHECKING:
     import pandas as pd
     import polars as pl
     import torch
-    from pfund.models.model_base import MachineLearningModel
+    from pfund.components.models.model_base import MachineLearningModel
     from pfund.typing import ModelT
 
-from pfund.features.feature_base import BaseFeature
+from pfund.components.features.feature_base import BaseFeature
 from pfund.mixins.backtest_mixin import BacktestMixin
 
 

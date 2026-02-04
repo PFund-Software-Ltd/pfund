@@ -2,9 +2,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, TypedDict, Literal, ClassVar, TypeAlias
 if TYPE_CHECKING:
     from pfund.typing import tEnvironment
-    from pfund.adapter import Adapter
+    from pfund.utils.adapter import Adapter
     from pfund.exchanges.exchange_base import BaseExchange
-    from pfund.accounts.account_crypto import CryptoAccount
+    from pfund.entities.accounts.account_crypto import CryptoAccount
     from httpx import Request, Response
 
 import time

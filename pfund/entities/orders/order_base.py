@@ -2,8 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Any
 if TYPE_CHECKING:
     from pfund.enums import TradingVenue, Broker, CryptoExchange
-    from pfund.products.product_base import BaseProduct
-    from pfund.accounts.account_base import BaseAccount
+    from pfund.entities.products.product_base import BaseProduct
+    from pfund.entities.accounts.account_base import BaseAccount
 
 import time
 import logging

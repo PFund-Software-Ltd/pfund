@@ -3,11 +3,11 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import pandas as pd
     import polars as pl
-    from pfund.indicators.talib_indicator import TalibFunction
-    from pfund.indicators.ta_indicator import TaFunction
+    from pfund.components.indicators.talib_indicator import TalibFunction
+    from pfund.components.indicators.ta_indicator import TaFunction
     IndicatorFunction = TalibFunction | TaFunction
 
-from pfund.models.model_base import BaseModel
+from pfund.components.models.model_base import BaseModel
 
 
 class BaseIndicator(BaseModel):

@@ -10,28 +10,27 @@ if TYPE_CHECKING:
         Currency,
     )
     from pfund.enums import OrderSide
-    from pfund.products.product_base import BaseProduct
-    from pfund.positions.position_base import BasePosition
-    from pfund.positions.position_crypto import CryptoPosition
-    from pfund.positions.position_ibkr import IBKRPosition
-    from pfund.balances.balance_base import BaseBalance
-    from pfund.balances.balance_crypto import CryptoBalance
-    from pfund.balances.balance_ibkr import IBKRBalance
-    from pfund.accounts.account_base import BaseAccount
-    from pfund.accounts.account_crypto import CryptoAccount
-    from pfund.accounts.account_ibkr import IBKRAccount
-    from pfund.accounts.account_simulated import SimulatedAccount
-    from pfund.orders.order_base import BaseOrder
+    from pfund.entities.products.product_base import BaseProduct
+    from pfund.entities.positions.position_base import BasePosition
+    from pfund.entities.positions.position_crypto import CryptoPosition
+    from pfund.entities.positions.position_ibkr import IBKRPosition
+    from pfund.entities.balances.balance_base import BaseBalance
+    from pfund.entities.balances.balance_crypto import CryptoBalance
+    from pfund.entities.balances.balance_ibkr import IBKRBalance
+    from pfund.entities.accounts.account_base import BaseAccount
+    from pfund.entities.accounts.account_crypto import CryptoAccount
+    from pfund.entities.accounts.account_ibkr import IBKRAccount
+    from pfund.entities.accounts.account_simulated import SimulatedAccount
+    from pfund.entities.orders.order_base import BaseOrder
     from pfund.datas.data_base import BaseData
-    from pfund.risk_guard import RiskGuard
 
 from collections import deque
 from abc import ABC, abstractmethod
 
-from pfund.strategies.strategy_meta import MetaStrategy
-from pfund.mixins.component_mixin import ComponentMixin
+from pfund.components.strategies.strategy_meta import MetaStrategy
+from pfund.components.mixin import ComponentMixin
 from pfund.enums import TradingVenue, Broker
-from pfund.proxies.actor_proxy import ActorProxy
+from pfund.components.actor_proxy import ActorProxy
 
 
 class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):    

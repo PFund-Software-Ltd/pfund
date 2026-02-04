@@ -1,4 +1,4 @@
-from pfund.balances.balance_base import BaseBalance
+from pfund.entities.balances.balance_base import BaseBalance
 
 
 class CryptoBalance(BaseBalance):

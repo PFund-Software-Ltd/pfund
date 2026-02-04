@@ -1,9 +1,9 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.accounts.account_base import BaseAccount
-    from pfund.positions.position_base import BasePosition
-    from pfund.balances.balance_base import BaseBalance
+    from pfund.entities.accounts.account_base import BaseAccount
+    from pfund.entities.positions.position_base import BasePosition
+    from pfund.entities.balances.balance_base import BaseBalance
 
 from collections import defaultdict
 

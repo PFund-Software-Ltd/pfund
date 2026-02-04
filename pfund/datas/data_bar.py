@@ -2,11 +2,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from datetime import datetime
-    from pfeed.messaging import BarMessage
+    from pfeed.streaming import BarMessage
     from pfeed.enums import DataSource
     from pfund.datas.resolution import Resolution
     from pfund.datas.timeframe import Timeframe
-    from pfund.products.product_base import BaseProduct
+    from pfund.entities.products.product_base import BaseProduct
 
 import sys
 import time

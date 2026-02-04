@@ -1,4 +1,4 @@
-from pfund.orders.order_crypto import CryptoOrder
+from pfund.entities.orders.order_crypto import CryptoOrder
 
 
 class BybitOrder(CryptoOrder):

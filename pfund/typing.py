@@ -7,11 +7,11 @@ from pfeed.enums.data_tool import DataTool
 from pfeed.enums.data_storage import DataStorage
 
 from pfund.datas.resolution import Resolution
-from pfund.strategies.strategy_base import BaseStrategy
-from pfund.models.model_base import BaseModel
-from pfund.features.feature_base import BaseFeature
-from pfund.indicators.indicator_base import BaseIndicator
-from pfund.products.product_base import BaseProduct
+from pfund.components.strategies.strategy_base import BaseStrategy
+from pfund.components.models.model_base import BaseModel
+from pfund.components.features.feature_base import BaseFeature
+from pfund.components.indicators.indicator_base import BaseIndicator
+from pfund.entities.products.product_base import BaseProduct
 
 
 StrategyT = TypeVar('StrategyT', bound=BaseStrategy)

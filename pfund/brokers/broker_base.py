@@ -5,9 +5,9 @@ if TYPE_CHECKING:
     from pfund.typing import tEnvironment, ProductName, AccountName
     from pfund.datas.resolution import Resolution
     from pfund.engines.trade_engine_settings import TradeEngineSettings
-    from pfund.orders.order_base import BaseOrder
-    from pfund.products.product_base import BaseProduct
-    from pfund.accounts.account_base import BaseAccount
+    from pfund.entities.orders.order_base import BaseOrder
+    from pfund.entities.products.product_base import BaseProduct
+    from pfund.entities.accounts.account_base import BaseAccount
 
 import logging
 from abc import ABC, abstractmethod
@@ -39,7 +39,7 @@ class BaseBroker(ABC):
     
     @classmethod
     def create_product(cls, basis: str, exch: str='', name: str='', symbol: str='', **specs) -> BaseProduct:
-        from pfund.products import ProductFactory
+        from pfund.entities.products import ProductFactory
         if cls.name == Broker.CRYPTO:
             assert exch in CryptoExchange.__members__, f'{exch} is not a valid crypto exchange'
             trading_venue = CryptoExchange[exch.upper()]

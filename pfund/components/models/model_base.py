@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     import torch.nn as nn
     from sklearn.base import BaseEstimator
     from pfeed.typing import GenericFrame
-    from pfund.indicators.indicator_base import TaFunction, TalibFunction
+    from pfund.components.indicators.indicator_base import TaFunction, TalibFunction
     MachineLearningModel = Union[
         nn.Module,
         BaseEstimator,
@@ -19,8 +19,8 @@ import os
 from abc import ABC, abstractmethod
 
 from pfund_kit.logging.filters.trimmed_path_filter import TrimmedPathFilter
-from pfund.models.model_meta import MetaModel
-from pfund.mixins.component_mixin import ComponentMixin
+from pfund.components.models.model_meta import MetaModel
+from pfund.components.mixin import ComponentMixin
 
 
 trim_path = TrimmedPathFilter.trim_path

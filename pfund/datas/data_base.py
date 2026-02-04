@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from pfund.enums import TradingVenue, Broker, CryptoExchange
 
 from abc import ABC, abstractmethod
-from pfund.products.product_base import BaseProduct
+from pfund.entities.products.product_base import BaseProduct
 
 
 class BaseData(ABC):

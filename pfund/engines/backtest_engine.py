@@ -4,9 +4,9 @@ if TYPE_CHECKING:
     import pandas as pd
     from sklearn.model_selection import TimeSeriesSplit
     from pfund.typing import StrategyT, ModelT, FeatureT, IndicatorT
-    from pfund.strategies.strategy_base import BaseStrategy
-    from pfund.models.model_base import BaseModel
-    from pfund.models.dataset_splitter import DatasetSplitsDict, CrossValidatorDatasetPeriods, DatasetPeriods
+    from pfund.components.strategies.strategy_base import BaseStrategy
+    from pfund.components.models.model_base import BaseModel
+    from pfund.components.models.dataset_splitter import DatasetSplitsDict, CrossValidatorDatasetPeriods, DatasetPeriods
     from pfund.mixins.backtest_mixin import BacktestMixin
     from pfund.engines.engine_context import DataRangeDict
 
@@ -42,7 +42,7 @@ class BacktestEngine(BaseEngine):
                 if passing in a cross-validator in dataset_splits, 
                 this is the ratio of the entire dataset to be reserved as a final hold-out test set.
         '''
-        from pfund.models.dataset_splitter import DatasetSplitter
+        from pfund.components.models.dataset_splitter import DatasetSplitter
         super().__init__(env=Environment.BACKTEST, data_range=data_range, name=name)
         self._backtest_mode = BacktestMode[mode.lower()]
         self._num_chunks: int = num_chunks
@@ -74,8 +74,8 @@ class BacktestEngine(BaseEngine):
         resolution: str,
         name: str='', 
     ) -> StrategyT:
-        from pfund.strategies.strategy_base import BaseStrategy
-        from pfund.strategies.strategy_backtest import BacktestStrategy
+        from pfund.components.strategies.strategy_base import BaseStrategy
+        from pfund.components.strategies.strategy_backtest import BacktestStrategy
         is_dummy_strategy_exist = '_dummy' in self.strategies
         assert not is_dummy_strategy_exist, 'dummy strategy is being used for model backtesting, adding another strategy is not allowed'
         if type(strategy) is not BaseStrategy:
@@ -95,7 +95,7 @@ class BacktestEngine(BaseEngine):
         signal_cols: list[str] | None=None,
     ) -> BacktestMixin | ModelT:
         '''Add model without creating a strategy (using dummy strategy)'''
-        from pfund.strategies._dummy_strategy import _DummyStrategy
+        from pfund.components.strategies._dummy_strategy import _DummyStrategy
 
         is_non_dummy_strategy_exist = bool([strat for strat in self.strategies if strat != '_dummy'])
         assert not is_non_dummy_strategy_exist, 'Please use strategy.add_model(...) instead of engine.add_model(...) when a strategy is already created'

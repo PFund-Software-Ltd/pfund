@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Callable, Awaitable
 if TYPE_CHECKING:
-    from pfund.accounts.account_crypto import CryptoAccount
+    from pfund.entities.accounts.account_crypto import CryptoAccount
     from pfund.typing import tEnvironment, FullDataChannel
     from pfund.datas.resolution import Resolution
     from pfund.exchanges.bybit.exchange import tProductCategory
@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 import asyncio
 
 from pfund.enums import CryptoExchange
-from pfund.products.product_bybit import BybitProduct
+from pfund.entities.products.product_bybit import BybitProduct
 from pfund.exchanges.ws_api_base import BaseWebSocketAPI
 
 ProductCategory = BybitProduct.ProductCategory

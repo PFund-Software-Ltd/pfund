@@ -12,7 +12,7 @@ message queue.
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfeed.messaging.zeromq import ZeroMQ
+    from pfeed.streaming.zeromq import ZeroMQ
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.datas.resolution import Resolution
     from pfund.engines.engine_context import DataRangeDict
@@ -39,7 +39,7 @@ class TradeEngine(BaseEngine):
     
     def _setup_proxy(self):
         import zmq
-        from pfeed.messaging.zeromq import ZeroMQ
+        from pfeed.streaming.zeromq import ZeroMQ
         # FIXME: remove zmq.XPUB, use mtflow's ws_client to emit to mtflow's websocket server (external listeners)
         self._proxy = ZeroMQ(
             name=self.name+"_proxy",
@@ -70,7 +70,7 @@ class TradeEngine(BaseEngine):
     
     def _setup_worker(self):
         import zmq
-        from pfeed.messaging.zeromq import ZeroMQ
+        from pfeed.streaming.zeromq import ZeroMQ
         # pull from components, e.g. orders
         self._worker = ZeroMQ(name=self.name+"_worker", logger=self._logger, receiver_type=zmq.PULL)
         for zmq_name, zmq_port in self._settings.zmq_ports.items():

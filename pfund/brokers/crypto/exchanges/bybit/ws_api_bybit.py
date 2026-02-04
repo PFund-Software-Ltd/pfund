@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
-    from pfund.accounts.account_crypto import CryptoAccount
+    from pfund.entities.accounts.account_crypto import CryptoAccount
 
 import os
 import time
@@ -15,7 +15,7 @@ from msgspec import json
 from pfund.utils.parser import SchemaParser
 from pfund.exchanges.ws_api_base import BaseWebSocketAPI, NamedWebSocket
 from pfund.enums import CryptoExchange, PublicDataChannel, DataChannelType
-from pfund.products.product_bybit import BybitProduct
+from pfund.entities.products.product_bybit import BybitProduct
 from pfund.datas.timeframe import TimeframeUnit
 
 

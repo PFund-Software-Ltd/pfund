@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.accounts.account_base import BaseAccount
-    from pfund.products.product_base import BaseProduct
+    from pfund.entities.accounts.account_base import BaseAccount
+    from pfund.entities.products.product_base import BaseProduct
 
 import logging
 

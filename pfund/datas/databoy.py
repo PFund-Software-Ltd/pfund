@@ -2,9 +2,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from logging import Logger
-    from pfeed.messaging.zeromq import ZeroMQ
-    from pfeed.messaging.streaming_message import StreamingMessage
-    from pfeed.messaging import BarMessage
+    from pfeed.streaming.zeromq import ZeroMQ
+    from pfeed.streaming.streaming_message import StreamingMessage
+    from pfeed.streaming import BarMessage
     from pfeed.typing import tDataSource
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.typing import (
@@ -22,10 +22,10 @@ from threading import Thread
 from collections import defaultdict
 
 from pfund.datas import QuoteData, TickData, BarData, MarketData
-from pfund.products.product_base import BaseProduct
+from pfund.entities.products.product_base import BaseProduct
 from pfund.datas.data_config import DataConfig
 from pfund.datas.resolution import Resolution
-from pfund.enums import Event, Broker, PublicDataChannel, PrivateDataChannel
+from pfund.enums import Broker, PublicDataChannel, PrivateDataChannel
 
 
 class DataBoy:
@@ -198,7 +198,7 @@ class DataBoy:
     
     def _setup_messaging(self):
         import zmq
-        from pfeed.messaging.zeromq import ZeroMQ
+        from pfeed.streaming.zeromq import ZeroMQ
         
         settings = self._component._engine.settings
         zmq_urls = settings.zmq_urls
@@ -252,7 +252,7 @@ class DataBoy:
     
     def _subscribe(self):
         import zmq
-        from pfeed.messaging.zeromq import ZeroMQ, ZeroMQDataChannel
+        from pfeed.streaming.zeromq import ZeroMQ, ZeroMQDataChannel
         zmq_ports = self._get_zmq_ports_in_use()
         engine_name = self._component._engine.name
         settings = self._component._engine.settings

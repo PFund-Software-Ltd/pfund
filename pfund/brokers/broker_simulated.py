@@ -2,13 +2,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfund.settings.backtest_engine_settings import BacktestEngineSettings
-    from pfund.products.product_base import BaseProduct
+    from pfund.entities.products.product_base import BaseProduct
     from pfund.brokers.broker_base import BaseBroker
 
 from collections import defaultdict
 
 from pfund.enums import Environment, Broker
-from pfund.accounts.account_simulated import SimulatedAccount
+from pfund.entities.accounts.account_simulated import SimulatedAccount
 
 
 def SimulatedBrokerFactory(broker: str) -> type[BaseBroker]:
@@ -40,7 +40,7 @@ class SimulatedBroker:
     def _accounts_check(self: SimulatedBroker | BaseBroker):
         assert all(isinstance(account, SimulatedAccount) for account in self._accounts.values()), 'all accounts must be SimulatedAccount'
         if self.name == Broker.IBKR:
-            from pfund.accounts.account_ibkr import IBKRAccount
+            from pfund.entities.accounts.account_ibkr import IBKRAccount
             account = list(self._accounts.values())[0]  # IB has only one account for SANDBOX trading
             # create an IB account to check if host, port, client_id are provided, if not, it raises an error
             IBKRAccount(

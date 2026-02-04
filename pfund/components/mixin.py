@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     import pandas as pd
     import polars as pl
     from pfeed.typing import tDataSource
-    from pfeed.messaging.streaming_message import StreamingMessage
+    from pfeed.streaming.streaming_message import StreamingMessage
     from pfund.typing import (
         StrategyT, 
         ModelT, 
@@ -23,24 +23,24 @@ if TYPE_CHECKING:
     from pfund.datas.data_bar import Bar
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund.products.product_base import BaseProduct
+    from pfund.entities.products.product_base import BaseProduct
     from pfund.datas import QuoteData, TickData, BarData
     from pfund.engines.base_engine import BaseEngine
-    from pfund.strategies.strategy_base import BaseStrategy
-    from pfund.proxies.engine_proxy import EngineProxy
-    from pfund.models.model_base import BaseModel
-    from pfund.features.feature_base import BaseFeature
-    from pfund.indicators.indicator_base import BaseIndicator
+    from pfund.components.strategies.strategy_base import BaseStrategy
+    from pfund.engines.engine_proxy import EngineProxy
+    from pfund.components.models.model_base import BaseModel
+    from pfund.components.features.feature_base import BaseFeature
+    from pfund.components.indicators.indicator_base import BaseIndicator
 
 import time
 import logging
 import datetime
 
 from pfund_kit.utils.yaml import load
-from pfund.stores.trading_store import TradingStore
+from pfund.datas.stores.trading_store import TradingStore
 from pfund.datas.resolution import Resolution
 from pfund.datas.data_config import DataConfig
-from pfund.proxies.actor_proxy import ActorProxy
+from pfund.components.actor_proxy import ActorProxy
 from pfund.enums import ComponentType, RunMode, Environment, Broker, TradingVenue
 
     
@@ -128,7 +128,7 @@ class ComponentMixin:
     def _setup_logging(self: Component):
         '''Sets up logging for component running in remote process, uses zmq's PUBHandler to send logs to engine'''
         from pfund.utils.zmq_pub_handler import ZMQPubHandler
-        from pfeed.messaging.zeromq import ZeroMQ
+        from pfeed.streaming.zeromq import ZeroMQ
         from pfund.logging.config import LoggingDictConfigurator
         from pfund_kit.utils import get_free_port
 
@@ -236,10 +236,10 @@ class ComponentMixin:
     
     @property
     def component_type(self) -> ComponentType:
-        from pfund.strategies.strategy_base import BaseStrategy
-        from pfund.indicators.indicator_base import BaseIndicator
-        from pfund.features.feature_base import BaseFeature
-        from pfund.models.model_base import BaseModel
+        from pfund.components.strategies.strategy_base import BaseStrategy
+        from pfund.components.indicators.indicator_base import BaseIndicator
+        from pfund.components.features.feature_base import BaseFeature
+        from pfund.components.models.model_base import BaseModel
         if isinstance(self, BaseStrategy):
             return ComponentType.strategy
         elif isinstance(self, BaseIndicator):
@@ -505,15 +505,15 @@ class ComponentMixin:
         Component = component.__class__
         ComponentName = Component.__name__
         if component.is_model():
-            from pfund.models.model_base import BaseModel
+            from pfund.components.models.model_base import BaseModel
             components = self.models
             BaseClass = BaseModel
         elif component.is_feature():
-            from pfund.features.feature_base import BaseFeature
+            from pfund.components.features.feature_base import BaseFeature
             components = self.features
             BaseClass = BaseFeature
         elif component.is_indicator():
-            from pfund.indicators.indicator_base import BaseIndicator
+            from pfund.components.indicators.indicator_base import BaseIndicator
             components = self.indicators
             BaseClass = BaseIndicator
         else:

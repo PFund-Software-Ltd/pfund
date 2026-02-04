@@ -7,8 +7,8 @@ if TYPE_CHECKING:
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.datas.timeframe import TimeframeUnit
     from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
-    from pfund.products.product_crypto import CryptoProduct
-    from pfund.accounts.account_crypto import CryptoAccount
+    from pfund.entities.products.product_crypto import CryptoProduct
+    from pfund.entities.accounts.account_crypto import CryptoAccount
     from pfund.engines.trade_engine_settings import TradeEngineSettings
 
 import os
@@ -19,7 +19,7 @@ from functools import reduce
 from collections import defaultdict
 from abc import ABC, abstractmethod
 
-from pfund.adapter import Adapter
+from pfund.utils.adapter import Adapter
 from pfund.managers.order_manager import OrderUpdateSource
 from pfund.enums import Environment, Broker, PrivateDataChannel, PublicDataChannel
 
@@ -154,7 +154,7 @@ class BaseExchange(ABC):
 
     @classmethod
     def create_product(cls, basis: str, name: str='', symbol: str='', **specs) -> CryptoProduct:
-        from pfund.products import ProductFactory
+        from pfund.entities.products import ProductFactory
         Product = ProductFactory(trading_venue=cls.name, basis=basis)
         return Product(basis=basis, name=name, symbol=symbol, specs=specs)
 

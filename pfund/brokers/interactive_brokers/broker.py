@@ -7,12 +7,12 @@ if TYPE_CHECKING:
     from pfund.typing import tEnvironment, FullDataChannel, AccountName, ProductName
     from pfund.datas.data_time_based import TimeBasedData
 
-from pfund.adapter import Adapter
-from pfund.products.product_ibkr import IBKRProduct
-from pfund.accounts.account_ibkr import IBKRAccount
-from pfund.orders.order_ibkr import IBKROrder
-from pfund.positions.position_ibkr import IBKRPosition
-from pfund.balances.balance_ibkr import IBKRBalance
+from pfund.utils.adapter import Adapter
+from pfund.entities.products.product_ibkr import IBKRProduct
+from pfund.entities.accounts.account_ibkr import IBKRAccount
+from pfund.entities.orders.order_ibkr import IBKROrder
+from pfund.entities.positions.position_ibkr import IBKRPosition
+from pfund.entities.balances.balance_ibkr import IBKRBalance
 from pfund_kit.utils.text import to_uppercase
 from pfund.brokers.broker_base import BaseBroker
 from pfund.enums import PublicDataChannel, PrivateDataChannel, Environment, Broker

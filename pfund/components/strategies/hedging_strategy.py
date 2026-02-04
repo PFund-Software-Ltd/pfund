@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 
 from abc import ABC, abstractmethod
 
-from pfund.strategies.strategy_base import BaseStrategy
+from pfund.components.strategies.strategy_base import BaseStrategy
 
 
 # TODO

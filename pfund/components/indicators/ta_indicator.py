@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 import inspect
 import re
 
-from pfund.indicators.indicator_base import BaseIndicator
+from pfund.components.indicators.indicator_base import BaseIndicator
 
 
 class TaIndicator(BaseIndicator):

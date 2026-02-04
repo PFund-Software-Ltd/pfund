@@ -6,7 +6,7 @@ from enum import StrEnum
 from pydantic import model_validator
 
 from pfund.enums import TradingVenue, CryptoExchange, CryptoAssetType, AssetTypeModifier
-from pfund.products.product_crypto import CryptoProduct
+from pfund.entities.products.product_crypto import CryptoProduct
 
 
 class BybitProduct(CryptoProduct):

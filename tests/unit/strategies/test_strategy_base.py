@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
 
-from pfund.strategies.strategy_base import BaseStrategy as Strategy
+from pfund.components.strategies.strategy_base import BaseStrategy as Strategy
 
 
 @pytest.mark.smoke

@@ -4,7 +4,7 @@ import torch
 import pandas as pd
 import polars as pl
 
-from pfund.models.model_base import BaseModel
+from pfund.components.models.model_base import BaseModel
 from pfund_kit.logging.filters.trimmed_path_filter import TrimmedPathFilter
 
 

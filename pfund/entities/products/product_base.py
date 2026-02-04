@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
 
-from pfund.products.product_basis import ProductBasis, ProductAssetType
+from pfund.entities.products.product_basis import ProductBasis, ProductAssetType
 from pfund.enums import Broker, CryptoExchange, TradingVenue
 
 
@@ -107,7 +107,7 @@ class BaseProduct(BaseModel):
 
     def _create_specs(self) -> dict:
         '''Create specifications that make a product unique'''
-        from pfund.products.product_crypto import CryptoProduct
+        from pfund.entities.products.product_crypto import CryptoProduct
         # TODO: add DeFiProduct
         specification_fields = [
             field for field in self.__class__.model_fields 
@@ -156,7 +156,7 @@ class BaseProduct(BaseModel):
         return self.asset_type.is_commodity()
     
     def is_derivative(self) -> bool:
-        from pfund.products.mixins.derivative import DerivativeMixin
+        from pfund.entities.products.mixins.derivative import DerivativeMixin
         return isinstance(self, DerivativeMixin)
     
     def __str__(self):

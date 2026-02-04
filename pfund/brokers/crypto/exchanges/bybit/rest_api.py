@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.exchanges.bybit.exchange import tProductCategory
-    from pfund.accounts.account_crypto import CryptoAccount
+    from pfund.entities.accounts.account_crypto import CryptoAccount
     from httpx import Request
     from pfund.exchanges.rest_api_base import Result, ApiResponse
 
