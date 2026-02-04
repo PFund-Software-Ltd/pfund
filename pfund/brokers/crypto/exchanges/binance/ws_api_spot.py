@@ -10,7 +10,7 @@ Supports Binance's spot trading, including:
     https://api4.binance.com
 '''
 
-from pfund.exchanges.ws_api_base import BaseWebSocketAPI
+from pfund.brokers.crypto.exchanges.ws_api_base import BaseWebSocketAPI
 
 
 class SpotWebSocketAPI(BaseWebSocketAPI):

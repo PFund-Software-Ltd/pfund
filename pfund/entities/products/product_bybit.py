@@ -38,7 +38,7 @@ class BybitProduct(CryptoProduct):
     # TODO: move to BaseProduct and add back SUPPORTED_ASSET_TYPES to BaseExchange?
     @model_validator(mode='after')
     def _validate_asset_type(self):
-        from pfund.exchanges import Bybit
+        from pfund.brokers.crypto.exchanges import Bybit
         if str(self.asset_type) not in Bybit.SUPPORTED_ASSET_TYPES:
             raise ValueError(f"Invalid asset type: {self.asset_type}")
         return self
@@ -51,7 +51,7 @@ class BybitProduct(CryptoProduct):
             return super()._create_name()
     
     def _create_symbol(self):
-        from pfund.exchanges import Bybit
+        from pfund.brokers.crypto.exchanges import Bybit
         ebase_asset = Bybit.adapter(self.base_asset, group='asset')
         equote_asset = Bybit.adapter(self.quote_asset, group='asset')
         if self.asset_type == CryptoAssetType.PERP:

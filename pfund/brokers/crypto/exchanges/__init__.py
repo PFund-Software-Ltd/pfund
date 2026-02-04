@@ -1,1 +1,1 @@
-from pfund.exchanges.bybit.exchange import Exchange as Bybit
+from pfund.brokers.crypto.exchanges.bybit.exchange import Exchange as Bybit

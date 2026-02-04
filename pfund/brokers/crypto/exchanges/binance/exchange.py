@@ -6,7 +6,7 @@ if TYPE_CHECKING:
 
 from pathlib import Path
 
-from pfund.exchanges.exchange_base import BaseExchange
+from pfund.brokers.crypto.exchanges.exchange_base import BaseExchange
         
         
 class Exchange(BaseExchange):

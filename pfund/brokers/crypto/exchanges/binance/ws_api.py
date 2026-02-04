@@ -1,12 +1,12 @@
 from pathlib import Path
 
-from pfund.exchanges.ws_api_base import BaseWebSocketAPI
+from pfund.brokers.crypto.exchanges.ws_api_base import BaseWebSocketAPI
 from pfund.enums import PublicDataChannel, PrivateDataChannel
 from pfund.enums import Environment
-from pfund.exchanges.binance.ws_api_spot import SpotWebSocketAPI
-from pfund.exchanges.binance.ws_api_linear import LinearWebSocketAPI
-from pfund.exchanges.binance.ws_api_inverse import InverseWebSocketAPI
-from pfund.exchanges.binance.ws_api_option import OptionWebSocketAPI
+from pfund.brokers.crypto.exchanges.binance.ws_api_spot import SpotWebSocketAPI
+from pfund.brokers.crypto.exchanges.binance.ws_api_linear import LinearWebSocketAPI
+from pfund.brokers.crypto.exchanges.binance.ws_api_inverse import InverseWebSocketAPI
+from pfund.brokers.crypto.exchanges.binance.ws_api_option import OptionWebSocketAPI
 
 
 # TODO

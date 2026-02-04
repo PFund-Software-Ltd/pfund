@@ -2,7 +2,7 @@
 Inverse (IPERP, IFUT) in PFund = COIN-M Futures in Binance
 '''
 
-from pfund.exchanges.rest_api_base import BaseRESTfulAPI
+from pfund.brokers.crypto.exchanges.rest_api_base import BaseRESTfulAPI
 
 
 class RESTfulAPIInverse(BaseRESTfulAPI):

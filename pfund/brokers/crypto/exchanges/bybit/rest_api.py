@@ -1,10 +1,10 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.exchanges.bybit.exchange import tProductCategory
+    from pfund.brokers.crypto.exchanges.bybit.exchange import tProductCategory
     from pfund.entities.accounts.account_crypto import CryptoAccount
     from httpx import Request
-    from pfund.exchanges.rest_api_base import Result, ApiResponse
+    from pfund.brokers.crypto.exchanges.rest_api_base import Result, ApiResponse
 
 import hmac
 import inspect
@@ -16,8 +16,8 @@ from decimal import Decimal
 import orjson as json
 
 from pfund.enums import Environment, CryptoExchange, CryptoAssetType, OptionType
-from pfund.exchanges.rest_api_base import BaseRESTfulAPI, RequestMethod
-from pfund.exchanges.bybit.exchange import ProductCategory
+from pfund.brokers.crypto.exchanges.rest_api_base import BaseRESTfulAPI, RequestMethod
+from pfund.brokers.crypto.exchanges.bybit.exchange import ProductCategory
 
 
 # TODO complete the endpoints

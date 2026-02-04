@@ -2,7 +2,7 @@
 Inverse (IPERP, IFUT) in PFund = COIN-M Futures in Binance
 '''
 
-from pfund.exchanges.ws_api_base import BaseWebSocketAPI
+from pfund.brokers.crypto.exchanges.ws_api_base import BaseWebSocketAPI
 
 
 class InverseWebSocketAPI(BaseWebSocketAPI):

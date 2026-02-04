@@ -1,4 +1,4 @@
-from pfund.exchanges.bybit.ws_api_bybit import BybitWebSocketAPI
+from pfund.brokers.crypto.exchanges.bybit.ws_api_bybit import BybitWebSocketAPI
 from pfund.enums import Environment, DataChannelType
 from pfund.entities.products.product_bybit import BybitProduct
 from pfund.datas.timeframe import TimeframeUnit

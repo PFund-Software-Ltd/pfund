@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar, TypeAlias, Literal
 if TYPE_CHECKING:
     from pathlib import Path
-    from pfund.exchanges.rest_api_base import Result, ApiResponse
+    from pfund.brokers.crypto.exchanges.rest_api_base import Result, ApiResponse
     from pfund.enums import CryptoExchange
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.datas.timeframe import TimeframeUnit

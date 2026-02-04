@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfund.exchanges.rest_api_base import Result, ApiResponse
+    from pfund.brokers.crypto.exchanges.rest_api_base import Result, ApiResponse
     from pfund.entities.products.product_bybit import BybitProduct
     from pfund.datas.timeframe import TimeframeUnit
 
@@ -11,7 +11,7 @@ from decimal import Decimal
 
 from pfund.entities.products.product_bybit import BybitProduct
 from pfund.enums import CryptoExchange, CryptoAssetType, AssetTypeModifier
-from pfund.exchanges.exchange_base import BaseExchange
+from pfund.brokers.crypto.exchanges.exchange_base import BaseExchange
 from pfund.entities.accounts.account_crypto import CryptoAccount
 from pfund.entities.orders.order_crypto import CryptoOrder
 

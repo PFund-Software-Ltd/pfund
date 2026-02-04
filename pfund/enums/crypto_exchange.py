@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.exchanges.exchange_base import BaseExchange
+    from pfund.brokers.crypto.exchanges.exchange_base import BaseExchange
 
 from enum import StrEnum
 

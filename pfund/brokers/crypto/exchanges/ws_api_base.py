@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from pfund.utils.adapter import Adapter
     from pfund.datas.resolution import Resolution
     from pfund.entities.accounts.account_crypto import CryptoAccount
-    from pfund.exchanges.exchange_base import BaseExchange
+    from pfund.brokers.crypto.exchanges.exchange_base import BaseExchange
     from pfund.entities.products.product_crypto import CryptoProduct
 
 import time

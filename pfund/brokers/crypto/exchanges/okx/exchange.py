@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 from enum import StrEnum
 from pathlib import Path
 
-from pfund.exchanges.exchange_base import BaseExchange
+from pfund.brokers.crypto.exchanges.exchange_base import BaseExchange
 
 
 # It's called instrument type in OKX

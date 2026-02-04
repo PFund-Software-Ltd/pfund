@@ -4,15 +4,15 @@ if TYPE_CHECKING:
     from pfund.entities.accounts.account_crypto import CryptoAccount
     from pfund.typing import tEnvironment, FullDataChannel
     from pfund.datas.resolution import Resolution
-    from pfund.exchanges.bybit.exchange import tProductCategory
-    from pfund.exchanges.bybit.ws_api_bybit import BybitWebSocketAPI
+    from pfund.brokers.crypto.exchanges.bybit.exchange import tProductCategory
+    from pfund.brokers.crypto.exchanges.bybit.ws_api_bybit import BybitWebSocketAPI
     from pfund.enums import Environment
 
 import asyncio
 
 from pfund.enums import CryptoExchange
 from pfund.entities.products.product_bybit import BybitProduct
-from pfund.exchanges.ws_api_base import BaseWebSocketAPI
+from pfund.brokers.crypto.exchanges.ws_api_base import BaseWebSocketAPI
 
 ProductCategory = BybitProduct.ProductCategory
 
@@ -32,10 +32,10 @@ class WebSocketAPI(BaseWebSocketAPI):
     
     @staticmethod
     def _get_api_class(category: ProductCategory | tProductCategory) -> type[BybitWebSocketAPI]:
-        from pfund.exchanges.bybit.ws_api_linear import LinearWebSocketAPI
-        from pfund.exchanges.bybit.ws_api_inverse import InverseWebSocketAPI
-        from pfund.exchanges.bybit.ws_api_spot import SpotWebSocketAPI
-        from pfund.exchanges.bybit.ws_api_option import OptionWebSocketAPI
+        from pfund.brokers.crypto.exchanges.bybit.ws_api_linear import LinearWebSocketAPI
+        from pfund.brokers.crypto.exchanges.bybit.ws_api_inverse import InverseWebSocketAPI
+        from pfund.brokers.crypto.exchanges.bybit.ws_api_spot import SpotWebSocketAPI
+        from pfund.brokers.crypto.exchanges.bybit.ws_api_option import OptionWebSocketAPI
         category = ProductCategory[category.upper()]
         return {
             ProductCategory.LINEAR: LinearWebSocketAPI,

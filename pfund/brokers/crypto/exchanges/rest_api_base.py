@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, TypedDict, Literal, ClassVar, TypeAlias
 if TYPE_CHECKING:
     from pfund.typing import tEnvironment
     from pfund.utils.adapter import Adapter
-    from pfund.exchanges.exchange_base import BaseExchange
+    from pfund.brokers.crypto.exchanges.exchange_base import BaseExchange
     from pfund.entities.accounts.account_crypto import CryptoAccount
     from httpx import Request, Response
 

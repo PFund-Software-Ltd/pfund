@@ -1,7 +1,7 @@
 '''
 Supports Binance's options trading
 '''
-from pfund.exchanges.rest_api_base import BaseRESTfulAPI
+from pfund.brokers.crypto.exchanges.rest_api_base import BaseRESTfulAPI
 
 
 # TODO: it doesn't have testnet, can't test it
