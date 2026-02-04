@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     from pfund.typing import StrategyT
     from pfund.data_tools import data_tool_backtest
     
-from pfund.mixins.backtest_mixin import BacktestMixin
+from pfund._backtest.backtest_mixin import BacktestMixin
 
 
 def BacktestStrategy(Strategy: type[StrategyT], *args, **kwargs) -> StrategyT:

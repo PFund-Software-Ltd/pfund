@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from pfund.enums import Environment, RunMode
     from pfund.typing import DataParamsDict
     from pfund.engines.base_engine import BaseEngine
-    from pfund.settings.base_engine_settings import BaseEngineSettings
+    from pfund.engines.settings.base_engine_settings import BaseEngineSettings
 
 import datetime
 from dataclasses import dataclass

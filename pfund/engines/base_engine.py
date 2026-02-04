@@ -20,7 +20,7 @@ import datetime
 from pfund import get_config
 from pfund.components.actor_proxy import ActorProxy
 from pfund.engines.engine_proxy import EngineProxy
-from pfund.settings import TradeEngineSettings, BacktestEngineSettings
+from pfund.engines.settings import TradeEngineSettings, BacktestEngineSettings
 from pfund.enums import (
     Environment,
     Broker,

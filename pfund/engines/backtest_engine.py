@@ -6,8 +6,8 @@ if TYPE_CHECKING:
     from pfund.typing import StrategyT, ModelT, FeatureT, IndicatorT
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.components.models.model_base import BaseModel
-    from pfund.components.models.dataset_splitter import DatasetSplitsDict, CrossValidatorDatasetPeriods, DatasetPeriods
-    from pfund.mixins.backtest_mixin import BacktestMixin
+    from pfund.utils.dataset_splitter import DatasetSplitsDict, CrossValidatorDatasetPeriods, DatasetPeriods
+    from pfund._backtest.backtest_mixin import BacktestMixin
     from pfund.engines.engine_context import DataRangeDict
 
 import os
@@ -42,7 +42,7 @@ class BacktestEngine(BaseEngine):
                 if passing in a cross-validator in dataset_splits, 
                 this is the ratio of the entire dataset to be reserved as a final hold-out test set.
         '''
-        from pfund.components.models.dataset_splitter import DatasetSplitter
+        from pfund.utils.dataset_splitter import DatasetSplitter
         super().__init__(env=Environment.BACKTEST, data_range=data_range, name=name)
         self._backtest_mode = BacktestMode[mode.lower()]
         self._num_chunks: int = num_chunks

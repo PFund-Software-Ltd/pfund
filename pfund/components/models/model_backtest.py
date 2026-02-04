@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from pfund.typing import ModelT
 
 from pfund.components.features.feature_base import BaseFeature
-from pfund.mixins.backtest_mixin import BacktestMixin
+from pfund._backtest.backtest_mixin import BacktestMixin
 
 
 def BacktestModel(Model: type[ModelT], model: MachineLearningModel, *args, **kwargs) -> ModelT:

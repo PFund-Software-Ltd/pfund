@@ -1,6 +1,6 @@
 from pydantic import Field, model_validator
 
-from pfund.settings.base_engine_settings import BaseEngineSettings
+from pfund.engines.settings.base_engine_settings import BaseEngineSettings
 
 
 '''

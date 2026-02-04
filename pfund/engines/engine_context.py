@@ -5,7 +5,7 @@ if TYPE_CHECKING:
 
 from pfund.enums import Environment
 from pfund.datas.resolution import Resolution
-from pfund.settings import TradeEngineSettings, BacktestEngineSettings
+from pfund.engines.settings import TradeEngineSettings, BacktestEngineSettings
 
 
 class DataRangeDict(TypedDict, total=False):
