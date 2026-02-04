@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 # from sklearn.model_selection._split import BaseCrossValidator
 from sklearn.model_selection import TimeSeriesSplit
 
-from pfund import print_warning
+from pfund_kit.style import cprint
 
 
 class DatasetSplitsDict(TypedDict, total=True):
@@ -89,7 +89,7 @@ class DatasetSplitter:
             else:
                 test_start = test_end = None
         else:
-            print_warning('validation set is EMPTY')
+            cprint('validation set is EMPTY', style='bold')
             val_start = val_end = None
             test_start = test_end = None
         

@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 import polars as pl
 
 from pfeed.enums import DataSource
-from pfund.stores.base_data_store import BaseDataStore
+from pfund.datas.stores.base_data_store import BaseDataStore
 
 
 MarketDataKey: TypeAlias = str

@@ -9,8 +9,11 @@ class CryptoAccount(BaseAccount):
     def __init__(self, env: tEnvironment, exchange: tCryptoExchange, name: str='', key: str='', secret: str=''):
         super().__init__(env=env, trading_venue=exchange, name=name, key=key, secret=secret)
         if self.tv == TradingVenue.BYBIT:
-            from pfund import print_warning
-            print_warning('account type is "UNIFIED" for Bybit by default, please make sure it is set correctly on Bybit\'s website')
+            from pfund_kit.style import cprint
+            cprint(
+                'account type is "UNIFIED" for Bybit by default, please make sure it is set correctly on Bybit\'s website', 
+                style='bold'
+            )
         self._key = key or os.getenv(f'{self.tv}_API_KEY', '')
         self._secret = secret or os.getenv(f'{self.tv}_API_SECRET', '')
         if self._env in [Environment.SANDBOX, Environment.PAPER, Environment.LIVE]:

@@ -28,7 +28,7 @@ class CryptoProduct(BaseProduct):
     
     def _load_config(self):
         from pfund.config import get_config
-        from pfund import print_warning
+        from pfund_kit.style import cprint
         from pfund_kit.utils.yaml import load
         config = get_config()
         file_path = f'{config.cache_path}/{self.exchange.lower()}/market_configs.yml'
@@ -36,11 +36,12 @@ class CryptoProduct(BaseProduct):
             return
         config = load(file_path)[self.category]
         if str(self) not in config:
-            print_warning(
+            cprint(
                 f'{self} not found in {self.exchange} market configs,\n'
                 f'configs such as tick_size and lot_size are not loaded.\n'
                 f'Try to clear your market configs by running command:\n'
-                f'    pfund clear cache --exch {self.exchange.lower()}\n'
+                f'    pfund clear cache --exch {self.exchange.lower()}\n', 
+                style='bold'
             )
         else:
             self.tick_size = Decimal(config[str(self)]['tick_size'])
