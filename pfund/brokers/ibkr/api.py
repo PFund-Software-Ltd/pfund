@@ -13,9 +13,9 @@ if TYPE_CHECKING:
 import logging
 from collections import defaultdict
 
-from pfund.brokers.interactive_brokers.client import InteractiveBrokersClient as IBClient
-from pfund.brokers.interactive_brokers.wrapper import InteractiveBrokersWrapper as IBWrapper
-from pfund.brokers.interactive_brokers.wrapper import *
+from pfund.brokers.ibkr.client import InteractiveBrokersClient as IBClient
+from pfund.brokers.ibkr.wrapper import InteractiveBrokersWrapper as IBWrapper
+from pfund.brokers.ibkr.wrapper import *
 from pfund.datas.timeframe import TimeframeUnit
 from pfund.enums import Environment, Broker, PublicDataChannel, PrivateDataChannel, TraditionalAssetType, DataChannelType
 
@@ -43,7 +43,7 @@ class InteractiveBrokersAPI(IBClient, IBWrapper):
     ]
 
     def __init__(self, env: Environment | tEnvironment):
-        from pfund.brokers.interactive_brokers.broker import IBKR
+        from pfund.brokers.ibkr.broker import IBKR
         
         IBClient.__init__(self)
         IBWrapper.__init__(self)

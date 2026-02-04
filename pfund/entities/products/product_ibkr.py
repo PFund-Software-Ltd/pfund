@@ -46,7 +46,7 @@ class IBKRProduct(BaseProduct):
     
     def to_contract(self) -> Contract:
         from ibapi.contract import Contract
-        from pfund.brokers.interactive_brokers.broker import InteractiveBrokers as IBKR
+        from pfund.brokers.ibkr.broker import InteractiveBrokers as IBKR
         adapter = IBKR.adapter
         contract = Contract()
         contract.exchange = self.exchange

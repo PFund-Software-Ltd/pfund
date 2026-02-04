@@ -21,7 +21,7 @@ from msgspec import json
 from websockets.protocol import State
 from websockets.asyncio.client import ClientConnection as WebSocket
 
-from pfund.managers.order_manager import OrderUpdateSource
+from pfund.brokers.managers.order_manager import OrderUpdateSource
 from pfund.enums import Environment, Broker, CryptoExchange, PrivateDataChannel, DataChannelType
 
 
@@ -44,7 +44,7 @@ class BaseWebSocketAPI(ABC):
         self._env = Environment[env.upper()]
         self._bkr = Broker.CRYPTO
         self._logger = logging.getLogger(self.exch.lower())
-        Exchange: type[BaseExchange] = getattr(importlib.import_module(f'pfund.exchanges.{self.exch.lower()}.exchange'), 'Exchange')
+        Exchange: type[BaseExchange] = getattr(importlib.import_module(f'pfund.brokers.crypto.exchanges.{self.exch.lower()}.exchange'), 'Exchange')
         self._adapter: Adapter = Exchange.adapter
         self._callback: Callable[[str], Awaitable[None] | None] | None = None
         self._callback_raw_msg: bool = False

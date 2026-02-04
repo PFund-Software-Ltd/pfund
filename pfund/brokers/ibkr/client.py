@@ -6,7 +6,7 @@ It should never be used alone.
 from __future__ import annotations
 from typing import ClassVar, Literal, TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.brokers.interactive_brokers.api import InteractiveBrokersAPI
+    from pfund.brokers.ibkr.api import InteractiveBrokersAPI
     from pfund.entities.accounts.account_ibkr import IBKRAccount
 
 import time

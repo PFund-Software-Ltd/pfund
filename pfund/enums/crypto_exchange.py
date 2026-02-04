@@ -14,4 +14,4 @@ class CryptoExchange(StrEnum):
     @property
     def exchange_class(self) -> type[BaseExchange]:
         import importlib
-        return getattr(importlib.import_module(f'pfund.exchanges.{self.lower()}.exchange'), 'Exchange')
+        return getattr(importlib.import_module(f'pfund.brokers.crypto.exchanges.{self.lower()}.exchange'), 'Exchange')

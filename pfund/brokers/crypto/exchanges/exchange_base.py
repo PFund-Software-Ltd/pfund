@@ -20,7 +20,7 @@ from collections import defaultdict
 from abc import ABC, abstractmethod
 
 from pfund.utils.adapter import Adapter
-from pfund.managers.order_manager import OrderUpdateSource
+from pfund.brokers.managers.order_manager import OrderUpdateSource
 from pfund.enums import Environment, Broker, PrivateDataChannel, PublicDataChannel
 
 
@@ -43,7 +43,7 @@ class BaseExchange(ABC):
         self._settings: TradeEngineSettings | None = getattr(TradeEngine, "_settings", None)
 
         # APIs
-        exchange_path = f'pfund.exchanges.{self.name.lower()}'
+        exchange_path = f'pfund.brokers.crypto.exchanges.{self.name.lower()}'
         RESTfulAPI = getattr(importlib.import_module(f'{exchange_path}.rest_api'), 'RESTfulAPI')
         self._rest_api = RESTfulAPI(self._env)
         WebSocketAPI = getattr(importlib.import_module(f'{exchange_path}.ws_api'), 'WebSocketAPI')

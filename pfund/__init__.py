@@ -13,9 +13,11 @@ if TYPE_CHECKING:
     from pfund.components.features.feature_base import BaseFeature as Feature
     from pfund.components.indicators.indicator_base import BaseIndicator as Indicator
     from pfund.components.indicators.talib_indicator import TalibIndicator
+    from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
+    from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.brokers.crypto.broker import CryptoBroker
     from pfund.brokers.broker_defi import DeFiBroker
-    from pfund.brokers.interactive_brokers.broker import (
+    from pfund.brokers.ibkr.broker import (
         InteractiveBrokers as IBKR,
         InteractiveBrokers as IB,
     )
@@ -39,6 +41,12 @@ def __getattr__(name: str):
     elif name == 'TradeEngine':
         from pfund.engines.trade_engine import TradeEngine
         return TradeEngine
+    elif name == 'TradeEngineSettings':
+        from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
+        return TradeEngineSettings
+    elif name == 'BacktestEngineSettings':
+        from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
+        return BacktestEngineSettings
     elif name == "Strategy":
         from pfund.components.strategies.strategy_base import BaseStrategy as Strategy
         return Strategy
@@ -64,7 +72,7 @@ def __getattr__(name: str):
         from pfund.brokers.crypto.broker import CryptoBroker
         return CryptoBroker
     elif name in ("InteractiveBrokers", "IBKR", "IB"):
-        from pfund.brokers.interactive_brokers.broker import InteractiveBrokers
+        from pfund.brokers.ibkr.broker import InteractiveBrokers
         return InteractiveBrokers
     elif name == "DeFiBroker":
         from pfund.brokers.broker_defi import DeFiBroker
@@ -92,6 +100,8 @@ __all__ = (
     # engines
     'BacktestEngine',
     'TradeEngine',
+    'TradeEngineSettings',
+    'BacktestEngineSettings',
     # components
     'Strategy',
     'Model',

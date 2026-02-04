@@ -79,10 +79,10 @@ class DataBoy:
     @staticmethod
     def _get_supported_resolutions(product: BaseProduct) -> dict:
         if product.bkr == Broker.CRYPTO:
-            Exchange = getattr(importlib.import_module(f'pfund.exchanges.{product.exch.lower()}.exchange'), 'Exchange')
+            Exchange = getattr(importlib.import_module(f'pfund.brokers.crypto.exchanges.{product.exch.lower()}.exchange'), 'Exchange')
             supported_resolutions = Exchange.get_supported_resolutions(product)
         elif product.bkr == Broker.IBKR:
-            InteractiveBrokersAPI = getattr(importlib.import_module('pfund.brokers.interactive_brokers.api'), 'InteractiveBrokersAPI')
+            InteractiveBrokersAPI = getattr(importlib.import_module('pfund.brokers.ibkr.api'), 'InteractiveBrokersAPI')
             supported_resolutions = InteractiveBrokersAPI.SUPPORTED_RESOLUTIONS
         else:
             raise NotImplementedError(f'broker {product.bkr} is not supported')

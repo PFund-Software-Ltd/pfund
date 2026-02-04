@@ -13,8 +13,8 @@ import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
 
-from pfund.managers.order_manager import OrderManager
-from pfund.managers.portfolio_manager import PortfolioManager
+from pfund.brokers.managers.order_manager import OrderManager
+from pfund.brokers.managers.portfolio_manager import PortfolioManager
 from pfund.enums import Environment, Broker, TradingVenue, CryptoExchange
 
 

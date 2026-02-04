@@ -23,7 +23,7 @@ class InteractiveBrokers(BaseBroker):
     adapter = Adapter(name)
     
     def __init__(self, env: Environment | tEnvironment=Environment.SANDBOX):
-        from pfund.brokers.interactive_brokers.api import InteractiveBrokersAPI
+        from pfund.brokers.ibkr.api import InteractiveBrokersAPI
 
         super().__init__(env=env)
         # FIXME: check if only supports one account

@@ -43,7 +43,7 @@ class Exchange(BaseExchange):
         from pfeed.utils import to_camel_case
         name = cls.name.lower()
         Category = to_camel_case(product.category.value)
-        WebSocketAPI = getattr(importlib.import_module(f'pfund.exchanges.{name}.ws_api_{Category.lower()}'), f'{Category}WebSocketAPI')
+        WebSocketAPI = getattr(importlib.import_module(f'pfund.brokers.crypto.exchanges.{name}.ws_api_{Category.lower()}'), f'{Category}WebSocketAPI')
         return WebSocketAPI.SUPPORTED_RESOLUTIONS    
 
     '''
