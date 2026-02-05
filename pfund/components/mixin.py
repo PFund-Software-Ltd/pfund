@@ -6,7 +6,6 @@ if TYPE_CHECKING:
     import pandas as pd
     import polars as pl
     from pfeed.typing import tDataSource
-    from pfeed.streaming.streaming_message import StreamingMessage
     from pfund.typing import (
         StrategyT, 
         ModelT, 
@@ -19,18 +18,20 @@ if TYPE_CHECKING:
         ProductName,
         ResolutionRepr,
     )
+    from pfund.engines.engine_context import EngineContext
     from pfund.datas.data_market import MarketData
     from pfund.datas.data_bar import Bar
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.entities.products.product_base import BaseProduct
     from pfund.datas import QuoteData, TickData, BarData
-    from pfund.engines.base_engine import BaseEngine
+    from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
+    from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.components.strategies.strategy_base import BaseStrategy
-    from pfund.engines.engine_proxy import EngineProxy
     from pfund.components.models.model_base import BaseModel
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.indicators.indicator_base import BaseIndicator
+    from pfund.utils.dataset_splitter import DatasetPeriods, CrossValidatorDatasetPeriods
 
 import time
 import logging
@@ -50,7 +51,7 @@ class ComponentMixin:
 
     # custom post init for-common attributes of strategy and model
     def __mixin_post_init__(self: Component, *args, **kwargs):
-        from pfund.databoy import DataBoy
+        from pfund.datas.databoy import DataBoy
 
         self.__pfund_args__ = args
         self.__pfund_kwargs__ = kwargs
@@ -66,7 +67,7 @@ class ComponentMixin:
         
         self.logger: logging.Logger = logging.getLogger('pfund')
         self._proxy: ActorProxy | None = None
-        self._engine: BaseEngine | EngineProxy | None = None
+        self._context: EngineContext | None = None
         self._consumers: list[Component | ActorProxy] = []
         self.store: TradingStore | None = None
         self.databoy = DataBoy(self)
@@ -89,11 +90,19 @@ class ComponentMixin:
     
     @property
     def env(self) -> Environment:
-        return self._engine.env
+        return self._context.env
     
     @property
     def run_mode(self):
         return self._run_mode
+    
+    @property
+    def settings(self: Component) -> TradeEngineSettings | BacktestEngineSettings | None:
+        return self._context.settings if self._context else None
+    
+    @property
+    def dataset_periods(self: Component) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
+        return self._context.backtest.dataset_splitter.dataset_periods
     
     # TODO: also check on_bar, on_tick, on_quote etc.
     def _assert_functions_signatures(self):
@@ -104,7 +113,7 @@ class ComponentMixin:
         name: ComponentName,
         run_mode: RunMode,
         resolution: Resolution | str,
-        engine: BaseEngine | EngineProxy,
+        engine_context: EngineContext,
     ):
         """
         Hydrates the component with necessary attributes after initialization.
@@ -113,15 +122,15 @@ class ComponentMixin:
             name (ComponentName): The name to assign to this component.
             run_mode (RunMode): The mode in which the component will run (e.g., local or remote).
             resolution (Resolution | str): The data resolution used by this component.
-            engine (BaseEngine | EngineProxy): The engine instance associated with this component. It is None if the component is running in a remote process.
+            engine_context (EngineContext): The engine context associated with this component. It is None if the component is running in a remote process.
         """
-        self._engine = engine
+        self._context = engine_context
         self._run_mode = run_mode
         self._set_name(name)
         self._set_resolution(resolution)
         if self.is_remote():
             self._setup_logging()
-        self.store = TradingStore(env=self._engine.env, data_params=self._engine.get_data_params())
+        self.store = TradingStore(env=self._context.env, data_params=self._context.get_data_params())
         self.databoy._setup_messaging()
     
     # FIXME: integrate pfund_kit logging instead
@@ -133,7 +142,7 @@ class ComponentMixin:
         from pfund_kit.utils import get_free_port
 
         # configure logging based on pfund's logging config, e.g. log_level, log_file, log_format, etc.
-        logging_configurator = LoggingDictConfigurator(self._engine.logging_config)
+        logging_configurator = LoggingDictConfigurator(self._context.logging_config)
         logging_configurator.configure()
         
         # remove existing handlers
@@ -142,7 +151,7 @@ class ComponentMixin:
             handler.close()
             
         # add zmq PUBhandler
-        zmq_url = self._engine.settings.zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL)
+        zmq_url = self._context.settings.zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL)
         zmq_port = get_free_port()
         zmq_handler = ZMQPubHandler(f'{zmq_url}:{zmq_port}')
         zmq_formatter = logging.Formatter(
@@ -391,9 +400,6 @@ class ComponentMixin:
     def get_data(self: Component, product: ProductName, resolution: ResolutionRepr) -> MarketData | None:
         return self.databoy.get_data(product, resolution)
     
-    def collect_data(self, msg: StreamingMessage):
-        return self.databoy._collect(msg=msg)
-    
     def _prepare_df(self: Component):
         return self.data_tool.prepare_df(ts_col_type='timestamp')
     
@@ -535,7 +541,7 @@ class ComponentMixin:
                 name=component_name,
                 run_mode=run_mode,
                 resolution=self._resolution,
-                engine=self._engine,
+                engine=self._context,
             )
             
             if signal_cols:

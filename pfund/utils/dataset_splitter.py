@@ -1,14 +1,16 @@
 from __future__ import annotations
-from typing_extensions import TypedDict
-from typing import TYPE_CHECKING
+from typing import TypedDict, TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.typing import DatasetSplitsDict
 
 import datetime
 from dataclasses import dataclass, field
 
-# from sklearn.model_selection._split import BaseCrossValidator
-from sklearn.model_selection import TimeSeriesSplit
+try:
+    # from sklearn.model_selection._split import BaseCrossValidator
+    from sklearn.model_selection import TimeSeriesSplit
+except ImportError:
+    TimeSeriesSplit = None
 
 from pfund_kit.style import cprint
 
@@ -53,7 +55,7 @@ class DatasetSplitter:
         if isinstance(self.dataset_splits, (int, dict)):
             dataset_periods: DatasetPeriods = self._split_by_ratio()
             object.__setattr__(self, 'dataset_periods', dataset_periods)
-        elif isinstance(self.dataset_splits, TimeSeriesSplit):
+        elif TimeSeriesSplit and isinstance(self.dataset_splits, TimeSeriesSplit):
             dataset_periods: list[CrossValidatorDatasetPeriods] = self._split_by_cross_validator()
             object.__setattr__(self, 'dataset_periods', dataset_periods)
         else:

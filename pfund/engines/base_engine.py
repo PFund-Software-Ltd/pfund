@@ -5,11 +5,7 @@ if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
     from pfund.entities.accounts.account_base import BaseAccount
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund.typing import (
-        StrategyT,
-        tBroker,
-        DataParamsDict,
-    )
+    from pfund.typing import StrategyT
     from pfund.brokers.broker_base import BaseBroker
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.engines.engine_context import DataRangeDict
@@ -19,7 +15,6 @@ import datetime
 
 from pfund import get_config
 from pfund.components.actor_proxy import ActorProxy
-from pfund.engines.engine_proxy import EngineProxy
 from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
 from pfund.enums import (
@@ -58,7 +53,7 @@ class BaseEngine:
                 when it is a dict, it is a dict with keys 'start_date' and 'end_date', 
                     e.g. {'start_date': '2024-01-01', 'end_date': '2024-12-31'}
         '''
-        from pfund.config import setup_logging
+        from pfund.config import setup_logging, get_logging_config
         from pfund_kit.style import cprint
         from pfund.engines.engine_context import EngineContext
         
@@ -77,7 +72,12 @@ class BaseEngine:
         self._is_gathered: bool = False
         self.brokers: dict[Broker, BaseBroker] = {}
         self.strategies: dict[str, BaseStrategy | ActorProxy] = {}
-        self._context: EngineContext = EngineContext(env=env, data_range=data_range)
+        self._context: EngineContext = EngineContext(
+            env=env, 
+            name=self.name, 
+            data_range=data_range, 
+            logging_config=get_logging_config(),
+        )
         cprint(f"{self.env} {self.name} is running (data_range=({self.data_start}, {self.data_end}))", style=ENV_COLORS[self.env])
     
     @property
@@ -128,19 +128,6 @@ class BaseEngine:
         # update settings in config
         self._context.settings = settings
     
-    # FIXME
-    def get_data_params(self) -> DataParamsDict:
-        '''Data params are used in components' data stores'''
-        return {
-            'data_start': self._data_start,
-            'data_end': self._data_end,
-            'data_tool': self._data_tool,
-            # FIXME
-            'storage': config.storage,
-            'storage_options': config.storage_options,
-            'use_deltalake': config.use_deltalake,
-        }
-        
     # TODO: create EngineMetadata class (typed dict/dataclass/pydantic model)
     def to_dict(self) -> dict:
         return {
@@ -185,7 +172,7 @@ class BaseEngine:
             name=strat,
             run_mode=run_mode,
             resolution=resolution,
-            engine=EngineProxy.from_engine(self) if is_remote else self,
+            engine_context=self._context
         )
         strategy._set_top_strategy(True)
 
@@ -205,8 +192,8 @@ class BaseEngine:
             self._logger.debug(f'added broker {bkr}')
         return self.brokers[bkr]
     
-    def get_broker(self, bkr: tBroker) -> BaseBroker:
-        return self.brokers[bkr.upper()]
+    def get_broker(self, bkr: Broker) -> BaseBroker:
+        return self.brokers[Broker[bkr.upper()]]
     
     def _register_component(self, component_metadata: dict):
         # register sub-components (nested components)

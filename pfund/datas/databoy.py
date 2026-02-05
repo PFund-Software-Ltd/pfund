@@ -200,7 +200,7 @@ class DataBoy:
         import zmq
         from pfeed.streaming.zeromq import ZeroMQ
         
-        settings = self._component._engine.settings
+        settings = self._component.settings
         zmq_urls = settings.zmq_urls
         zmq_ports = settings.zmq_ports
         self._update_zmq_ports_in_use(zmq_ports)
@@ -254,8 +254,8 @@ class DataBoy:
         import zmq
         from pfeed.streaming.zeromq import ZeroMQ, ZeroMQDataChannel
         zmq_ports = self._get_zmq_ports_in_use()
-        engine_name = self._component._engine.name
-        settings = self._component._engine.settings
+        engine_name = self._component._context.name
+        settings = self._component.settings
         engine_zmq_url = settings.zmq_urls.get(engine_name, ZeroMQ.DEFAULT_URL)
         # subscribe to proxy's order updates and data engine's data
         for zmq_name in ['proxy', 'data_engine']:
@@ -326,11 +326,7 @@ class DataBoy:
         # self._signals_zmq.send(signal)
         pass
     
-    def _collect(self, msg: StreamingMessage | None=None):
-        '''
-        Args:
-            msg: message will only be passed in in WASM mode (i.e. data_zmq is None)
-        '''
+    def _collect(self):
         while self._component.is_running():
             if msg_tuple := self._data_zmq.recv():
                 channel, topic, msg, msg_ts = msg_tuple

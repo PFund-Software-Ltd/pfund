@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import polars as pl
 
-from pfund.backtest_dfs.narwhals_mixin import NarwhalsMixin
+from pfund._backtest.narwhals_mixin import NarwhalsMixin
 
 
 class BacktestDataFrame(NarwhalsMixin, pl.DataFrame):

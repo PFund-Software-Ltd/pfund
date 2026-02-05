@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.typing import StrategyT
-    from pfund.data_tools import data_tool_backtest
+    from pfund._backtest.typing import BacktestDataFrame
     
 from pfund._backtest.backtest_mixin import BacktestMixin
 
@@ -16,7 +16,7 @@ def BacktestStrategy(Strategy: type[StrategyT], *args, **kwargs) -> StrategyT:
                 class_name = Strategy.__name__
                 raise AttributeError(f"'{class_name}' object has no attribute '{name}'")
         
-        def backtest(self, df: data_tool_backtest.BacktestDataFrame):
+        def backtest(self, df: BacktestDataFrame):
             raise Exception(f'Strategy "{self.name}" does not have a backtest() method, cannot run vectorized backtesting')
         
         def add_strategy(self, strategy: StrategyT, name: str='') -> BacktestMixin | StrategyT:

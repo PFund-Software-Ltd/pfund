@@ -43,9 +43,8 @@ class MetaModel(ABCMeta):
             # assert users to include 'model'/'indicator' as the first argument in __init__()
             MetaModel._assert_required_arg(cls, init_args)
             
-        # FIXME: update backtest model 
-        # if name == '_BacktestModel':
-        #     assert '__init__' not in dct, '_BacktestModel should not have __init__()'
+        if name == '_BacktestModel':
+            assert '__init__' not in dct, 'In order to keep the MRO clean, _BacktestModel is not allowed to have __init__()'
     
     @staticmethod
     def _get_required_arg(cls) -> Literal['model', 'indicator', '']:

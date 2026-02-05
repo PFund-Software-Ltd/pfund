@@ -1,11 +1,6 @@
 from typing_extensions import TypedDict, Annotated
 from typing import TypeVar, Literal, TypeAlias, Union
 
-import datetime
-
-from pfeed.enums.data_tool import DataTool
-from pfeed.enums.data_storage import DataStorage
-
 from pfund.datas.resolution import Resolution
 from pfund.components.strategies.strategy_base import BaseStrategy
 from pfund.components.models.model_base import BaseModel
@@ -60,13 +55,3 @@ class DataConfigDict(TypedDict, total=False):  # total=False makes fields option
     shift: dict[Resolution, int]
     skip_first_bar: dict[Resolution, bool]
     stale_bar_timeout: int
-
-
-# FIXME
-class DataParamsDict(TypedDict, total=True):
-    data_start: datetime.date
-    data_end: datetime.date
-    data_tool: DataTool
-    storage: DataStorage
-    storage_options: dict
-    use_deltalake: bool

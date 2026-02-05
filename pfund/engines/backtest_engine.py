@@ -13,13 +13,23 @@ if TYPE_CHECKING:
 import os
 import inspect
 import time
+from dataclasses import dataclass
 
 import polars as pl
 
 from pfund_kit.utils.progress_bar import track, ProgressBar
 from pfund_kit.style import cprint, RichColor
 from pfund.enums import BacktestMode, ComponentType, Environment
+from pfund.components.actor_proxy import ActorProxy
 from pfund.engines.base_engine import BaseEngine
+from pfund.utils.dataset_splitter import DatasetSplitter
+
+
+@dataclass(frozen=True)
+class BacktestContext:
+    backtest_mode: BacktestMode
+    num_chunks: int
+    dataset_splitter: DatasetSplitter
 
 
 class BacktestEngine(BaseEngine):
@@ -44,45 +54,61 @@ class BacktestEngine(BaseEngine):
         '''
         from pfund.utils.dataset_splitter import DatasetSplitter
         super().__init__(env=Environment.BACKTEST, data_range=data_range, name=name)
-        self._backtest_mode = BacktestMode[mode.lower()]
-        self._num_chunks: int = num_chunks
-        self._dataset_splitter = DatasetSplitter(
-            dataset_start=self.data_start,
-            dataset_end=self.data_end,
-            dataset_splits=dataset_splits, 
-            cv_test_ratio=cv_test_ratio
+        self._context.backtest = BacktestContext(
+            backtest_mode=BacktestMode[mode.lower()],
+            num_chunks=num_chunks,
+            dataset_splitter=DatasetSplitter(
+                dataset_start=self.data_start,
+                dataset_end=self.data_end,
+                dataset_splits=dataset_splits, 
+                cv_test_ratio=cv_test_ratio
+            )
         )
-        if self._backtest_mode == BacktestMode.event_driven and self.settings.reuse_signals:
+        if self.backtest_mode == BacktestMode.event_driven and self.settings.reuse_signals:
             cprint(
                 'Warning: Reusing precomputed signals to speed up event-driven backtesting,\n'
                 'i.e. computing signals on the fly will be skipped',
                 style='bold'
             )
-    
+
     @property
     def backtest_mode(self) -> BacktestMode:
-        return self._backtest_mode
+        return self._context.backtest.backtest_mode
     
     @property
     def dataset_periods(self) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
-        return self._dataset_splitter.dataset_periods
+        return self._context.backtest.dataset_splitter.dataset_periods
     
-    # TODO: handle ray actors, i.e. UserStrategy.remote() is passed in
+    @property
+    def _dummy(self) -> str:
+        '''gets the name of the dummy strategy'''
+        from pfund.components.strategies._dummy_strategy import _DummyStrategy
+        return _DummyStrategy.name
+    
     def add_strategy(
         self, 
         strategy: StrategyT, 
         resolution: str,
         name: str='', 
-    ) -> StrategyT:
-        from pfund.components.strategies.strategy_base import BaseStrategy
+        ray_actor_options: dict | None=None,
+        **ray_kwargs
+    ) -> StrategyT | ActorProxy:
+        '''
+        Args:
+            ray_actor_options:
+                Options for Ray actor.
+                will be passed to ray actor like this: Actor.options(**ray_options).remote(**ray_kwargs)
+        '''
+        from pfund.components.strategies._dummy_strategy import _DummyStrategy
         from pfund.components.strategies.strategy_backtest import BacktestStrategy
-        is_dummy_strategy_exist = '_dummy' in self.strategies
-        assert not is_dummy_strategy_exist, 'dummy strategy is being used for model backtesting, adding another strategy is not allowed'
-        if type(strategy) is not BaseStrategy:
-            assert name != '_dummy', 'dummy strategy is reserved for model backtesting, please use another name'
-        name = name or strategy.__class__.__name__
-        strategy = BacktestStrategy(type(strategy), *strategy._args, **strategy._kwargs)
-        return super().add_strategy(strategy, resolution, name=name)
+
+        assert self._dummy not in self.strategies, 'adding another strategy is not allowed during model backtesting (i.e. engine.add_model(...) has been called)'
+        Strategy = strategy.__class__
+        if Strategy is not _DummyStrategy:
+            assert name != self._dummy, f'strategy name "{self._dummy}" is reserved, please use another name'
+        name = name or Strategy.__name__
+        strategy = BacktestStrategy(Strategy, *strategy.__pfund_args__, **strategy.__pfund_kwargs__)
+        return super().add_strategy(strategy, resolution, name=name, ray_actor_options=ray_actor_options, **ray_kwargs)
 
     def add_model(
         self, 
@@ -96,11 +122,10 @@ class BacktestEngine(BaseEngine):
     ) -> BacktestMixin | ModelT:
         '''Add model without creating a strategy (using dummy strategy)'''
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
-
-        is_non_dummy_strategy_exist = bool([strat for strat in self.strategies if strat != '_dummy'])
-        assert not is_non_dummy_strategy_exist, 'Please use strategy.add_model(...) instead of engine.add_model(...) when a strategy is already created'
-        if not (strategy := self.get_strategy('_dummy')):
-            strategy = self.add_strategy(_DummyStrategy(), resolution, name='_dummy')
+        only_dummy_strategy_exists = self._dummy in self.strategies and len(self.strategies) == 1
+        assert not only_dummy_strategy_exists, 'Please use strategy.add_model(...) instead of engine.add_model(...) when a strategy is already created'
+        if not (strategy := self.get_strategy(self._dummy)):
+            strategy = self.add_strategy(_DummyStrategy(), resolution, name=self._dummy)
             strategy.set_flags(True)
         assert not strategy.models, 'Adding more than 1 model to dummy strategy in backtesting is not supported, you should train and dump your models one by one'
         model = strategy.add_model(
@@ -155,7 +180,7 @@ class BacktestEngine(BaseEngine):
         )
     
     def _assert_backtest_function(self, backtestee: BaseStrategy | BaseModel):
-        assert self._backtest_mode == BacktestMode.vectorized, 'assert_backtest_function() is only for vectorized backtesting'
+        assert self.backtest_mode == BacktestMode.vectorized, 'assert_backtest_function() is only for vectorized backtesting'
         if not hasattr(backtestee, 'backtest'):
             raise Exception(f'class "{backtestee.name}" does not have backtest() method, cannot run vectorized backtesting')
         sig = inspect.signature(backtestee.backtest)
@@ -164,6 +189,8 @@ class BacktestEngine(BaseEngine):
             raise Exception(f'{backtestee.name} backtest() must have "df" as its first arg, i.e. backtest(self, df)')
     
     def run(self, num_chunks: int=1, **ray_kwargs):
+        from pfund.components.strategies._dummy_strategy import _DummyStrategy
+        
         super().run()
         assert num_chunks > 0, 'num_chunks must be greater than 0'
         if num_chunks > 1 and not self._use_ray:
@@ -176,10 +203,10 @@ class BacktestEngine(BaseEngine):
         try:
             for strat, strategy in self.strategies.items():
                 backtestee = strategy
-                if strat == '_dummy':
-                    if self._backtest_mode == BacktestMode.vectorized:
+                if strat == _DummyStrategy.name:
+                    if self.backtest_mode == BacktestMode.vectorized:
                         continue
-                    elif self._backtest_mode == BacktestMode.event_driven:
+                    elif self.backtest_mode == BacktestMode.event_driven:
                         # dummy strategy has exactly one model
                         model = list(strategy.models.values())[0]
                         backtestee = model
@@ -202,14 +229,14 @@ class BacktestEngine(BaseEngine):
         df = backtestee.get_df(copy=True)
         
         # Pre-Backtesting
-        if self._backtest_mode == BacktestMode.vectorized:
+        if self.backtest_mode == BacktestMode.vectorized:
             self._assert_backtest_function(backtestee)
             df_chunks = []
-        elif self._backtest_mode == BacktestMode.event_driven:
+        elif self.backtest_mode == BacktestMode.event_driven:
             # NOTE: clear dfs so that strategies/models don't know anything about the incoming data
             backtestee.clear_dfs()
         else:
-            raise NotImplementedError(f'Backtesting mode {self._backtest_mode} is not supported')
+            raise NotImplementedError(f'Backtesting mode {self.backtest_mode} is not supported')
         
         
         # Backtesting
@@ -229,11 +256,11 @@ class BacktestEngine(BaseEngine):
             if self._use_ray:
                 ray_tasks.append((df_chunk, chunk_num))
             else:
-                if self._backtest_mode == BacktestMode.vectorized:
+                if self.backtest_mode == BacktestMode.vectorized:
                     df_chunk = dtl.preprocess_vectorized_df(df_chunk)
                     backtestee.backtest(df_chunk)
                     df_chunks.append(df_chunk)
-                elif self._backtest_mode == BacktestMode.event_driven:
+                elif self.backtest_mode == BacktestMode.event_driven:
                     df_chunk = dtl.preprocess_event_driven_df(df_chunk)
                     self._event_driven_backtest(df_chunk, chunk_num=chunk_num)
                 progress_bar.advance(1)
@@ -250,10 +277,10 @@ class BacktestEngine(BaseEngine):
             def _run_task(log_queue: Queue,  _df_chunk: pd.DataFrame | pl.LazyFrame, _chunk_num: int, _batch_num: int):
                 try:
                     logger =setup_logger_in_ray_task(backtestee.logger.name, log_queue)
-                    if self._backtest_mode == BacktestMode.vectorized:
+                    if self.backtest_mode == BacktestMode.vectorized:
                         _df_chunk = dtl.preprocess_vectorized_df(_df_chunk, backtestee)
                         backtestee.backtest(_df_chunk)
-                    elif self._backtest_mode == BacktestMode.event_driven:
+                    elif self.backtest_mode == BacktestMode.event_driven:
                         _df_chunk = dtl.preprocess_event_driven_df(_df_chunk)
                         self._event_driven_backtest(_df_chunk, chunk_num=_chunk_num, batch_num=_batch_num)
                 except Exception:
@@ -287,10 +314,10 @@ class BacktestEngine(BaseEngine):
         
         # Post-Backtesting
         if backtestee.component_type == ComponentType.strategy:
-            if self._backtest_mode == BacktestMode.vectorized:
+            if self.backtest_mode == BacktestMode.vectorized:
                 df = dtl.postprocess_vectorized_df(df_chunks)
             # TODO
-            elif self._backtest_mode == BacktestMode.event_driven:
+            elif self.backtest_mode == BacktestMode.event_driven:
                 pass
             backtest_history: dict = self.history.create(backtestee, df, start_time, end_time)
             backtest_result[backtestee.name] = backtest_history

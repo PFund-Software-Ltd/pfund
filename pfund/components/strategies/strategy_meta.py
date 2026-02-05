@@ -24,10 +24,9 @@ class MetaStrategy(ABCMeta):
     
     def __init__(cls, name, bases, dct):
         super().__init__(name, bases, dct)
-        
-        # FIXME: update backtest strategy
+
         if name == '_BacktestStrategy':
-            assert '__init__' not in dct, '_BacktestStrategy should not have __init__()'
+            assert '__init__' not in dct, 'In order to keep the MRO clean, _BacktestStrategy is not allowed to have __init__()'
     
     # def __call__(cls, *args, **kwargs):
     #     instance = super().__call__(*args, **kwargs)

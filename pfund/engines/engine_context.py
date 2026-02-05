@@ -5,7 +5,8 @@ if TYPE_CHECKING:
 
 from pfund.enums import Environment
 from pfund.datas.resolution import Resolution
-from pfund.engines.settings import TradeEngineSettings, BacktestEngineSettings
+from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
+from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
 
 
 class DataRangeDict(TypedDict, total=False):
@@ -13,17 +14,45 @@ class DataRangeDict(TypedDict, total=False):
     end_date: str
 
 
+# FIXME
+class DataParamsDict(TypedDict, total=True):
+    pass
+    # data_start: datetime.date
+    # data_end: datetime.date
+    # data_tool: DataTool
+    # storage: DataStorage
+    # storage_options: dict
+    # use_deltalake: bool
+
+
 class EngineContext:
     def __init__(
         self,
         env: Environment,
+        name: str,  # engine name
         data_range: str | Resolution | DataRangeDict | Literal['ytd'],
+        logging_config: dict,
     ):
         self.env = env
+        self.name = name
         self._env_var_prefix = f'PFUND_{env.upper()}_'
         self._env_vars = self._load_env_vars()
         self.data_start, self.data_end = self._parse_data_range(data_range)
         self.settings = self._load_settings()
+        self.logging_config: dict = logging_config
+    
+    # FIXME: refactor this
+    def get_data_params(self) -> DataParamsDict:
+        '''Data params are used in components' data stores'''
+        return {
+            # 'data_start': self._data_start,
+            # 'data_end': self._data_end,
+            # 'data_tool': self._data_tool,
+            # FIXME
+            # 'storage': config.storage,
+            # 'storage_options': config.storage_options,
+            # 'use_deltalake': config.use_deltalake,
+        }
     
     def _load_env_vars(self) -> dict[str, str]:
         from dotenv import find_dotenv, dotenv_values

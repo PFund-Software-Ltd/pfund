@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from pfeed.sources.pfund.engine_feed import PFundEngineFeed
     from pfeed.sources.pfund.data_model import PFundDataModel
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund.typing import DataParamsDict
+    from pfund.engines.engine_context import DataParamsDict
 
 from pfeed.enums import DataCategory, DataLayer
 from pfund.enums import Environment
@@ -37,14 +37,15 @@ class TradingStore:
         # )
         self._feed = None
         
-        self._data_stores = {
-            DataCategory.MARKET_DATA: MarketDataStore(
-                data_tool=data_params['data_tool'],
-                storage=data_params['storage'],
-                storage_options=data_params['storage_options'],
-                feed=self._feed,
-            ),
-        }
+        # FIXME
+        # self._data_stores = {
+        #     DataCategory.MARKET_DATA: MarketDataStore(
+        #         data_tool=data_params['data_tool'],
+        #         storage=data_params['storage'],
+        #         storage_options=data_params['storage_options'],
+        #         feed=self._feed,
+        #     ),
+        # }
         self._df: GenericFrame | None = None
         self._df_updates = []
         
