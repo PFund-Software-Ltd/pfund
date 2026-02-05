@@ -30,9 +30,8 @@ class TradeEngine(BaseEngine):
         *,
         env: Literal['SANDBOX', 'PAPER', 'LIVE']=Environment.SANDBOX,
         data_range: str | Resolution | DataRangeDict | Literal['ytd']='ytd',
-        name: str='',
     ):  
-        super().__init__(env=Environment[env.upper()], data_range=data_range, name=name)
+        super().__init__(env=Environment[env.upper()], data_range=data_range)
         self._proxy: ZeroMQ | None = None
         self._worker: ZeroMQ | None = None
         self._setup_proxy()

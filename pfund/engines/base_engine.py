@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 import logging
 import datetime
+import uuid
 
 from pfund import get_config
 from pfund.components.actor_proxy import ActorProxy
@@ -44,7 +45,6 @@ class BaseEngine:
         *,
         env: Environment, 
         data_range: str | Resolution | DataRangeDict | Literal['ytd'],
-        name: str='',
     ):
         '''
         Args:
@@ -65,9 +65,7 @@ class BaseEngine:
         
         setup_logging(env=env)
         self._logger = logging.getLogger('pfund')
-        self.name = self._get_default_name()
-        if name:
-            self._set_name(name)
+        self._id = uuid.uuid4().hex[:8]
         self._is_running: bool = False
         self._is_gathered: bool = False
         self.brokers: dict[Broker, BaseBroker] = {}
@@ -83,7 +81,15 @@ class BaseEngine:
     @property
     def env(self) -> Environment:
         return self._context.env
-
+    
+    @property
+    def id(self) -> str:
+        return self._id
+    
+    @property
+    def name(self) -> str:
+        return f'{self.__class__.__name__}-{self.id}'
+    
     @property
     def settings(self) -> TradeEngineSettings | BacktestEngineSettings:
         return self._context.settings
@@ -98,16 +104,6 @@ class BaseEngine:
     
     def is_running(self) -> bool:
         return self._is_running
-    
-    def _get_default_name(self) -> str:
-        return f"{self.__class__.__name__}"
-    
-    def _set_name(self, name: str):
-        if not name:
-            return
-        self.name = name
-        if not self.name.lower().endswith("engine"):
-            self.name += "_engine"
     
     def configure_settings(self, settings: TradeEngineSettings | BacktestEngineSettings):
         '''Overrides the loaded settings with the given settings object and saves it to settings.toml
@@ -131,7 +127,6 @@ class BaseEngine:
     # TODO: create EngineMetadata class (typed dict/dataclass/pydantic model)
     def to_dict(self) -> dict:
         return {
-            'name': self.name,
             'env': self.env.value,
             'data_start': self.data_start.strftime('%Y-%m-%d'),
             'data_end': self.data_end.strftime('%Y-%m-%d'),

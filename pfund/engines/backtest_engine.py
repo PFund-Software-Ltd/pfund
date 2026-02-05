@@ -36,7 +36,6 @@ class BacktestEngine(BaseEngine):
     def __init__(
         self,
         data_range: str | DataRangeDict | Literal['ytd']='1mo',
-        name: str='',
         mode: Literal['vectorized', 'hybrid', 'event_driven']='vectorized',
         num_chunks: int=1,
         dataset_splits: int | DatasetSplitsDict | TimeSeriesSplit=721,
@@ -53,7 +52,7 @@ class BacktestEngine(BaseEngine):
                 this is the ratio of the entire dataset to be reserved as a final hold-out test set.
         '''
         from pfund.utils.dataset_splitter import DatasetSplitter
-        super().__init__(env=Environment.BACKTEST, data_range=data_range, name=name)
+        super().__init__(env=Environment.BACKTEST, data_range=data_range)
         self._context.backtest = BacktestContext(
             backtest_mode=BacktestMode[mode.lower()],
             num_chunks=num_chunks,
