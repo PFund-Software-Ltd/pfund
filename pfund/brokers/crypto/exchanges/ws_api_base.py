@@ -1,11 +1,10 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Callable, Literal, ClassVar, TypeAlias, Awaitable, Any
 
-from pfund.datas.timeframe import TimeframeUnit
 if TYPE_CHECKING:
     from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
     from pfund.utils.adapter import Adapter
-    from pfund.datas.resolution import Resolution
+    from pfund.datas.resolution import Resolution, ResolutionUnit
     from pfund.entities.accounts.account_crypto import CryptoAccount
     from pfund.brokers.crypto.exchanges.exchange_base import BaseExchange
     from pfund.entities.products.product_crypto import CryptoProduct
@@ -38,7 +37,7 @@ class BaseWebSocketAPI(ABC):
 
     URLS: ClassVar[dict[Environment, dict[DataChannelType, str]]] = {}
     SUPPORTED_ORDERBOOK_LEVELS: ClassVar[list[int]] = []
-    SUPPORTED_RESOLUTIONS: ClassVar[dict[TimeframeUnit, list[int]]] = {}
+    SUPPORTED_RESOLUTIONS: ClassVar[dict[ResolutionUnit, list[int]]] = {}
     CHECK_FREQ: ClassVar[int] = 10  # check connections frequency (in seconds)
     PING_FREQ: ClassVar[int] = 20  # application-level ping to exchange (in seconds)
 

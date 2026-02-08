@@ -3,7 +3,7 @@ from typing import ClassVar
 from pfund.brokers.crypto.exchanges.bybit.ws_api_bybit import BybitWebSocketAPI
 from pfund.enums import Environment, DataChannelType
 from pfund.entities.products.product_bybit import BybitProduct
-from pfund.datas.timeframe import TimeframeUnit
+from pfund.datas.resolution import ResolutionUnit
 
 
 class OptionWebSocketAPI(BybitWebSocketAPI):
@@ -20,11 +20,11 @@ class OptionWebSocketAPI(BybitWebSocketAPI):
         }
     }
     SUPPORTED_ORDERBOOK_LEVELS: ClassVar[list[int]] = [2]
-    SUPPORTED_RESOLUTIONS: ClassVar[dict[TimeframeUnit, list[int]]] = {
-        TimeframeUnit.QUOTE: [25, 100],
-        TimeframeUnit.TICK: [1],
-        TimeframeUnit.MINUTE: [1, 3, 5, 15, 30, 60, 120, 240, 360, 720],
-        TimeframeUnit.DAY: [1],
+    SUPPORTED_RESOLUTIONS: ClassVar[dict[ResolutionUnit, list[int]]] = {
+        ResolutionUnit.QUOTE: [25, 100],
+        ResolutionUnit.TICK: [1],
+        ResolutionUnit.MINUTE: [1, 3, 5, 15, 30, 60, 120, 240, 360, 720],
+        ResolutionUnit.DAY: [1],
     }
     # REVIEW
     PUBLIC_CHANNEL_ARGS_LIMIT: ClassVar[int] = 2000

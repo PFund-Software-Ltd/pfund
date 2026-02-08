@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, Callable, Awaitable
+from typing import TYPE_CHECKING, Literal, Callable, Awaitable, ClassVar
 if TYPE_CHECKING:
     from pfund.entities.accounts.account_crypto import CryptoAccount
     from pfund.typing import tEnvironment, FullDataChannel
@@ -19,7 +19,7 @@ ProductCategory = BybitProduct.ProductCategory
 
 class WebSocketAPI(BaseWebSocketAPI):
     '''A facade for the Bybit websocket API.'''
-    exch = CryptoExchange.BYBIT
+    EXCHANGE: ClassVar[CryptoExchange] = CryptoExchange.BYBIT
     
     def __init__(self, env: Environment | tEnvironment):
         super().__init__(env)

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
     from pfund.enums import Environment
     from pfund.datas.resolution import Resolution
@@ -17,7 +17,7 @@ from pfund.utils.parser import SchemaParser
 from pfund.brokers.crypto.exchanges.ws_api_base import BaseWebSocketAPI, NamedWebSocket
 from pfund.enums import CryptoExchange, PublicDataChannel, DataChannelType
 from pfund.entities.products.product_bybit import BybitProduct
-from pfund.datas.timeframe import TimeframeUnit
+from pfund.datas.resolution import ResolutionUnit
 
 
 ProductCategory = BybitProduct.ProductCategory
@@ -128,7 +128,7 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
             orderbook_level = resolution.orderbook_level
             orderbook_depth = resolution.period
             supported_orderbook_levels = self.SUPPORTED_ORDERBOOK_LEVELS[product.category]
-            supported_orderbook_depths = self.SUPPORTED_RESOLUTIONS[TimeframeUnit.QUOTE][product.category]
+            supported_orderbook_depths = self.SUPPORTED_RESOLUTIONS[ResolutionUnit.QUOTE][product.category]
             if orderbook_level not in supported_orderbook_levels:
                 raise NotImplementedError(f"{self.exch} ({channel}.{product.symbol}) orderbook_level={orderbook_level} is not supported, supported levels: {supported_orderbook_levels}")
             if orderbook_level == 1 and orderbook_depth not in supported_orderbook_depths:
@@ -141,11 +141,11 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
         elif resolution.is_bar():
             channel = PublicDataChannel.candlestick
             echannel = self._adapter(channel.value, group='channel')
-            period, timeframe = resolution.period, resolution.timeframe
-            if timeframe.unit not in self.SUPPORTED_RESOLUTIONS:
-                raise ValueError(f'{self.exch} ({channel}.{product.symbol}) {resolution=} (timeframe={timeframe.unit.name}) is not supported, supported timeframes: {[tf.name for tf in self.SUPPORTED_RESOLUTIONS]}')
-            elif period not in self.SUPPORTED_RESOLUTIONS[timeframe.unit]:
-                raise ValueError(f'{self.exch} ({channel}.{product.symbol}) {resolution=} ({period=}) is not supported, supported periods: {self.SUPPORTED_RESOLUTIONS[timeframe.unit]}')
+            period = resolution.period
+            if resolution.unit not in self.SUPPORTED_RESOLUTIONS:
+                raise ValueError(f'{self.exch} ({channel}.{product.symbol}) {resolution=} is not supported, supported resolutions: {[unit.name for unit in self.SUPPORTED_RESOLUTIONS]}')
+            elif period not in self.SUPPORTED_RESOLUTIONS[resolution.unit]:
+                raise ValueError(f'{self.exch} ({channel}.{product.symbol}) {resolution=} ({period=}) is not supported, supported periods: {self.SUPPORTED_RESOLUTIONS[resolution.unit]}')
             eresolution = self._adapter(repr(resolution), group='resolution')
             full_channel = '.'.join([echannel, eresolution, product.symbol])
         else:

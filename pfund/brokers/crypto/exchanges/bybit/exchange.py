@@ -1,11 +1,12 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, ClassVar
 from typing_extensions import override
+
 if TYPE_CHECKING:
     from pfund.brokers.crypto.exchanges.ws_api_base import BaseWebSocketAPI
     from pfund.brokers.crypto.exchanges.rest_api_base import Result, ApiResponse
     from pfund.entities.products.product_bybit import BybitProduct
-    from pfund.datas.timeframe import TimeframeUnit
+    from pfund.datas.resolution import ResolutionUnit
 
 import asyncio
 import datetime
@@ -41,7 +42,7 @@ class Exchange(BaseExchange):
 
     @classmethod
     @override
-    def get_supported_resolutions(cls, product: BybitProduct) -> dict[TimeframeUnit, list[int]]:
+    def get_supported_resolutions(cls, product: BybitProduct) -> dict[ResolutionUnit, list[int]]:
         import importlib
         from pfund_kit.utils.text import to_camel_case
         name = cls.name.lower()
