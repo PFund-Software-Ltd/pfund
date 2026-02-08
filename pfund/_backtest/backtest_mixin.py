@@ -4,10 +4,13 @@ if TYPE_CHECKING:
     import torch
     import pandas as pd
     import polars as pl
-    from pfeed.typing import tDataSource, tStorage, GenericFrame
-    from pfund.typing import ModelT, DataConfigDict, tTradingVenue
+    from pfeed.typing import GenericFrame
+    from pfeed.enums import DataSource
+    from pfund.typing import ModelT
+    from pfund.enums import TradingVenue
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
+    from pfund.utils.dataset_splitter import DatasetPeriods, CrossValidatorDatasetPeriods
 
 from functools import cached_property
 
@@ -16,6 +19,7 @@ import numpy as np
 from pfund_kit.style import cprint
 from pfund.components.strategies.strategy_base import BaseStrategy
 from pfund.components.models.model_base import BaseModel
+from pfund.datas.data_config import DataConfig
 from pfund.enums import BacktestMode
 
 
@@ -63,6 +67,10 @@ class BacktestMixin:
     def backtest_mode(self: BacktestMixin | BaseStrategy | BaseModel) -> BacktestMode:
         return self._context.backtest.backtest_mode
     
+    @property
+    def dataset_periods(self: BacktestMixin | BaseStrategy | BaseModel) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
+        return self._context.backtest.dataset_splitter.dataset_periods
+    
     @cached_property
     def _is_signal_df_required(self: BacktestMixin | BaseStrategy | BaseModel) -> bool:
         if self._is_dummy_strategy:
@@ -91,8 +99,9 @@ class BacktestMixin:
     
     # TODO
     @property
-    def val_set(self: BaseStrategy | BaseModel) -> GenericFrame:
+    def dev_set(self: BaseStrategy | BaseModel) -> GenericFrame:
         return self.store.load_data(...)
+    val_set = dev_set
     
     # TODO
     @property
@@ -206,15 +215,15 @@ class BacktestMixin:
     # TODO: add data_generator to add_data()
     def add_data(
         self: BaseStrategy | BaseModel, 
-        trading_venue: tTradingVenue, 
+        trading_venue: TradingVenue, 
         product: str,
-        data_source: tDataSource | None=None,
+        data_source: DataSource | None=None,
         from_storage: tStorage | None=None,
-        data_config: DataConfigDict | None=None,
+        data_config: DataConfig | None=None,
         **product_specs
     ) -> list[BaseData]:
         # REVIEW
-        def _force_primary_resolution_as_resampler(data_config: DataConfigDict):
+        def _force_primary_resolution_as_resampler(data_config: DataConfig):
             '''force using the primary resolution as a resampler for any extra resolutions that are <= primary resolution
             e.g. resolution='1m', extra_resolutions=['1h'], force 'resample' to be {'1h': '1m'}
             since in live trading, multiple data resolutions can be subscribed, i.e. data of '1h' and '1m' can be both subscribed,
@@ -230,7 +239,7 @@ class BacktestMixin:
                     else:
                         raise Exception(f'extra_resolution={resolution} is not supported for auto_resampling, since it is not a multiple of resolution={primary_resolution}')
         # REVIEW
-        def _set_default_skip_first_bar(data_config: DataConfigDict):
+        def _set_default_skip_first_bar(data_config: DataConfig):
             extra_resolutions = data_config.get('extra_resolutions', [])
             primary_resolution = self._resolution
             skip_first_bar = data_config.get('skip_first_bar', {})

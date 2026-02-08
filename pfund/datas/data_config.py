@@ -1,19 +1,21 @@
-from typing_extensions import Annotated
+from typing import Annotated, ClassVar
 
-from pydantic import BaseModel, Field, ConfigDict, model_validator
+from pydantic import BaseModel, Field, ConfigDict, model_validator, field_validator, PrivateAttr
 
-from pfeed.enums import DataSource
 from pfund.datas.resolution import Resolution
 
 
-# TODO: use field_validator?
 class DataConfig(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+    )
 
-    data_source: DataSource
-    data_origin: str=''
-    primary_resolution: Resolution = Field(description='primary resolution used for trading, must be a bar resolution (e.g. "1s", "1m", "1h", "1d")')
-    extra_resolutions: list[Resolution] = Field(default_factory=list, description='extra resolutions, e.g. "1t" for tick data, "1q" for quote data')
+    _primary_resolution: Resolution = PrivateAttr(init=False)
+    extra_resolutions: list[Resolution] = Field(
+        default_factory=list, 
+        description='extra resolutions, e.g. "1t" for tick data, "1q" for quote data'
+    )
     # TODO: handle quote_L1 resampled by quote_L2
     resample: dict[Annotated[Resolution, "ResampleeResolution"], Annotated[Resolution, "ResamplerResolution"]] = Field(
         default_factory=dict, 
@@ -38,65 +40,143 @@ class DataConfig(BaseModel):
     )
     
     @property
+    def primary_resolution(self) -> Resolution:
+        return self._primary_resolution
+    
+    @primary_resolution.setter
+    def primary_resolution(self, value: Resolution | str):  # pyright: ignore[reportPropertyTypeMismatch]
+        if isinstance(value, str):
+            value = Resolution(value)
+        if not value.is_bar():
+            raise ValueError(f'primary_resolution={repr(value)} must be a bar resolution (e.g. "1s", "1m", "1h", "1d")')
+        self._primary_resolution = value
+        
+    @property
     def resolutions(self) -> list[Resolution]:
-        return [self.primary_resolution] + self.extra_resolutions
-
+        if hasattr(self, '_primary_resolution') and self._primary_resolution not in self.extra_resolutions:
+            return [self._primary_resolution] + self.extra_resolutions
+        else:
+            return self.extra_resolutions
+    
+    # REVIEW: support week, month, year?
+    @staticmethod
+    def _assert_at_least_daily_resolution(resolution: Resolution):
+        if resolution.is_week() or resolution.is_month() or resolution.is_year():
+            raise ValueError(f'{resolution=} is not supported')
+    
+    def _set_default_skip_first_bar(self, resolution: Resolution):
+        if resolution in self.skip_first_bar or not resolution.is_bar():
+            return
+        # the first bar is very likely incomplete due to resampling, excluding cases like resample={'1h': '60m'}
+        if resolution in self.resample and resolution != self.resample[resolution]:
+            default_skip_first_bar = True
+        else:
+            default_skip_first_bar = False
+        self.skip_first_bar[resolution] = default_skip_first_bar
+    
+    def _set_default_stale_bar_timeout(self, resolution: Resolution):
+        if resolution in self.stale_bar_timeout or not resolution.is_bar():
+            return
+        default_timeout = resolution.to_seconds() * 0.1
+        self.stale_bar_timeout[resolution] = default_timeout
+    
     @model_validator(mode='after')
     def validate_after(self):
-        assert self.primary_resolution.is_bar(), f'resolution={repr(self.primary_resolution)} must be a bar resolution (e.g. "1s", "1m", "1h", "1d")'
-        assert self.primary_resolution not in self.extra_resolutions, f'resolution={repr(self.primary_resolution)} should not be included in "extra_resolutions"'
-        quote_resolutions = [r for r in self.resolutions if r.is_quote()]
-        if quote_resolutions:
-            assert len(quote_resolutions) == 1, f'only one quote resolution is supported, got {len(quote_resolutions)}'
-        tick_resolutions = [r for r in self.resolutions if r.is_tick()]
-        if tick_resolutions:
-            assert len(tick_resolutions) == 1, f'only one tick resolution is supported, got {len(tick_resolutions)}'
-        self._validate_resample()
-        self._validate_shift()
-        self._validate_stale_bar_timeout()
-        # set default values
+        for resolution in self.shift:
+            self.add_extra_resolution(resolution)
+        for resamplee_resolution, resampler_resolution in self.resample.items():
+            self.add_extra_resolution(resamplee_resolution)
+            self.add_extra_resolution(resampler_resolution)
         for resolution in self.resolutions:
+            self._assert_at_least_daily_resolution(resolution)
+            if not resolution.is_bar():
+                continue
             self._set_default_skip_first_bar(resolution)
             self._set_default_stale_bar_timeout(resolution)
         return self
-        
-    @model_validator(mode='before')
+    
+    @field_validator('extra_resolutions', mode='before')
     @classmethod
-    def validate_before(cls, data: dict) -> dict:
-        if isinstance(data['data_source'], str):
-            data['data_source'] = DataSource[data['data_source'].upper()]
-        if isinstance(data['primary_resolution'], str):
-            data['primary_resolution'] = Resolution(data['primary_resolution'])
-        data['extra_resolutions'] = list(set(Resolution(resolution) for resolution in data.get('extra_resolutions', [])))
-        data['resample']: dict[Annotated[Resolution, "ResampleeResolution"], Annotated[Resolution, "ResamplerResolution"]] = {
-            Resolution(resamplee_resolution): Resolution(resampler_resolution) for resamplee_resolution, resampler_resolution in data.get('resample', {}).items()
+    def validate_extra_resolutions(cls, v: list[Resolution | str]) -> list[Resolution]:
+        return list(set(Resolution(resolution) for resolution in v))
+
+    @field_validator('extra_resolutions', mode='after')
+    @classmethod
+    def validate_extra_resolutions_after(cls, v: list[Resolution]) -> list[Resolution]:
+        quote_resolutions = [r for r in v if r.is_quote()]
+        if len(quote_resolutions) > 1:
+            raise ValueError(f'only one quote resolution is supported, got {len(quote_resolutions)}')
+        tick_resolutions = [r for r in v if r.is_tick()]
+        if len(tick_resolutions) > 1:
+            raise ValueError(f'only one tick resolution is supported, got {len(tick_resolutions)}')
+        return v
+
+    @field_validator('resample', mode='before')
+    @classmethod
+    def validate_resample(cls, v: dict[Resolution | str, Resolution | str]) -> dict[Resolution, Resolution]:
+        return {
+            Resolution(resamplee_resolution): Resolution(resampler_resolution) 
+            for resamplee_resolution, resampler_resolution in v.items()
         }
-        data['shift'] = {Resolution(resolution): shift for resolution, shift in data.get('shift', {}).items()}
-        data['skip_first_bar'] = {Resolution(resolution): is_skip for resolution, is_skip in data.get('skip_first_bar', {}).items()}
-        data['stale_bar_timeout'] = {Resolution(resolution): timeout for resolution, timeout in data.get('stale_bar_timeout', {}).items()}
-        return data
     
-    def _validate_resample(self):
-        for resamplee_resolution, resampler_resolution in self.resample.items():
-            assert resamplee_resolution.is_bar(), f'{resamplee_resolution=} is not a bar resolution (e.g. "1s", "1m", "1h", "1d")'
-            assert not resampler_resolution.is_quote(), f'{resampler_resolution=} in "resample" cannot be a quote resolution'
-            assert resampler_resolution >= resamplee_resolution, f'Cannot use lower/equal resolution "{resampler_resolution}" to resample "{resamplee_resolution}"'
-            self.add_extra_resolution(resamplee_resolution)
-            self.add_extra_resolution(resampler_resolution)
+    @field_validator('resample', mode='after')
+    @classmethod
+    def validate_resample_after(cls, v: dict[Resolution, Resolution]) -> dict[Resolution, Resolution]:
+        for resamplee_resolution, resampler_resolution in v.items():
+            if not resamplee_resolution.is_bar():
+                raise ValueError(f'{resamplee_resolution=} is not a bar resolution (e.g. "1s", "1m", "1h", "1d")')
+            if resampler_resolution.is_quote():
+                raise ValueError(f'{resampler_resolution=} in "resample" cannot be a quote resolution')
+            if not resampler_resolution > resamplee_resolution:
+                raise ValueError(f'Cannot use lower/equal resolution "{resampler_resolution}" to resample "{resamplee_resolution}"')
+        return v
+
+    @field_validator('shift', mode='before')
+    @classmethod
+    def validate_shift(cls, v: dict[Resolution | str, int]) -> dict[Resolution, int]:
+        return { Resolution(resolution): shift for resolution, shift in v.items() }
     
-    def _validate_shift(self):
-        for resolution, shift in self.shift.items():
-            assert resolution.is_bar() and not resolution.is_second(), f'{resolution=} in "shift" is not a supported bar resolution (e.g. "1m", "1h", "1d"), there is no shifting in second bars'
-            if resolution.is_day():
-                assert shift < 24, f'{shift=} must be less than 24 for {resolution=}'
-            self.add_extra_resolution(resolution)
-            
-    def _validate_stale_bar_timeout(self):
-        for resolution, timeout in self.stale_bar_timeout.items():
-            assert resolution.is_bar(), f'{resolution=} in "stale_bar_timeout" must be a bar resolution (e.g. "1s", "1m", "1h", "1d")'
+    @field_validator('shift', mode='after')
+    @classmethod
+    def validate_shift_after(cls, v: dict[Resolution, int]) -> dict[Resolution, int]:
+        for resolution, shift in v.items():
+            if not resolution.is_bar():
+                raise ValueError(f'{resolution=} in "shift" must be a bar resolution (e.g. "1m", "1h", "1d")')
+            if resolution.is_second():
+                raise ValueError(f'{resolution=} in "shift" must not be a second resolution (e.g. "1s"), there is no shifting in second bars')
+            if resolution.is_day() and shift >= 24:
+                raise ValueError(f'{shift=} must be less than 24 for {resolution=}')
+        return v
+
+    @field_validator('skip_first_bar', mode='before')
+    @classmethod
+    def validate_skip_first_bar(cls, v: dict[Resolution | str, bool]) -> dict[Resolution, bool]:
+        return { Resolution(resolution): is_skip for resolution, is_skip in v.items() }
+
+    @field_validator('stale_bar_timeout', mode='before')
+    @classmethod
+    def validate_stale_bar_timeout(cls, v: dict[Resolution | str, float]) -> dict[Resolution, float]:
+        return { Resolution(resolution): timeout for resolution, timeout in v.items() }
+    
+    @field_validator('stale_bar_timeout', mode='after')
+    @classmethod
+    def validate_stale_bar_timeout_after(cls, v: dict[Resolution, float]) -> dict[Resolution, float]:
+        for resolution, timeout in v.items():
+            if not resolution.is_bar():
+                raise ValueError(f'{resolution=} in "stale_bar_timeout" must be a bar resolution (e.g. "1s", "1m", "1h", "1d")')
             resolution_in_seconds = resolution.to_seconds()
-            assert timeout < resolution_in_seconds, f'{resolution=} {timeout=} in "stale_bar_timeout" must be less than {resolution_in_seconds} seconds'
-        
+            if timeout >= resolution_in_seconds:
+                raise ValueError(f'{resolution=} {timeout=} in "stale_bar_timeout" must be less than {resolution_in_seconds} seconds')
+        return v
+    
+    def add_extra_resolution(self, resolution: Resolution):
+        if resolution not in self.extra_resolutions:
+            self.extra_resolutions.append(resolution)
+            
+    # TODO: detect bar shift based on the returned data by e.g. Yahoo Finance, its hourly data starts from 9:30 to 10:30 etc.
+    def auto_shift(self):
+        pass
+    
     def auto_resample(self, supported_resolutions: dict) -> bool:
         '''Resamples the resolutions automatically if not supported officially.
         Returns True if auto_resampling is needed.
@@ -162,38 +242,5 @@ class DataConfig(BaseModel):
                     output_resample[resamplee_resolution] = supported_resolution
                 
         if is_auto_resampled := (output_resample != input_resample):
-            self.update_resample(output_resample)
+            self.resample = {**self.resample, **output_resample}  # Triggers validation automatically
         return is_auto_resampled
-    
-    def add_extra_resolution(self, resolution: Resolution):
-        if resolution not in self.extra_resolutions:
-            self.extra_resolutions.append(resolution)
-            self._set_default_skip_first_bar(resolution)
-            self._set_default_stale_bar_timeout(resolution)
-            
-    def update_resample(self, resample: dict):
-        self.resample.update(resample)
-        for resamplee_resolution, resampler_resolution in resample.items():
-            self.add_extra_resolution(resamplee_resolution)
-            self.add_extra_resolution(resampler_resolution)
-        self._validate_resample()
-    
-    # TODO: detect bar shift based on the returned data by e.g. Yahoo Finance, its hourly data starts from 9:30 to 10:30 etc.
-    def update_shift(self):
-        pass
-    
-    def _set_default_skip_first_bar(self, resolution: Resolution):
-        if resolution in self.skip_first_bar or not resolution.is_bar():
-            return
-        # the first bar is very likely incomplete due to resampling, excluding cases like resample={'1h': '60m'}
-        if resolution in self.resample and resolution != self.resample[resolution]:
-            default_skip_first_bar = True
-        else:
-            default_skip_first_bar = False
-        self.skip_first_bar[resolution] = default_skip_first_bar
-    
-    def _set_default_stale_bar_timeout(self, resolution: Resolution):
-        if resolution in self.stale_bar_timeout or not resolution.is_bar():
-            return
-        default_timeout = resolution.to_seconds() * 0.1
-        self.stale_bar_timeout[resolution] = default_timeout

@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     from pfund.enums import PrivateDataChannel, PublicDataChannel
     from pfund.typing import tEnvironment, ProductName, AccountName
     from pfund.datas.resolution import Resolution
-    from pfund.engines.trade_engine_settings import TradeEngineSettings
+    from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.entities.orders.order_base import BaseOrder
     from pfund.entities.products.product_base import BaseProduct
     from pfund.entities.accounts.account_base import BaseAccount

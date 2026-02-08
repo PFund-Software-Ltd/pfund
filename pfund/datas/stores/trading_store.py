@@ -1,64 +1,89 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    import datetime
-    from logging import Logger
-    from pfeed.enums import DataTool, DataStorage
+    from pfund.engines.engine_context import EngineContext
     from pfeed.typing import GenericFrame, GenericSeries
     from pfeed.storages.base_storage import BaseStorage
-    from pfeed.sources.pfund.engine_feed import PFundEngineFeed
-    from pfeed.sources.pfund.data_model import PFundDataModel
+    from pfeed.sources.pfund.component_feed import PFundComponentFeed
+    from pfeed.sources.pfund.component_data_model import PFundComponentDataModel
+    from pfund.datas.stores.base_data_store import BaseDataStore
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund.engines.engine_context import DataParamsDict
 
-from pfeed.enums import DataCategory, DataLayer
-from pfund.enums import Environment
+import logging
+
+import pfeed as pe
+from pfeed.enums import DataStorage, DataCategory, DataLayer, IOFormat
+from pfund.datas.storage_config import StorageConfig
 from pfund.datas.stores.market_data_store import MarketDataStore
 
 
 class TradingStore:
     '''
-    A TradingStore is a store that contains all data used in trading, from market data, computed features, to model predictions etc.
+    A TradingStore is a store that contains all data used by a component (e.g. strategy) in trading, from market data, computed features, to model predictions etc.
     '''
-    def __init__(self, env: Environment, data_params: DataParamsDict):
-        from pfeed.sources.pfund import PFund
-
-        self._logger = None
-        self._env = env
-        self._data_params: DataParamsDict = data_params
-        
-        
-        # FIXME
-        # self._feed: PFundEngineFeed = PFund(
-        #     env=env.value,
-        #     data_tool=data_tool.value,
-        #     use_ray=False,  # FIXME
-        #     use_deltalake=True,
-        # )
-        self._feed = None
-        
-        # FIXME
-        # self._data_stores = {
-        #     DataCategory.MARKET_DATA: MarketDataStore(
-        #         data_tool=data_params['data_tool'],
-        #         storage=data_params['storage'],
-        #         storage_options=data_params['storage_options'],
-        #         feed=self._feed,
-        #     ),
-        # }
+    def __init__(self, context: EngineContext):
+        self._logger = logging.getLogger('pfund')
+        self._context: EngineContext = context
+        self._feed: PFundComponentFeed = pe.PFund(env=context.env).component_feed
+        self._storage: BaseStorage = self._create_storage()
+        self._data_stores: dict[DataCategory, BaseDataStore] = {}
         self._df: GenericFrame | None = None
         self._df_updates = []
-        
+    
+    # TODO
+    def _prepare_df(self) -> GenericFrame:
+        pass
+    
     @property
     def market_data_store(self) -> MarketDataStore:
-        return self._data_stores[DataCategory.MARKET_DATA]
+        return self.get_data_store(DataCategory.MARKET_DATA)
     market = market_data_store
 
-    def _set_logger(self, logger: Logger):
-        self._logger = logger
-        for store in self._data_stores.values():
-            store._set_logger(logger)
-    
+    def _create_data_store(self, category: DataCategory) -> BaseDataStore:
+        if category == DataCategory.MARKET_DATA:
+            return MarketDataStore(self._context)
+        else:
+            raise ValueError(f'{category} is not supported')
+        
+    def get_data_store(self, category: DataCategory) -> BaseDataStore:
+        if category in self._data_stores:
+            return self._data_stores[category]
+        else:
+            return self._create_data_store(category)
+
+    def _create_storage(self) -> BaseStorage:
+        '''Create storage for component data to store signal dfs.
+        e.g. {strategy_name}.parquet, {model_name}.parquet, etc.
+        '''
+        config = self._context.config
+        settings = self._context.settings
+        storage = DataStorage[config.database]
+        storage_config: StorageConfig = StorageConfig(
+            data_path=config.data_path,
+            data_layer=DataLayer.CURATED,
+            data_domain='trading_store',
+            storage=DataStorage.LOCAL,
+            io_format=IOFormat.PARQUET,
+        )
+        storage_options: dict = settings.storage_options.get(storage, {})
+        io_options: dict = settings.io_options.get(storage_config.io_format, {})
+        Storage = storage.storage_class
+        # TODO
+        data_model: PFundComponentDataModel = self._feed.create_data_model(...)
+        return (
+            Storage(
+                data_path=storage_config.data_path,
+                data_layer=storage_config.data_layer,
+                data_domain=storage_config.data_domain,
+                storage_options=storage_options,
+            )
+            .with_data_model(data_model)
+            .with_io(
+                io_options=io_options,
+                io_format=storage_config.io_format,
+            )
+        )
+
     def get_market_data_df(self, data: TimeBasedData | None=None, unstack: bool=False) -> GenericFrame | None:
         if data is None:
             return self.market.data
@@ -112,17 +137,20 @@ class TradingStore:
     def _get_df(self) -> GenericFrame | None:
         pass
 
-    def _materialize(self):
+    def materialize(self):
         for data_store in self._data_stores.values():
-            data_store._materialize()
+            data_store.materialize()
         
+    # TODO: I/O should be async
     def _write_to_storage(self, data: GenericFrame):
+        '''Load pfund's component (strategy/model/feature/indicator) data 
+        from the online store (TradingStore) to the offline store (pfeed's data lakehouse).
         '''
-        Load pfund's component (strategy/model/feature/indicator) data from the online store (TradingStore) to the offline store (pfeed's data lakehouse).
-        '''
-        import pfeed as pe
+        import pfeed as pe        
+
         
-        data_model: PFundDataModel = self._feed.create_data_model(...)
+        data_model: PFundComponentDataModel = self._feed.create_data_model(...)
+        
         data_layer = DataLayer.CURATED
         data_domain = 'trading_data'
         metadata = {}  # TODO
@@ -137,7 +165,7 @@ class TradingStore:
         self._logger.info(f'wrote {data_model} data to {storage.name} in {data_layer=} {data_domain=}')
 
     # TODO: when pfeed's data recording is ready
-    def _rehydrate_from_lakehouse(self):
+    def _rehydrate_from_pfeed(self):
         '''
         Load data from pfeed's data lakehouse if theres missing data after backfilling.
         '''

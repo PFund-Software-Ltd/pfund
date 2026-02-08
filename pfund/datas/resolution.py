@@ -1,8 +1,6 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pfund.typing import ResolutionRepr
+from typing import ClassVar, cast
+from typing_extensions import override
 
 import re
 from enum import StrEnum
@@ -33,13 +31,14 @@ class ResolutionUnit(StrEnum):
         return self._aliases
 
     @classmethod
-    def standardize(cls, s: str) -> ResolutionUnit:
-        '''Standardize the resolution unit string to the canonical value.'''
-        s_lower = s.lower()
+    @override
+    def _missing_(cls, value: str) -> ResolutionUnit | None:
+        '''Called when lookup fails - search by alias'''
+        value_lower = value.lower()
         for unit in cls:
-            if s_lower in unit._aliases:
+            if value_lower in unit._aliases:
                 return unit
-        raise ValueError(f"Unknown resolution unit: {s}")
+        return None  # Let default error handling take over
 
     @classmethod
     def pattern(cls) -> str:
@@ -51,9 +50,9 @@ class ResolutionUnit(StrEnum):
 
 
 class Resolution:
-    DEFAULT_ORDERBOOK_LEVEL = 1
+    DEFAULT_ORDERBOOK_LEVEL: ClassVar[int] = 1
 
-    def __init__(self, resolution: Resolution | ResolutionRepr):
+    def __init__(self, resolution: Resolution | str):
         """
         Args:
             resolution: e.g. '1m', '1minute', '1quote_L1'
@@ -61,7 +60,7 @@ class Resolution:
             it will be converted to resolution by adding '1' to the beginning.
             e.g. 'minute' -> '1m', 'daily' -> '1d'
         """
-        from pfund.datas.timeframe import Timeframe
+        from pfund.datas.timeframe import Timeframe, TimeframeStr
 
         if isinstance(resolution, Resolution):
             # Copy all attributes from the resolution object
@@ -69,8 +68,9 @@ class Resolution:
             return
 
         period, timeframe, orderbook_level = self._parse(resolution)
-        self.period = int(period)
-        self.timeframe = Timeframe(ResolutionUnit.standardize(timeframe))
+        self.period: int = int(period)
+        self.unit: ResolutionUnit = ResolutionUnit(timeframe)
+        self.timeframe: Timeframe = Timeframe(cast(TimeframeStr, self.unit.value))
         self.orderbook_level: int | None = self._resolve_orderbook_level(orderbook_level)
 
     def _parse(self, resolution: str) -> tuple[str, str, str | None]:
@@ -97,6 +97,8 @@ class Resolution:
         resolution, *orderbook_level = resolution.strip().split("_")
         if not orderbook_level:
             orderbook_level = None
+        else:
+            orderbook_level = orderbook_level[0]
 
         # extract period and timeframe
         period, timeframe = re.split(r"(\d+)", resolution.strip())[1:]
@@ -234,13 +236,13 @@ class Resolution:
         return lower_resolutions
 
     def __str__(self):
-        resolution = f"{self.period}_{self.timeframe}"
+        resolution = f"{self.period}_{self.unit.name}"
         if self.orderbook_level:
             resolution += f"_L{self.orderbook_level}"
         return resolution
 
     def __repr__(self):
-        resoultion = f"{self.period}{repr(self.timeframe)}"
+        resoultion = f"{self.period}{self.unit.value}"
         if self.orderbook_level:
             resoultion += f"_L{self.orderbook_level}"
         return resoultion

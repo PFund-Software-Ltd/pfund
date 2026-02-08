@@ -1,12 +1,11 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING, TypeAlias, overload
 if TYPE_CHECKING:
     import datetime
-    from pfeed.typing import tDataSource, GenericFrame
+    from pfeed.typing import GenericFrame
     from pfeed.enums import DataStorage
     from pfeed.feeds.market_feed import MarketFeed
-    from pfeed.data_models.market_data_model import MarketDataModel
-    from pfund.typing import ComponentName
+    from pfund.datas.data_market import MarketData
     from pfund.datas.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
 
@@ -22,6 +21,11 @@ ResolutionRepr: TypeAlias = str
 
 
 class MarketDataStore(BaseDataStore):
+    
+    @overload
+    def _create_feed(self, data: MarketData) -> MarketFeed: 
+        ...
+            
     def materialize(self):
         '''Loads data from pfeed's data lakehouse into the store'''
         dfs = []

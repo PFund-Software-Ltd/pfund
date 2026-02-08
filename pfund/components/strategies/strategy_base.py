@@ -55,12 +55,8 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         
         self.__mixin_post_init__(*args, **kwargs)  # calls ComponentMixin.__mixin_post_init__()
     
-    # TODO: warning if sub-strategy adds risk guard
-    def add_risk_guard(self, risk_guard: RiskGuard):
-        raise NotImplementedError("RiskGuard is not implemented yet")
-    
-    def _set_top_strategy(self, is_top_strategy: bool):
-        self._is_top_strategy = is_top_strategy
+    def _set_top_strategy(self):
+        self._is_top_strategy = True
     
     def is_top_strategy(self) -> bool:
         return self._is_top_strategy

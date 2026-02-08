@@ -19,6 +19,7 @@ from pfund.enums.data_channel import (
     DataChannelType, 
     PFundDataChannel,
 )
+from pfund.enums.database import Database
 
 
 __all__ = [
@@ -50,4 +51,5 @@ __all__ = [
     "PrivateDataChannel",
     "DataChannelType",
     "PFundDataChannel",
+    "Database",
 ]

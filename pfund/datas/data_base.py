@@ -2,17 +2,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pfeed.enums import DataSource, DataCategory
-    from pfund.enums import TradingVenue, Broker, CryptoExchange
 
 from abc import ABC, abstractmethod
-from pfund.entities.products.product_base import BaseProduct
 
 
 class BaseData(ABC):
-    def __init__(self, data_source: DataSource, data_origin: str, product: BaseProduct | None=None):
+    def __init__(self, data_source: DataSource, data_origin: str):
         self.source: DataSource = data_source
         self.origin: str = data_origin or data_source.value
-        self.product: BaseProduct | None = product
         self._extra_data: dict[str, Any] = {}
         self._custom_data: dict[Any, Any] = {}
         
@@ -38,24 +35,6 @@ class BaseData(ABC):
     
     def update_custom_data(self, custom_data: dict):
         self._custom_data = custom_data
-    
-    def is_time_based(self):
-        return False
-    
-    @property
-    def trading_venue(self) -> TradingVenue | None:
-        return self.product.trading_venue if self.product else None
-    tv = trading_venue
-    
-    @property
-    def broker(self) -> Broker | None:
-        return self.product.broker if self.product else None
-    bkr = broker
-    
-    @property
-    def exchange(self) -> CryptoExchange | str | None:
-        return self.product.exchange if self.product else None
-    exch = exchange
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, BaseData):
@@ -63,8 +42,7 @@ class BaseData(ABC):
         return (
             self.source == other.source
             and self.origin == other.origin
-            and self.product == other.product
         )
     
     def __hash__(self):
-        return hash((self.source, self.origin, self.product))
+        return hash((self.source, self.origin))

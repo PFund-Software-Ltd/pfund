@@ -12,9 +12,7 @@ if TYPE_CHECKING:
 
 import logging
 import datetime
-import uuid
 
-from pfund import get_config
 from pfund.components.actor_proxy import ActorProxy
 from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
@@ -35,8 +33,6 @@ ENV_COLORS = {
     Environment.PAPER: 'bold red',
     Environment.LIVE: 'bold green',
 }
-config = get_config()
-
 
 
 class BaseEngine:
@@ -53,7 +49,7 @@ class BaseEngine:
                 when it is a dict, it is a dict with keys 'start_date' and 'end_date', 
                     e.g. {'start_date': '2024-01-01', 'end_date': '2024-12-31'}
         '''
-        from pfund.config import setup_logging, get_logging_config
+        from pfund.config import setup_logging
         from pfund_kit.style import cprint
         from pfund.engines.engine_context import EngineContext
         
@@ -65,17 +61,11 @@ class BaseEngine:
         
         setup_logging(env=env)
         self._logger = logging.getLogger('pfund')
-        self._id = uuid.uuid4().hex[:8]
+        self._context: EngineContext = EngineContext(env=env, data_range=data_range)
         self._is_running: bool = False
         self._is_gathered: bool = False
         self.brokers: dict[Broker, BaseBroker] = {}
         self.strategies: dict[str, BaseStrategy | ActorProxy] = {}
-        self._context: EngineContext = EngineContext(
-            env=env, 
-            name=self.name, 
-            data_range=data_range, 
-            logging_config=get_logging_config(),
-        )
         cprint(f"{self.env} {self.name} is running (data_range=({self.data_start}, {self.data_end}))", style=ENV_COLORS[self.env])
     
     @property
@@ -84,11 +74,11 @@ class BaseEngine:
     
     @property
     def id(self) -> str:
-        return self._id
+        return self._context.id
     
     @property
     def name(self) -> str:
-        return f'{self.__class__.__name__}-{self.id}'
+        return self._context.name
     
     @property
     def settings(self) -> TradeEngineSettings | BacktestEngineSettings:
@@ -105,6 +95,9 @@ class BaseEngine:
     def is_running(self) -> bool:
         return self._is_running
     
+    def is_remote(self) -> bool:
+        return self._context.run_mode == RunMode.REMOTE
+    
     def configure_settings(self, settings: TradeEngineSettings | BacktestEngineSettings):
         '''Overrides the loaded settings with the given settings object and saves it to settings.toml
 
@@ -112,6 +105,9 @@ class BaseEngine:
             settings: settings object to override the current settings (if any)
         '''
         from pfund_kit.utils import toml
+        from pfund import get_config
+
+        config = get_config()
 
         if not isinstance(settings, (TradeEngineSettings, BacktestEngineSettings)):
             raise ValueError(f"Invalid settings type: {type(settings)}")
@@ -123,15 +119,6 @@ class BaseEngine:
 
         # update settings in config
         self._context.settings = settings
-    
-    # TODO: create EngineMetadata class (typed dict/dataclass/pydantic model)
-    def to_dict(self) -> dict:
-        return {
-            'env': self.env.value,
-            'data_start': self.data_start.strftime('%Y-%m-%d'),
-            'data_end': self.data_end.strftime('%Y-%m-%d'),
-            'settings': self.settings.model_dump(),
-        }
     
     def add_strategy(
         self, 
@@ -148,7 +135,6 @@ class BaseEngine:
                 will be passed to ray actor like this: Actor.options(**ray_options).remote(**ray_kwargs)
         '''
         from pfund.components.strategies.strategy_base import BaseStrategy
-        from pfund.utils import derive_run_mode
         
         Strategy = strategy.__class__
         StrategyName = Strategy.__name__
@@ -159,17 +145,20 @@ class BaseEngine:
         if strat in self.strategies:
             raise ValueError(f"{strat} already exists")
 
-        run_mode: RunMode = derive_run_mode(ray_kwargs)
-        if is_remote := (run_mode == RunMode.REMOTE):
+        if ray_kwargs:
+            if not self.is_remote():
+                from pfeed.utils.ray import setup_ray
+                setup_ray()
             strategy = ActorProxy(strategy, name=name, ray_actor_options=ray_actor_options, **ray_kwargs)
             strategy._set_proxy(strategy)
+
         strategy._hydrate(
             name=strat,
-            run_mode=run_mode,
+            run_mode=RunMode.REMOTE if ray_kwargs else RunMode.LOCAL,
             resolution=resolution,
             engine_context=self._context
         )
-        strategy._set_top_strategy(True)
+        strategy._set_top_strategy()
 
         self.strategies[strat] = strategy
         self._logger.debug(f"added '{strat}'")
@@ -267,6 +256,7 @@ class BaseEngine:
             self._logger.debug(f'{self.name} is already running')
 
     def end(self):
+        from pfeed.utils.ray import shutdown_ray
         if self.is_running():
             self._is_running = False
             for strategy in self.strategies.values():
@@ -275,3 +265,4 @@ class BaseEngine:
                 broker.stop()
         else:
             self._logger.debug(f'{self.name} is not running')
+        shutdown_ray()

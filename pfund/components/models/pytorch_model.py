@@ -31,7 +31,7 @@ class PytorchModel(BaseModel):
             # TODO, refer to model_base, e.g. dump self.datas
             # 'dataset_periods': {
             #     'train_period': "2020-01-01 to 2020-12-31",
-            #     'val_period': ...,
+            #     'dev_period': ...,
             #     'test_period': ...,
             # },
             # "data_info": {

@@ -48,8 +48,8 @@ class TradeEngine(BaseEngine):
             receiver_type=zmq.XSUB,  # subscribe to data engine, component's logs (if using ray) etc.
         )
         sender_name = "proxy"
-        zmq_ports = self._settings.zmq_ports
-        engine_zmq_url = self._settings.zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL)
+        zmq_ports = self.settings.zmq_ports
+        engine_zmq_url = self.settings.zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL)
         self._proxy.bind(
             socket=self._proxy.sender,
             port=zmq_ports.get(sender_name, None),
@@ -65,21 +65,21 @@ class TradeEngine(BaseEngine):
                     url=engine_zmq_url,
                 )
                 self._logger.debug(f"zmq proxy connected to {zmq_name} at {engine_zmq_url}:{zmq_port}")
-        self._settings.zmq_ports.update({ sender_name: proxy_zmq_port })
+        self.settings.zmq_ports.update({ sender_name: proxy_zmq_port })
     
     def _setup_worker(self):
         import zmq
         from pfeed.streaming.zeromq import ZeroMQ
         # pull from components, e.g. orders
         self._worker = ZeroMQ(name=self.name+"_worker", logger=self._logger, receiver_type=zmq.PULL)
-        for zmq_name, zmq_port in self._settings.zmq_ports.items():
+        for zmq_name, zmq_port in self.settings.zmq_ports.items():
             if zmq_name in ['proxy', 'data_engine'] or zmq_name.endswith("_logger"):
                 continue
             if zmq_name.endswith("_data"):
                 component_name = zmq_name.replace("_data", "")
             else:
                 component_name = zmq_name
-            zmq_url = self._settings.zmq_urls.get(component_name, ZeroMQ.DEFAULT_URL)
+            zmq_url = self.settings.zmq_urls.get(component_name, ZeroMQ.DEFAULT_URL)
             self._worker.connect(
                 socket=self._worker.receiver,
                 port=zmq_port,
@@ -106,9 +106,6 @@ class TradeEngine(BaseEngine):
         '''
         super().run()
         # NOTE: need to init ray in the main thread to avoid "SIGTERM handler is not set because current thread is not the main thread"
-        import ray
-        if not ray.is_initialized():
-            ray.init(**ray_kwargs)
         while self.is_running():
             try:
                 # TODO: receive positions, balances etc.
@@ -130,8 +127,6 @@ class TradeEngine(BaseEngine):
                 break
         if self.is_running():
             self.end()
-        if ray.is_initialized():
-            ray.shutdown()
     
     def end(self):
         super().end()
@@ -139,4 +134,3 @@ class TradeEngine(BaseEngine):
             self._proxy.terminate()
         if self._worker:
             self._worker.terminate()
-    

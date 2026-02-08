@@ -1,21 +1,20 @@
-from typing_extensions import TypedDict, Annotated
-from typing import TypeVar, Literal, TypeAlias, Union
+from __future__ import annotations
+from typing import TYPE_CHECKING, TypeVar, Literal, TypeAlias
+if TYPE_CHECKING:
+    from pfund.components.strategies.strategy_base import BaseStrategy
+    from pfund.components.models.model_base import BaseModel
+    from pfund.components.features.feature_base import BaseFeature
+    from pfund.components.indicators.indicator_base import BaseIndicator
+    from pfund.entities.products.product_base import BaseProduct
 
-from pfund.datas.resolution import Resolution
-from pfund.components.strategies.strategy_base import BaseStrategy
-from pfund.components.models.model_base import BaseModel
-from pfund.components.features.feature_base import BaseFeature
-from pfund.components.indicators.indicator_base import BaseIndicator
-from pfund.entities.products.product_base import BaseProduct
+    StrategyT = TypeVar('StrategyT', bound=BaseStrategy)
+    ModelT = TypeVar('ModelT', bound=BaseModel)
+    FeatureT = TypeVar('FeatureT', bound=BaseFeature)
+    IndicatorT = TypeVar('IndicatorT', bound=BaseIndicator)
+    ProductT = TypeVar('ProductT', bound=BaseProduct)
 
+    Component = BaseStrategy | BaseModel | BaseFeature | BaseIndicator
 
-StrategyT = TypeVar('StrategyT', bound=BaseStrategy)
-ModelT = TypeVar('ModelT', bound=BaseModel)
-FeatureT = TypeVar('FeatureT', bound=BaseFeature)
-IndicatorT = TypeVar('IndicatorT', bound=BaseIndicator)
-ProductT = TypeVar('ProductT', bound=BaseProduct)
-
-Component = BaseStrategy | BaseModel | BaseFeature | BaseIndicator
 EngineName: TypeAlias = str
 ComponentName: TypeAlias = str
 ProductName: TypeAlias = str
@@ -35,23 +34,15 @@ tOrderType = Literal['LIMIT', 'MARKET', 'STOP_MARKET', 'STOP_LIMIT']
 
 ComponentNameWithData: TypeAlias = ComponentName
 ComponentNameWithLogger: TypeAlias = ComponentName
-ZeroMQSenderName = Union[
+ZeroMQSenderName = (
     Literal[
         "data_engine",  # ZeroMQ data engine for pulling data from trading venues
         "proxy",  # ZeroMQ publisher for broadcasting internal states to external apps
-    ],
+    ]
     # each component has TWO ZeroMQ ports:
     # ComponentName is used for component's signals_zmq
     # ComponentNameWithData is used for component's data_zmq
-    ComponentName,
-    ComponentNameWithData,  # {component_name}_data
-    ComponentNameWithLogger,  # {component_name}_logger
-]
-
-
-class DataConfigDict(TypedDict, total=False):  # total=False makes fields optional
-    extra_resolutions: list[Resolution]
-    resample: dict[Annotated[Resolution, "ResampleeResolution"], Annotated[Resolution, "ResamplerResolution"]]
-    shift: dict[Resolution, int]
-    skip_first_bar: dict[Resolution, bool]
-    stale_bar_timeout: int
+    | ComponentName
+    | ComponentNameWithData  # {component_name}_data
+    | ComponentNameWithLogger  # {component_name}_logger
+)

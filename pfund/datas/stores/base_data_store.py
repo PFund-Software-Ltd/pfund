@@ -1,34 +1,24 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from pfeed.enums import DataTool, DataStorage
-    from pfeed.typing import GenericData
-    from pfeed.sources.pfund.engine_feed import PFundEngineFeed
-    from pfeed.sources.pfund.data_model import PFundDataModel
-    from pfeed.storages.base_storage import BaseStorage
-    
-from abc import ABC, abstractmethod
-from logging import Logger
 
-from pfeed.enums import DataLayer
+if TYPE_CHECKING:
+    from pfeed.typing import GenericData
+    from pfeed.feeds import BaseFeed
+    from pfund.engines.engine_context import EngineContext
+    from pfund.datas.storage_config import StorageConfig
+    from pfund.datas.data_base import BaseData
+    
+import logging
+from abc import ABC, abstractmethod
 
 
 class BaseDataStore(ABC):
-    def __init__(
-        self, 
-        data_tool: DataTool,
-        storage: DataStorage,
-        storage_options: dict,
-        feed: PFundEngineFeed,
-    ):
-        self._data_tool = data_tool
-        self._storage = storage
-        self._storage_options = storage_options
-        self._logger: Logger | None = None
-        self._feed: PFundEngineFeed = feed
-        self._data: GenericData | None = None
-        self._data_updates = []
-        
+    def __init__(self, context: EngineContext):
+        self._logger = logging.getLogger('pfund')
+        self._context: EngineContext = context
+        self._feeds: dict[BaseData, BaseFeed] = {}
+        self._storage_configs: dict[BaseData, StorageConfig] = {}
+
     @abstractmethod
     def materialize(self, *args, **kwargs):
         pass
@@ -37,36 +27,18 @@ class BaseDataStore(ABC):
     def _get_historical_data(self, *args, **kwargs) -> GenericData:
         pass
 
-    @property
-    def data(self) -> GenericData | None:
-        if self._data is None:
-            # TODO: read from storage if data is not in memory
-            pass
-        else:
-            return self._data
-    
-    def _set_logger(self, logger: Logger):
-        self._logger = logger
-        
-    def _set_data(self, data: GenericData):
-        self._data = data
-    
-    # TODO: I/O should be async
-    def _write_to_storage(self, data: GenericData):
-        '''
-        Load data (e.g. market data) from the online store (TradingStore) to the offline store (pfeed's data lakehouse).
-        '''
-        import pfeed as pe
-        data_model: PFundDataModel = self._feed.create_data_model(...)
-        data_layer = DataLayer.CURATED
-        data_domain = 'trading_data'
-        metadata = {}  # TODO
-        storage: BaseStorage = pe.create_storage(
-            storage=self._storage.value,
-            data_model=data_model,
-            data_layer=data_layer.value,
-            data_domain=data_domain,
-            storage_options=self._storage_options,
+    def _create_feed(self, data: BaseData) -> BaseFeed:
+        from pfeed.feeds import create_feed
+        return create_feed(
+            data_source=data.source,
+            data_category=data.category,
+            pipeline_mode=True,
         )
-        storage.write_data(data, metadata=metadata)
-        self._logger.info(f'wrote {data_model} data to {storage.name} in {data_layer=} {data_domain=}')
+    
+    def add_data(self, data: BaseData, storage_config: StorageConfig | None):
+        if storage_config is None:
+            storage_config = StorageConfig()
+        if not storage_config.data_domain:
+            storage_config.data_domain = data.category
+        self._storage_configs[data] = storage_config
+        self._feeds[data] = self._create_feed(data)

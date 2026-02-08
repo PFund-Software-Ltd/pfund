@@ -3,6 +3,19 @@ from typing import Literal
 from enum import IntEnum
 
 
+TimeframeStr = Literal[
+    'QUOTE', 'q', 
+    'TICK', 't',
+    'SECOND', 's',
+    'MINUTE', 'm',
+    'HOUR', 'h',
+    'DAY', 'd',
+    'WEEK', 'w',
+    'MONTH', 'mo',
+    'YEAR', 'y'
+]
+
+
 class TimeframeUnit(IntEnum):
     QUOTE = q = -2
     TICK = t = -1
@@ -17,8 +30,8 @@ class TimeframeUnit(IntEnum):
 
 
 class Timeframe:
-    def __init__(self, timeframe: Literal['q', 't', 's', 'm', 'h', 'd', 'w', 'mo', 'y']):
-        self.unit = TimeframeUnit[timeframe]
+    def __init__(self, timeframe: TimeframeStr):
+        self.unit: TimeframeUnit = TimeframeUnit[timeframe]
     
     def higher(self):
         """Rotate to the next higher timeframe. e.g. HOUR is higher than MINUTE."""

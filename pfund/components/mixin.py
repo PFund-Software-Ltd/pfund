@@ -1,18 +1,16 @@
+# pyright: reportUninitializedInstanceVariable=false
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import torch
     import numpy as np
     import pandas as pd
     import polars as pl
-    from pfeed.typing import tDataSource
     from pfund.typing import (
         StrategyT, 
         ModelT, 
         IndicatorT, 
         FeatureT, 
-        DataConfigDict, 
-        tTradingVenue, 
         Component,
         ComponentName,
         ProductName,
@@ -31,16 +29,17 @@ if TYPE_CHECKING:
     from pfund.components.models.model_base import BaseModel
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.indicators.indicator_base import BaseIndicator
-    from pfund.utils.dataset_splitter import DatasetPeriods, CrossValidatorDatasetPeriods
+    from pfund.datas.stores.trading_store import TradingStore
 
 import time
 import logging
 import datetime
 
-from pfund_kit.utils.yaml import load
-from pfund.datas.stores.trading_store import TradingStore
+from pfund_kit.utils import yaml
+from pfeed.enums import DataSource
 from pfund.datas.resolution import Resolution
 from pfund.datas.data_config import DataConfig
+from pfund.datas.storage_config import StorageConfig
 from pfund.components.actor_proxy import ActorProxy
 from pfund.enums import ComponentType, RunMode, Environment, Broker, TradingVenue
 
@@ -50,7 +49,7 @@ class ComponentMixin:
     params = {}
 
     # custom post init for-common attributes of strategy and model
-    def __mixin_post_init__(self: Component, *args, **kwargs):
+    def __mixin_post_init__(self, *args: Any, **kwargs: Any):
         from pfund.datas.databoy import DataBoy
 
         self.__pfund_args__ = args
@@ -97,19 +96,15 @@ class ComponentMixin:
         return self._run_mode
     
     @property
-    def settings(self: Component) -> TradeEngineSettings | BacktestEngineSettings | None:
+    def settings(self) -> TradeEngineSettings | BacktestEngineSettings | None:
         return self._context.settings if self._context else None
-    
-    @property
-    def dataset_periods(self: Component) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
-        return self._context.backtest.dataset_splitter.dataset_periods
     
     # TODO: also check on_bar, on_tick, on_quote etc.
     def _assert_functions_signatures(self):
         pass
 
     def _hydrate(
-        self: Component,
+        self,
         name: ComponentName,
         run_mode: RunMode,
         resolution: Resolution | str,
@@ -124,17 +119,19 @@ class ComponentMixin:
             resolution (Resolution | str): The data resolution used by this component.
             engine_context (EngineContext): The engine context associated with this component. It is None if the component is running in a remote process.
         """
+        from pfund.datas.stores.trading_store import TradingStore
         self._context = engine_context
         self._run_mode = run_mode
         self._set_name(name)
         self._set_resolution(resolution)
         if self.is_remote():
             self._setup_logging()
-        self.store = TradingStore(env=self._context.env, data_params=self._context.get_data_params())
-        self.databoy._setup_messaging()
+        self.store = TradingStore(engine_context)
+        if hasattr(self.settings, 'zmq_urls'):
+            self.databoy._setup_messaging()
     
     # FIXME: integrate pfund_kit logging instead
-    def _setup_logging(self: Component):
+    def _setup_logging(self):
         '''Sets up logging for component running in remote process, uses zmq's PUBHandler to send logs to engine'''
         from pfund.utils.zmq_pub_handler import ZMQPubHandler
         from pfeed.streaming.zeromq import ZeroMQ
@@ -186,7 +183,7 @@ class ComponentMixin:
         if config:
             cls.config = config
         elif file_path:
-            if config := load(file_path):
+            if config := yaml.load(file_path):
                 cls.config = config
     
     @classmethod
@@ -194,12 +191,12 @@ class ComponentMixin:
         if params:
             cls.params = params
         elif file_path:
-            if params := load(file_path):
+            if params := yaml.load(file_path):
                 cls.params = params
     
     # TODO: add versioning, run_id etc.
     # TODO: create ComponentMetadata class (typeddataclass/pydantic model)
-    def to_dict(self: Component) -> dict:
+    def to_dict(self) -> dict:
         metadata = {
             'class': self.__class__.__name__,
             'env': self.env.value,
@@ -229,18 +226,18 @@ class ComponentMixin:
         self._signal_cols = [f'{self.name}-{col}' if not col.startswith(self.name) else col for col in columns]
     
     @property
-    def datas(self: Component) -> dict[BaseProduct, dict[Resolution, TimeBasedData]]:
+    def datas(self) -> dict[BaseProduct, dict[Resolution, TimeBasedData]]:
         return self.databoy.datas
     
     @property
-    def components(self: Component) -> list[Component | ActorProxy]:
+    def components(self) -> list[Component | ActorProxy]:
         components = [*self.models.values(), *self.features.values(), *self.indicators.values()]
         if self.is_strategy():
             components.extend([*self.strategies.values()])
         return components
     
     @property
-    def consumers(self: Component) -> list[Component | ActorProxy]:
+    def consumers(self) -> list[Component | ActorProxy]:
         return self._consumers
     
     @property
@@ -259,7 +256,7 @@ class ComponentMixin:
             return ComponentType.model
     
     def get_df(
-        self: Component, 
+        self, 
         start_idx: int=0, 
         end_idx: int | None=None, 
         product: str | None=None, 
@@ -276,16 +273,16 @@ class ComponentMixin:
         
     # NOTE: df = X + predictions generated by other strategies/models
     @property
-    def df(self: Component):
+    def df(self):
         # TODO: self.store.load_data(...)
         return self.get_df(copy=False)
 
     @property
-    def INDEX(self: Component):
+    def INDEX(self):
         return self.data_tool.INDEX
     
     @property
-    def GROUP(self: Component):
+    def GROUP(self):
         return self.data_tool.GROUP
 
     @staticmethod
@@ -302,7 +299,7 @@ class ComponentMixin:
         return time.time() - ts
     
     @property
-    def resolution(self: Component) -> Resolution | None:
+    def resolution(self) -> Resolution | None:
         return self._resolution
     
     def _set_resolution(self, resolution: Resolution | str):
@@ -317,28 +314,28 @@ class ComponentMixin:
         if not self.name.lower().endswith(self.component_type):
             self.name += f"_{self.component_type}"
     
-    def _add_consumer(self: Component, consumer: Component | ActorProxy):
+    def _add_consumer(self, consumer: Component | ActorProxy):
         if consumer not in self._consumers:
             self._consumers.append(consumer)
         else:
             raise ValueError(f"{self.name} already has a consumer {consumer}")
     
-    def is_strategy(self: Component) -> bool:
+    def is_strategy(self) -> bool:
         return self.component_type == ComponentType.strategy
     
-    def is_model(self: Component) -> bool:
+    def is_model(self) -> bool:
         return self.component_type == ComponentType.model
     
-    def is_indicator(self: Component) -> bool:
+    def is_indicator(self) -> bool:
         return self.component_type == ComponentType.indicator
     
-    def is_feature(self: Component) -> bool:
+    def is_feature(self) -> bool:
         return self.component_type == ComponentType.feature
     
-    def is_running(self: Component) -> bool:
+    def is_running(self) -> bool:
         return self._is_running
     
-    def is_remote(self: Component, direct_only: bool=True) -> bool:
+    def is_remote(self, direct_only: bool=True) -> bool:
         """
         Returns whether this component is running in a remote (Ray) process.
 
@@ -367,12 +364,12 @@ class ComponentMixin:
     
     def _create_product(
         self,
-        trading_venue: tTradingVenue,
+        trading_venue: TradingVenue,
         basis: str,
         exch: str='',
         symbol: str='',
         name: str='',
-        **specs
+        **specs: Any
     ) -> BaseProduct:
         from pfund.brokers import create_broker
         # NOTE: broker is only used to create product but nothing else
@@ -386,7 +383,7 @@ class ComponentMixin:
             raise NotImplementedError(f"Broker {broker.name} is not supported")
         return product
     
-    def _add_product(self: Component, product: BaseProduct) -> BaseProduct:
+    def _add_product(self, product: BaseProduct) -> BaseProduct:
         if product.name not in self.products:
             self.products[product.name] = product
         else:
@@ -394,38 +391,36 @@ class ComponentMixin:
             assert existing_product == product, f"{product.name=} is already used by {existing_product}, cannot use it for {product}"
         return self.products[product.name]
     
-    def get_product(self: Component, name: ProductName) -> BaseProduct | None:
+    def get_product(self, name: ProductName) -> BaseProduct | None:
         return self.products.get(name, None)
     
-    def get_data(self: Component, product: ProductName, resolution: ResolutionRepr) -> MarketData | None:
+    def get_data(self, product: ProductName, resolution: ResolutionRepr) -> MarketData | None:
         return self.databoy.get_data(product, resolution)
     
-    def _prepare_df(self: Component):
-        return self.data_tool.prepare_df(ts_col_type='timestamp')
-    
-    def _append_to_df(self: Component, data: BaseData):
+    def _append_to_df(self, data: BaseData):
         return self.data_tool.append_to_df(data, self.predictions)
     
-    def _get_default_name(self: Component):
+    def _get_default_name(self):
         return self.__class__.__name__
     
     def add_data(
         self, 
-        trading_venue: tTradingVenue,
-        product: str,
+        trading_venue: TradingVenue,
+        product_basis: str,
         exchange: str='',
         symbol: str='',
         product_name: str='',
-        data_source: tDataSource | None=None,
+        data_source: DataSource | None=None,
         data_origin: str='',
-        data_config: DataConfigDict | DataConfig | None=None,
-        **product_specs
-    ) -> list[TimeBasedData]:
+        data_config: DataConfig | None=None,
+        storage_config: StorageConfig | None=None,
+        **product_specs: Any
+    ) -> list[MarketData]:
         '''
         Args:
             exchange: useful for TradFi brokers (e.g. IB), to specify the exchange (e.g. 'NASDAQ')
             symbol: useful for TradFi brokers (e.g. IB), to specify the symbol (e.g. 'AAPL')
-            product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
+            product_basis: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
             product_name: A user-defined identifier for the product.
                 If not provided, the default product symbol (e.g. 'BTC_USDT_PERP', 'TSLA241213C00075000') will be used.
                 This is useful when you need to distinguish between similar instruments, such as options 
@@ -438,26 +433,29 @@ class ComponentMixin:
         '''
         product: BaseProduct = self._create_product(
             trading_venue=trading_venue,
-            basis=product,
+            basis=product_basis,
             exch=exchange,
             symbol=symbol,
             name=product_name,
             **product_specs
         )
-        self._add_product(product)
-        datas: list[TimeBasedData] = self.databoy.add_data(
+        product = self._add_product(product)
+        datas: list[MarketData] = self.databoy.add_data(
             product=product,
-            data_source=data_source or trading_venue,
+            data_source=DataSource[(data_source or trading_venue).upper()],
             data_origin=data_origin,
-            data_config=data_config
+            data_config=data_config or DataConfig(),
         )
+        for data in datas:
+            assert self.store is not None, "trading store must be initialized before adding data"
+            self.store.market.add_data(data=data, storage_config=storage_config)
         return datas
     
     # TODO
-    def add_custom_data(self: Component):
+    def add_custom_data(self):
         raise NotImplementedError
     
-    def _add_datas_from_consumer_if_none(self: Component) -> list[BaseData]:
+    def _add_datas_from_consumer_if_none(self) -> list[BaseData]:
         has_no_data = self._consumer and not self.datas
         if not has_no_data:
             return []
@@ -468,14 +466,14 @@ class ComponentMixin:
             self._consumer._add_listener(self, data)
         return datas
 
-    def get_orderbook(self: Component, product: BaseProduct) -> TimeBasedData | None:
+    def get_orderbook(self, product: BaseProduct) -> TimeBasedData | None:
         return self.get_data(product, '1q')
     
-    def get_tradebook(self: Component, product: BaseProduct) -> TimeBasedData | None:
+    def get_tradebook(self, product: BaseProduct) -> TimeBasedData | None:
         return self.get_data(product, '1t')
     
     def _add_component(
-        self: Component, 
+        self, 
         component: StrategyT | ModelT | FeatureT | IndicatorT | ActorProxy,
         name: str='', 
         min_data: int | None=None,
@@ -506,8 +504,6 @@ class ComponentMixin:
                 Options for Ray actor.
                 will be passed to ray actor like this: Actor.options(**ray_options).remote(**ray_kwargs)
         '''
-        from pfund.utils import derive_run_mode
-
         Component = component.__class__
         ComponentName = Component.__name__
         if component.is_model():
@@ -533,13 +529,15 @@ class ComponentMixin:
             if component_name in components:
                 raise ValueError(f"{component_name} already exists")
             
-            run_mode: RunMode = derive_run_mode(ray_kwargs)
-            if is_remote := (run_mode == RunMode.REMOTE):
+            if ray_kwargs:
+                if not self.is_remote(direct_only=False):
+                    from pfeed.utils.ray import setup_ray
+                    setup_ray()
                 component = ActorProxy(component, name=component_name, ray_actor_options=ray_actor_options, **ray_kwargs)
                 component._set_proxy(component)
             component._hydrate(
                 name=component_name,
-                run_mode=run_mode,
+                run_mode=RunMode.REMOTE if ray_kwargs else RunMode.LOCAL,
                 resolution=self._resolution,
                 engine=self._context,
             )
@@ -566,7 +564,7 @@ class ComponentMixin:
             return component
     
     def add_model(
-        self: Component, 
+        self, 
         model: ModelT | ActorProxy,
         name: str='',
         min_data: int | None=None,
@@ -591,7 +589,7 @@ class ComponentMixin:
         return self.models[name]
     
     def add_feature(
-        self: Component, 
+        self, 
         feature: FeatureT | ActorProxy, 
         name: str='',
         min_data: int | None=None,
@@ -616,7 +614,7 @@ class ComponentMixin:
         return self.features[name]
     
     def add_indicator(
-        self: Component, 
+        self, 
         indicator: IndicatorT | ActorProxy,
         name: str='',
         min_data: int | None=None,
@@ -640,7 +638,7 @@ class ComponentMixin:
     def get_indicator(self, name: str) -> BaseIndicator | ActorProxy:
         return self.indicators[name]
 
-    def _on_quote(self: Component, data: QuoteData):
+    def _on_quote(self, data: QuoteData):
         product, bids, asks, ts = data.product, data.bids, data.asks, data.ts
         local_components = self._local_components.get(data, [])
         for component in local_components:
@@ -649,7 +647,7 @@ class ComponentMixin:
         self._append_to_df(data)
         self.on_quote(product, bids, asks, ts)
 
-    def _on_tick(self: Component, data: TickData):
+    def _on_tick(self, data: TickData):
         product, px, qty, ts = data.product, data.px, data.qty, data.ts
         for listener in self._listeners[data]:
             listener._on_tick(data)
@@ -657,7 +655,7 @@ class ComponentMixin:
         self._append_to_df(data)
         self.on_tick(product, px, qty, ts)
     
-    def _on_bar(self: Component, data: BarData):
+    def _on_bar(self, data: BarData):
         product, bar, ts = data.product, data.bar, data.bar.end_ts
         # TODO: wait for remote components' outputs
         for listener in self._listeners[data]:
@@ -668,14 +666,14 @@ class ComponentMixin:
         self._append_to_df(data)
         self.on_bar(product, bar, ts)
 
-    def _update_signals(self: Component, data: BaseData, listener: BaseStrategy | BaseModel):
+    def _update_signals(self, data: BaseData, listener: BaseStrategy | BaseModel):
         pred_y: torch.Tensor | np.ndarray | None = listener._next(data)
         if pred_y is not None:
             signal_cols = listener.get_signal_cols()
             for i, col in enumerate(signal_cols):
                 self.predictions[col] = pred_y[i]
     
-    def _gather(self: Component):
+    def _gather(self):
         '''Sets up everything before start'''
         # NOTE: use is_gathered to avoid a component being gathered multiple times when it's a shared component
         if not self._is_gathered:
@@ -690,14 +688,14 @@ class ComponentMixin:
             # TODO:
             # self.store.freeze()
             # self.store.materialize()
-            # self._prepare_df()
+            # self.store._prepare_df()
             for component in self.components:
                 component._gather()
             self.logger.info(f"'{self.name}' has gathered")
         else:
             self.logger.info(f"'{self.name}' has already gathered")
     
-    def start(self: Component):
+    def start(self):
         if not self.is_running():
             self._is_running = True
             self.on_start()
@@ -736,22 +734,22 @@ class ComponentMixin:
     def on_bar(self, product, bar: Bar, ts, **kwargs):
         raise NotImplementedError(f"Please define your own on_bar(product, bar, ts, **kwargs) in your strategy '{self.name}'.")
 
-    def add_datas(self: Component):
+    def add_datas(self):
         pass
     
-    def add_models(self: Component):
+    def add_models(self):
         pass
 
-    def add_features(self: Component):
+    def add_features(self):
         pass
     
-    def add_indicators(self: Component):
+    def add_indicators(self):
         pass
     
-    def on_start(self: Component):
+    def on_start(self):
         pass
     
-    def on_stop(self: Component):
+    def on_stop(self):
         pass
     
     
@@ -760,15 +758,15 @@ class ComponentMixin:
     Sugar Functions
     ************************************************
     '''
-    def get_second_bar(self: Component, product: BaseProduct, period: int) -> BarData | None:
+    def get_second_bar(self, product: BaseProduct, period: int) -> BarData | None:
         return self.get_data(product, resolution=f'{period}s')
     
-    def get_minute_bar(self: Component, product: BaseProduct, period: int) -> BarData | None:
+    def get_minute_bar(self, product: BaseProduct, period: int) -> BarData | None:
         return self.get_data(product, resolution=f'{period}m')
     
-    def get_hour_bar(self: Component, product: BaseProduct, period: int) -> BarData | None:
+    def get_hour_bar(self, product: BaseProduct, period: int) -> BarData | None:
         return self.get_data(product, resolution=f'{period}h')
     
-    def get_day_bar(self: Component, product: BaseProduct, period: int) -> BarData | None:
+    def get_day_bar(self, product: BaseProduct, period: int) -> BarData | None:
         return self.get_data(product, resolution=f'{period}d')
     

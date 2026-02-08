@@ -53,7 +53,7 @@ class RequestMethod(StrEnum):
     
 
 class BaseRESTfulAPI(ABC):
-    exch: ClassVar[CryptoExchange]
+    EXCHANGE: ClassVar[CryptoExchange]
     
     SAMPLES_FILENAME = 'rest_api_samples.yml'
 
@@ -70,6 +70,10 @@ class BaseRESTfulAPI(ABC):
         self._adapter: Adapter = Exchange.adapter
         self._url: str | None = self.URLS.get(self._env, None)
         self._client = AsyncClient()
+    
+    @property
+    def exch(self) -> CryptoExchange:
+        return self.EXCHANGE
         
     def __getstate__(self) -> object:
         state = self.__dict__.copy()

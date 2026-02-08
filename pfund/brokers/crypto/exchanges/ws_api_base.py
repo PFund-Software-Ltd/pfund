@@ -1,5 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Callable, Literal, ClassVar, TypeAlias, Awaitable, Any
+
+from pfund.datas.timeframe import TimeframeUnit
 if TYPE_CHECKING:
     from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
     from pfund.utils.adapter import Adapter
@@ -32,13 +34,13 @@ class NamedWebSocket(WebSocket):
 
 
 class BaseWebSocketAPI(ABC):
-    exch: ClassVar[CryptoExchange]
+    EXCHANGE: ClassVar[CryptoExchange]
 
-    URLS: ClassVar[dict[Environment, dict[DataChannelType | Literal['public', 'private'], str]]] = {}
-    SUPPORTED_ORDERBOOK_LEVELS = {}
-    SUPPORTED_RESOLUTIONS = {}
-    CHECK_FREQ = 10  # check connections frequency (in seconds)
-    PING_FREQ = 20  # application-level ping to exchange (in seconds)
+    URLS: ClassVar[dict[Environment, dict[DataChannelType, str]]] = {}
+    SUPPORTED_ORDERBOOK_LEVELS: ClassVar[list[int]] = []
+    SUPPORTED_RESOLUTIONS: ClassVar[dict[TimeframeUnit, list[int]]] = {}
+    CHECK_FREQ: ClassVar[int] = 10  # check connections frequency (in seconds)
+    PING_FREQ: ClassVar[int] = 20  # application-level ping to exchange (in seconds)
 
     def __init__(self, env: Environment | tEnvironment):
         self._env = Environment[env.upper()]
@@ -94,6 +96,10 @@ class BaseWebSocketAPI(ABC):
     @abstractmethod
     def _parse_message(self, msg: dict) -> dict:
         pass
+
+    @property
+    def exch(self) -> CryptoExchange:
+        return self.EXCHANGE
 
     def set_logger(self, name: str):
         self._logger = logging.getLogger(name)

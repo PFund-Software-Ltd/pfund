@@ -20,7 +20,6 @@ import polars as pl
 from pfund_kit.utils.progress_bar import track, ProgressBar
 from pfund_kit.style import cprint, RichColor
 from pfund.enums import BacktestMode, ComponentType, Environment
-from pfund.components.actor_proxy import ActorProxy
 from pfund.engines.base_engine import BaseEngine
 from pfund.utils.dataset_splitter import DatasetSplitter
 
@@ -84,14 +83,7 @@ class BacktestEngine(BaseEngine):
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
         return _DummyStrategy.name
     
-    def add_strategy(
-        self, 
-        strategy: StrategyT, 
-        resolution: str,
-        name: str='', 
-        ray_actor_options: dict | None=None,
-        **ray_kwargs
-    ) -> StrategyT | ActorProxy:
+    def add_strategy(self, strategy: StrategyT, resolution: str, name: str='') -> StrategyT:
         '''
         Args:
             ray_actor_options:
@@ -107,7 +99,7 @@ class BacktestEngine(BaseEngine):
             assert name != self._dummy, f'strategy name "{self._dummy}" is reserved, please use another name'
         name = name or Strategy.__name__
         strategy = BacktestStrategy(Strategy, *strategy.__pfund_args__, **strategy.__pfund_kwargs__)
-        return super().add_strategy(strategy, resolution, name=name, ray_actor_options=ray_actor_options, **ray_kwargs)
+        return super().add_strategy(strategy=strategy, resolution=resolution, name=name)
 
     def add_model(
         self, 
@@ -265,12 +257,9 @@ class BacktestEngine(BaseEngine):
                 progress_bar.advance(1)
             
         if self._use_ray:
-            import atexit
             import ray
             from ray.util.queue import Queue
-            from pfeed.utils.ray_logging import setup_logger_in_ray_task, ray_logging_context
-            
-            atexit.register(lambda: ray.shutdown())
+            from pfeed.utils.ray import shutdown_ray, setup_logger_in_ray_task, ray_logging_context
             
             @ray.remote
             def _run_task(log_queue: Queue,  _df_chunk: pd.DataFrame | pl.LazyFrame, _chunk_num: int, _batch_num: int):
@@ -288,7 +277,6 @@ class BacktestEngine(BaseEngine):
                 return True
 
             logger = backtestee.logger
-            self._init_ray(**ray_kwargs)
             with ray_logging_context(logger) as log_queue:
                 try:
                     batch_size = ray_kwargs['num_cpus']
@@ -305,8 +293,8 @@ class BacktestEngine(BaseEngine):
                             progress_bar.advance(1)
                 except Exception:
                     logger.exception('Error in backtesting:')
-                finally:
-                    self._shutdown_ray()
+            self._logger.debug('shutting down ray...')
+            shutdown_ray()
         end_time = time.time()
         cprint(f'Backtest elapsed time: {end_time - start_time:.3f}(s)', style='bold')
         

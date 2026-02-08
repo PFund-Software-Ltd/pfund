@@ -4,11 +4,13 @@ if TYPE_CHECKING:
     from ray.actor import ActorHandle
     from pfund.typing import Component
 
-from pfund_kit.style import cprint, RichColor, TextStyle
+from pfund_kit.style import cprint
 
 
 class ActorProxy:
     def __init__(self, component: Component, name: str='', ray_actor_options: dict | None=None, **ray_kwargs):
+        assert 'num_cpus' in ray_kwargs, '`num_cpus` must be set for a Ray actor'
+        assert ray_kwargs['num_cpus'] > 0, '`num_cpus` must be greater than 0'
         component_name = name or component.name
         ray_actor_options = ray_actor_options or {}
         if 'name' not in ray_actor_options:

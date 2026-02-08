@@ -1,6 +1,7 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Literal
 if TYPE_CHECKING:
+    from pfund.enums import Environment
     from pfund.datas.resolution import Resolution
     from pfund.entities.accounts.account_crypto import CryptoAccount
 
@@ -23,12 +24,12 @@ ProductCategory = BybitProduct.ProductCategory
 
 
 class BybitWebSocketAPI(BaseWebSocketAPI):
-    exch = CryptoExchange.BYBIT
+    EXCHANGE: ClassVar[CryptoExchange] = CryptoExchange.BYBIT
     CATEGORY: ClassVar[BybitProduct.ProductCategory]
-    VERSION = 'v5'
-    URLS = {}
+    VERSION: ClassVar[str] = 'v5'
+    URLS: ClassVar[dict[Environment, dict[DataChannelType, str]]] = {}
     # it defines the maximum number of arguments allowed in the 'args' list of a WebSocket message: {'op': '...', 'args': [...]}
-    PUBLIC_CHANNEL_ARGS_LIMIT = os.sys.maxsize
+    PUBLIC_CHANNEL_ARGS_LIMIT: ClassVar[int] = os.sys.maxsize  # pyright: ignore[reportUnknownMemberType,reportAttributeAccessIssue, reportUnknownVariableType]
     
     def _create_ws_name(self, account_name: str=''):
         if not account_name:

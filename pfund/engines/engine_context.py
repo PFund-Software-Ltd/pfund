@@ -2,11 +2,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, TypedDict
 if TYPE_CHECKING:
     import datetime
+    from pfund.config import PFundConfig
 
-from pfund.enums import Environment
+import uuid
+
+from pfund.enums import Environment, RunMode
 from pfund.datas.resolution import Resolution
 from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
+from pfund.config import get_config, get_logging_config
 
 
 class DataRangeDict(TypedDict, total=False):
@@ -14,45 +18,35 @@ class DataRangeDict(TypedDict, total=False):
     end_date: str
 
 
-# FIXME
-class DataParamsDict(TypedDict, total=True):
-    pass
-    # data_start: datetime.date
-    # data_end: datetime.date
-    # data_tool: DataTool
-    # storage: DataStorage
-    # storage_options: dict
-    # use_deltalake: bool
-
-
 class EngineContext:
-    def __init__(
-        self,
-        env: Environment,
-        name: str,  # engine name
-        data_range: str | Resolution | DataRangeDict | Literal['ytd'],
-        logging_config: dict,
-    ):
+    def __init__(self, env: Environment, data_range: str | Resolution | DataRangeDict | Literal['ytd']):
         self.env = env
-        self.name = name
+        self.id = uuid.uuid4().hex[:8]
         self._env_var_prefix = f'PFUND_{env.upper()}_'
         self._env_vars = self._load_env_vars()
+        self.run_mode = self._derive_run_mode()
         self.data_start, self.data_end = self._parse_data_range(data_range)
         self.settings = self._load_settings()
-        self.logging_config: dict = logging_config
-    
-    # FIXME: refactor this
-    def get_data_params(self) -> DataParamsDict:
-        '''Data params are used in components' data stores'''
-        return {
-            # 'data_start': self._data_start,
-            # 'data_end': self._data_end,
-            # 'data_tool': self._data_tool,
-            # FIXME
-            # 'storage': config.storage,
-            # 'storage_options': config.storage_options,
-            # 'use_deltalake': config.use_deltalake,
-        }
+        # NOTE: config obtained by get_config() inside ray actor could be different from the one in the main thread (e.g. after calling pf.configure())
+        # so we create the config object here in the context and treat it as the source of truth
+        self.config: PFundConfig = get_config()
+        self.logging_config: dict = get_logging_config()
+
+    @property
+    def name(self) -> str:
+        return f'{self.env.lower()}-engine-{self.id}'
+
+    @staticmethod
+    def _derive_run_mode() -> RunMode:
+        import ray
+        if not ray.is_initialized():
+            return RunMode.LOCAL
+        ctx = ray.get_runtime_context()
+        actor_id = ctx.get_actor_id()   # empty/None if not in an actor
+        if actor_id is not None and actor_id != "":
+            return RunMode.REMOTE
+        else:
+            return RunMode.LOCAL
     
     def _load_env_vars(self) -> dict[str, str]:
         from dotenv import find_dotenv, dotenv_values

@@ -1,6 +1,8 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, ClassVar
+from typing_extensions import override
 if TYPE_CHECKING:
+    from pfund.brokers.crypto.exchanges.ws_api_base import BaseWebSocketAPI
     from pfund.brokers.crypto.exchanges.rest_api_base import Result, ApiResponse
     from pfund.entities.products.product_bybit import BybitProduct
     from pfund.datas.timeframe import TimeframeUnit
@@ -21,9 +23,9 @@ tProductCategory = Literal['LINEAR', 'INVERSE', 'SPOT', 'OPTION']
     
     
 class Exchange(BaseExchange):
-    name = CryptoExchange.BYBIT
+    name: ClassVar[CryptoExchange] = CryptoExchange.BYBIT
     # REVIEW
-    SUPPORTED_ASSET_TYPES: list = [
+    SUPPORTED_ASSET_TYPES: list[CryptoAssetType | str] = [
         CryptoAssetType.FUTURE,
         CryptoAssetType.PERPETUAL,
         CryptoAssetType.OPTION,
@@ -38,12 +40,14 @@ class Exchange(BaseExchange):
     #     pass
 
     @classmethod
+    @override
     def get_supported_resolutions(cls, product: BybitProduct) -> dict[TimeframeUnit, list[int]]:
         import importlib
-        from pfeed.utils import to_camel_case
+        from pfund_kit.utils.text import to_camel_case
         name = cls.name.lower()
-        Category = to_camel_case(product.category.value)
-        WebSocketAPI = getattr(importlib.import_module(f'pfund.brokers.crypto.exchanges.{name}.ws_api_{Category.lower()}'), f'{Category}WebSocketAPI')
+        assert product.category is not None, 'product category is not set'
+        Category = to_camel_case(product.category)
+        WebSocketAPI: type[BaseWebSocketAPI] = getattr(importlib.import_module(f'pfund.brokers.crypto.exchanges.{name}.ws_api_{Category.lower()}'), f'{Category}WebSocketAPI')
         return WebSocketAPI.SUPPORTED_RESOLUTIONS    
 
     '''

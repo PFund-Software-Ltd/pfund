@@ -3,9 +3,8 @@ from typing import Literal
 
 from pathlib import Path
 
-from pfund.enums import Environment
+from pfund.enums import Environment, Database
 from pfund.enums.data_tool import DataTool
-from pfund.enums.database import Database
 from pfund_kit.config import Configuration
 
 
@@ -152,8 +151,8 @@ class PFundConfig(Configuration):
 
     def _initialize_from_data(self):
         """Initialize PFundConfig-specific attributes from config data."""
-        self.data_tool = self._data.get('data_tool', DataTool.polars)
-        self.database = self._data.get('database', Database.DUCKDB)
+        self.data_tool = DataTool[self._data.get('data_tool', DataTool.polars).lower()]
+        self.database = Database[self._data.get('database', Database.DUCKDB).upper()]
     
     def to_dict(self) -> dict:
         return {

@@ -3,9 +3,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from logging import Logger
     from pfeed.streaming.zeromq import ZeroMQ
-    from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.streaming import BarMessage
-    from pfeed.typing import tDataSource
+    from pfund.datas.data_market import MarketData
+    from pfeed.enums import DataSource
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.typing import (
         ComponentName, 
@@ -13,7 +13,6 @@ if TYPE_CHECKING:
         ProductName, 
         ResolutionRepr, 
         ZeroMQSenderName, 
-        DataConfigDict,
     )
 
 import importlib
@@ -21,7 +20,7 @@ from pprint import pformat
 from threading import Thread
 from collections import defaultdict
 
-from pfund.datas import QuoteData, TickData, BarData, MarketData
+from pfund.datas import QuoteData, TickData, BarData
 from pfund.entities.products.product_base import BaseProduct
 from pfund.datas.data_config import DataConfig
 from pfund.datas.resolution import Resolution
@@ -36,7 +35,7 @@ class DataBoy:
             _subscribed_data: all data in `datas` + data subscribed on behalf of local components
         '''
         self._component: Component = component
-        self._datas: dict[ProductName, dict[ResolutionRepr, MarketData]] = defaultdict(dict)
+        self._datas: dict[ProductName, dict[Resolution, MarketData]] = defaultdict(dict)
         self._stale_bar_timeouts: dict[BarData, int] = {}
         self._data_zmq: ZeroMQ | None = None
         self._signals_zmq: ZeroMQ | None = None
@@ -67,7 +66,7 @@ class DataBoy:
         return self._datas
     
     def get_datas(self) -> list[MarketData]:
-        return [data for product in self.datas for data in self.datas[product].values()]
+        return [data for product in self._datas for data in self._datas[product].values()]
     
     @property
     def logger(self) -> Logger:
@@ -88,64 +87,61 @@ class DataBoy:
             raise NotImplementedError(f'broker {product.bkr} is not supported')
         return supported_resolutions
     
-    def _add_data(self, product: BaseProduct, resolution: Resolution, data_config: DataConfig) -> TimeBasedData:
+    def _add_data(self, product: BaseProduct, resolution: Resolution, data_source: DataSource, data_origin: str, data_config: DataConfig) -> TimeBasedData:
         if resolution.is_quote():
             data = QuoteData(
-                data_source=data_config.data_source, 
-                data_origin=data_config.data_origin, 
+                data_source=data_source, 
+                data_origin=data_origin, 
                 product=product, 
                 resolution=resolution
             )
         elif resolution.is_tick():
             data = TickData(
-                data_source=data_config.data_source, 
-                data_origin=data_config.data_origin, 
+                data_source=data_source, 
+                data_origin=data_origin, 
                 product=product, 
                 resolution=resolution
             )
         else:
             data = BarData(
-                data_source=data_config.data_source, 
-                data_origin=data_config.data_origin, 
+                data_source=data_source, 
+                data_origin=data_origin, 
                 product=product, 
                 resolution=resolution, 
                 shift=data_config.shift.get(resolution, 0), 
                 skip_first_bar=data_config.skip_first_bar.get(resolution, True)
             )
             self._stale_bar_timeouts[data] = data_config.stale_bar_timeout[resolution]
-        self.datas[product.name][repr(resolution)] = data
+        self._datas[product.name][resolution] = data
         return data
     
-    def get_data(self, product: ProductName, resolution: ResolutionRepr | Resolution) -> MarketData | None:
-        if product not in self.datas:
+    def get_data(self, product: ProductName, resolution: Resolution) -> MarketData | None:
+        if product not in self._datas:
             return None
-        if isinstance(resolution, Resolution):
-            resolution = repr(resolution)
-        return self.datas[product].get(resolution, None)
+        return self._datas[product].get(resolution, None)
     
     def add_data(
         self, 
         product: BaseProduct, 
-        data_source: tDataSource, 
+        data_source: DataSource, 
         data_origin: str, 
-        data_config: DataConfigDict | DataConfig | None
+        data_config: DataConfig,
     ) -> list[MarketData]:
-        if not isinstance(data_config, DataConfig):
-            data_config = data_config or {}
-            data_config['primary_resolution'] = self._component._resolution
-            data_config['data_source'] = data_source
-            data_config['data_origin'] = data_origin
-            data_config = DataConfig(**data_config)
-
+        assert self._component.resolution is not None, 'component resolution is not set'
+        data_config.primary_resolution = self._component.resolution
+            
         supported_resolutions = self._get_supported_resolutions(product)
         is_auto_resampled = data_config.auto_resample(supported_resolutions)
         if is_auto_resampled:
-            self.logger.warning(f'{product.name} resolution={data_config.primary_resolution} extra_resolutions={data_config.extra_resolutions} data is auto-resampled to:\n{pformat(data_config.resample)}')
+            self.logger.warning(f'{product.name} resolution={primary_resolution} extra_resolutions={data_config.extra_resolutions} data is auto-resampled to:\n{pformat(data_config.resample)}')
+        
+        # TODO: detect bar shift based on the returned data by e.g. Yahoo Finance, its hourly data starts from 9:30 to 10:30 etc.
+        # data_config.auto_shift()
         
         datas: list[MarketData] = []
         for resolution in data_config.resolutions:
-            if repr(resolution) not in self.datas[product.name]:
-                data = self._add_data(product, resolution, data_config)
+            if resolution not in self._datas[product.name]:
+                data = self._add_data(product, resolution, data_source, data_origin, data_config)
             else:
                 data = self.get_data(product.name, resolution)
             datas.append(data)
@@ -338,7 +334,7 @@ class DataBoy:
                 resolution = Resolution(msg.resolution)
                 data: MarketData = self.get_data(product.name, resolution)
                 if data is None:
-                    raise ValueError(f'data {product.name} {resolution} is not found in {self.datas}')
+                    raise ValueError(f'data {product.name} {resolution} is not found in {self._datas}')
                 if topic == PublicDataChannel.orderbook:
                     self._update_quote(data, msg)
                 elif topic == PublicDataChannel.tradebook:
