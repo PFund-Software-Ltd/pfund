@@ -250,38 +250,38 @@ class Resolution:
     def __hash__(self):
         return self._value()
 
-    def is_strict_equal(self, other):
+    def is_strict_equal(self, other: Resolution) -> bool:
         """1h = 60m when using __eq__ to compare resolutions, but in strict_equal, 1h != 60m"""
         return self._value() == other._value() and self.timeframe == other.timeframe
 
-    def __eq__(self, other):
+    def __eq__(self, other: Resolution) -> bool:
         if not isinstance(other, Resolution):
             return NotImplemented
         return self._value() == other._value()
 
-    def __ne__(self, other):
+    def __ne__(self, other: Resolution) -> bool:
         if not isinstance(other, Resolution):
             return NotImplemented
         return not self == other
 
     # NOTE: higher value = lower resolution and vice versa
     # e.g. 1m (higher resolution, value=60) > 1h (lower resolution, value=3600)
-    def __lt__(self, other):
+    def __lt__(self, other: Resolution) -> bool:
         if not isinstance(other, Resolution):
             return NotImplemented
         return self._value() > other._value()
 
-    def __le__(self, other):
+    def __le__(self, other: Resolution) -> bool:
         if not isinstance(other, Resolution):
             return NotImplemented
         return self._value() >= other._value()
 
-    def __gt__(self, other):
+    def __gt__(self, other: Resolution) -> bool:
         if not isinstance(other, Resolution):
             return NotImplemented
         return self._value() < other._value()
 
-    def __ge__(self, other):
+    def __ge__(self, other: Resolution) -> bool:
         if not isinstance(other, Resolution):
             return NotImplemented
         return self._value() <= other._value()

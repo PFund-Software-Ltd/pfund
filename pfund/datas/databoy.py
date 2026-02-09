@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     )
 
 import importlib
-from pprint import pformat
 from threading import Thread
 from collections import defaultdict
 
@@ -133,9 +132,13 @@ class DataBoy:
         data_config.primary_resolution = self._component.resolution
             
         supported_resolutions = self._get_supported_resolutions(product)
+        original_resample = data_config.resample.copy()
         is_auto_resampled = data_config.auto_resample(supported_resolutions)
         if is_auto_resampled:
-            self.logger.warning(f'{product.name} resolution={data_config.primary_resolution} extra_resolutions={data_config.extra_resolutions} data is auto-resampled to:\n{pformat(data_config.resample)}')
+            self.logger.warning(
+                f'{product.name} resolution={repr(data_config.primary_resolution)} extra_resolutions={data_config.extra_resolutions} ' +
+                f' data is auto-resampled from {original_resample} to {data_config.resample}'
+            )
         
         # TODO: detect bar shift based on the returned data by e.g. Yahoo Finance, its hourly data starts from 9:30 to 10:30 etc.
         # data_config.auto_shift()
