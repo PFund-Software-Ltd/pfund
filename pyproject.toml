@@ -61,6 +61,7 @@ reportImportCycles = false
 reportPrivateUsage = false
 reportUnusedCallResult = false
 reportImplicitOverride = false
+reportMissingTypeStubs = false
 reportUnnecessaryIsInstance = false
 
 [tool.uv.build-backend]

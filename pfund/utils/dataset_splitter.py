@@ -1,7 +1,5 @@
 from __future__ import annotations
-from typing import TypedDict, TYPE_CHECKING
-if TYPE_CHECKING:
-    from pfund.typing import DatasetSplitsDict
+from typing import TypedDict
 
 import datetime
 from dataclasses import dataclass, field
@@ -44,7 +42,7 @@ class DatasetSplitter:
     """
     dataset_start: datetime.date
     dataset_end: datetime.date
-    dataset_splits: int | DatasetSplitsDict | TimeSeriesSplit = 721
+    dataset_splits: int | DatasetSplitsDict | TimeSeriesSplit = 721  # pyright: ignore[reportInvalidTypeForm]
     cv_test_ratio: float = 0.1
 
     # Derived fields:

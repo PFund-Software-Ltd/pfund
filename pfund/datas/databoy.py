@@ -5,7 +5,6 @@ if TYPE_CHECKING:
     from pfeed.streaming.zeromq import ZeroMQ
     from pfeed.streaming import BarMessage
     from pfund.datas.data_market import MarketData
-    from pfeed.enums import DataSource
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.typing import (
         ComponentName, 
@@ -73,39 +72,26 @@ class DataBoy:
     
     def is_remote(self) -> bool:
         return self._component.is_remote()
-        
-    @staticmethod
-    def _get_supported_resolutions(product: BaseProduct) -> dict[ResolutionUnit, list[int]]:
-        supported_resolutions: dict[ResolutionUnit, list[int]]
-        if product.bkr == Broker.CRYPTO:
-            Exchange = getattr(importlib.import_module(f'pfund.brokers.crypto.exchanges.{product.exch.lower()}.exchange'), 'Exchange')
-            supported_resolutions = Exchange.get_supported_resolutions(product)
-        elif product.bkr == Broker.IBKR:
-            InteractiveBrokersAPI = getattr(importlib.import_module('pfund.brokers.ibkr.api'), 'InteractiveBrokersAPI')
-            supported_resolutions = InteractiveBrokersAPI.SUPPORTED_RESOLUTIONS
-        else:
-            raise NotImplementedError(f'broker {product.bkr} is not supported')
-        return supported_resolutions
     
-    def _add_data(self, product: BaseProduct, resolution: Resolution, data_source: DataSource, data_origin: str, data_config: DataConfig) -> TimeBasedData:
+    def _add_data(self, product: BaseProduct, resolution: Resolution, data_config: DataConfig) -> TimeBasedData:
         if resolution.is_quote():
             data = QuoteData(
-                data_source=data_source, 
-                data_origin=data_origin, 
+                data_source=data_config.data_source, 
+                data_origin=data_config.data_origin, 
                 product=product, 
                 resolution=resolution
             )
         elif resolution.is_tick():
             data = TickData(
-                data_source=data_source, 
-                data_origin=data_origin, 
+                data_source=data_config.data_source, 
+                data_origin=data_config.data_origin, 
                 product=product, 
                 resolution=resolution
             )
         else:
             data = BarData(
-                data_source=data_source, 
-                data_origin=data_origin, 
+                data_source=data_config.data_source, 
+                data_origin=data_config.data_origin, 
                 product=product, 
                 resolution=resolution, 
                 shift=data_config.shift.get(resolution, 0), 
@@ -120,33 +106,11 @@ class DataBoy:
             return None
         return self._datas[product].get(resolution, None)
     
-    def add_data(
-        self, 
-        product: BaseProduct, 
-        data_source: DataSource, 
-        data_origin: str, 
-        data_config: DataConfig,
-    ) -> list[MarketData]:
-        # set data config's primary resolution to be the component's resolution
-        assert self._component.resolution is not None, 'component resolution is not set'
-        data_config.primary_resolution = self._component.resolution
-            
-        supported_resolutions = self._get_supported_resolutions(product)
-        original_resample = data_config.resample.copy()
-        is_auto_resampled = data_config.auto_resample(supported_resolutions)
-        if is_auto_resampled:
-            self.logger.warning(
-                f'{product.name} resolution={repr(data_config.primary_resolution)} extra_resolutions={data_config.extra_resolutions} ' +
-                f' data is auto-resampled from {original_resample} to {data_config.resample}'
-            )
-        
-        # TODO: detect bar shift based on the returned data by e.g. Yahoo Finance, its hourly data starts from 9:30 to 10:30 etc.
-        # data_config.auto_shift()
-        
+    def add_data(self, product: BaseProduct, data_config: DataConfig) -> list[MarketData]:
         datas: list[MarketData] = []
         for resolution in data_config.resolutions:
             if resolution not in self._datas[product.name]:
-                data = self._add_data(product, resolution, data_source, data_origin, data_config)
+                data = self._add_data(product, resolution, data_config)
             else:
                 data = self.get_data(product.name, resolution)
             datas.append(data)

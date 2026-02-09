@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any
+from typing import Any, ClassVar
 
 from decimal import Decimal
 
@@ -10,13 +10,13 @@ from pfund.enums import Broker, CryptoExchange, TradingVenue
 
 
 class BaseProduct(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra='forbid')
+    model_config: ClassVar[ConfigDict] = ConfigDict(arbitrary_types_allowed=True, extra='forbid')
 
     trading_venue: TradingVenue
     broker: Broker
     exchange: CryptoExchange | str = ''
     basis: ProductBasis
-    specs: dict = Field(default_factory=dict, description='specifications that make a product unique, e.g. for options, specs are strike_price, expiration_date, etc.')
+    specs: dict[str, Any] = Field(default_factory=dict, description='specifications that make a product unique, e.g. for options, specs are strike_price, expiration_date, etc.')
     symbol: str = Field(
         default='', 
         description='''
@@ -36,7 +36,7 @@ class BaseProduct(BaseModel):
     
     @model_validator(mode='before')
     @classmethod
-    def _assert_required_fields(cls, data: dict) -> dict:
+    def _assert_required_fields(cls, data: dict[str, Any]) -> dict[str, Any]:
         required_specs: set[str] = cls.get_required_specs()
         missing_fields = []
         missing_fields_msg = f'"{data["basis"]}" is missing the following required fields:'

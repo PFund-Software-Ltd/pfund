@@ -33,12 +33,13 @@ if TYPE_CHECKING:
     from pfund.brokers.broker_base import BaseBroker
 
 import time
+import importlib
 import logging
 import datetime
 
 from pfund_kit.utils import yaml
 from pfeed.enums import DataSource
-from pfund.datas.resolution import Resolution
+from pfund.datas.resolution import Resolution, ResolutionUnit
 from pfund.datas.data_config import DataConfig
 from pfund.datas.storage_config import StorageConfig
 from pfund.components.actor_proxy import ActorProxy
@@ -307,7 +308,10 @@ class ComponentMixin:
     def _set_resolution(self, resolution: Resolution | str):
         if self._resolution:
             raise ValueError(f"{self.name} already has a resolution {self._resolution}, cannot set to {resolution}")
-        self._resolution = Resolution(resolution)
+        resolution = Resolution(resolution)
+        if not resolution.is_bar():
+            raise ValueError(f"{self.component_type} must use a bar resolution (e.g. '1s', '1m', '1h', '1d'), got {resolution=}")
+        self._resolution = resolution
 
     def _set_name(self, name: str):
         if not name:
@@ -366,7 +370,7 @@ class ComponentMixin:
     
     def _create_product(
         self,
-        tv: TradingVenue,
+        tv: TradingVenue | str,
         basis: str,
         exch: str='',
         symbol: str='',
@@ -405,6 +409,67 @@ class ComponentMixin:
     def _get_default_name(self):
         return self.__class__.__name__
     
+    @staticmethod
+    def _get_supported_resolutions(product: BaseProduct) -> dict[ResolutionUnit, list[int]]:
+        supported_resolutions: dict[ResolutionUnit, list[int]]
+        if product.bkr == Broker.CRYPTO:
+            Exchange = getattr(importlib.import_module(f'pfund.brokers.crypto.exchanges.{product.exch.lower()}.exchange'), 'Exchange')
+            supported_resolutions = Exchange.get_supported_resolutions(product)
+        elif product.bkr == Broker.IBKR:
+            InteractiveBrokersAPI = getattr(importlib.import_module('pfund.brokers.ibkr.api'), 'InteractiveBrokersAPI')
+            supported_resolutions = InteractiveBrokersAPI.SUPPORTED_RESOLUTIONS
+        else:
+            raise NotImplementedError(f'broker {product.bkr} is not supported')
+        return supported_resolutions
+    
+    def _resolve_data_config(self, product: BaseProduct, data_config: DataConfig | None) -> DataConfig:
+        '''Resolves and configures DataConfig with defaults and automatic settings.
+
+        Sets primary resolution from component resolution, derives data source from
+        product's trading venue, and configures resampling for extra resolutions.
+
+        Args:
+            product: The product to configure data for
+            data_config: Optional data configuration (creates default if None)
+
+        Returns:
+            Fully configured DataConfig ready for data subscription
+
+        Raises:
+            AssertionError: If component resolution is not set
+            ValueError: If data_source cannot be derived from product's trading venue
+        '''
+        data_config = data_config or DataConfig()
+        # set data config's primary resolution to be the component's resolution
+        assert self.resolution is not None, 'component resolution is not set'
+        data_config.primary_resolution = self.resolution
+        # derive data_source from trading_venue if not provided
+        if data_config.data_source is None:
+            if product.tv in DataSource.__members__:
+                data_config.data_source = DataSource[product.tv]
+            else:
+                raise ValueError("data_source must be provided")
+        data_config = self._auto_resample_data_config(product, data_config)
+        # TODO: auto shift data config
+        data_config = self._auto_shift_data_config(data_config)
+        return data_config
+    
+    def _auto_resample_data_config(self, product: BaseProduct, data_config: DataConfig) -> DataConfig:
+        supported_resolutions = self._get_supported_resolutions(product)
+        original_resample = data_config.resample.copy()
+        is_auto_resampled = data_config.auto_resample(supported_resolutions)
+        if is_auto_resampled:
+            self.logger.warning(
+                f'{product.name} resolution={repr(data_config.primary_resolution)} extra_resolutions={data_config.extra_resolutions} ' +
+                f' data is auto-resampled from {original_resample} to {data_config.resample}'
+            )
+        return data_config
+    
+    # TODO: detect bar shift based on the returned data by e.g. Yahoo Finance, its hourly data starts from 9:30 to 10:30 etc.
+    def _auto_shift_data_config(self, data_config: DataConfig) -> DataConfig:
+        # data_config.auto_shift()
+        return data_config
+    
     def add_data(
         self, 
         trading_venue: TradingVenue | str,
@@ -412,8 +477,6 @@ class ComponentMixin:
         exchange: str='',
         symbol: str='',
         product_name: str='',
-        data_source: DataSource | str | None=None,
-        data_origin: str='',
         data_config: DataConfig | None=None,
         storage_config: StorageConfig | None=None,
         **product_specs: Any
@@ -434,7 +497,7 @@ class ComponentMixin:
             product_specs: product specifications, e.g. expiration, strike_price etc.
         '''
         product: BaseProduct = self._create_product(
-            tv=TradingVenue[trading_venue.upper()],
+            tv=trading_venue,
             basis=product_basis,
             exch=exchange,
             symbol=symbol,
@@ -443,10 +506,8 @@ class ComponentMixin:
         )
         product = self._add_product(product)
         datas: list[MarketData] = self.databoy.add_data(
-            product=product,
-            data_source=DataSource[(data_source or trading_venue).upper()],
-            data_origin=data_origin,
-            data_config=data_config or DataConfig(),
+            product=product, 
+            data_config=self._resolve_data_config(product, data_config)
         )
         for data in datas:
             assert self.store is not None, "trading store must be initialized before adding data"

@@ -1,5 +1,6 @@
+# pyright: reportUninitializedInstanceVariable=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 if TYPE_CHECKING:
     import pandas as pd
     from sklearn.model_selection import TimeSeriesSplit
@@ -9,6 +10,11 @@ if TYPE_CHECKING:
     from pfund.utils.dataset_splitter import DatasetSplitsDict, CrossValidatorDatasetPeriods, DatasetPeriods
     from pfund._backtest.backtest_mixin import BacktestMixin
     from pfund.engines.engine_context import DataRangeDict
+    from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
+    from pfund.engines.engine_context import EngineContext
+    class BacktestEngineContext(EngineContext):
+        backtest: BacktestContext
+
 
 import os
 import inspect
@@ -29,6 +35,8 @@ class BacktestContext:
     backtest_mode: BacktestMode
     num_chunks: int
     dataset_splitter: DatasetSplitter
+
+
 
 
 class BacktestEngine(BaseEngine):
@@ -52,7 +60,7 @@ class BacktestEngine(BaseEngine):
         '''
         from pfund.utils.dataset_splitter import DatasetSplitter
         super().__init__(env=Environment.BACKTEST, data_range=data_range)
-        self._context.backtest = BacktestContext(
+        cast("BacktestEngineContext", self._context).backtest = BacktestContext(
             backtest_mode=BacktestMode[mode.lower()],
             num_chunks=num_chunks,
             dataset_splitter=DatasetSplitter(
@@ -62,20 +70,20 @@ class BacktestEngine(BaseEngine):
                 cv_test_ratio=cv_test_ratio
             )
         )
-        if self.backtest_mode == BacktestMode.event_driven and self.settings.reuse_signals:
+        if self.backtest_mode == BacktestMode.event_driven and cast("BacktestEngineSettings", self.settings).reuse_signals:
             cprint(
-                'Warning: Reusing precomputed signals to speed up event-driven backtesting,\n'
+                'Warning: Reusing precomputed signals to speed up event-driven backtesting,\n' +
                 'i.e. computing signals on the fly will be skipped',
                 style='bold'
             )
-
+    
     @property
     def backtest_mode(self) -> BacktestMode:
-        return self._context.backtest.backtest_mode
+        return cast("BacktestEngineContext", self._context).backtest.backtest_mode
     
     @property
     def dataset_periods(self) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
-        return self._context.backtest.dataset_splitter.dataset_periods
+        return cast("BacktestEngineContext", self._context).backtest.dataset_splitter.dataset_periods
     
     @property
     def _dummy(self) -> str:

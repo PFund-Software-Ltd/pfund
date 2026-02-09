@@ -1,14 +1,12 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.typing import tBroker
     from pfund.brokers.broker_base import BaseBroker
 
 from pfund.enums import Environment, Broker
 
 
-def create_broker(env: Environment | str, bkr: Broker | tBroker) -> BaseBroker:
-    env = Environment[env.upper()]
+def create_broker(env: Environment, bkr: Broker) -> BaseBroker:
     if env in [Environment.BACKTEST, Environment.SANDBOX]:
         from pfund.brokers.broker_simulated import SimulatedBrokerFactory
         SimulatedBrokerClass: type[BaseBroker] = SimulatedBrokerFactory(bkr)

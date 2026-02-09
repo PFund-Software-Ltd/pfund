@@ -2,6 +2,7 @@ from typing import Annotated, ClassVar, cast
 
 from pydantic import BaseModel, Field, ConfigDict, model_validator, field_validator, PrivateAttr
 
+from pfeed.enums import DataSource
 from pfund.datas.resolution import Resolution, ResolutionUnit
 
 
@@ -11,6 +12,8 @@ class DataConfig(BaseModel):
         validate_assignment=True,
     )
 
+    data_source: DataSource | str | None = Field(default=None, init=False)
+    data_origin: str = ''
     _primary_resolution: Resolution = PrivateAttr(init=False)
     extra_resolutions: list[Resolution | str] = Field(
         default_factory=list, 
@@ -94,6 +97,13 @@ class DataConfig(BaseModel):
             self._set_default_skip_first_bar(resolution)
             self._set_default_stale_bar_timeout(resolution)
         return self
+    
+    @field_validator('data_source', mode='before')
+    @classmethod
+    def validate_data_source(cls, v: DataSource | str | None) -> DataSource | None:
+        if v is not None:
+            return DataSource[v.upper()]
+        return None
     
     @field_validator('extra_resolutions', mode='before')
     @classmethod
