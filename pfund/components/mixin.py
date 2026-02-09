@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     import pandas as pd
     import polars as pl
     from pfund.typing import (
-        StrategyT, 
+        ComponentT, 
         ModelT, 
         IndicatorT, 
         FeatureT, 
@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.indicators.indicator_base import BaseIndicator
     from pfund.datas.stores.trading_store import TradingStore
+    from pfund.brokers.broker_base import BaseBroker
 
 import time
 import logging
@@ -65,16 +66,16 @@ class ComponentMixin:
         self._resolution: Resolution | None = None
         
         self.logger: logging.Logger = logging.getLogger('pfund')
-        self._proxy: ActorProxy | None = None
+        self._proxy: ActorProxy[Component] | None = None
         self._context: EngineContext | None = None
-        self._consumers: list[Component | ActorProxy] = []
+        self._consumers: list[Component | ActorProxy[Component]] = []
         self.store: TradingStore | None = None
         self.databoy = DataBoy(self)
 
         self.products: dict[ProductName, BaseProduct] = {}
-        self.models: dict[str, BaseModel | ActorProxy] = {}
-        self.features: dict[str, BaseFeature | ActorProxy] = {}
-        self.indicators: dict[str, BaseIndicator | ActorProxy] = {}
+        self.models: dict[str, BaseModel | ActorProxy[BaseModel]] = {}
+        self.features: dict[str, BaseFeature | ActorProxy[BaseFeature]] = {}
+        self.indicators: dict[str, BaseIndicator | ActorProxy[BaseIndicator]] = {}
 
         # FIXME: to be removed, should return dict with keys as column names in predict()
         # otherwise, use default cols
@@ -89,6 +90,7 @@ class ComponentMixin:
     
     @property
     def env(self) -> Environment:
+        assert self._context is not None, 'context is not set'
         return self._context.env
     
     @property
@@ -175,7 +177,7 @@ class ComponentMixin:
             datas.extend(component._get_datas_in_use())
         return list(set(datas))
     
-    def _set_proxy(self, proxy: ActorProxy):
+    def _set_proxy(self, proxy: ActorProxy[Component]):
         self._proxy = proxy
     
     @classmethod
@@ -230,14 +232,14 @@ class ComponentMixin:
         return self.databoy.datas
     
     @property
-    def components(self) -> list[Component | ActorProxy]:
+    def components(self) -> list[Component | ActorProxy[Component]]:
         components = [*self.models.values(), *self.features.values(), *self.indicators.values()]
         if self.is_strategy():
             components.extend([*self.strategies.values()])
         return components
     
     @property
-    def consumers(self) -> list[Component | ActorProxy]:
+    def consumers(self) -> list[Component | ActorProxy[Component]]:
         return self._consumers
     
     @property
@@ -314,7 +316,7 @@ class ComponentMixin:
         if not self.name.lower().endswith(self.component_type):
             self.name += f"_{self.component_type}"
     
-    def _add_consumer(self, consumer: Component | ActorProxy):
+    def _add_consumer(self, consumer: Component | ActorProxy[Component]):
         if consumer not in self._consumers:
             self._consumers.append(consumer)
         else:
@@ -364,7 +366,7 @@ class ComponentMixin:
     
     def _create_product(
         self,
-        trading_venue: TradingVenue,
+        tv: TradingVenue,
         basis: str,
         exch: str='',
         symbol: str='',
@@ -373,12 +375,12 @@ class ComponentMixin:
     ) -> BaseProduct:
         from pfund.brokers import create_broker
         # NOTE: broker is only used to create product but nothing else
-        broker = create_broker(env=self.env, bkr=TradingVenue[trading_venue.upper()].broker)
+        broker: BaseBroker = create_broker(env=self.env, bkr=TradingVenue[tv.upper()].broker)
         if broker.name == Broker.CRYPTO:
-            exch = trading_venue
-            product = broker.add_product(exch=exch, basis=basis, name=name, symbol=symbol, **specs)
+            exch = tv
+            product: BaseProduct = broker.add_product(exch=exch, basis=basis, name=name, symbol=symbol, **specs)
         elif broker.name == Broker.IBKR:
-            product = broker.add_product(exch=exch, basis=basis, name=name, symbol=symbol, **specs)
+            product: BaseProduct = broker.add_product(exch=exch, basis=basis, name=name, symbol=symbol, **specs)
         else:
             raise NotImplementedError(f"Broker {broker.name} is not supported")
         return product
@@ -405,12 +407,12 @@ class ComponentMixin:
     
     def add_data(
         self, 
-        trading_venue: TradingVenue,
+        trading_venue: TradingVenue | str,
         product_basis: str,
         exchange: str='',
         symbol: str='',
         product_name: str='',
-        data_source: DataSource | None=None,
+        data_source: DataSource | str | None=None,
         data_origin: str='',
         data_config: DataConfig | None=None,
         storage_config: StorageConfig | None=None,
@@ -432,7 +434,7 @@ class ComponentMixin:
             product_specs: product specifications, e.g. expiration, strike_price etc.
         '''
         product: BaseProduct = self._create_product(
-            trading_venue=trading_venue,
+            tv=TradingVenue[trading_venue.upper()],
             basis=product_basis,
             exch=exchange,
             symbol=symbol,
@@ -474,7 +476,7 @@ class ComponentMixin:
     
     def _add_component(
         self, 
-        component: StrategyT | ModelT | FeatureT | IndicatorT | ActorProxy,
+        component: ComponentT | ActorProxy[ComponentT],
         name: str='', 
         min_data: int | None=None,
         max_data: int | None=None,
@@ -482,7 +484,7 @@ class ComponentMixin:
         signal_cols: list[str] | None=None,
         ray_actor_options: dict | None=None,
         **ray_kwargs
-    ) -> StrategyT | ModelT | FeatureT | IndicatorT | ActorProxy | None:
+    ) -> ComponentT | ActorProxy[ComponentT] | None:
         '''Adds a model component to the current component.
         A model component is a model, feature, or indicator.
         Args:

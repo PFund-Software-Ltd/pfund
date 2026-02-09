@@ -30,7 +30,7 @@ class TradingVenue(StrEnum):
             class_name = f'{self}Order'
         else:
             class_name = f'{self.capitalize()}Order'
-        Order = getattr(importlib.import_module(f'pfund.orders.order_{self.lower()}'), class_name)
+        Order = getattr(importlib.import_module(f'pfund.entities.orders.order_{self.lower()}'), class_name)
         return Order
     
     @property
@@ -39,7 +39,7 @@ class TradingVenue(StrEnum):
             class_name = f'{self}Product'
         else:
             class_name = f'{self.capitalize()}Product'
-        Product = getattr(importlib.import_module(f'pfund.products.product_{self.lower()}'), class_name)
+        Product = getattr(importlib.import_module(f'pfund.entities.products.product_{self.lower()}'), class_name)
         return Product
         
     @property
@@ -49,8 +49,8 @@ class TradingVenue(StrEnum):
             class_name = f'{self}Account'
         elif self.value in CryptoExchange.__members__:
             class_name = 'CryptoAccount'
-            return getattr(importlib.import_module('pfund.accounts.account_crypto'), class_name)
+            return getattr(importlib.import_module('pfund.entities.accounts.account_crypto'), class_name)
         else:
             class_name = f'{self.capitalize()}Account'
-        Account = getattr(importlib.import_module(f'pfund.accounts.account_{self.lower()}'), class_name)
+        Account = getattr(importlib.import_module(f'pfund.entities.accounts.account_{self.lower()}'), class_name)
         return Account

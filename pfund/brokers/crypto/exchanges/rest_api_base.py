@@ -63,7 +63,6 @@ class BaseRESTfulAPI(ABC):
     
     def __init__(self, env: Environment | tEnvironment):
         self._env = Environment[env.upper()]
-        assert self._env != Environment.BACKTEST, f'{self._env=} is not supported in RESTful API'
         self._logger = logging.getLogger(self.exch.lower())
         self._dev_mode = False
         Exchange: type[BaseExchange] = getattr(importlib.import_module(f'pfund.brokers.crypto.exchanges.{self.exch.lower()}.exchange'), 'Exchange')

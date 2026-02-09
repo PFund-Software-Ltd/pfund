@@ -23,7 +23,7 @@ from collections import defaultdict
 from pfund.datas import QuoteData, TickData, BarData
 from pfund.entities.products.product_base import BaseProduct
 from pfund.datas.data_config import DataConfig
-from pfund.datas.resolution import Resolution
+from pfund.datas.resolution import Resolution, ResolutionUnit
 from pfund.enums import Broker, PublicDataChannel, PrivateDataChannel
 
 
@@ -76,7 +76,8 @@ class DataBoy:
         return self._component.is_remote()
         
     @staticmethod
-    def _get_supported_resolutions(product: BaseProduct) -> dict:
+    def _get_supported_resolutions(product: BaseProduct) -> dict[ResolutionUnit, list[int]]:
+        supported_resolutions: dict[ResolutionUnit, list[int]]
         if product.bkr == Broker.CRYPTO:
             Exchange = getattr(importlib.import_module(f'pfund.brokers.crypto.exchanges.{product.exch.lower()}.exchange'), 'Exchange')
             supported_resolutions = Exchange.get_supported_resolutions(product)
@@ -127,13 +128,14 @@ class DataBoy:
         data_origin: str, 
         data_config: DataConfig,
     ) -> list[MarketData]:
+        # set data config's primary resolution to be the component's resolution
         assert self._component.resolution is not None, 'component resolution is not set'
         data_config.primary_resolution = self._component.resolution
             
         supported_resolutions = self._get_supported_resolutions(product)
         is_auto_resampled = data_config.auto_resample(supported_resolutions)
         if is_auto_resampled:
-            self.logger.warning(f'{product.name} resolution={primary_resolution} extra_resolutions={data_config.extra_resolutions} data is auto-resampled to:\n{pformat(data_config.resample)}')
+            self.logger.warning(f'{product.name} resolution={data_config.primary_resolution} extra_resolutions={data_config.extra_resolutions} data is auto-resampled to:\n{pformat(data_config.resample)}')
         
         # TODO: detect bar shift based on the returned data by e.g. Yahoo Finance, its hourly data starts from 9:30 to 10:30 etc.
         # data_config.auto_shift()

@@ -7,13 +7,15 @@ if TYPE_CHECKING:
     from pfund.components.indicators.indicator_base import BaseIndicator
     from pfund.entities.products.product_base import BaseProduct
 
-    StrategyT = TypeVar('StrategyT', bound=BaseStrategy)
-    ModelT = TypeVar('ModelT', bound=BaseModel)
-    FeatureT = TypeVar('FeatureT', bound=BaseFeature)
-    IndicatorT = TypeVar('IndicatorT', bound=BaseIndicator)
-    ProductT = TypeVar('ProductT', bound=BaseProduct)
+StrategyT = TypeVar('StrategyT', bound="BaseStrategy")
+ModelT = TypeVar('ModelT', bound="BaseModel")
+FeatureT = TypeVar('FeatureT', bound="BaseFeature")
+IndicatorT = TypeVar('IndicatorT', bound="BaseIndicator")
+ProductT = TypeVar('ProductT', bound="BaseProduct")
 
-    Component = BaseStrategy | BaseModel | BaseFeature | BaseIndicator
+Component: TypeAlias = "BaseStrategy | BaseModel | BaseFeature | BaseIndicator"
+ComponentT = TypeVar("ComponentT", bound="Component")
+
 
 EngineName: TypeAlias = str
 ComponentName: TypeAlias = str

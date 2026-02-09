@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Any
 if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
@@ -60,13 +60,13 @@ class BaseEngine:
             raise ValueError(f"{env=} is not allowed for now")
         
         setup_logging(env=env)
-        self._logger = logging.getLogger('pfund')
+        self._logger: logging.Logger = logging.getLogger('pfund')
         self._context: EngineContext = EngineContext(env=env, data_range=data_range)
         self._is_running: bool = False
         self._is_gathered: bool = False
         self.brokers: dict[Broker, BaseBroker] = {}
-        self.strategies: dict[str, BaseStrategy | ActorProxy] = {}
-        cprint(f"{self.env} {self.name} is running (data_range=({self.data_start}, {self.data_end}))", style=ENV_COLORS[self.env])
+        self.strategies: dict[str, BaseStrategy | ActorProxy[BaseStrategy]] = {}
+        cprint(f"{self.name} is running (data_range=({self.data_start}, {self.data_end}))", style=ENV_COLORS[self.env])
     
     @property
     def env(self) -> Environment:
@@ -109,7 +109,7 @@ class BaseEngine:
 
         config = get_config()
 
-        if not isinstance(settings, (TradeEngineSettings, BacktestEngineSettings)):
+        if not isinstance(settings, (TradeEngineSettings, BacktestEngineSettings)):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise ValueError(f"Invalid settings type: {type(settings)}")
 
         # write settings to settings.toml
@@ -122,12 +122,12 @@ class BaseEngine:
     
     def add_strategy(
         self, 
-        strategy: StrategyT, 
+        strategy: StrategyT,
         resolution: str, 
         name: str='', 
-        ray_actor_options: dict | None=None,
-        **ray_kwargs
-    ) -> StrategyT | ActorProxy:
+        ray_actor_options: dict[str, Any] | None=None,
+        **ray_kwargs: Any,
+    ) -> StrategyT | ActorProxy[StrategyT]:
         '''
         Args:
             ray_actor_options:
@@ -149,7 +149,7 @@ class BaseEngine:
             if not self.is_remote():
                 from pfeed.utils.ray import setup_ray
                 setup_ray()
-            strategy = ActorProxy(strategy, name=name, ray_actor_options=ray_actor_options, **ray_kwargs)
+            strategy: ActorProxy[StrategyT] = ActorProxy(strategy, name=name, ray_actor_options=ray_actor_options, **ray_kwargs)
             strategy._set_proxy(strategy)
 
         strategy._hydrate(
@@ -160,11 +160,11 @@ class BaseEngine:
         )
         strategy._set_top_strategy()
 
-        self.strategies[strat] = strategy
+        self.strategies[strat] = strategy  # pyright: ignore[reportArgumentType]
         self._logger.debug(f"added '{strat}'")
         return strategy
     
-    def get_strategy(self, name: str) -> BaseStrategy | ActorProxy:
+    def get_strategy(self, name: str) -> BaseStrategy | ActorProxy[BaseStrategy]:
         return self.strategies[name]
     
     def _add_broker(self, trading_venue: TradingVenue) -> BaseBroker:

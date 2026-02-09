@@ -2,7 +2,7 @@ from typing import Annotated, ClassVar
 
 from pydantic import BaseModel, Field, ConfigDict, model_validator, field_validator, PrivateAttr
 
-from pfund.datas.resolution import Resolution
+from pfund.datas.resolution import Resolution, ResolutionUnit
 
 
 class DataConfig(BaseModel):
@@ -177,7 +177,7 @@ class DataConfig(BaseModel):
     def auto_shift(self):
         pass
     
-    def auto_resample(self, supported_resolutions: dict) -> bool:
+    def auto_resample(self, supported_resolutions: dict[ResolutionUnit, list[int]]) -> bool:
         '''Resamples the resolutions automatically if not supported officially.
         Returns True if auto_resampling is needed.
         '''

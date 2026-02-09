@@ -1,10 +1,8 @@
 from __future__ import annotations
-from typing import Literal, TYPE_CHECKING, overload
+from typing import Literal, TYPE_CHECKING, overload, Any
 if TYPE_CHECKING:
     from pfund.typing import (
-        StrategyT, 
-        tTradingVenue, 
-        tCryptoExchange,
+        StrategyT,
         ProductName,
         AccountName,
         Currency,
@@ -23,6 +21,7 @@ if TYPE_CHECKING:
     from pfund.entities.accounts.account_simulated import SimulatedAccount
     from pfund.entities.orders.order_base import BaseOrder
     from pfund.datas.data_base import BaseData
+    from pfund.components.actor_proxy import ActorProxy
 
 from collections import deque
 from abc import ABC, abstractmethod
@@ -30,11 +29,10 @@ from abc import ABC, abstractmethod
 from pfund.components.strategies.strategy_meta import MetaStrategy
 from pfund.components.mixin import ComponentMixin
 from pfund.enums import TradingVenue, Broker
-from pfund.components.actor_proxy import ActorProxy
 
 
 class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):    
-    def __init__(self, *args, **kwargs):       
+    def __init__(self, *args: Any, **kwargs: Any):       
         # TODO: also include sub-strategies' accounts
         self.accounts: dict[AccountName, BaseAccount] = {}
         self.strategies: dict[str, BaseStrategy] = {}
@@ -64,7 +62,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def is_sub_strategy(self) -> bool:
         return not self._is_top_strategy
     
-    def get_strategy(self, name: str) -> BaseStrategy | ActorProxy:
+    def get_strategy(self, name: str) -> BaseStrategy | ActorProxy[BaseStrategy]:
         return self.strategies[name]
     
     @overload

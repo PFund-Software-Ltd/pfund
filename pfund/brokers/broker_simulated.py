@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, ClassVar
 if TYPE_CHECKING:
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.entities.products.product_base import BaseProduct
@@ -8,7 +8,6 @@ if TYPE_CHECKING:
 from collections import defaultdict
 
 from pfund.enums import Environment, Broker
-from pfund.entities.accounts.account_simulated import SimulatedAccount
 
 
 def SimulatedBrokerFactory(broker: str) -> type[BaseBroker]:
@@ -20,15 +19,27 @@ def SimulatedBrokerFactory(broker: str) -> type[BaseBroker]:
 # TODO: how to add margin calls?
 class SimulatedBroker:
     # NOTE: host, port, client_id are required for using PAPER trading data feeds in SANDBOX trading
-    WHITELISTED_ACCOUNT_FIELDS = ['_env', 'trading_venue', 'name', '_host', '_port', '_client_id']
-    DEFAULT_INITIAL_BALANCES = {'BTC': 10, 'ETH': 100, 'USD': 1_000_000}
+    WHITELISTED_ACCOUNT_FIELDS: ClassVar[list[str]] = [
+        '_env', 
+        'trading_venue', 
+        'name', 
+        '_host', 
+        '_port', 
+        '_client_id',
+    ]
+    DEFAULT_INITIAL_BALANCES: ClassVar[dict[str, float]] = {
+        'BTC': 10, 
+        'ETH': 100, 
+        'USD': 1_000_000,
+    }
     
-    def __init__(self: SimulatedBroker | BaseBroker, env: Literal['BACKTEST', 'SANDBOX']='BACKTEST'):
-        super().__init__(env=env)
-        if self._env == Environment.BACKTEST:
+    def __init__(self, env: Literal['BACKTEST', 'SANDBOX']='BACKTEST'):
+        super().__init__(env=env)  # pyright: ignore[reportCallIssue]
+        if self._env == Environment.BACKTEST:  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
             from pfund.engines.backtest_engine import BacktestEngine
             self._settings: BacktestEngineSettings | None = getattr(BacktestEngine, "_settings", None)
-        self._initial_balances = defaultdict(dict)  # {trading_venue: {acc1: balances_dict, acc2: balances_dict} }
+        # {trading_venue: {acc1: balances_dict, acc2: balances_dict} }
+        self._initial_balances = defaultdict(dict)
         # TODO
         # self._initial_positions = None
     

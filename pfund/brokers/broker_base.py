@@ -1,8 +1,8 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, ClassVar, TypeAlias
+from typing import TYPE_CHECKING, TypeAlias, Any
 if TYPE_CHECKING:
     from pfund.enums import PrivateDataChannel, PublicDataChannel
-    from pfund.typing import tEnvironment, ProductName, AccountName
+    from pfund.typing import ProductName, AccountName
     from pfund.datas.resolution import Resolution
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.entities.orders.order_base import BaseOrder
@@ -22,13 +22,11 @@ ExchangeName: TypeAlias = CryptoExchange | str
 
 
 class BaseBroker(ABC):
-    name: ClassVar[Broker]
-
-    def __init__(self, env: Environment | tEnvironment):
+    def __init__(self, env: Environment | str):
         from pfund.engines.trade_engine import TradeEngine
 
-        self._env = Environment[env.upper()]
-        self._logger: logging.Logger | None = None
+        self._env: Environment = Environment[env.upper()]
+        self._logger: logging.Logger = logging.getLogger('pfund')
         self._settings: TradeEngineSettings | None = getattr(TradeEngine, "_settings", None)
         
         self._products: defaultdict[ExchangeName, dict[ProductName, BaseProduct]] = defaultdict(dict)
@@ -36,6 +34,11 @@ class BaseBroker(ABC):
 
         self._order_manager = OrderManager(self)
         self._portfolio_manager = PortfolioManager(self)
+    
+    @property
+    @abstractmethod
+    def name(self) -> Broker:
+        pass
     
     @classmethod
     def create_product(cls, basis: str, exch: str='', name: str='', symbol: str='', **specs) -> BaseProduct:
@@ -47,6 +50,10 @@ class BaseBroker(ABC):
             trading_venue = cls.name
         Product = ProductFactory(trading_venue=trading_venue, basis=basis)
         return Product(basis=basis, exchange=exch, name=name, symbol=symbol, specs=specs)
+    
+    @abstractmethod
+    def add_product(self, *args: Any, **kwargs: Any) -> BaseProduct:
+        pass
 
     @property
     def products(self):

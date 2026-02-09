@@ -1,11 +1,12 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Any
+from typing_extensions import override
 if TYPE_CHECKING:
     from pfund.entities.products.product_crypto import CryptoProduct
     from pfund.entities.orders.order_base import BaseOrder
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.brokers.crypto.exchanges.exchange_base import BaseExchange
-    from pfund.typing import tCryptoExchange, tEnvironment, FullDataChannel, AccountName, ProductName
+    from pfund.typing import FullDataChannel, AccountName, ProductName
     from pfund.enums import OrderSide, PublicDataChannel
 
 import inspect
@@ -22,11 +23,14 @@ from pfund.brokers.broker_base import BaseBroker
 
 
 class CryptoBroker(BaseBroker):
-    name = Broker.CRYPTO
-    
-    def __init__(self, env: Environment | tEnvironment=Environment.SANDBOX):
+    def __init__(self, env: Environment | str=Environment.SANDBOX):
         super().__init__(env=env)
         self.exchanges: dict[CryptoExchange, BaseExchange] = {}
+    
+    @property
+    @override
+    def name(self) -> Broker:
+        return Broker.CRYPTO
     
     def start(self):
         for exch in self._accounts:
@@ -51,18 +55,18 @@ class CryptoBroker(BaseBroker):
             for channel in PrivateDataChannel:
                 self.add_private_channel(exch, channel)
     
-    def add_public_channel(self, exch: tCryptoExchange, channel: PublicDataChannel | FullDataChannel, data: TimeBasedData | None=None):
+    def add_public_channel(self, exch: CryptoExchange, channel: PublicDataChannel | FullDataChannel, data: TimeBasedData | None=None):
         exchange = self.get_exchange(exch)
         exchange.add_public_channel(channel, data=data)
     
-    def add_private_channel(self, exch: tCryptoExchange, channel: PrivateDataChannel | FullDataChannel):
+    def add_private_channel(self, exch: CryptoExchange, channel: PrivateDataChannel | FullDataChannel):
         exchange = self.get_exchange(exch)
         exchange.add_private_channel(channel)
         
-    def get_account(self, exch: tCryptoExchange, name: AccountName) -> CryptoAccount:
+    def get_account(self, exch: CryptoExchange, name: AccountName) -> CryptoAccount:
         return self._accounts[CryptoExchange[exch.upper()]][name]
     
-    def add_account(self, exch: tCryptoExchange, name: AccountName='', key: str='', secret: str='') -> CryptoAccount:
+    def add_account(self, exch: CryptoExchange, name: AccountName='', key: str='', secret: str='') -> CryptoAccount:
         exchange = self.add_exchange(exch)
         if name not in self._accounts[exchange.name]:
             account = CryptoAccount(env=self._env, exchange=exch, name=name, key=key, secret=secret)
@@ -72,19 +76,19 @@ class CryptoBroker(BaseBroker):
             raise ValueError(f'account name {name} has already been added')
         return account
     
-    def get_product(self, exch: tCryptoExchange, name: ProductName) -> CryptoProduct:
+    def get_product(self, exch: CryptoExchange, name: ProductName) -> CryptoProduct:
         '''
         Args:
             name: product name (product.name)
         '''
         return self._products[CryptoExchange[exch.upper()]][name]
     
-    def add_product(self, exch: tCryptoExchange, basis: str, name: ProductName='', symbol: str='', **specs) -> CryptoProduct:
+    def add_product(self, exch: CryptoExchange, basis: str, name: ProductName='', symbol: str='', **specs: Any) -> CryptoProduct:
         '''
         Args:
             name: product name (product.name)
         '''
-        exchange = self.add_exchange(exch)
+        exchange: BaseExchange = self.add_exchange(exch)
         # create another product object to get a correct product name
         product: CryptoProduct = exchange.create_product(basis, name=name, symbol=symbol, specs=specs)
         if product.name not in self._products[exchange.name]:
@@ -99,11 +103,11 @@ class CryptoBroker(BaseBroker):
                 raise ValueError(f'product name {name} has already been used for {existing_product}')
         return product
     
-    def get_exchange(self, exch: tCryptoExchange) -> BaseExchange:
+    def get_exchange(self, exch: CryptoExchange) -> BaseExchange:
         return self.exchanges[CryptoExchange[exch.upper()]]
 
-    def add_exchange(self, exch: tCryptoExchange) -> BaseExchange:
-        exch = CryptoExchange[exch.upper()]
+    def add_exchange(self, exch: CryptoExchange | str) -> BaseExchange:
+        exch: CryptoExchange = CryptoExchange[exch.upper()]
         if exch not in self.exchanges:
             Exchange: type[BaseExchange] = exch.exchange_class
             exchange: BaseExchange = Exchange(env=self._env)
@@ -113,7 +117,7 @@ class CryptoBroker(BaseBroker):
             exchange: BaseExchange = self.get_exchange(exch)
         return exchange
     
-    def add_balance(self, exch: tCryptoExchange, acc: str, ccy: str) -> CryptoBalance:
+    def add_balance(self, exch: CryptoExchange, acc: str, ccy: str) -> CryptoBalance:
         exch, acc, ccy = to_uppercase(exch, acc, ccy)
         if not (balance := self.get_balances(exch, acc=acc, ccy=ccy)):
             self.add_exchange(exch)
@@ -123,7 +127,7 @@ class CryptoBroker(BaseBroker):
             self._logger.debug(f'added {balance}')
         return balance
 
-    def add_position(self, exch: tCryptoExchange, acc: str, pdt: str) -> CryptoPosition:
+    def add_position(self, exch: CryptoExchange, acc: str, pdt: str) -> CryptoPosition:
         exch, acc, pdt = to_uppercase(exch, acc, pdt)
         if not (position := self.get_positions(exch, acc=acc, pdt=pdt)):
             account = self.get_account(exch, acc)
@@ -141,7 +145,7 @@ class CryptoBroker(BaseBroker):
         func = inspect.stack()[0][3]
         Thread(target=work, name=func+'_thread', daemon=True).start()
 
-    def get_orders(self, exch: tCryptoExchange, acc: str, pdt: str='', oid: str='', eoid: str='', is_api_call=False, **kwargs) -> dict | None:
+    def get_orders(self, exch: CryptoExchange, acc: str, pdt: str='', oid: str='', eoid: str='', is_api_call=False, **kwargs) -> dict | None:
         exch, acc, pdt = to_uppercase(exch, acc, pdt)
         if not is_api_call:
             return self._order_manager.get_orders(exch, acc, pdt=pdt, oid=oid, eoid=eoid)
@@ -158,7 +162,7 @@ class CryptoBroker(BaseBroker):
         func = inspect.stack()[0][3]
         Thread(target=work, name=func+'_thread', daemon=True).start()
 
-    def get_trades(self, exch: tCryptoExchange, acc: str, pdt: str='', is_api_call=False, **kwargs) -> dict | None:
+    def get_trades(self, exch: CryptoExchange, acc: str, pdt: str='', is_api_call=False, **kwargs) -> dict | None:
         exch, acc, pdt = to_uppercase(exch, acc, pdt)
         if not is_api_call:
             return self._order_manager.get_trades(...)
@@ -175,7 +179,7 @@ class CryptoBroker(BaseBroker):
         func = inspect.stack()[0][3]
         Thread(target=work, name=func+'_thread', daemon=True).start()
 
-    def get_balances(self, exch: tCryptoExchange, acc: str='', ccy: str='', is_api_call=False, **kwargs) -> dict | None:
+    def get_balances(self, exch: CryptoExchange, acc: str='', ccy: str='', is_api_call=False, **kwargs) -> dict | None:
         exch, acc, ccy = to_uppercase(exch, acc, ccy)
         if not is_api_call:
             return self._portfolio_manager.get_balances(exch, acc, ccy=ccy)
@@ -192,7 +196,7 @@ class CryptoBroker(BaseBroker):
         func = inspect.stack()[0][3]
         Thread(target=work, name=func+'_thread', daemon=True).start()
 
-    def get_positions(self, exch: tCryptoExchange, acc: str='', pdt: str='', is_api_call=False, **kwargs) -> dict | None:
+    def get_positions(self, exch: CryptoExchange, acc: str='', pdt: str='', is_api_call=False, **kwargs) -> dict | None:
         exch, acc, pdt = to_uppercase(exch, acc, pdt)
         if not is_api_call:
             return self._portfolio_manager.get_positions(exch, acc=acc, pdt=pdt)

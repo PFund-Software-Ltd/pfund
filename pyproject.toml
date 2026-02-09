@@ -55,7 +55,12 @@ build-backend = "uv_build"
 reportAny = false
 reportExplicitAny = false
 reportIncompatibleMethodOverride = false
-# reportImportCycles = false
+reportUnreachable = false
+reportRedeclaration = false
+reportImportCycles = false
+reportPrivateUsage = false
+reportUnusedCallResult = false
+reportImplicitOverride = false
 
 [tool.uv.build-backend]
 module-name = "pfund"

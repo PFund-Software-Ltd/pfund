@@ -50,6 +50,8 @@ class Exchange(BaseExchange):
         Category = to_camel_case(product.category)
         WebSocketAPI: type[BaseWebSocketAPI] = getattr(importlib.import_module(f'pfund.brokers.crypto.exchanges.{name}.ws_api_{Category.lower()}'), f'{Category}WebSocketAPI')
         return WebSocketAPI.SUPPORTED_RESOLUTIONS    
+    
+    
 
     '''
     Functions using REST API

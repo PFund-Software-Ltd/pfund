@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Literal
+from typing import Literal, Any
 
 from pathlib import Path
 
@@ -18,26 +18,26 @@ __all__ = [
 
 project_name = 'pfund'
 _config: PFundConfig | None = None
-_logging_config: dict | None = None
+_logging_config: dict[str, Any] | None = None
 
 
 def setup_logging(env: Environment | None=None, reset: bool=False):
     from pfund_kit.logging import clear_logging_handlers, setup_exception_logging
     from pfund_kit.logging.configurator import LoggingDictConfigurator
     
-    env = Environment[env.upper()] if env else ''
+    env = Environment[env.upper()] if env else None
     
     if reset:
         clear_logging_handlers()
         
     config: PFundConfig = get_config()
-    logging_config: dict = get_logging_config()
+    logging_config: dict[str, Any] = get_logging_config()
 
     log_path = config.log_path / env if env else config.log_path
     log_path.mkdir(parents=True, exist_ok=True)
 
     # ≈ logging.config.dictConfig(logging_config) with a custom configurator
-    logging_configurator = LoggingDictConfigurator.create(
+    logging_configurator: LoggingDictConfigurator = LoggingDictConfigurator.create(
         log_path=log_path, 
         logging_config=logging_config, 
         lazy=True,
@@ -46,7 +46,6 @@ def setup_logging(env: Environment | None=None, reset: bool=False):
     logging_configurator.configure()
     
     setup_exception_logging(logger_name=project_name)
-    return logging_config
 
 
 def get_config() -> PFundConfig:
@@ -59,7 +58,7 @@ def get_config() -> PFundConfig:
     return _config
 
 
-def get_logging_config() -> dict:
+def get_logging_config() -> dict[str, Any]:
     global _logging_config
     if _logging_config is None:
         _logging_config = configure_logging()

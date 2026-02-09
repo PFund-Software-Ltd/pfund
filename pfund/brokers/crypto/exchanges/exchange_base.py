@@ -1,8 +1,10 @@
 from __future__ import annotations  
-from typing import TYPE_CHECKING, ClassVar, TypeAlias, Literal
+from typing import TYPE_CHECKING, ClassVar, TypeAlias, Literal, Any
+
 if TYPE_CHECKING:
     from pathlib import Path
-    from pfund.brokers.crypto.exchanges.rest_api_base import Result, ApiResponse
+    from pfund.brokers.crypto.exchanges.rest_api_base import BaseRESTfulAPI, Result, ApiResponse
+    from pfund.brokers.crypto.exchanges.ws_api_base import BaseWebSocketAPI
     from pfund.enums import CryptoExchange
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.datas.resolution import ResolutionUnit
@@ -28,26 +30,25 @@ ProductCategory: TypeAlias = str
 
 
 class BaseExchange(ABC):
-    bkr = Broker.CRYPTO
     name: ClassVar[CryptoExchange]
     adapter: ClassVar[Adapter]
     
-    MARKET_CONFIGS_FILENAME = 'market_configs.yml'
+    MARKET_CONFIGS_FILENAME: ClassVar[str] = 'market_configs.yml'
             
     def __init__(self, env: Environment | tEnvironment):
         from pfund.engines.trade_engine import TradeEngine
-        self._env = Environment[env.upper()]
-        self._logger = logging.getLogger(self.name.lower())
+        self._env: Environment = Environment[env.upper()]
+        self._logger: logging.Logger = logging.getLogger(f'pfund.{self.name.lower()}')
         self._products: dict[ProductName, CryptoProduct] = {}
         self._accounts: dict[AccountName, CryptoAccount] = {}
         self._settings: TradeEngineSettings | None = getattr(TradeEngine, "_settings", None)
 
         # APIs
         exchange_path = f'pfund.brokers.crypto.exchanges.{self.name.lower()}'
-        RESTfulAPI = getattr(importlib.import_module(f'{exchange_path}.rest_api'), 'RESTfulAPI')
-        self._rest_api = RESTfulAPI(self._env)
-        WebSocketAPI = getattr(importlib.import_module(f'{exchange_path}.ws_api'), 'WebSocketAPI')
-        self._ws_api = WebSocketAPI(self._env)
+        RESTfulAPI: type[BaseRESTfulAPI] = getattr(importlib.import_module(f'{exchange_path}.rest_api'), 'RESTfulAPI')
+        self._rest_api: BaseRESTfulAPI = RESTfulAPI(self._env)
+        WebSocketAPI: type[BaseWebSocketAPI] = getattr(importlib.import_module(f'{exchange_path}.ws_api'), 'WebSocketAPI')
+        self._ws_api: BaseWebSocketAPI = WebSocketAPI(self._env)
 
         if self._settings:
             self._check_if_refetch_market_configs()
@@ -58,7 +59,8 @@ class BaseExchange(ABC):
     
     @property
     def broker(self) -> Broker:
-        return self.bkr
+        return Broker.CRYPTO
+    bkr = broker
     
     @property
     def products(self):
@@ -153,7 +155,7 @@ class BaseExchange(ABC):
         dump(data=existing_market_configs, file_path=market_configs_file_path)
 
     @classmethod
-    def create_product(cls, basis: str, name: str='', symbol: str='', **specs) -> CryptoProduct:
+    def create_product(cls, basis: str, name: str='', symbol: str='', **specs: Any) -> CryptoProduct:
         from pfund.entities.products import ProductFactory
         Product = ProductFactory(trading_venue=cls.name, basis=basis)
         return Product(basis=basis, name=name, symbol=symbol, specs=specs)

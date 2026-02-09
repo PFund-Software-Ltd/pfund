@@ -12,7 +12,7 @@ def OrderFactory(trading_venue: TradingVenue | tTradingVenue, order_type: OrderT
     trading_venue = TradingVenue[trading_venue.upper()]
     Order = trading_venue.order_class
     order_type = OrderType[order_type.upper()]
-    OrderTypeMixin = getattr(importlib.import_module(f'pfund.orders.mixins.{order_type.lower()}_order'), f'{order_type.capitalize()}OrderMixin')
+    OrderTypeMixin = getattr(importlib.import_module(f'pfund.entities.orders.mixins.{order_type.lower()}_order'), f'{order_type.capitalize()}OrderMixin')
     class_name = (
         f'{Order.__name__.replace("Order", "")}'
         + OrderTypeMixin.__name__.replace('Mixin', '')

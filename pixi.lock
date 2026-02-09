@@ -8041,7 +8041,7 @@ packages:
 - pypi: ./
   name: pfund
   version: 0.0.2
-  sha256: 9944e4befee38ba4afb0b1c5244576bf6a16d0136022b9073ecfbc00c1ac23a6
+  sha256: efb187fa3dc8ccb39bf53c04a849f07daae8242f28262433812de3de9efd0259
   requires_dist:
   - pfeed[duckdb] @ file:///Users/stephenyau/pfund.ai/pfeed
   - pfolio @ file:///Users/stephenyau/pfund.ai/pfolio

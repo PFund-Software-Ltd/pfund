@@ -25,7 +25,8 @@ class TradingStore:
         self._logger = logging.getLogger('pfund')
         self._context: EngineContext = context
         self._feed: PFundComponentFeed = pe.PFund(env=context.env).component_feed
-        self._storage: BaseStorage = self._create_storage()
+        # TEMP
+        # self._storage: BaseStorage = self._create_storage()
         self._data_stores: dict[DataCategory, BaseDataStore] = {}
         self._df: GenericFrame | None = None
         self._df_updates = []

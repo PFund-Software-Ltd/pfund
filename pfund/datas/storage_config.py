@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -6,7 +8,7 @@ from pfeed.enums import DataStorage, IOFormat, Compression, DataLayer
 
 
 class StorageConfig(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(arbitrary_types_allowed=True)
 
     data_path: Path | str | None = None
     data_layer: DataLayer = DataLayer.CLEANED

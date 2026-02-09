@@ -3,6 +3,7 @@ Conceptually, this is the equivalent of broker_crypto.py + exchange_base.py in c
 """
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
+from typing_extensions import override
 if TYPE_CHECKING:
     from pfund.typing import tEnvironment, FullDataChannel, AccountName, ProductName
     from pfund.datas.data_time_based import TimeBasedData
@@ -19,7 +20,6 @@ from pfund.enums import PublicDataChannel, PrivateDataChannel, Environment, Brok
 
 
 class InteractiveBrokers(BaseBroker):
-    name = Broker.IBKR
     adapter = Adapter(name)
     
     def __init__(self, env: Environment | tEnvironment=Environment.SANDBOX):
@@ -30,6 +30,11 @@ class InteractiveBrokers(BaseBroker):
         self.account = None
         self._accounts: dict[Literal[Broker.IBKR], dict[AccountName, IBKRAccount]] = { self.name: {} }
         self._api = InteractiveBrokersAPI(self._env)
+    
+    @property
+    @override
+    def name(self) -> Broker:
+        return Broker.IBKR
 
     @property
     def accounts(self):
