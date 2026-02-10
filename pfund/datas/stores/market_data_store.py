@@ -1,11 +1,9 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, TypeAlias, overload
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import datetime
     from pfeed.typing import GenericFrame
     from pfeed.enums import DataStorage
-    from pfeed.feeds.market_feed import MarketFeed
-    from pfund.datas.data_market import MarketData
     from pfund.datas.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
 
@@ -15,46 +13,37 @@ from pfeed.enums import DataSource
 from pfund.datas.stores.base_data_store import BaseDataStore
 
 
-MarketDataKey: TypeAlias = str
-ProductName: TypeAlias = str
-ResolutionRepr: TypeAlias = str
-
-
 class MarketDataStore(BaseDataStore):
-    
-    @overload
-    def _create_feed(self, data: MarketData) -> MarketFeed: 
-        ...
-            
     def materialize(self):
         '''Loads data from pfeed's data lakehouse into the store'''
-        dfs = []
+        print('***materializing market data store')
+        # dfs = []
         # FIXME: use data objects directly instead of metadata
-        for metadata in self._registry.values():
-            data_source: DataSource = metadata['data_source']
-            data_origin = metadata['data_origin']
-            product: BaseProduct = metadata['product']
-            resolution: Resolution = metadata['resolution']
-            data_key = self._generate_data_key(
-                data_source=data_source,
-                data_origin=data_origin,
-                product=product.name,
-                resolution=repr(resolution),
-            )
-            df = self._get_historical_data(
-                data_source=data_source,
-                data_origin=data_origin,
-                product=product,
-                resolution=resolution,
-                start_date=metadata['start_date'],
-                end_date=metadata['end_date'],
-                storage=self._storage,
-                storage_options=self._storage_options,
-            )
-            assert df is not None, f'No data found for {data_key}'
-            dfs.append(df)
-            # TODO: add data_source as new column? need to differentiate historical data from live data
-        self._set_data(pl.concat(dfs))
+        # for metadata in self._registry.values():
+        #     data_source: DataSource = metadata['data_source']
+        #     data_origin = metadata['data_origin']
+        #     product: BaseProduct = metadata['product']
+        #     resolution: Resolution = metadata['resolution']
+        #     data_key = self._generate_data_key(
+        #         data_source=data_source,
+        #         data_origin=data_origin,
+        #         product=product.name,
+        #         resolution=repr(resolution),
+        #     )
+        #     df = self._get_historical_data(
+        #         data_source=data_source,
+        #         data_origin=data_origin,
+        #         product=product,
+        #         resolution=resolution,
+        #         start_date=metadata['start_date'],
+        #         end_date=metadata['end_date'],
+        #         storage=self._storage,
+        #         storage_options=self._storage_options,
+        #     )
+        #     assert df is not None, f'No data found for {data_key}'
+        #     dfs.append(df)
+        #     # TODO: add data_source as new column? need to differentiate historical data from live data
+        # self._set_data(pl.concat(dfs))
     
     def _get_historical_data(
         self,

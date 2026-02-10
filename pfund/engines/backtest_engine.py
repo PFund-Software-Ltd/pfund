@@ -1,10 +1,11 @@
-# pyright: reportUninitializedInstanceVariable=false
+# pyright: reportUninitializedInstanceVariable=false, reportUnsafeMultipleInheritance=false, reportIncompatibleVariableOverride=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, cast
 if TYPE_CHECKING:
     import pandas as pd
     from sklearn.model_selection import TimeSeriesSplit
     from pfund.typing import StrategyT, ModelT, FeatureT, IndicatorT
+    from pfund.brokers.broker_base import BaseBroker
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.components.models.model_base import BaseModel
     from pfund.utils.dataset_splitter import DatasetSplitsDict, CrossValidatorDatasetPeriods, DatasetPeriods
@@ -12,6 +13,12 @@ if TYPE_CHECKING:
     from pfund.engines.engine_context import DataRangeDict
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.engines.engine_context import EngineContext
+    from pfund.entities.accounts.account_base import BaseAccount
+    from pfund.brokers.crypto.broker import CryptoBroker
+    from pfund.brokers.ibkr.broker import InteractiveBrokers
+    from pfund.brokers.broker_simulated import SimulatedBroker
+    class SimulatedCryptoBroker(SimulatedBroker, CryptoBroker): ...
+    class SimulatedInteractiveBrokers(SimulatedBroker, InteractiveBrokers): ...
     class BacktestEngineContext(EngineContext):
         backtest: BacktestContext
 
@@ -33,10 +40,7 @@ from pfund.utils.dataset_splitter import DatasetSplitter
 @dataclass(frozen=True)
 class BacktestContext:
     backtest_mode: BacktestMode
-    num_chunks: int
     dataset_splitter: DatasetSplitter
-
-
 
 
 class BacktestEngine(BaseEngine):
@@ -44,16 +48,11 @@ class BacktestEngine(BaseEngine):
         self,
         data_range: str | DataRangeDict | Literal['ytd']='1mo',
         mode: Literal['vectorized', 'hybrid', 'event_driven']='vectorized',
-        num_chunks: int=1,
         dataset_splits: int | DatasetSplitsDict | TimeSeriesSplit=721,
         cv_test_ratio: float=0.1,
     ):
         '''
         Args:
-            num_chunks:
-                number of chunks to split the dataset into for parallel processing.
-                if > 1, will use ray for parallel processing and num_chunks = num_cpus in ray's task.
-                if = 1, will process the dataset sequentially.
             cv_test_ratio:
                 if passing in a cross-validator in dataset_splits, 
                 this is the ratio of the entire dataset to be reserved as a final hold-out test set.
@@ -62,7 +61,6 @@ class BacktestEngine(BaseEngine):
         super().__init__(env=Environment.BACKTEST, data_range=data_range)
         cast("BacktestEngineContext", self._context).backtest = BacktestContext(
             backtest_mode=BacktestMode[mode.lower()],
-            num_chunks=num_chunks,
             dataset_splitter=DatasetSplitter(
                 dataset_start=self.data_start,
                 dataset_end=self.data_end,
@@ -70,12 +68,16 @@ class BacktestEngine(BaseEngine):
                 cv_test_ratio=cv_test_ratio
             )
         )
-        if self.backtest_mode == BacktestMode.event_driven and cast("BacktestEngineSettings", self.settings).reuse_signals:
+        if self.backtest_mode == BacktestMode.event_driven and self.settings.reuse_signals:
             cprint(
                 'Warning: Reusing precomputed signals to speed up event-driven backtesting,\n' +
                 'i.e. computing signals on the fly will be skipped',
                 style='bold'
             )
+    
+    @property
+    def settings(self) -> BacktestEngineSettings:
+        return cast("BacktestEngineSettings", self._context.settings)
     
     @property
     def backtest_mode(self) -> BacktestMode:
@@ -90,7 +92,7 @@ class BacktestEngine(BaseEngine):
         '''gets the name of the dummy strategy'''
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
         return _DummyStrategy.name
-    
+        
     def add_strategy(self, strategy: StrategyT, resolution: str, name: str='') -> StrategyT:
         '''
         Args:
@@ -101,13 +103,15 @@ class BacktestEngine(BaseEngine):
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
         from pfund.components.strategies.strategy_backtest import BacktestStrategy
 
-        assert self._dummy not in self.strategies, 'adding another strategy is not allowed during model backtesting (i.e. engine.add_model(...) has been called)'
-        Strategy = strategy.__class__
+        if self._dummy in self.strategies:
+            raise Exception('adding another strategy is not allowed during model backtesting (i.e. engine.add_model(...) has been called)')
+        Strategy = type(strategy)
         if Strategy is not _DummyStrategy:
-            assert name != self._dummy, f'strategy name "{self._dummy}" is reserved, please use another name'
+            if name == self._dummy:
+                raise ValueError(f'strategy name "{self._dummy}" is reserved, please use another name')
         name = name or Strategy.__name__
-        strategy = BacktestStrategy(Strategy, *strategy.__pfund_args__, **strategy.__pfund_kwargs__)
-        return super().add_strategy(strategy=strategy, resolution=resolution, name=name)
+        strategy: StrategyT = BacktestStrategy(Strategy, *strategy.__pfund_args__, **strategy.__pfund_kwargs__)
+        return cast("StrategyT", super().add_strategy(strategy=strategy, resolution=resolution, name=name))
 
     def add_model(
         self, 
@@ -187,42 +191,49 @@ class BacktestEngine(BaseEngine):
         if not params or params[0].name != 'df':
             raise Exception(f'{backtestee.name} backtest() must have "df" as its first arg, i.e. backtest(self, df)')
     
-    def run(self, num_chunks: int=1, **ray_kwargs):
+    def run(self, num_chunks: int=1):
+        '''
+        num_chunks:
+            number of chunks to split the dataset into for parallel processing.
+            if > 1, will use ray for parallel processing and num_chunks = num_cpus in ray's task.
+            if = 1, will process the dataset sequentially.
+        '''
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
         
         super().run()
         assert num_chunks > 0, 'num_chunks must be greater than 0'
-        if num_chunks > 1 and not self._use_ray:
-            self._logger.warning('num_chunks > 1 but ray is not enabled, chunks will be processed sequentially')
-        for broker in self.brokers.values():
-            broker.start()
-        self.strategy_manager.start()
-        backtest_results = {}
-        error = ''
-        try:
-            for strat, strategy in self.strategies.items():
-                backtestee = strategy
-                if strat == _DummyStrategy.name:
-                    if self.backtest_mode == BacktestMode.vectorized:
-                        continue
-                    elif self.backtest_mode == BacktestMode.event_driven:
-                        # dummy strategy has exactly one model
-                        model = list(strategy.models.values())[0]
-                        backtestee = model
-                backtest_result: dict = self._backtest(backtestee, num_chunks=num_chunks, ray_kwargs=ray_kwargs)
-                backtest_results.update(backtest_result)
-            # if only one backtest is run, return the backtest result without backtestee's name
-            if len(backtest_results) == 1:
-                backtest_results = backtest_results[backtestee.name]
-        except Exception as err:
-            error = str(err)
-            self._logger.exception('Error in backtesting:')
-        finally:
-            self.end(reason=error)
+        # TODO: to be refactored
+        # if num_chunks > 1 and not self._use_ray:
+        #     self._logger.warning('num_chunks > 1 but ray is not enabled, chunks will be processed sequentially')
+        # for broker in self.brokers.values():
+        #     broker.start()
+        # self.strategy_manager.start()
+        # backtest_results = {}
+        # error = ''
+        # try:
+        #     for strat, strategy in self.strategies.items():
+        #         backtestee = strategy
+        #         if strat == _DummyStrategy.name:
+        #             if self.backtest_mode == BacktestMode.vectorized:
+        #                 continue
+        #             elif self.backtest_mode == BacktestMode.event_driven:
+        #                 # dummy strategy has exactly one model
+        #                 model = list(strategy.models.values())[0]
+        #                 backtestee = model
+        #         backtest_result: dict = self._backtest(backtestee, num_chunks=num_chunks, ray_kwargs=ray_kwargs)
+        #         backtest_results.update(backtest_result)
+        #     # if only one backtest is run, return the backtest result without backtestee's name
+        #     if len(backtest_results) == 1:
+        #         backtest_results = backtest_results[backtestee.name]
+        # except Exception as err:
+        #     error = str(err)
+        #     self._logger.exception('Error in backtesting:')
+        # finally:
+        #     self.end(reason=error)
         
-        return backtest_results
+        # return backtest_results
 
-    def _backtest(self, backtestee: BaseStrategy | BaseModel, num_chunks: int=1, ray_kwargs: dict | None=None) -> dict:       
+    def _backtest(self, backtestee: BaseStrategy | BaseModel, num_chunks: int=1) -> dict:       
         backtest_result = {}
         dtl = backtestee.dtl
         df = backtestee.get_df(copy=True)
@@ -287,7 +298,7 @@ class BacktestEngine(BaseEngine):
             logger = backtestee.logger
             with ray_logging_context(logger) as log_queue:
                 try:
-                    batch_size = ray_kwargs['num_cpus']
+                    batch_size = ray_kwargs['num_cpus']  # FIXME: replace with num_chunks
                     batches = [ray_tasks[i: i + batch_size] for i in range(0, len(ray_tasks), batch_size)]
                     with ProgressBar(
                         total=len(batches),

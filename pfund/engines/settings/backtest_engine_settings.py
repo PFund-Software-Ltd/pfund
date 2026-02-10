@@ -1,5 +1,9 @@
+from typing import ClassVar
+
 from pydantic import Field, model_validator
 
+from pfund.typing import Currency, ProductName
+from pfund.enums import TradingVenue
 from pfund.engines.settings.base_engine_settings import BaseEngineSettings
 
 
@@ -10,6 +14,9 @@ settings: BacktestEngineSettings = {
     }
 '''
 class BacktestEngineSettings(BaseEngineSettings):
+    # If not provided, will use the default initial balances in SimulatedBroker
+    initial_balances: ClassVar[dict[TradingVenue, dict[Currency, float]] | None] = None
+    initial_positions: ClassVar[dict[TradingVenue, dict[ProductName, float]] | None] = None
     retention_period: int = Field(default=7, ge=1)
     commit_to_git: bool = Field(default=False)
     save_backtests: bool = Field(default=True)

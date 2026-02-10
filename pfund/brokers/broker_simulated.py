@@ -1,13 +1,17 @@
+# pyright: reportUninitializedInstanceVariable=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast, Any
+
 if TYPE_CHECKING:
+    from pfund.typing import Currency, AccountName, ProductName
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.entities.products.product_base import BaseProduct
     from pfund.brokers.broker_base import BaseBroker
+    from pfund.entities.accounts.account_base import BaseAccount
 
-from collections import defaultdict
+import logging
 
-from pfund.enums import Environment, Broker
+from pfund.enums import Environment, TradingVenue, Broker
 
 
 def SimulatedBrokerFactory(broker: str) -> type[BaseBroker]:
@@ -18,38 +22,51 @@ def SimulatedBrokerFactory(broker: str) -> type[BaseBroker]:
 
 # TODO: how to add margin calls?
 class SimulatedBroker:
-    # NOTE: host, port, client_id are required for using PAPER trading data feeds in SANDBOX trading
+    # NOTE: host, port, client_id are required for using PAPER/LIVE trading data feeds in SANDBOX trading
     WHITELISTED_ACCOUNT_FIELDS: ClassVar[list[str]] = [
         '_env', 
         'trading_venue', 
         'name', 
-        '_host', 
-        '_port', 
+        '_host',
+        '_port',
         '_client_id',
     ]
-    DEFAULT_INITIAL_BALANCES: ClassVar[dict[str, float]] = {
-        'BTC': 10, 
-        'ETH': 100, 
-        'USD': 1_000_000,
+    DEFAULT_INITIAL_BALANCES: ClassVar[dict[TradingVenue, dict[Currency, float]]] = {
+        TradingVenue.IBKR: {
+            'USD': 1_000_000,
+        },
+        TradingVenue.BYBIT: {
+            'BTC': 10,
+            'USDT': 1_000_000,
+        },
     }
-    
-    def __init__(self, env: Literal['BACKTEST', 'SANDBOX']='BACKTEST'):
-        super().__init__(env=env)  # pyright: ignore[reportCallIssue]
-        if self._env == Environment.BACKTEST:  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
-            from pfund.engines.backtest_engine import BacktestEngine
-            self._settings: BacktestEngineSettings | None = getattr(BacktestEngine, "_settings", None)
-        # {trading_venue: {acc1: balances_dict, acc2: balances_dict} }
-        self._initial_balances = defaultdict(dict)
-        # TODO
-        # self._initial_positions = None
+
+    _logger: logging.Logger
+    name: Broker
+    _env: Environment
+    _settings: BacktestEngineSettings | None
+    _products: dict[TradingVenue, dict[ProductName, BaseProduct]]
+    _accounts: dict[TradingVenue, dict[AccountName, BaseAccount]]
     
     # TODO
-    def _safety_check(self: SimulatedBroker | BaseBroker):
+    def _safety_check(self):
         # TODO: add a function to override all the existing functions in live broker
         pass
         
-    def _accounts_check(self: SimulatedBroker | BaseBroker):
-        assert all(isinstance(account, SimulatedAccount) for account in self._accounts.values()), 'all accounts must be SimulatedAccount'
+    def _accounts_check(self):
+        accounts: list[BaseAccount] = [
+            account
+            for accounts_per_venue in self._accounts.values()
+            for account in accounts_per_venue.values()
+        ]
+
+        for account in accounts:
+            # remove all the attributes that are not in WHITELISTED_ACCOUNT_FIELDS
+            for k in list(account.__dict__):
+                if k not in self.WHITELISTED_ACCOUNT_FIELDS:
+                    self._logger.warning(f'removed non-whitelisted attribute {k} from {self.name} account {account.name}')
+                    delattr(account, k)
+
         if self.name == Broker.IBKR:
             from pfund.entities.accounts.account_ibkr import IBKRAccount
             account = list(self._accounts.values())[0]  # IB has only one account for SANDBOX trading
@@ -62,77 +79,56 @@ class SimulatedBroker:
                 client_id=getattr(account, 'client_id', None),
             )
 
-    def start(self: SimulatedBroker | BaseBroker):
+    def start(self):
         self._safety_check()
         self._accounts_check()
         self._logger.debug(f'broker {self.name} started')
         self.initialize_balances()
         
-    def stop(self: SimulatedBroker | BaseBroker):
+    def stop(self):
         self._logger.debug(f'broker {self.name} stopped')
     
-    def add_account(
-        self: SimulatedBroker | BaseBroker, 
-        name: str='', 
-        initial_balances: dict[str, float] | None=None,
-        initial_positions: dict[BaseProduct, float]|None=None,
-        **kwargs,
-    ):
-        account = super().add_account(name=name, **kwargs)
-        # remove all the attributes that are not in WHITELISTED_ACCOUNT_FIELDS
-        for k, v in account.__dict__.items():
-            if k not in self.WHITELISTED_ACCOUNT_FIELDS:
-                delattr(account, k)
-        # TODO: assign different initial balances for different broker accounts
-        if initial_balances is None:
-            initial_balances = self.DEFAULT_INITIAL_BALANCES
-        else: 
-            initial_balances = {k.upper(): v for k, v in initial_balances.items()}
-        trading_venue = account.exch if self.name == Broker.CRYPTO else self.name
-        self._initial_balances[trading_venue][account.name] = initial_balances
-        return account
-
     # FIXME, what if a strategy needs to get_xxx before e.g. placing an order
-    def get_balances(self: SimulatedBroker | BaseBroker, *args, **kwargs):
+    def get_balances(self, *args, **kwargs):
         pass
     
     # FIXME, what if a strategy needs to get_xxx before e.g. placing an order
-    def get_positions(self: SimulatedBroker | BaseBroker, *args, **kwargs):
+    def get_positions(self, *args, **kwargs):
         pass
     
     # FIXME, what if a strategy needs to get_xxx before e.g. placing an order
-    def get_orders(self: SimulatedBroker | BaseBroker, *args, **kwargs):
+    def get_orders(self, *args, **kwargs):
         pass
     
     # FIXME, what if a strategy needs to get_xxx before e.g. placing an order
-    def get_trades(self: SimulatedBroker | BaseBroker, *args, **kwargs):
+    def get_trades(self, *args, **kwargs):
         pass
     
-    def get_initial_balances(self: SimulatedBroker | BaseBroker):
+    def get_initial_balances(self):
         return self._initial_balances
     
-    def initialize_balances(self: SimulatedBroker | BaseBroker):
+    def initialize_balances(self):
         for trading_venue in self._initial_balances:
             for acc, initial_balances in self._initial_balances[trading_venue].items():
                 updates = {'ts': None, 'data': {k: {'wallet': v, 'available': v, 'margin': v} for k, v in initial_balances.items()}}
                 self._portfolio_manager.update_balances(trading_venue, acc, updates)
     
     # TODO
-    def place_orders(self: SimulatedBroker | BaseBroker, account, product, orders):
+    def place_orders(self, account, product, orders):
         pass
         # self.order_manager.handle_msgs(...)
         # self.portfolio_manager.handle_msgs(...)
 
     # TODO
-    def cancel_orders(self: SimulatedBroker | BaseBroker, account, product, orders):
+    def cancel_orders(self, account, product, orders):
         pass
         # self.order_manager.handle_msgs(...)
     
     # TODO
-    def cancel_all_orders(self: SimulatedBroker | BaseBroker):
+    def cancel_all_orders(self):
         pass
         # self.order_manager.handle_msgs(...)
 
     # TODO
-    def amend_orders(self: SimulatedBroker | BaseBroker, account, product, orders):
+    def amend_orders(self, account, product, orders):
         pass

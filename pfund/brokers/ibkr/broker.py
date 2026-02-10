@@ -2,10 +2,10 @@
 Conceptually, this is the equivalent of broker_crypto.py + exchange_base.py in crypto
 """
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, ClassVar
 from typing_extensions import override
 if TYPE_CHECKING:
-    from pfund.typing import tEnvironment, FullDataChannel, AccountName, ProductName
+    from pfund.typing import FullDataChannel, AccountName, ProductName
     from pfund.datas.data_time_based import TimeBasedData
 
 from pfund.utils.adapter import Adapter
@@ -16,26 +16,22 @@ from pfund.entities.positions.position_ibkr import IBKRPosition
 from pfund.entities.balances.balance_ibkr import IBKRBalance
 from pfund_kit.utils.text import to_uppercase
 from pfund.brokers.broker_base import BaseBroker
-from pfund.enums import PublicDataChannel, PrivateDataChannel, Environment, Broker
+from pfund.enums import PublicDataChannel, PrivateDataChannel, Environment, Broker, TradingVenue
 
 
 class InteractiveBrokers(BaseBroker):
-    adapter = Adapter(name)
+    name: ClassVar[Broker] = Broker.IBKR
+    adapter = Adapter(TradingVenue[name])
     
-    def __init__(self, env: Environment | tEnvironment=Environment.SANDBOX):
+    def __init__(self, env: Environment | str=Environment.SANDBOX):
         from pfund.brokers.ibkr.api import InteractiveBrokersAPI
 
         super().__init__(env=env)
         # FIXME: check if only supports one account
         self.account = None
-        self._accounts: dict[Literal[Broker.IBKR], dict[AccountName, IBKRAccount]] = { self.name: {} }
+        self._accounts: dict[Literal[TradingVenue.IBKR], dict[AccountName, IBKRAccount]] = { self.name: {} }
         self._api = InteractiveBrokersAPI(self._env)
     
-    @property
-    @override
-    def name(self) -> Broker:
-        return Broker.IBKR
-
     @property
     def accounts(self):
         return self._accounts[self.name]

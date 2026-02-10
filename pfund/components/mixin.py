@@ -1,6 +1,6 @@
 # pyright: reportUninitializedInstanceVariable=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     import torch
     import numpy as np
@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
     from pfund.datas import QuoteData, TickData, BarData
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
-    from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.components.models.model_base import BaseModel
     from pfund.components.features.feature_base import BaseFeature
@@ -70,7 +69,7 @@ class ComponentMixin:
         self._proxy: ActorProxy[Component] | None = None
         self._context: EngineContext | None = None
         self._consumers: list[Component | ActorProxy[Component]] = []
-        self.store: TradingStore | None = None
+        self._store: TradingStore | None = None
         self.databoy = DataBoy(self)
 
         self.products: dict[ProductName, BaseProduct] = {}
@@ -99,8 +98,18 @@ class ComponentMixin:
         return self._run_mode
     
     @property
-    def settings(self) -> TradeEngineSettings | BacktestEngineSettings | None:
-        return self._context.settings if self._context else None
+    def context(self) -> EngineContext:
+        assert self._context is not None, 'context is not set'
+        return self._context
+    
+    @property
+    def settings(self) -> TradeEngineSettings:
+        return cast(TradeEngineSettings, self.context.settings)
+    
+    @property
+    def store(self) -> TradingStore:
+        assert self._store is not None, 'store is not set'
+        return self._store
     
     # TODO: also check on_bar, on_tick, on_quote etc.
     def _assert_functions_signatures(self):
@@ -129,8 +138,8 @@ class ComponentMixin:
         self._set_resolution(resolution)
         if self.is_remote():
             self._setup_logging()
-        self.store = TradingStore(engine_context)
-        if hasattr(self.settings, 'zmq_urls'):
+        self._store = TradingStore(engine_context)
+        if self.env != Environment.BACKTEST:
             self.databoy._setup_messaging()
     
     # FIXME: integrate pfund_kit logging instead
@@ -368,7 +377,7 @@ class ComponentMixin:
                 return True
         return False
     
-    def _create_product(
+    def _add_product(
         self,
         tv: TradingVenue | str,
         basis: str,
@@ -387,9 +396,6 @@ class ComponentMixin:
             product: BaseProduct = broker.add_product(exch=exch, basis=basis, name=name, symbol=symbol, **specs)
         else:
             raise NotImplementedError(f"Broker {broker.name} is not supported")
-        return product
-    
-    def _add_product(self, product: BaseProduct) -> BaseProduct:
         if product.name not in self.products:
             self.products[product.name] = product
         else:
@@ -496,7 +502,7 @@ class ComponentMixin:
                     It is the user's responsibility to manage and maintain these custom product names.
             product_specs: product specifications, e.g. expiration, strike_price etc.
         '''
-        product: BaseProduct = self._create_product(
+        product: BaseProduct = self._add_product(
             tv=trading_venue,
             basis=product_basis,
             exch=exchange,
@@ -504,13 +510,11 @@ class ComponentMixin:
             name=product_name,
             **product_specs
         )
-        product = self._add_product(product)
         datas: list[MarketData] = self.databoy.add_data(
             product=product, 
             data_config=self._resolve_data_config(product, data_config)
         )
         for data in datas:
-            assert self.store is not None, "trading store must be initialized before adding data"
             self.store.market.add_data(data=data, storage_config=storage_config)
         return datas
     
@@ -744,14 +748,15 @@ class ComponentMixin:
             self.add_models()
             self.add_features()
             self.add_indicators()
-            self.databoy._subscribe()
+            if self.env != Environment.BACKTEST:
+                self.databoy._subscribe()
             self._is_gathered = True
             # TODO:
             # self._add_datas_from_consumer_if_none()
-            # TODO:
-            # self.store.freeze()
-            # self.store.materialize()
-            # self.store._prepare_df()
+            
+            assert self.store is not None, "trading store must be initialized before gathering"
+            self.store.materialize()
+            
             for component in self.components:
                 component._gather()
             self.logger.info(f"'{self.name}' has gathered")

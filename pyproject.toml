@@ -48,10 +48,11 @@ repository = "https://github.com/PFund-Software-Ltd/pfund"
 documentation = "https://pfund-docs.pfund.ai"
 
 [build-system]
-requires = ["uv_build>=0.9.30,<0.10.0"]
+requires = ["uv_build>=0.10.0,<0.11.0"]
 build-backend = "uv_build"
 
 [tool.pyright]
+# typeCheckingMode = "basic"
 reportAny = false
 reportExplicitAny = false
 reportIncompatibleMethodOverride = false
@@ -62,6 +63,7 @@ reportPrivateUsage = false
 reportUnusedCallResult = false
 reportImplicitOverride = false
 reportMissingTypeStubs = false
+reportUnannotatedClassAttribute = false
 reportUnnecessaryIsInstance = false
 
 [tool.uv.build-backend]

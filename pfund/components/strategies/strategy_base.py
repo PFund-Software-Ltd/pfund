@@ -7,7 +7,7 @@ if TYPE_CHECKING:
         AccountName,
         Currency,
     )
-    from pfund.enums import OrderSide
+    from pfund.enums import OrderSide, CryptoExchange
     from pfund.entities.products.product_base import BaseProduct
     from pfund.entities.positions.position_base import BasePosition
     from pfund.entities.positions.position_crypto import CryptoPosition
@@ -18,14 +18,15 @@ if TYPE_CHECKING:
     from pfund.entities.accounts.account_base import BaseAccount
     from pfund.entities.accounts.account_crypto import CryptoAccount
     from pfund.entities.accounts.account_ibkr import IBKRAccount
-    from pfund.entities.accounts.account_simulated import SimulatedAccount
     from pfund.entities.orders.order_base import BaseOrder
     from pfund.datas.data_base import BaseData
     from pfund.components.actor_proxy import ActorProxy
+    from pfund.brokers.broker_base import BaseBroker
 
 from collections import deque
 from abc import ABC, abstractmethod
 
+from pfund_kit.style import cprint, RichColor, TextStyle
 from pfund.components.strategies.strategy_meta import MetaStrategy
 from pfund.components.mixin import ComponentMixin
 from pfund.enums import TradingVenue, Broker
@@ -91,10 +92,13 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
             'strategies': [strategy.to_dict() for strategy in self.strategies.values()],
         }
     
+    def get_accounts(self) -> list[BaseAccount]:
+        return list(self.accounts.values())
+    
     @overload
     def add_account(
         self, 
-        trading_venue: tCryptoExchange, 
+        trading_venue: CryptoExchange | str, 
         name: str='', 
         key: str='', 
         secret: str='', 
@@ -103,44 +107,30 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     @overload
     def add_account(
         self,
-        trading_venue: Literal['IB'],
+        trading_venue: Literal[Broker.IBKR, 'IBKR', 'ibkr'],
         name: str='',
         host: str='',
         port: int | None=None,
         client_id: int | None=None,
     ) -> IBKRAccount: ...
     
-    @overload
-    def add_account(
-        self,
-        trading_venue: tTradingVenue,
-        name: str='',
-        initial_balances: dict[str, float] | None=None, 
-        initial_positions: dict[BaseProduct, float] | None=None,
-        **kwargs,
-    ) -> SimulatedAccount: ...
-
-    def _create_account(self, trading_venue: tTradingVenue, name: str='', **kwargs) -> BaseAccount:
+    def add_account(self, trading_venue: TradingVenue | str, name: str='', **kwargs: Any) -> BaseAccount:  # pyright: ignore[reportInconsistentOverload]
         from pfund.brokers import create_broker
+        
+        trading_venue = TradingVenue[trading_venue.upper()]
         # NOTE: broker is only used to create account but does nothing else
-        broker = create_broker(env=self.env, bkr=TradingVenue[trading_venue.upper()].broker)
+        broker: BaseBroker = create_broker(env=self.env, bkr=trading_venue.broker)
         if broker.name == Broker.CRYPTO:
             exch = trading_venue
-            account =  broker.add_account(exch=exch, name=name or self.name, **kwargs)
+            account: BaseAccount =  broker.add_account(exch=exch, name=name or self.name, **kwargs)
         elif broker.name == Broker.IBKR:
-            account = broker.add_account(name=name or self.name, **kwargs)
+            account: BaseAccount = broker.add_account(name=name or self.name, **kwargs)
         else:
             raise NotImplementedError(f"Broker {broker.name} is not supported")
-        return account
-    
-    def get_accounts(self) -> list[BaseAccount]:
-        return list(self.accounts.values())
-    
-    def add_account(self, trading_venue: tTradingVenue, name: str='', **kwargs) -> BaseAccount:
+        
         if self.is_sub_strategy():
             raise ValueError(f"Sub-strategy '{self.name}' cannot add accounts")
-        trading_venue = TradingVenue[trading_venue.upper()]
-        account: BaseAccount = self._create_account(trading_venue, name=name, **kwargs)
+
         self.accounts[account.name] = account
         self.positions[account.name] = {}
         self.balances[account.name] = {}

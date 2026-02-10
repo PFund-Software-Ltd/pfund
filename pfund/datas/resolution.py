@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import ClassVar, cast
+from typing import ClassVar, cast, Any
 from typing_extensions import override
 
 import re
@@ -250,38 +250,38 @@ class Resolution:
     def __hash__(self):
         return self._value()
 
-    def is_strict_equal(self, other: Resolution) -> bool:
+    def is_strict_equal(self, other: Any) -> bool:
         """1h = 60m when using __eq__ to compare resolutions, but in strict_equal, 1h != 60m"""
         return self._value() == other._value() and self.timeframe == other.timeframe
 
-    def __eq__(self, other: Resolution) -> bool:
+    def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Resolution):
             return NotImplemented
         return self._value() == other._value()
 
-    def __ne__(self, other: Resolution) -> bool:
+    def __ne__(self, other: Any) -> bool:
         if not isinstance(other, Resolution):
             return NotImplemented
         return not self == other
 
     # NOTE: higher value = lower resolution and vice versa
     # e.g. 1m (higher resolution, value=60) > 1h (lower resolution, value=3600)
-    def __lt__(self, other: Resolution) -> bool:
+    def __lt__(self, other: Any) -> bool:
         if not isinstance(other, Resolution):
             return NotImplemented
         return self._value() > other._value()
 
-    def __le__(self, other: Resolution) -> bool:
+    def __le__(self, other: Any) -> bool:
         if not isinstance(other, Resolution):
             return NotImplemented
         return self._value() >= other._value()
 
-    def __gt__(self, other: Resolution) -> bool:
+    def __gt__(self, other: Any) -> bool:
         if not isinstance(other, Resolution):
             return NotImplemented
         return self._value() < other._value()
 
-    def __ge__(self, other: Resolution) -> bool:
+    def __ge__(self, other: Any) -> bool:
         if not isinstance(other, Resolution):
             return NotImplemented
         return self._value() <= other._value()

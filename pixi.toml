@@ -23,7 +23,7 @@ py313 = ["py313", "test", "optional"]
 
 [dependencies]
 python = ">=3.11.14"
-uv = ">=0.9.30"
+uv = ">=0.10.0"
 
 [pypi-dependencies]
 # TEMP

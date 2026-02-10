@@ -8,9 +8,9 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericFrame
     from pfund.typing import ModelT
     from pfund.entities.products.product_base import BaseProduct
-    from pfund.enums import TradingVenue
     from pfund.datas.data_base import BaseData
     from pfund.components.mixin import ComponentMixin
+    from pfund.engines.engine_context import EngineContext
     from pfund.engines.backtest_engine import BacktestEngineContext
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.utils.dataset_splitter import DatasetPeriods, CrossValidatorDatasetPeriods
@@ -56,8 +56,7 @@ def event_driven(func):
 
 
 class BacktestMixin:
-    _context: BacktestEngineContext
-    settings: BacktestEngineSettings
+    _context: EngineContext | None
     logger: logging.Logger
     
     # NOTE: used to keep the MRO clean, only the __init__ of a non-mixin class is called
@@ -70,14 +69,23 @@ class BacktestMixin:
         self._signal_list_num = 0
             
         self._is_dummy_strategy = False
+    
+    @property
+    def context(self) -> BacktestEngineContext:
+        assert self._context is not None, 'context is not set'
+        return cast("BacktestEngineContext", self._context)
         
     @property
+    def settings(self) -> BacktestEngineSettings:
+        return cast("BacktestEngineSettings", self.context.settings)
+    
+    @property
     def backtest_mode(self) -> BacktestMode:
-        return self._context.backtest.backtest_mode
+        return self.context.backtest.backtest_mode
     
     @property
     def dataset_periods(self) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
-        return self._context.backtest.dataset_splitter.dataset_periods
+        return self.context.backtest.dataset_splitter.dataset_periods
     
     @cached_property
     def _is_signal_df_required(self) -> bool:
@@ -229,10 +237,11 @@ class BacktestMixin:
         if data_config.extra_resolutions:
             if self.backtest_mode != BacktestMode.event_driven:
                 cprint(
-                    f'{product.name} extra_resolutions={data_config.extra_resolutions} will be ignored in backtesting',
+                    f'{product.name} extra_resolutions={data_config.extra_resolutions} will be ignored in {self.backtest_mode.value} backtesting',
                     style=TextStyle.BOLD + RichColor.RED
                 )
             else:
+                # REVIEW: support looping quote/tick data?
                 if any(resolution.is_quote() or resolution.is_tick() for resolution in data_config.resolutions):
                     cprint(
                         f'WARNING: {product.name} tick/quote data will be ignored in backtesting',
@@ -273,11 +282,16 @@ class BacktestMixin:
             Exception: If a lower resolution cannot be evenly resampled from the primary
                       resolution (e.g., '1h' cannot be cleanly resampled from '45m')
         '''
+        # Only event-driven mode supports extra resolutions
+        if self.backtest_mode != BacktestMode.event_driven:
+            return data_config  # Skip processing extra resolutions
+
         original_resample = data_config.resample.copy()
         primary_resolution = data_config.primary_resolution
         for resolution in data_config.resolutions:
             if resolution == primary_resolution:
                 continue
+            # REVIEW: support using tick data to resample bar data?
             if not resolution.is_bar():
                 continue
             if resolution < primary_resolution:

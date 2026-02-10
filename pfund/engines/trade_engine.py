@@ -10,10 +10,10 @@ In order to communicate with other processes, it uses ZeroMQ as the core
 message queue.
 """
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 if TYPE_CHECKING:
     from pfeed.streaming.zeromq import ZeroMQ
-    from pfund.datas.data_time_based import TimeBasedData
+    from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.datas.resolution import Resolution
     from pfund.engines.engine_context import DataRangeDict
 
@@ -28,13 +28,17 @@ class TradeEngine(BaseEngine):
     def __init__(
         self,
         *,
-        env: Literal['SANDBOX', 'PAPER', 'LIVE']=Environment.SANDBOX,
+        env: Environment | Literal['SANDBOX', 'PAPER', 'LIVE']=Environment.SANDBOX,
         data_range: str | Resolution | DataRangeDict | Literal['ytd']='ytd',
     ):  
         super().__init__(env=Environment[env.upper()], data_range=data_range)
         self._proxy: ZeroMQ | None = None
         self._worker: ZeroMQ | None = None
         self._setup_proxy()
+    
+    @property
+    def settings(self) -> TradeEngineSettings:
+        return cast("TradeEngineSettings", self._context.settings)
     
     def _setup_proxy(self):
         import zmq
@@ -87,17 +91,13 @@ class TradeEngine(BaseEngine):
             )
             self._logger.debug(f"zmq worker connected to {zmq_name} at {zmq_url}:{zmq_port}")
     
-    def gather(self):
-        if self._is_gathered:
-            return
-        super().gather()
-        self._setup_worker()
-        for strategy in self.strategies.values():
-            datas: list[TimeBasedData] = strategy._get_datas_in_use()
-            for data in datas:
-                if data.is_resamplee():
-                    continue
-        self._is_gathered = True
+    def _gather(self):
+        super()._gather()
+        if not self._is_gathered:
+            self._setup_worker()
+            for strategy in self.strategies.values():
+                # updates zmq ports in settings
+                self.settings.zmq_ports.update(strategy._get_zmq_ports_in_use())
     
     def run(self, **ray_kwargs):
         '''

@@ -1,8 +1,9 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, Any
+from typing import TYPE_CHECKING, Literal, Any, ClassVar
 from typing_extensions import override
 if TYPE_CHECKING:
     from pfund.entities.products.product_crypto import CryptoProduct
+    from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.entities.orders.order_base import BaseOrder
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.brokers.crypto.exchanges.exchange_base import BaseExchange
@@ -23,14 +24,15 @@ from pfund.brokers.broker_base import BaseBroker
 
 
 class CryptoBroker(BaseBroker):
-    def __init__(self, env: Environment | str=Environment.SANDBOX):
-        super().__init__(env=env)
-        self.exchanges: dict[CryptoExchange, BaseExchange] = {}
+    name: ClassVar[Broker] = Broker.CRYPTO
+
+    def __init__(self, env: Environment | str=Environment.SANDBOX, settings: TradeEngineSettings | None=None):
+        super().__init__(env=env, settings=settings)
+        self._exchanges: dict[CryptoExchange, BaseExchange] = {}
     
     @property
-    @override
-    def name(self) -> Broker:
-        return Broker.CRYPTO
+    def exchanges(self):
+        return self._exchanges
     
     def start(self):
         for exch in self._accounts:

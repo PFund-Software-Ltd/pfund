@@ -22,7 +22,7 @@ class TradingStore:
     A TradingStore is a store that contains all data used by a component (e.g. strategy) in trading, from market data, computed features, to model predictions etc.
     '''
     def __init__(self, context: EngineContext):
-        self._logger = logging.getLogger('pfund')
+        self._logger: logging.Logger = logging.getLogger('pfund')
         self._context: EngineContext = context
         self._feed: PFundComponentFeed = pe.PFund(env=context.env).component_feed
         # TEMP

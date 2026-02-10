@@ -1,9 +1,6 @@
-from typing import ClassVar
-
-import os
+from typing import ClassVar, Any
 
 from pfund.enums import Environment, TradingVenue
-from pfund.typing import tEnvironment, tTradingVenue
 
 
 class BaseAccount:
@@ -17,10 +14,10 @@ class BaseAccount:
     def _get_default_name(self):
         return f"{self.__class__.__name__}-{self._next_account_id()}"
     
-    def __init__(self, env: tEnvironment, trading_venue: tTradingVenue, name: str=''):
+    def __init__(self, env: Environment | str, trading_venue: TradingVenue | str, name: str=''):
         self._env = Environment[env.upper()]
         self.trading_venue = TradingVenue[trading_venue.upper()]
-        self.name = name or self._get_default_name()
+        self.name: str = name or self._get_default_name()
         if 'account' not in self.name.lower():
             self.name += "_account"
         
@@ -34,7 +31,7 @@ class BaseAccount:
     def __repr__(self):
         return f'{self.trading_venue}:{self.name}'
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any):
         if not isinstance(other, BaseAccount):
             return NotImplemented  # Allow other types to define equality with BaseProduct
         return (

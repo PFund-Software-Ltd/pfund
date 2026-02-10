@@ -1,13 +1,12 @@
 import os
 
-from pfund.typing import tEnvironment, tCryptoExchange
 from pfund.entities.accounts.account_base import BaseAccount
-from pfund.enums import Environment, TradingVenue
+from pfund.enums import Environment, TradingVenue, CryptoExchange
 
 
 class CryptoAccount(BaseAccount):
-    def __init__(self, env: tEnvironment, exchange: tCryptoExchange, name: str='', key: str='', secret: str=''):
-        super().__init__(env=env, trading_venue=exchange, name=name, key=key, secret=secret)
+    def __init__(self, env: Environment | str, exchange: CryptoExchange | str, name: str='', key: str='', secret: str=''):
+        super().__init__(env=env, trading_venue=exchange, name=name)
         if self.tv == TradingVenue.BYBIT:
             from pfund_kit.style import cprint
             cprint(

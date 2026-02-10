@@ -1,10 +1,9 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, TypeAlias, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
     from pfund.enums import PrivateDataChannel, PublicDataChannel
     from pfund.typing import ProductName, AccountName
     from pfund.datas.resolution import Resolution
-    from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.entities.orders.order_base import BaseOrder
     from pfund.entities.products.product_base import BaseProduct
     from pfund.entities.accounts.account_base import BaseAccount
@@ -13,32 +12,35 @@ import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
 
+from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 from pfund.brokers.managers.order_manager import OrderManager
 from pfund.brokers.managers.portfolio_manager import PortfolioManager
 from pfund.enums import Environment, Broker, TradingVenue, CryptoExchange
 
 
-ExchangeName: TypeAlias = CryptoExchange | str
-
-
 class BaseBroker(ABC):
-    def __init__(self, env: Environment | str):
-        from pfund.engines.trade_engine import TradeEngine
-
+    name: ClassVar[Broker]
+    
+    def __init__(self, env: Environment | str, settings: TradeEngineSettings | None=None):
         self._env: Environment = Environment[env.upper()]
         self._logger: logging.Logger = logging.getLogger('pfund')
-        self._settings: TradeEngineSettings | None = getattr(TradeEngine, "_settings", None)
+        self._settings: TradeEngineSettings | None = settings or TradeEngineSettings()
         
-        self._products: defaultdict[ExchangeName, dict[ProductName, BaseProduct]] = defaultdict(dict)
+        self._products: defaultdict[CryptoExchange, dict[ProductName, BaseProduct]] = defaultdict(dict)
         self._accounts: defaultdict[TradingVenue, dict[AccountName, BaseAccount]] = defaultdict(dict)
 
         self._order_manager = OrderManager(self)
         self._portfolio_manager = PortfolioManager(self)
     
     @property
-    @abstractmethod
-    def name(self) -> Broker:
-        pass
+    def portfolio_manager(self):
+        return self._portfolio_manager
+    pm = portfolio_manager
+    
+    @property
+    def order_manager(self):
+        return self._order_manager
+    om = order_manager
     
     @classmethod
     def create_product(cls, basis: str, exch: str='', name: str='', symbol: str='', **specs) -> BaseProduct:
@@ -54,6 +56,10 @@ class BaseBroker(ABC):
     @abstractmethod
     def add_product(self, *args: Any, **kwargs: Any) -> BaseProduct:
         pass
+    
+    @abstractmethod
+    def add_account(self, *args: Any, **kwargs: Any) -> BaseAccount:
+        pass
 
     @property
     def products(self):
@@ -65,11 +71,11 @@ class BaseBroker(ABC):
 
     @property
     def balances(self):
-        return self._portfolio_manager.balances[self._name] if self._name != Broker.CRYPTO else self._portfolio_manager.balances
+        return self._portfolio_manager._balances[self._name] if self._name != Broker.CRYPTO else self._portfolio_manager.balances
     
     @property
     def positions(self):
-        return self._portfolio_manager.positions
+        return self._portfolio_manager._positions
     
     @property
     def orders(self, type_='opened'):

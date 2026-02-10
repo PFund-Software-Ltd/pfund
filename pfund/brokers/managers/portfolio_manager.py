@@ -1,21 +1,25 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    from pfund.typing import AccountName, Currency, ProductName
     from pfund.brokers.broker_base import BaseBroker
 
 from collections import defaultdict
 
 from pfund.entities.balances.balance_base import BaseBalance
 from pfund.entities.positions.position_base import BasePosition
-from pfund.enums import Broker, Event, RunMode
+from pfund.enums import Broker, Event, RunMode, TradingVenue
 
 
 class PortfolioManager:
+    _balances: dict[TradingVenue, dict[AccountName, dict[Currency, BaseBalance]]]
+    _positions: dict[TradingVenue, dict[AccountName, dict[ProductName, BasePosition]]]
+    
     def __init__(self, broker: BaseBroker):
         self._broker = broker
         self._logger = broker._logger
-        self.balances = defaultdict(lambda: defaultdict(dict))
-        self.positions = defaultdict(lambda: defaultdict(dict))
+        self._balances = defaultdict(lambda: defaultdict(dict))
+        self._positions = defaultdict(lambda: defaultdict(dict))
 
     def push(self, pos_or_bal, event: Event):
         if strategy := self._engine.strategy_manager.get_strategy(pos_or_bal.strat):
@@ -33,9 +37,9 @@ class PortfolioManager:
     def get_balances(self, trading_venue, acc='', ccy='') -> BaseBalance | None:
         try:
             if not acc:
-                return self.balances[trading_venue]
+                return self._balances[trading_venue]
             else:
-                return self.balances[trading_venue][acc][ccy] if ccy else self.balances[trading_venue][acc]
+                return self._balances[trading_venue][acc][ccy] if ccy else self._balances[trading_venue][acc]
         except KeyError:
             return None
         
@@ -43,28 +47,28 @@ class PortfolioManager:
         try:
             if self._broker.name == Broker.CRYPTO:
                 if not acc:
-                    return self.positions[exch]
+                    return self._positions[exch]
                 else:
-                    return self.positions[exch][acc][pdt] if pdt else self.positions[exch][acc]
+                    return self._positions[exch][acc][pdt] if pdt else self._positions[exch][acc]
             else:
                 if not acc:
-                    return self.positions
+                    return self._positions
                 else:
-                    return self.positions[acc][pdt] if pdt else self.positions[acc]
+                    return self._positions[acc][pdt] if pdt else self._positions[acc]
         except KeyError:
             return None
 
     def add_balance(self, balance):
         acc, ccy = balance.acc, balance.ccy
         trading_venue = balance.exch if self._broker.name == Broker.CRYPTO else balance.bkr
-        self.balances[trading_venue][acc][ccy] = balance
+        self._balances[trading_venue][acc][ccy] = balance
 
     def add_position(self, position):
         exch, acc, pdt = position.exch, position.acc, position.pdt
         if self._broker.name == Broker.CRYPTO:
-            self.positions[exch][acc][pdt] = position
+            self._positions[exch][acc][pdt] = position
         else:
-            self.positions[acc][pdt][exch] = position
+            self._positions[acc][pdt][exch] = position
 
     def update_balances(self, trading_venue, acc, balances):
         ts = balances['ts']

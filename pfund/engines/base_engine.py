@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
     from pfund.entities.accounts.account_base import BaseAccount
-    from pfund.datas.data_time_based import TimeBasedData
+    from pfund.datas.data_base import BaseData
     from pfund.typing import StrategyT
     from pfund.brokers.broker_base import BaseBroker
     from pfund.components.strategies.strategy_base import BaseStrategy
@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 import logging
 import datetime
 
+from pfund_kit.style import cprint, RichColor, TextStyle
 from pfund.components.actor_proxy import ActorProxy
 from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
@@ -28,10 +29,10 @@ ENV_COLORS = {
     # 'yellow': 'bold yellow on #ffffe0',
     # 'magenta': 'bold magenta on #fff0ff',
     # 'TRAIN': 'bold cyan on #d0ffff',
-    Environment.BACKTEST: 'bold blue',
-    Environment.SANDBOX: 'bold black',
-    Environment.PAPER: 'bold red',
-    Environment.LIVE: 'bold green',
+    Environment.BACKTEST: TextStyle.BOLD + RichColor.BLUE,
+    Environment.SANDBOX: TextStyle.BOLD + RichColor.BLACK,
+    Environment.PAPER: TextStyle.BOLD + RichColor.RED,
+    Environment.LIVE: TextStyle.BOLD + RichColor.GREEN,
 }
 
 
@@ -50,7 +51,6 @@ class BaseEngine:
                     e.g. {'start_date': '2024-01-01', 'end_date': '2024-12-31'}
         '''
         from pfund.config import setup_logging
-        from pfund_kit.style import cprint
         from pfund.engines.engine_context import EngineContext
         
         env = Environment[env.upper()]
@@ -109,7 +109,7 @@ class BaseEngine:
 
         config = get_config()
 
-        if not isinstance(settings, (TradeEngineSettings, BacktestEngineSettings)):  # pyright: ignore[reportUnnecessaryIsInstance]
+        if not isinstance(settings, (TradeEngineSettings, BacktestEngineSettings)):
             raise ValueError(f"Invalid settings type: {type(settings)}")
 
         # write settings to settings.toml
@@ -179,17 +179,7 @@ class BaseEngine:
     def get_broker(self, bkr: Broker) -> BaseBroker:
         return self.brokers[Broker[bkr.upper()]]
     
-    def _register_component(self, component_metadata: dict):
-        # register sub-components (nested components)
-        strategies: list[dict] = component_metadata.get('strategies', [])
-        models: list[dict] = component_metadata.get('models', [])
-        features: list[dict] = component_metadata.get('features', [])
-        indicators: list[dict] = component_metadata.get('indicators', [])
-        components: list[dict] = strategies + models + features + indicators
-        for component_metadata in components:
-            self._register_component(component_metadata)
-        
-    def _register_product(self, product: BaseProduct):
+    def _add_product(self, product: BaseProduct):
         broker: BaseBroker = self._add_broker(product.trading_venue)
         if broker.name == Broker.CRYPTO:
             broker.add_product(exch=product.exch, basis=str(product.basis), name=product.name, symbol=product.symbol, **product.specs)
@@ -199,54 +189,48 @@ class BaseEngine:
             raise NotImplementedError(f"Broker {broker.name} is not supported")
         self._logger.debug(f'added product {product.symbol}')
     
-    def _register_account(self, account: BaseAccount):
+    def _add_account(self, account: BaseAccount):
+        from pfund.brokers.crypto.broker import CryptoBroker
+        from pfund.brokers.ibkr.broker import InteractiveBrokers
         broker: BaseBroker = self._add_broker(account.trading_venue)
-        if broker.name == Broker.CRYPTO:
+        if isinstance(broker, CryptoBroker):
             account = broker.add_account(exch=account.trading_venue, name=account.name, key=account._key, secret=account._secret)
-        elif broker.name == Broker.IBKR:
+        elif isinstance(broker, InteractiveBrokers):
             account = broker.add_account(name=account.name, host=account._host, port=account._port, client_id=account._client_id)
         else:
             raise NotImplementedError(f"Broker {broker.name} is not supported")
         self._logger.debug(f'added account {account}')
     
-    def gather(self):
+    def _gather(self):
         '''
         Sets up everything before run.
         - updates zmq ports in settings
-        - registers components, data to mtstore
-        - freezes mtstore.
         '''
+        from pfund.datas.data_market import MarketData
         if not self._is_gathered:
-            # TODO: add engine metadata to mtflow
-            engine_metadata = self.to_dict()
-
             for strategy in self.strategies.values():
-                strategy: BaseStrategy | ActorProxy
+                strategy: BaseStrategy | ActorProxy[BaseStrategy]
                 strategy._gather()
                 
-                # updates zmq ports in settings
-                self._context.settings.zmq_ports.update(strategy._get_zmq_ports_in_use())
-                
-                # registers accounts
                 accounts: list[BaseAccount] = strategy.get_accounts()
                 for account in accounts:
-                    self._register_account(account)
+                    self._add_account(account)
                 
-                # registers products
-                datas: list[TimeBasedData] = strategy._get_datas_in_use()
+                datas: list[BaseData] = strategy._get_datas_in_use()
                 for data in datas:
-                    self._register_product(data.product)
-                
-                # registers components
-                metadata = strategy.to_dict()
-                self._register_component(metadata)
+                    if isinstance(data, MarketData):
+                        self._add_product(data.product)
+                    else:
+                        if hasattr(data, 'product'):
+                            raise NotImplementedError(f"Unhandled data type that has product attribute: {type(data)}. It should also call add_product().")
         else:
             self._logger.debug(f'{self.name} is already gathered')
     
     def run(self):
         if not self.is_running():
             self._is_running = True
-            self.gather()
+            self._gather()
+            self._is_gathered = True
             # TODO: start brokers
             # for broker in self.brokers.values():
             #     broker.start()
