@@ -99,11 +99,7 @@ class TradeEngine(BaseEngine):
                 # updates zmq ports in settings
                 self.settings.zmq_ports.update(strategy._get_zmq_ports_in_use())
     
-    def run(self, **ray_kwargs):
-        '''
-        Args:
-            ray_kwargs: keyword arguments for ray.init()
-        '''
+    def run(self):
         super().run()
         # NOTE: need to init ray in the main thread to avoid "SIGTERM handler is not set because current thread is not the main thread"
         while self.is_running():

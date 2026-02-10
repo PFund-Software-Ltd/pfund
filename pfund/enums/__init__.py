@@ -6,7 +6,6 @@ from pfund.enums.month_code import CryptoMonthCode, FutureMonthCode
 from pfund.enums.asset_type import AllAssetType, TraditionalAssetType, CryptoAssetType, DeFiAssetType, AssetTypeModifier
 from pfund.enums.backtest_mode import BacktestMode
 from pfund.enums.option_type import OptionType
-from pfund.enums.event import Event
 from pfund.enums.component_type import ComponentType, ModelComponentType
 from pfund.enums.run_mode import RunMode
 from pfund.enums.order_status import MainOrderStatus, FillOrderStatus, CancelOrderStatus, AmendOrderStatus
@@ -36,7 +35,6 @@ __all__ = [
     "AssetTypeModifier",
     "BacktestMode",
     "OptionType",
-    "Event",
     "ComponentType",
     "ModelComponentType",
     "RunMode",

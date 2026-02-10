@@ -6,11 +6,10 @@ if TYPE_CHECKING:
 import time
 from collections import OrderedDict, defaultdict
 
-from typing import Union
 from enum import Enum
 
 
-from pfund.enums import Event, RunMode, MainOrderStatus, FillOrderStatus, CancelOrderStatus, AmendOrderStatus
+from pfund.enums import RunMode, MainOrderStatus, FillOrderStatus, CancelOrderStatus, AmendOrderStatus
 
 
 class OrderUpdateSource(Enum):
@@ -21,7 +20,7 @@ class OrderUpdateSource(Enum):
     WST = 'websocket_api_trades'
 
 
-OrderClosedReason = Union[FillOrderStatus, CancelOrderStatus, MainOrderStatus]
+OrderClosedReason = FillOrderStatus | CancelOrderStatus | MainOrderStatus
 
 
 class OrderManager:
@@ -44,19 +43,6 @@ class OrderManager:
         self._missed_nums = defaultdict(int)
         self._recon_nums = defaultdict(int)
         self._cxl_rej_nums = defaultdict(int)
-
-    def push(self, order, event: Event, type_):
-        if strategy := self._engine.strategy_manager.get_strategy(order.strat):
-            if self._broker._run_mode == RunMode.REMOTE:
-                if strategy.is_running():
-                    if event == Event.order:
-                        strategy._update_orders(order, type_)
-                    elif event == Event.trade:
-                        strategy._update_trades(order, type_)
-            else:
-                raise NotImplementedError('parallel strategy is not implemented')
-                # TODO
-                # self._broker._zmq
 
     def get_order(self, trading_venue, acc, oid='', eoid=''):
         assert oid or eoid, 'At least one of oid or eoid should be provided'
@@ -200,7 +186,6 @@ class OrderManager:
     def on_submitted(self, order, ts=None, reason=''):
         if is_updated := order.on_status_update(status=MainOrderStatus.SUBMITTED, ts=ts, reason=reason):
             self.submitted_orders[order.tv][order.acc][order.oid] = order
-            self.push(order, event=Event.order, type_='submitted')
 
     def _on_opened(self, order, ts=None, reason=''):
         if order.oid in self.closed_orders[order.tv][order.acc]:
@@ -208,7 +193,6 @@ class OrderManager:
             return
         if is_updated := order.on_status_update(status=MainOrderStatus.OPENED, ts=ts, reason=reason):
             self.opened_orders[order.tv][order.acc][order.oid] = order
-            self.push(order, event=Event.order, type_='opened')
         if order.oid in self.submitted_orders[order.tv][order.acc]:
             del self.submitted_orders[order.tv][order.acc][order.oid]
 
@@ -218,7 +202,6 @@ class OrderManager:
             self._on_opened(order, ts=ts, reason='open to be closed')
         if is_updated := order.on_status_update(status=MainOrderStatus.CLOSED, ts=ts, reason=reason):
             self.closed_orders[order.tv][order.acc][order.oid] = order
-            self.push(order, event=Event.order, type_='closed')
         if order.oid in self.submitted_orders[order.tv][order.acc]:
             del self.submitted_orders[order.tv][order.acc][order.oid]
         if order.oid in self.opened_orders[order.tv][order.acc]:
@@ -232,10 +215,8 @@ class OrderManager:
         if is_updated := order.on_trade_update(avg_px, filled_qty, last_traded_px, last_traded_qty):
             if fill_status == 'P' or not order.is_filled():
                 self._on_partial(order, ts=ts, reason=reason)
-                self.push(order, event=Event.trade, type_='partial')
             elif fill_status == 'F' or order.is_filled():
                 self._on_filled(order, ts=ts, reason=reason)
-                self.push(order, event=Event.trade, type_='filled')
                     
     def _on_partial(self, order, ts=None, reason=''):
         order.on_status_update(status=FillOrderStatus.PARTIAL, ts=ts, reason=reason)
@@ -260,8 +241,7 @@ class OrderManager:
         order.on_status_update(status=AmendOrderStatus.SUBMITTED, ts=ts, reason=reason)
 
     def _on_amended(self, order, ts=None, reason=''):
-        if is_updated := order.on_status_update(status=AmendOrderStatus.AMENDED, ts=ts, reason=reason):
-            self.push(order, event=Event.order, type_='amended')
+        order.on_status_update(status=AmendOrderStatus.AMENDED, ts=ts, reason=reason)
 
     def _on_amend_rejected(self, order, ts=None, reason=''):
         order.on_status_update(status=AmendOrderStatus.REJECTED, ts=ts, reason=reason)
