@@ -2,9 +2,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
     from pfund.enums import PrivateDataChannel, PublicDataChannel
-    from pfund.typing import ProductName, AccountName
+    from pfund.typing import ProductName, AccountName, Currency
     from pfund.datas.resolution import Resolution
     from pfund.entities.orders.order_base import BaseOrder
+    from pfund.entities.positions.position_base import BasePosition
+    from pfund.entities.balances.balance_base import BaseBalance
     from pfund.entities.products.product_base import BaseProduct
     from pfund.entities.accounts.account_base import BaseAccount
 
@@ -24,13 +26,13 @@ class BaseBroker(ABC):
     def __init__(self, env: Environment | str, settings: TradeEngineSettings | None=None):
         self._env: Environment = Environment[env.upper()]
         self._logger: logging.Logger = logging.getLogger('pfund')
-        self._settings: TradeEngineSettings | None = settings or TradeEngineSettings()
+        self._settings: TradeEngineSettings = settings or TradeEngineSettings()
 
         self._products: defaultdict[CryptoExchange, dict[ProductName, BaseProduct]] = defaultdict(dict)
         self._accounts: defaultdict[TradingVenue, dict[AccountName, BaseAccount]] = defaultdict(dict)
 
         self._order_manager = OrderManager(self)
-        self._portfolio_manager = PortfolioManager(self)
+        self._portfolio_manager: PortfolioManager[Any, Any] = PortfolioManager()
 
     @property
     def portfolio_manager(self):
@@ -70,21 +72,21 @@ class BaseBroker(ABC):
         return self._accounts
 
     @property
-    def balances(self):
-        return self._portfolio_manager._balances[self._name] if self._name != Broker.CRYPTO else self._portfolio_manager.balances
+    def balances(self) -> dict[TradingVenue, dict[AccountName, dict[Currency, BaseBalance]]]:
+        return self._portfolio_manager._balances
 
     @property
-    def positions(self):
+    def positions(self) -> dict[TradingVenue, dict[AccountName, dict[ProductName, BasePosition]]]:
         return self._portfolio_manager._positions
 
-    @property
-    def orders(self, type_='opened'):
-        if type_ == 'opened':
-            return self._order_manager.opened_orders
-        elif type_ == 'submitted':
-            return self._order_manager.submitted_orders
-        elif type_ == 'closed':
-            return self._order_manager.closed_orders
+    def opened_orders(self):
+        return self._order_manager.opened_orders
+
+    def submitted_orders(self):
+        return self._order_manager.submitted_orders
+
+    def closed_orders(self):
+        return self._order_manager.closed_orders
 
     def start(self):
         # TODO: check if all product names and account names are unique
@@ -125,17 +127,22 @@ class BaseBroker(ABC):
             self.add_channel(channel, channel_type='private')
 
     # FIXME
-    def distribute_msgs(self, channel, topic, info):
-        # self._order_manager.update_orders(...)
-        # self._portfolio_manager.update_positions(...)
-        # self._portfolio_manager.update_balances(...)
-        pass
+    def _distribute_msgs(self, channel, topic, info):
+        if ...:
+            self.add_order(...)
+            self._order_manager.update_orders(...)
+        elif ...:
+            self.add_position(...)
+            self._portfolio_manager.update_positions(...)
+        elif ...:
+            self.add_balance(...)
+            self._portfolio_manager.update_balances(...)
         # elif channel == 4:  # from api processes to connection manager
         #     self._connection_manager.handle_msgs(topic, info)
         #     if topic == 3 and self._settings.get('cancel_all_at', {}).get('disconnect', True):  # on disconnected
         #         self.cancel_all_orders(reason='disconnect')
 
-    # FIXME: move to mtflow
+    # FIXME:
     def schedule_jobs(self, scheduler: BackgroundScheduler):
         scheduler.add_job(self.reconcile_balances, 'interval', seconds=10)
         scheduler.add_job(self.reconcile_positions, 'interval', seconds=10)

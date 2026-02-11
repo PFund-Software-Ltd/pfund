@@ -388,7 +388,7 @@ class ComponentMixin:
     ) -> BaseProduct:
         from pfund.brokers import create_broker
         # NOTE: broker is only used to create product but nothing else
-        broker: BaseBroker = create_broker(env=self.env, bkr=TradingVenue[tv.upper()].broker)
+        broker: BaseBroker = create_broker(env=self.env, bkr=TradingVenue[tv.upper()].broker, settings=self.settings)
         if broker.name == Broker.CRYPTO:
             exch = tv
             product: BaseProduct = broker.add_product(exch=exch, basis=basis, name=name, symbol=symbol, **specs)

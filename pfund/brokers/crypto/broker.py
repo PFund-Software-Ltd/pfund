@@ -1,35 +1,39 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Any, ClassVar
-from typing_extensions import override
 if TYPE_CHECKING:
     from pfund.entities.products.product_crypto import CryptoProduct
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.entities.orders.order_base import BaseOrder
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.brokers.crypto.exchanges.exchange_base import BaseExchange
-    from pfund.typing import FullDataChannel, AccountName, ProductName
+    from pfund.brokers.managers.portfolio_manager import PortfolioManager
+    from pfund.typing import FullDataChannel, AccountName, ProductName, Currency
     from pfund.enums import OrderSide, PublicDataChannel
 
 import inspect
 from threading import Thread
 
-from pfund.enums import Environment, Broker
 from pfund.entities.orders.order_crypto import CryptoOrder
 from pfund.entities.positions.position_crypto import CryptoPosition
 from pfund.entities.balances.balance_crypto import CryptoBalance
 from pfund.entities.accounts.account_crypto import CryptoAccount
 from pfund_kit.utils.text import to_uppercase
-from pfund.enums import CryptoExchange, PrivateDataChannel
+from pfund.enums import Environment, TradingVenue, Broker, CryptoExchange, PrivateDataChannel
 from pfund.brokers.broker_base import BaseBroker
 
 
+# TODO: convert all "exch" in functions to "trading_venue"
+# TODO: make BaseBroker generic (BaseBroker[Balance, Position]) so CryptoBroker(BaseBroker[CryptoBalance, CryptoPosition])
+# propagates types through portfolio_manager property (now self.pm is of type PortfolioManager[Any, Any]) without needing to redefine it here
 class CryptoBroker(BaseBroker):
     name: ClassVar[Broker] = Broker.CRYPTO
+
+    _portfolio_manager: PortfolioManager[CryptoBalance, CryptoPosition]
 
     def __init__(self, env: Environment | str=Environment.SANDBOX, settings: TradeEngineSettings | None=None):
         super().__init__(env=env, settings=settings)
         self._exchanges: dict[CryptoExchange, BaseExchange] = {}
-    
+
     @property
     def exchanges(self):
         return self._exchanges
@@ -65,10 +69,12 @@ class CryptoBroker(BaseBroker):
         exchange = self.get_exchange(exch)
         exchange.add_private_channel(channel)
         
-    def get_account(self, exch: CryptoExchange, name: AccountName) -> CryptoAccount:
-        return self._accounts[CryptoExchange[exch.upper()]][name]
+    def get_account(self, trading_venue: TradingVenue, name: AccountName) -> CryptoAccount:
+        exch = CryptoExchange[trading_venue.upper()]
+        return self._accounts[exch][name]
     
-    def add_account(self, exch: CryptoExchange, name: AccountName='', key: str='', secret: str='') -> CryptoAccount:
+    def add_account(self, trading_venue: TradingVenue, name: AccountName='', key: str='', secret: str='') -> CryptoAccount:
+        exch = CryptoExchange[trading_venue.upper()]
         exchange = self.add_exchange(exch)
         if name not in self._accounts[exchange.name]:
             account = CryptoAccount(env=self._env, exchange=exch, name=name, key=key, secret=secret)
@@ -119,18 +125,18 @@ class CryptoBroker(BaseBroker):
             exchange: BaseExchange = self.get_exchange(exch)
         return exchange
     
-    def add_balance(self, exch: CryptoExchange, acc: str, ccy: str) -> CryptoBalance:
-        exch, acc, ccy = to_uppercase(exch, acc, ccy)
+    def add_balance(self, tv: TradingVenue, acc: AccountName, ccy: Currency) -> CryptoBalance:
+        exch = CryptoExchange[tv.upper()]
+        ccy = ccy.upper()
         if not (balance := self.get_balances(exch, acc=acc, ccy=ccy)):
             self.add_exchange(exch)
-            account = self.get_account(exch, acc)
-            balance = CryptoBalance(account, ccy)
-            self._portfolio_manager.add_balance(balance)
+            balance = CryptoBalance(ccy=ccy)
+            self._portfolio_manager.add_balance(tv, acc, balance)
             self._logger.debug(f'added {balance}')
         return balance
 
-    def add_position(self, exch: CryptoExchange, acc: str, pdt: str) -> CryptoPosition:
-        exch, acc, pdt = to_uppercase(exch, acc, pdt)
+    def add_position(self, exch: CryptoExchange, acc: str, pdt: ProductName) -> CryptoPosition:
+        exch, pdt = exch.upper(), pdt.upper()
         if not (position := self.get_positions(exch, acc=acc, pdt=pdt)):
             account = self.get_account(exch, acc)
             product = self.add_product(exch, pdt=pdt)
@@ -181,10 +187,24 @@ class CryptoBroker(BaseBroker):
         func = inspect.stack()[0][3]
         Thread(target=work, name=func+'_thread', daemon=True).start()
 
-    def get_balances(self, exch: CryptoExchange, acc: str='', ccy: str='', is_api_call=False, **kwargs) -> dict | None:
-        exch, acc, ccy = to_uppercase(exch, acc, ccy)
+    def get_balances(
+        self, 
+        trading_venue: TradingVenue, 
+        account_name: AccountName='', 
+        currency: Currency='', 
+        is_api_call: bool=False, 
+        **kwargs: Any
+    ) -> (
+        dict[AccountName, dict[Currency, CryptoBalance]]
+        | list[CryptoBalance]
+        | dict[Currency, CryptoBalance]
+        | CryptoBalance
+        | None
+    ):
+        exch = CryptoExchange[trading_venue.upper()]
+        ccy = currency.upper()
         if not is_api_call:
-            return self._portfolio_manager.get_balances(exch, acc, ccy=ccy)
+            return self._portfolio_manager.get_balances(tv=trading_venue, acc=account_name, ccy=currency)
         else:
             exchange = self.get_exchange(exch)
             account = self.get_account(exch, acc)

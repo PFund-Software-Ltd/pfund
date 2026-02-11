@@ -53,7 +53,7 @@ class InteractiveBrokers(BaseBroker):
     def get_account(self, name: AccountName) -> IBKRAccount:
         return self.accounts[name]
 
-    def add_account(self, name: AccountName='', host: str='', port: int | None=None, client_id: int | None=None) -> IBKRAccount:
+    def add_account(self, trading_venue: TradingVenue, name: AccountName='', host: str='', port: int | None=None, client_id: int | None=None) -> IBKRAccount:
         if name not in self.accounts:
             account = IBKRAccount(env=self._env, name=name, host=host, port=port, client_id=client_id)
             self.accounts[account.name] = account
@@ -147,7 +147,7 @@ class InteractiveBrokers(BaseBroker):
         """
         return orders
 
-    def get_balances(self, acc: str='', ccy: str='') -> dict | IBKRBalance:
+    def get_balances(self, trading_venue: TradingVenue, acc: str='', ccy: str='') -> dict | IBKRBalance:
         """Gets balances from an IB account.
         Account name `acc` will be automatically filled using the primary account if not provided.
         Therefore, `acc` is always non-empty

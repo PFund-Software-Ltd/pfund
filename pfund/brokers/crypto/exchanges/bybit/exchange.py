@@ -51,7 +51,6 @@ class Exchange(BaseExchange):
         WebSocketAPI: type[BaseWebSocketAPI] = getattr(importlib.import_module(f'pfund.brokers.crypto.exchanges.{name}.ws_api_{Category.lower()}'), f'{Category}WebSocketAPI')
         return WebSocketAPI.SUPPORTED_RESOLUTIONS    
     
-    
 
     '''
     Functions using REST API
@@ -111,6 +110,7 @@ class Exchange(BaseExchange):
             },
         }
         products = [self.get_product(pdt)] if pdt else list(self.products.values())
+        # FIXME: use pydantic model PositionUpdate(), not dict
         positions = {'ts': 0.0, 'data': {}}
         categories = [category] if category else self._categories
         products_per_category = {category: [product for product in products if product.category == category] for category in categories}

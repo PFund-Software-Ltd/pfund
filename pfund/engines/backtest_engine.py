@@ -5,7 +5,6 @@ if TYPE_CHECKING:
     import pandas as pd
     from sklearn.model_selection import TimeSeriesSplit
     from pfund.typing import StrategyT, ModelT, FeatureT, IndicatorT
-    from pfund.brokers.broker_base import BaseBroker
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.components.models.model_base import BaseModel
     from pfund.utils.dataset_splitter import DatasetSplitsDict, CrossValidatorDatasetPeriods, DatasetPeriods
@@ -13,7 +12,6 @@ if TYPE_CHECKING:
     from pfund.engines.engine_context import DataRangeDict
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.engines.engine_context import EngineContext
-    from pfund.entities.accounts.account_base import BaseAccount
     from pfund.brokers.crypto.broker import CryptoBroker
     from pfund.brokers.ibkr.broker import InteractiveBrokers
     from pfund.brokers.broker_simulated import SimulatedBroker
@@ -44,6 +42,8 @@ class BacktestContext:
 
 
 class BacktestEngine(BaseEngine):
+    _context: BacktestEngineContext
+
     def __init__(
         self,
         data_range: str | DataRangeDict | Literal['ytd']='1mo',
@@ -59,7 +59,7 @@ class BacktestEngine(BaseEngine):
         '''
         from pfund.utils.dataset_splitter import DatasetSplitter
         super().__init__(env=Environment.BACKTEST, data_range=data_range)
-        cast("BacktestEngineContext", self._context).backtest = BacktestContext(
+        self._context.backtest = BacktestContext(
             backtest_mode=BacktestMode[mode.lower()],
             dataset_splitter=DatasetSplitter(
                 dataset_start=self.data_start,
@@ -68,12 +68,15 @@ class BacktestEngine(BaseEngine):
                 cv_test_ratio=cv_test_ratio
             )
         )
-        if self.backtest_mode == BacktestMode.event_driven and self.settings.reuse_signals:
-            cprint(
-                'Warning: Reusing precomputed signals to speed up event-driven backtesting,\n' +
-                'i.e. computing signals on the fly will be skipped',
-                style='bold'
-            )
+        if self.backtest_mode == BacktestMode.event_driven:
+            if self.settings.reuse_signals:
+                if self.settings.assert_signals:
+                    raise ValueError('reuse_signals must be False when assert_signals=True in event-driven backtesting')
+                cprint(
+                    'Warning: Reusing precomputed signals to speed up event-driven backtesting,\n' +
+                    'i.e. computing signals on the fly will be skipped',
+                    style='bold'
+                )
     
     @property
     def settings(self) -> BacktestEngineSettings:
@@ -81,11 +84,11 @@ class BacktestEngine(BaseEngine):
     
     @property
     def backtest_mode(self) -> BacktestMode:
-        return cast("BacktestEngineContext", self._context).backtest.backtest_mode
+        return self._context.backtest.backtest_mode
     
     @property
     def dataset_periods(self) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
-        return cast("BacktestEngineContext", self._context).backtest.dataset_splitter.dataset_periods
+        return self._context.backtest.dataset_splitter.dataset_periods
     
     @property
     def _dummy(self) -> str:

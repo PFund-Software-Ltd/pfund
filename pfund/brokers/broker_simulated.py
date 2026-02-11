@@ -1,8 +1,10 @@
-# pyright: reportUninitializedInstanceVariable=false
+# pyright: reportUninitializedInstanceVariable=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportArgumentType=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, ClassVar, cast, Any
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
+    from pfund.brokers.managers.order_manager import OrderManager
+    from pfund.brokers.managers.portfolio_manager import PortfolioManager
     from pfund.typing import Currency, AccountName, ProductName
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.entities.products.product_base import BaseProduct
@@ -10,6 +12,7 @@ if TYPE_CHECKING:
     from pfund.entities.accounts.account_base import BaseAccount
 
 import logging
+from decimal import Decimal
 
 from pfund.enums import Environment, TradingVenue, Broker
 
@@ -31,23 +34,25 @@ class SimulatedBroker:
         '_port',
         '_client_id',
     ]
-    DEFAULT_INITIAL_BALANCES: ClassVar[dict[TradingVenue, dict[Currency, float]]] = {
+    DEFAULT_INITIAL_BALANCES: ClassVar[dict[TradingVenue, dict[Currency, Decimal]]] = {
         TradingVenue.IBKR: {
-            'USD': 1_000_000,
+            'USD': Decimal(1_000_000),
         },
         TradingVenue.BYBIT: {
-            'BTC': 10,
-            'USDT': 1_000_000,
+            'BTC': Decimal(10),
+            'USDT': Decimal(1_000_000),
         },
     }
 
     _logger: logging.Logger
     name: Broker
     _env: Environment
-    _settings: BacktestEngineSettings | None
+    _settings: BacktestEngineSettings
     _products: dict[TradingVenue, dict[ProductName, BaseProduct]]
     _accounts: dict[TradingVenue, dict[AccountName, BaseAccount]]
-    
+    _order_manager: OrderManager
+    _portfolio_manager: PortfolioManager
+
     # TODO
     def _safety_check(self):
         # TODO: add a function to override all the existing functions in live broker
@@ -62,11 +67,12 @@ class SimulatedBroker:
 
         for account in accounts:
             # remove all the attributes that are not in WHITELISTED_ACCOUNT_FIELDS
-            for k in list(account.__dict__):
-                if k not in self.WHITELISTED_ACCOUNT_FIELDS:
+            for k, v in list(account.__dict__.items()):
+                if v and k not in self.WHITELISTED_ACCOUNT_FIELDS:
                     self._logger.warning(f'removed non-whitelisted attribute {k} from {self.name} account {account.name}')
                     delattr(account, k)
 
+        # FIXME: no longer needed? or only needs it for SANDBOX env?
         if self.name == Broker.IBKR:
             from pfund.entities.accounts.account_ibkr import IBKRAccount
             account = list(self._accounts.values())[0]  # IB has only one account for SANDBOX trading
@@ -79,17 +85,35 @@ class SimulatedBroker:
                 client_id=getattr(account, 'client_id', None),
             )
 
-    def initialize_balances(self):
-        for trading_venue in self._initial_balances:
-            for acc, initial_balances in self._initial_balances[trading_venue].items():
-                updates = {'ts': None, 'data': {k: {'wallet': v, 'available': v, 'margin': v} for k, v in initial_balances.items()}}
-                self._portfolio_manager.update_balances(trading_venue, acc, updates)
+    def _initialize_balances(self):
+        from pfund.entities.balances.balance_update import BalanceUpdate
+        initial_balances = self._settings.initial_balances or self.DEFAULT_INITIAL_BALANCES
+        for tv in initial_balances:
+            balances = initial_balances[tv]
+            accounts = self._accounts[tv]
+            for ccy, amount in balances.items():  
+                update = BalanceUpdate(
+                    ts=None,
+                    data={
+                        # REVIEW: same amount for wallet, available, margin?
+                        ccy: {'wallet': amount, 'available': amount, 'margin': amount}
+                    }
+                )
+                for acc in accounts:
+                    self.add_balance(tv, acc, ccy)
+                    self._portfolio_manager.update_balances(tv, acc, update)
+
+    def _initialize_positions(self):
+        raise NotImplementedError('initial positions are not supported yet')
     
     def start(self):
         self._safety_check()
         self._accounts_check()
         self._logger.debug(f'broker {self.name} started')
-        self.initialize_balances()
+        self._initialize_balances()
+        # TODO: handle initial positions
+        # if self._settings.initial_positions:
+        #     self._initialize_positions()
         
     def stop(self):
         self._logger.debug(f'broker {self.name} stopped')

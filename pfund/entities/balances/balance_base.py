@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.typing import Currency
 
-import time
 from decimal import Decimal
 from dataclasses import dataclass, replace
 
@@ -20,9 +19,8 @@ class BaseBalance:
         self.ccy = ccy
         self._balance = self.Snapshot()
 
-    def on_update(self, update: dict[str, Decimal | float], ts: float | None=None):
-        update['ts'] = ts or time.time()
-        self._balance = replace(self._balance, **update)
+    def on_update(self, data: dict[str, Decimal], ts: float | None=None):
+        self._balance = replace(self._balance, ts=ts, **data)
 
     @property
     def wallet(self) -> Decimal:

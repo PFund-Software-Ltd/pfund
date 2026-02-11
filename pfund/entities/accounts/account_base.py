@@ -20,6 +20,12 @@ class BaseAccount:
         self.name: str = name or self._get_default_name()
         if 'account' not in self.name.lower():
             self.name += "_account"
+    
+    def to_dict(self):
+        return {
+            'trading_venue': self.trading_venue,
+            'name': self.name,
+        }
         
     @property
     def tv(self) -> TradingVenue:

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, TypedDict
+from typing import TYPE_CHECKING, Literal, TypedDict, Any
 if TYPE_CHECKING:
     import datetime
     from pfund.config import PFundConfig
@@ -30,7 +30,7 @@ class EngineContext:
         # NOTE: config obtained by get_config() inside ray actor could be different from the one in the main thread (e.g. after calling pf.configure())
         # so we create the config object here in the context and treat it as the source of truth
         self.config: PFundConfig = get_config()
-        self.logging_config: dict = get_logging_config()
+        self.logging_config: dict[str, Any] = get_logging_config()
 
     @property
     def name(self) -> str:
@@ -82,13 +82,11 @@ class EngineContext:
             settings = EngineSettings(
                 **{k: v for k, v in env_settings.items() if k in EngineSettings.model_fields}
             )
-            if self.env not in settings_toml:
-                data = {self.env: settings.model_dump()}
-                toml.dump(data, settings_file_path, mode='update', auto_inline=True)
         else:
             settings = EngineSettings()
-            data = {self.env: settings.model_dump()}
-            toml.dump(data, settings_file_path, mode='overwrite', auto_inline=True)
+        # Always write back — this adds new fields with defaults and drops removed fields automatically
+        data = {self.env: settings.model_dump()}
+        toml.dump(data, settings_file_path, mode='update', auto_inline=True)
         return settings
 
     def get_env(self, key: str) -> str | None:

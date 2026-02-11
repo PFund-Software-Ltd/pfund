@@ -4,19 +4,19 @@ if TYPE_CHECKING:
     from pfund.entities.accounts.account_base import BaseAccount
     from pfund.entities.orders.order_base import BaseOrder
     from pfund.entities.products.product_base import BaseProduct
-    from pfund.enums import Broker
 
 import importlib
 from enum import StrEnum
+from pfund.enums.broker import Broker
+from pfund.enums.crypto_exchange import CryptoExchange
 
 
 class TradingVenue(StrEnum):
-    IBKR = 'IBKR'
-    BYBIT = 'BYBIT'
+    IBKR = Broker.IBKR
+    BYBIT = CryptoExchange.BYBIT
     
     @property
     def broker(self) -> Broker:
-        from pfund.enums import Broker, CryptoExchange
         if self.value in CryptoExchange.__members__:
             return Broker.CRYPTO
         elif self.value in Broker.__members__:
@@ -44,7 +44,6 @@ class TradingVenue(StrEnum):
         
     @property
     def account_class(self) -> type[BaseAccount]:
-        from pfund.enums import CryptoExchange
         if self == TradingVenue.IBKR:
             class_name = f'{self}Account'
         elif self.value in CryptoExchange.__members__:

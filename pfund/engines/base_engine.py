@@ -117,7 +117,7 @@ class BaseEngine:
         data = {env_section: settings.model_dump()}
         toml.dump(data, config.settings_file_path, mode='update', auto_inline=True)
 
-        # update settings in config
+        # update settings in context
         self._context.settings = settings
     
     def add_strategy(
@@ -171,7 +171,7 @@ class BaseEngine:
         from pfund.brokers import create_broker
         bkr: Broker = TradingVenue[trading_venue.upper()].broker
         if bkr not in self.brokers:
-            broker = create_broker(env=self.env, bkr=bkr)
+            broker = create_broker(env=self.env, bkr=bkr, settings=self.settings)
             self.brokers[bkr] = broker
             self._logger.debug(f'added broker {bkr}')
         return self.brokers[bkr]
@@ -181,24 +181,12 @@ class BaseEngine:
     
     def _add_product(self, product: BaseProduct):
         broker: BaseBroker = self._add_broker(product.trading_venue)
-        if broker.name == Broker.CRYPTO:
-            broker.add_product(exch=product.exch, basis=str(product.basis), name=product.name, symbol=product.symbol, **product.specs)
-        elif broker.name == Broker.IBKR:
-            broker.add_product(exch=product.exch, basis=str(product.basis), name=product.name, symbol=product.symbol, **product.specs)
-        else:
-            raise NotImplementedError(f"Broker {broker.name} is not supported")
+        broker.add_product(exch=product.exch, basis=str(product.basis), name=product.name, symbol=product.symbol, **product.specs)
         self._logger.debug(f'added product {product.symbol}')
     
     def _add_account(self, account: BaseAccount):
-        from pfund.brokers.crypto.broker import CryptoBroker
-        from pfund.brokers.ibkr.broker import InteractiveBrokers
         broker: BaseBroker = self._add_broker(account.trading_venue)
-        if isinstance(broker, CryptoBroker):
-            account = broker.add_account(exch=account.trading_venue, name=account.name, key=account._key, secret=account._secret)
-        elif isinstance(broker, InteractiveBrokers):
-            account = broker.add_account(name=account.name, host=account._host, port=account._port, client_id=account._client_id)
-        else:
-            raise NotImplementedError(f"Broker {broker.name} is not supported")
+        account = broker.add_account(**account.to_dict())
         self._logger.debug(f'added account {account}')
     
     def _gather(self):
@@ -231,9 +219,8 @@ class BaseEngine:
             self._is_running = True
             self._gather()
             self._is_gathered = True
-            # TODO: start brokers
-            # for broker in self.brokers.values():
-            #     broker.start()
+            for broker in self.brokers.values():
+                broker.start()
             for strategy in self.strategies.values():
                 strategy.start()
         else:

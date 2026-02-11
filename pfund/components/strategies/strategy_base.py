@@ -119,15 +119,9 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         
         trading_venue = TradingVenue[trading_venue.upper()]
         # NOTE: broker is only used to create account but does nothing else
-        broker: BaseBroker = create_broker(env=self.env, bkr=trading_venue.broker)
-        if broker.name == Broker.CRYPTO:
-            exch = trading_venue
-            account: BaseAccount =  broker.add_account(exch=exch, name=name or self.name, **kwargs)
-        elif broker.name == Broker.IBKR:
-            account: BaseAccount = broker.add_account(name=name or self.name, **kwargs)
-        else:
-            raise NotImplementedError(f"Broker {broker.name} is not supported")
-        
+        broker: BaseBroker = create_broker(env=self.env, bkr=trading_venue.broker, settings=self.settings)
+        account: BaseAccount =  broker.add_account(trading_venue=trading_venue, name=name or self.name, **kwargs)
+
         if self.is_sub_strategy():
             raise ValueError(f"Sub-strategy '{self.name}' cannot add accounts")
 

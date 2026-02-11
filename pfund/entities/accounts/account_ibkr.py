@@ -52,3 +52,11 @@ class IBKRAccount(BaseAccount):
     @property
     def client_id(self):
         return self._client_id
+    
+    def to_dict(self):
+        return {
+            **super().to_dict(),
+            'host': self._host,
+            'port': self._port,
+            'client_id': self._client_id,
+        }

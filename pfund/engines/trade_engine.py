@@ -1,12 +1,12 @@
 """This is an engine used to trade against multiple brokers and cryptocurrency exchanges.
 
-This engine is designed for algorithmic trading and contains all the major 
+This engine is designed for algorithmic trading and contains all the major
 components at the highest level such as:
     brokers (e.g. Interactive Brokers, Crypto, ...),
         where broker `Crypto` is a fake broker name that includes the actual
         crypto exchanges (e.g. Binance, Bybit, ...)
     strategies (your trading strategies)
-In order to communicate with other processes, it uses ZeroMQ as the core 
+In order to communicate with other processes, it uses ZeroMQ as the core
 message queue.
 """
 from __future__ import annotations
@@ -30,16 +30,16 @@ class TradeEngine(BaseEngine):
         *,
         env: Environment | Literal['SANDBOX', 'PAPER', 'LIVE']=Environment.SANDBOX,
         data_range: str | Resolution | DataRangeDict | Literal['ytd']='ytd',
-    ):  
+    ):
         super().__init__(env=Environment[env.upper()], data_range=data_range)
         self._proxy: ZeroMQ | None = None
         self._worker: ZeroMQ | None = None
         self._setup_proxy()
-    
+
     @property
     def settings(self) -> TradeEngineSettings:
         return cast("TradeEngineSettings", self._context.settings)
-    
+
     def _setup_proxy(self):
         import zmq
         from pfeed.streaming.zeromq import ZeroMQ
@@ -70,7 +70,7 @@ class TradeEngine(BaseEngine):
                 )
                 self._logger.debug(f"zmq proxy connected to {zmq_name} at {engine_zmq_url}:{zmq_port}")
         self.settings.zmq_ports.update({ sender_name: proxy_zmq_port })
-    
+
     def _setup_worker(self):
         import zmq
         from pfeed.streaming.zeromq import ZeroMQ
@@ -90,7 +90,7 @@ class TradeEngine(BaseEngine):
                 url=zmq_url,
             )
             self._logger.debug(f"zmq worker connected to {zmq_name} at {zmq_url}:{zmq_port}")
-    
+
     def _gather(self):
         super()._gather()
         if not self._is_gathered:
@@ -98,7 +98,7 @@ class TradeEngine(BaseEngine):
             for strategy in self.strategies.values():
                 # updates zmq ports in settings
                 self.settings.zmq_ports.update(strategy._get_zmq_ports_in_use())
-    
+
     def run(self):
         super().run()
         # NOTE: need to init ray in the main thread to avoid "SIGTERM handler is not set because current thread is not the main thread"
@@ -113,7 +113,7 @@ class TradeEngine(BaseEngine):
                         self._logger.log(log_level, f'{data}')
                     else:
                         self._logger.debug(f'{channel} {topic} {data} {msg_ts}')
-                    # TODO: broker.distribute_msgs(channel, topic, data)
+                    # TODO: broker._distribute_msgs(channel, topic, data)
                 # TODO: receive components orders
                 if msg := self._worker.recv():
                     pass
@@ -124,7 +124,7 @@ class TradeEngine(BaseEngine):
                 break
         if self.is_running():
             self.end()
-    
+
     def end(self):
         super().end()
         if self._proxy:
