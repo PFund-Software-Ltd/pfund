@@ -20,28 +20,28 @@ from pfund.enums import Environment, Broker, TradingVenue, CryptoExchange
 
 class BaseBroker(ABC):
     name: ClassVar[Broker]
-    
+
     def __init__(self, env: Environment | str, settings: TradeEngineSettings | None=None):
         self._env: Environment = Environment[env.upper()]
         self._logger: logging.Logger = logging.getLogger('pfund')
         self._settings: TradeEngineSettings | None = settings or TradeEngineSettings()
-        
+
         self._products: defaultdict[CryptoExchange, dict[ProductName, BaseProduct]] = defaultdict(dict)
         self._accounts: defaultdict[TradingVenue, dict[AccountName, BaseAccount]] = defaultdict(dict)
 
         self._order_manager = OrderManager(self)
         self._portfolio_manager = PortfolioManager(self)
-    
+
     @property
     def portfolio_manager(self):
         return self._portfolio_manager
     pm = portfolio_manager
-    
+
     @property
     def order_manager(self):
         return self._order_manager
     om = order_manager
-    
+
     @classmethod
     def create_product(cls, basis: str, exch: str='', name: str='', symbol: str='', **specs) -> BaseProduct:
         from pfund.entities.products import ProductFactory
@@ -52,11 +52,11 @@ class BaseBroker(ABC):
             trading_venue = cls.name
         Product = ProductFactory(trading_venue=trading_venue, basis=basis)
         return Product(basis=basis, exchange=exch, name=name, symbol=symbol, specs=specs)
-    
+
     @abstractmethod
     def add_product(self, *args: Any, **kwargs: Any) -> BaseProduct:
         pass
-    
+
     @abstractmethod
     def add_account(self, *args: Any, **kwargs: Any) -> BaseAccount:
         pass
@@ -64,7 +64,7 @@ class BaseBroker(ABC):
     @property
     def products(self):
         return self._products
-    
+
     @property
     def accounts(self):
         return self._accounts
@@ -72,11 +72,11 @@ class BaseBroker(ABC):
     @property
     def balances(self):
         return self._portfolio_manager._balances[self._name] if self._name != Broker.CRYPTO else self._portfolio_manager.balances
-    
+
     @property
     def positions(self):
         return self._portfolio_manager._positions
-    
+
     @property
     def orders(self, type_='opened'):
         if type_ == 'opened':
@@ -85,7 +85,7 @@ class BaseBroker(ABC):
             return self._order_manager.submitted_orders
         elif type_ == 'closed':
             return self._order_manager.closed_orders
-    
+
     def start(self):
         # TODO: check if all product names and account names are unique
         self._add_default_private_channels()
@@ -105,13 +105,13 @@ class BaseBroker(ABC):
     @abstractmethod
     def add_public_channel(self, channel: PublicDataChannel, product: BaseProduct, resolution: Resolution):
         pass
-    
+
     # TODO: add more abstract methods, e.g. place_orders etc.
-       
+
     @abstractmethod
     def create_order(self, *args, **kwargs) -> BaseOrder:
         pass
-    
+
     @abstractmethod
     def place_orders(self, *args, **kwargs) -> list[BaseOrder]:
         pass
@@ -119,21 +119,18 @@ class BaseBroker(ABC):
     @abstractmethod
     def cancel_all_orders(self, reason=None):
         pass
-    
+
     def _add_default_private_channels(self):
         for channel in PrivateDataChannel:
             self.add_channel(channel, channel_type='private')
 
     # FIXME
     def distribute_msgs(self, channel, topic, info):
-        if channel == 1:
-            pass
-        elif channel == 2:  # from api processes to data manager
-            self._order_manager.handle_msgs(topic, info)
-        elif channel == 3:
-            self._portfolio_manager.handle_msgs(topic, info)
-        # FIXME
-        # elif channel == 4:  # from api processes to connection manager 
+        # self._order_manager.update_orders(...)
+        # self._portfolio_manager.update_positions(...)
+        # self._portfolio_manager.update_balances(...)
+        pass
+        # elif channel == 4:  # from api processes to connection manager
         #     self._connection_manager.handle_msgs(topic, info)
         #     if topic == 3 and self._settings.get('cancel_all_at', {}).get('disconnect', True):  # on disconnected
         #         self.cancel_all_orders(reason='disconnect')

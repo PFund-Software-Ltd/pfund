@@ -3,9 +3,8 @@ Conceptually, this is the equivalent of broker_crypto.py + exchange_base.py in c
 """
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, ClassVar
-from typing_extensions import override
 if TYPE_CHECKING:
-    from pfund.typing import FullDataChannel, AccountName, ProductName
+    from pfund.typing import FullDataChannel, AccountName, ProductName, Currency
     from pfund.datas.data_time_based import TimeBasedData
 
 from pfund.utils.adapter import Adapter
@@ -22,7 +21,7 @@ from pfund.enums import PublicDataChannel, PrivateDataChannel, Environment, Brok
 class InteractiveBrokers(BaseBroker):
     name: ClassVar[Broker] = Broker.IBKR
     adapter = Adapter(TradingVenue[name])
-    
+
     def __init__(self, env: Environment | str=Environment.SANDBOX):
         from pfund.brokers.ibkr.api import InteractiveBrokersAPI
 
@@ -31,21 +30,21 @@ class InteractiveBrokers(BaseBroker):
         self.account = None
         self._accounts: dict[Literal[TradingVenue.IBKR], dict[AccountName, IBKRAccount]] = { self.name: {} }
         self._api = InteractiveBrokersAPI(self._env)
-    
+
     @property
     def accounts(self):
         return self._accounts[self.name]
-    
+
     def _add_default_private_channels(self):
         for channel in list(PrivateDataChannel.__members__) + ['account_update', 'account_summary']:
             self.add_private_channel(channel)
-    
+
     def add_public_channel(self, channel: PublicDataChannel | FullDataChannel, data: TimeBasedData | None=None):
         if channel.lower() in PublicDataChannel.__members__:
             assert data is not None, 'data object is required for public channels'
             channel: FullDataChannel = self._api._create_public_channel(data.product, data.resolution)
         self._api.add_channel(channel, channel_type='public')
-    
+
     def add_private_channel(self, channel: PrivateDataChannel | FullDataChannel):
         if channel.lower() in PrivateDataChannel.__members__:
             channel: FullDataChannel = self._api._create_private_channel(channel)
@@ -66,7 +65,7 @@ class InteractiveBrokers(BaseBroker):
             # if account.name != name.upper():
             #     raise Exception(f'Only one primary account is supported and account {self.account} is already set up')
         return account
-    
+
     def get_product(self, name: ProductName, exch: str='') -> IBKRProduct:
         if exch:
             return self._products[exch.upper()][name]
@@ -76,7 +75,7 @@ class InteractiveBrokers(BaseBroker):
                 return products[0]
             else:
                 raise ValueError(f'product name {name} has multiple products across exchanges, please specify `exch`')
-    
+
     def add_product(self, basis: str, exch: str='', name: ProductName='', symbol: str='', **specs) -> IBKRProduct:
         product: IBKRProduct = self.create_product(basis, exch=exch, name=name, symbol=symbol, **specs)
         if product.name not in self._products[product.exchange]:
@@ -100,7 +99,7 @@ class InteractiveBrokers(BaseBroker):
                 raise ValueError(f'product name {name} has already been used for {existing_product}')
         return product
 
-    def add_balance(self, acc: str, ccy: str) -> IBKRBalance | None:
+    def add_balance(self, _: TradingVenue, acc: AccountName, ccy: Currency) -> IBKRBalance | None:
         acc, ccy = to_uppercase(acc, ccy)
         if not (balance := self.get_balances(acc=acc, ccy=ccy)):
             account = self.get_account(acc)
@@ -108,7 +107,7 @@ class InteractiveBrokers(BaseBroker):
             self._portfolio_manager.add_balance(balance)
             self._logger.debug(f'added {balance=}')
         return balance
-    
+
     def add_position(self, exch: str, acc: str, pdt: str) -> IBKRPosition | None:
         exch, acc, pdt = to_uppercase(exch, acc, pdt)
         if not (position := self.get_positions(exch=exch, acc=acc, pdt=pdt)):
@@ -126,7 +125,7 @@ class InteractiveBrokers(BaseBroker):
             order = IBKROrder(self._env, acc, product)
             self.orders[acc][order.oid] = order
         return order
-    
+
     # TODO
     def get_orders(self, acc: str='', pdt: str='') -> dict | IBKROrder:
         """Gets orders from an IB account.
@@ -140,7 +139,7 @@ class InteractiveBrokers(BaseBroker):
             returns positions in that specific exchange
         Case 4: non-empty `exch` and non-empty `pdt`
             returns position in that specific exchange for that specific product
-        
+
         Args:
             acc: account name. If empty, use primary account by default.
             exch: exchange name.
@@ -156,7 +155,7 @@ class InteractiveBrokers(BaseBroker):
             returns balances for that specific account
         Case 2: non-empty `ccy`
             returns balance for that specific currency
-        
+
         Args:
             acc: account name. If empty, use primary account by default.
             ccy: currency name.
@@ -181,7 +180,7 @@ class InteractiveBrokers(BaseBroker):
             returns positions in that specific exchange
         Case 4: non-empty `exch` and non-empty `pdt`
             returns position in that specific exchange for that specific product
-        
+
         Args:
             acc: account name. If empty, use primary account by default.
             exch: exchange name.
@@ -200,12 +199,12 @@ class InteractiveBrokers(BaseBroker):
             if pdt in positions:
                 positions = positions[pdt]
         return positions
-    
+
     def create_order(self, exch, acc, pdt, *args, **kwargs):
         account = self.get_account(acc)
-        product = self.add_product(exch, pdt)    
+        product = self.add_product(exch, pdt)
         return IBKROrder(account, product, *args, **kwargs)
-    
+
     def place_order(self, o):
         self._order_manager.on_submitted(o)
         self._api.placeOrder(o.orderId, o.contract, o)
@@ -215,4 +214,3 @@ class InteractiveBrokers(BaseBroker):
 
     def cancel_all_orders(self, reason=None):
         raise NotImplementedError(f'{self.name} does not support cancel_all_orders')
-    

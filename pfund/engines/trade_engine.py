@@ -113,6 +113,7 @@ class TradeEngine(BaseEngine):
                         self._logger.log(log_level, f'{data}')
                     else:
                         self._logger.debug(f'{channel} {topic} {data} {msg_ts}')
+                    # TODO: broker.distribute_msgs(channel, topic, data)
                 # TODO: receive components orders
                 if msg := self._worker.recv():
                     pass

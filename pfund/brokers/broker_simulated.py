@@ -79,6 +79,12 @@ class SimulatedBroker:
                 client_id=getattr(account, 'client_id', None),
             )
 
+    def initialize_balances(self):
+        for trading_venue in self._initial_balances:
+            for acc, initial_balances in self._initial_balances[trading_venue].items():
+                updates = {'ts': None, 'data': {k: {'wallet': v, 'available': v, 'margin': v} for k, v in initial_balances.items()}}
+                self._portfolio_manager.update_balances(trading_venue, acc, updates)
+    
     def start(self):
         self._safety_check()
         self._accounts_check()
@@ -103,15 +109,6 @@ class SimulatedBroker:
     # FIXME, what if a strategy needs to get_xxx before e.g. placing an order
     def get_trades(self, *args, **kwargs):
         pass
-    
-    def get_initial_balances(self):
-        return self._initial_balances
-    
-    def initialize_balances(self):
-        for trading_venue in self._initial_balances:
-            for acc, initial_balances in self._initial_balances[trading_venue].items():
-                updates = {'ts': None, 'data': {k: {'wallet': v, 'available': v, 'margin': v} for k, v in initial_balances.items()}}
-                self._portfolio_manager.update_balances(trading_venue, acc, updates)
     
     # TODO
     def place_orders(self, account, product, orders):
