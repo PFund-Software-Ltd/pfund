@@ -6,14 +6,14 @@ if TYPE_CHECKING:
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.sources.pfund.component_feed import PFundComponentFeed
     from pfeed.sources.pfund.component_data_model import PFundComponentDataModel
-    from pfund.datas.stores.base_data_store import BaseDataStore
+    from pfund.datas.stores.market_data_store import MarketDataStore
     from pfund.datas.data_time_based import TimeBasedData
 
 import logging
 
 import pfeed as pe
 from pfeed.enums import DataStorage, DataCategory, DataLayer, IOFormat
-from pfund.datas.storage_config import StorageConfig
+from pfeed.storages.storage_config import StorageConfig
 from pfund.datas.stores.market_data_store import MarketDataStore
 
 
@@ -27,7 +27,7 @@ class TradingStore:
         self._feed: PFundComponentFeed = pe.PFund(env=context.env).component_feed
         # TEMP
         # self._storage: BaseStorage = self._create_storage()
-        self._data_stores: dict[DataCategory, BaseDataStore] = {}
+        self._data_stores: dict[DataCategory, MarketDataStore] = {}
         self._df: GenericFrame | None = None
         self._df_updates = []
     
@@ -40,17 +40,19 @@ class TradingStore:
         return self.get_data_store(DataCategory.MARKET_DATA)
     market = market_data_store
 
-    def _create_data_store(self, category: DataCategory) -> BaseDataStore:
+    def _create_data_store(self, category: DataCategory) -> MarketDataStore:
         if category == DataCategory.MARKET_DATA:
             return MarketDataStore(self._context)
         else:
             raise ValueError(f'{category} is not supported')
         
-    def get_data_store(self, category: DataCategory) -> BaseDataStore:
+    def get_data_store(self, category: DataCategory) -> MarketDataStore:
         if category in self._data_stores:
             return self._data_stores[category]
         else:
-            return self._create_data_store(category)
+            data_store = self._create_data_store(category)
+            self._data_stores[category] = data_store
+            return data_store
 
     def _create_storage(self) -> BaseStorage:
         '''Create storage for component data to store signal dfs.
@@ -140,7 +142,7 @@ class TradingStore:
 
     def materialize(self):
         for data_store in self._data_stores.values():
-            data_store.materialize()
+            df = data_store.materialize()
         
     # TODO: I/O should be async
     def _write_to_storage(self, data: GenericFrame):
@@ -153,7 +155,7 @@ class TradingStore:
         data_model: PFundComponentDataModel = self._feed.create_data_model(...)
         
         data_layer = DataLayer.CURATED
-        data_domain = 'trading_data'
+        data_domain = f'{self._context.env}_DATA'
         metadata = {}  # TODO
         storage: BaseStorage = pe.create_storage(
             storage=self._storage.value,

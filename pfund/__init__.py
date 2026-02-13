@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.datas.data_config import DataConfig
-    from pfund.datas.storage_config import StorageConfig
     from pfund.brokers.crypto.broker import CryptoBroker
     from pfund.brokers.broker_defi import DeFiBroker
     from pfund.brokers.ibkr.broker import (
@@ -40,9 +39,6 @@ def __getattr__(name: str):
     elif name == 'DataConfig':
         from pfund.datas.data_config import DataConfig
         return DataConfig
-    elif name == 'StorageConfig':
-        from pfund.datas.storage_config import StorageConfig
-        return StorageConfig
     elif name == 'BacktestEngine':
         from pfund.engines.backtest_engine import BacktestEngine
         return BacktestEngine
@@ -107,7 +103,6 @@ __all__ = (
     'get_config',
     'configure_logging',
     'DataConfig',
-    'StorageConfig',
     # engines
     'BacktestEngine',
     'TradeEngine',

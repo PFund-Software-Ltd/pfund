@@ -4,7 +4,6 @@ from typing import Literal, Any
 from pathlib import Path
 
 from pfund.enums import Environment, Database
-from pfund.enums.data_tool import DataTool
 from pfund_kit.config import Configuration
 
 
@@ -69,7 +68,6 @@ def configure(
     data_path: str | None = None,
     log_path: str | None = None,
     cache_path: str | None = None,
-    data_tool: Literal['pandas', 'polars'] | None = None,
     database: Literal['duckdb'] | None = None,
     persist: bool = False,
 ) -> PFundConfig:
@@ -79,7 +77,6 @@ def configure(
         data_path: Path to the data directory.
         log_path: Path to the log directory.
         cache_path: Path to the cache directory.
-        data_tool: data tool to use for dataframe operations, e.g. "pandas", "polars"
         database: database to use for storing data, e.g. "duckdb"
         persist: If True, the config will be saved to the config file.
     '''
@@ -93,8 +90,6 @@ def configure(
         if v is not None:
             if '_path' in k:
                 v = Path(v)
-            elif k == 'data_tool':
-                v = DataTool[v.lower()]
             elif k == 'database':
                 v = Database[v.upper()]
             setattr(config, k, v)
@@ -107,7 +102,7 @@ def configure(
     return config
 
 
-def configure_logging(logging_config: dict | None=None, debug: bool=False) -> dict:
+def configure_logging(logging_config: dict[str, Any] | None=None, debug: bool=False) -> dict[str, Any]:
     '''
     Loads logging config from YAML file and merges with optional user overrides.
 
@@ -150,13 +145,11 @@ class PFundConfig(Configuration):
 
     def _initialize_from_data(self):
         """Initialize PFundConfig-specific attributes from config data."""
-        self.data_tool = DataTool[self._data.get('data_tool', DataTool.polars).lower()]
         self.database = Database[self._data.get('database', Database.DUCKDB).upper()]
     
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             **super().to_dict(),
-            'data_tool': self.data_tool,
             'database': self.database,
         }
 

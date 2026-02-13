@@ -50,15 +50,19 @@ class BacktestEngine(BaseEngine):
         mode: Literal['vectorized', 'hybrid', 'event_driven']='vectorized',
         dataset_splits: int | DatasetSplitsDict | TimeSeriesSplit=721,
         cv_test_ratio: float=0.1,
+        settings: BacktestEngineSettings | None=None,
     ):
         '''
         Args:
             cv_test_ratio:
                 if passing in a cross-validator in dataset_splits, 
                 this is the ratio of the entire dataset to be reserved as a final hold-out test set.
+            settings:
+                if not provided, settings.toml will be used.
+                if provided, will override the settings in settings.toml.
         '''
         from pfund.utils.dataset_splitter import DatasetSplitter
-        super().__init__(env=Environment.BACKTEST, data_range=data_range)
+        super().__init__(env=Environment.BACKTEST, data_range=data_range, settings=settings)
         self._context.backtest = BacktestContext(
             backtest_mode=BacktestMode[mode.lower()],
             dataset_splitter=DatasetSplitter(

@@ -217,7 +217,7 @@ class BarData(MarketData):
             str(self.resolution)
         ])
         if not self.bar.start_ts or self.bar.is_empty():
-            return f"{base_info} - No data"
+            return f"{base_info}"
         ohlcv = f"O:{self.bar.open:.2f} H:{self.bar.high:.2f} L:{self.bar.low:.2f} C:{self.bar.close:.2f} V:{self.bar.volume:.2f}"
         
         if self.bar.start_dt and self.bar.end_dt and self.bar.dt:

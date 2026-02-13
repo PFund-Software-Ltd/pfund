@@ -19,6 +19,7 @@ from pfund.enums.data_channel import (
     PFundDataChannel,
 )
 from pfund.enums.database import Database
+from pfund.enums.source_type import SourceType
 
 
 __all__ = [
@@ -50,4 +51,5 @@ __all__ = [
     "DataChannelType",
     "PFundDataChannel",
     "Database",
+    "SourceType",
 ]

@@ -42,6 +42,7 @@ class BaseEngine:
         *,
         env: Environment, 
         data_range: str | Resolution | DataRangeDict | Literal['ytd'],
+        settings: TradeEngineSettings | BacktestEngineSettings | None=None,
     ):
         '''
         Args:
@@ -66,6 +67,8 @@ class BaseEngine:
         self._is_gathered: bool = False
         self.brokers: dict[Broker, BaseBroker] = {}
         self.strategies: dict[str, BaseStrategy | ActorProxy[BaseStrategy]] = {}
+        if settings:
+            self.configure_settings(settings, persist=False)
         cprint(f"{self.name} is running (data_range=({self.data_start}, {self.data_end}))", style=ENV_COLORS[self.env])
     
     @property
@@ -98,7 +101,7 @@ class BaseEngine:
     def is_remote(self) -> bool:
         return self._context.run_mode == RunMode.REMOTE
     
-    def configure_settings(self, settings: TradeEngineSettings | BacktestEngineSettings):
+    def configure_settings(self, settings: TradeEngineSettings | BacktestEngineSettings, persist: bool=False):
         '''Overrides the loaded settings with the given settings object and saves it to settings.toml
 
         Args:
@@ -107,15 +110,15 @@ class BaseEngine:
         from pfund_kit.utils import toml
         from pfund import get_config
 
-        config = get_config()
-
         if not isinstance(settings, (TradeEngineSettings, BacktestEngineSettings)):
             raise ValueError(f"Invalid settings type: {type(settings)}")
-
+        
         # write settings to settings.toml
-        env_section = self.env
-        data = {env_section: settings.model_dump()}
-        toml.dump(data, config.settings_file_path, mode='update', auto_inline=True)
+        if persist:
+            config = get_config()
+            env_section = self.env
+            data = {env_section: settings.model_dump()}
+            toml.dump(data, config.settings_file_path, mode='update', auto_inline=True)
 
         # update settings in context
         self._context.settings = settings

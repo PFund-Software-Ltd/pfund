@@ -32,7 +32,7 @@ class BaseBroker(ABC):
         self._accounts: defaultdict[TradingVenue, dict[AccountName, BaseAccount]] = defaultdict(dict)
 
         self._order_manager = OrderManager(self)
-        self._portfolio_manager: PortfolioManager[Any, Any] = PortfolioManager()
+        self._portfolio_manager: PortfolioManager[BaseBalance, BasePosition] = PortfolioManager()
 
     @property
     def portfolio_manager(self):

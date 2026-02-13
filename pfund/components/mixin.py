@@ -38,9 +38,9 @@ import datetime
 
 from pfund_kit.utils import yaml
 from pfeed.enums import DataSource
+from pfeed.storages.storage_config import StorageConfig
 from pfund.datas.resolution import Resolution, ResolutionUnit
 from pfund.datas.data_config import DataConfig
-from pfund.datas.storage_config import StorageConfig
 from pfund.components.actor_proxy import ActorProxy
 from pfund.enums import ComponentType, RunMode, Environment, Broker, TradingVenue
 
@@ -479,7 +479,7 @@ class ComponentMixin:
     def add_data(
         self, 
         trading_venue: TradingVenue | str,
-        product_basis: str,
+        product: str,
         exchange: str='',
         symbol: str='',
         product_name: str='',
@@ -491,7 +491,7 @@ class ComponentMixin:
         Args:
             exchange: useful for TradFi brokers (e.g. IB), to specify the exchange (e.g. 'NASDAQ')
             symbol: useful for TradFi brokers (e.g. IB), to specify the symbol (e.g. 'AAPL')
-            product_basis: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
+            product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
             product_name: A user-defined identifier for the product.
                 If not provided, the default product symbol (e.g. 'BTC_USDT_PERP', 'TSLA241213C00075000') will be used.
                 This is useful when you need to distinguish between similar instruments, such as options 
@@ -504,7 +504,7 @@ class ComponentMixin:
         '''
         product: BaseProduct = self._add_product(
             tv=trading_venue,
-            basis=product_basis,
+            basis=product,
             exch=exchange,
             symbol=symbol,
             name=product_name,
@@ -515,6 +515,8 @@ class ComponentMixin:
             data_config=self._resolve_data_config(product, data_config)
         )
         for data in datas:
+            if not data.is_bar():
+                continue
             self.store.market.add_data(data=data, storage_config=storage_config)
         return datas
     

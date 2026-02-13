@@ -107,7 +107,7 @@ class Resolution:
     def _resolve_orderbook_level(self, orderbook_level: str | None) -> int | None:
         if self.is_quote():
             if orderbook_level:
-                orderbook_level = int(orderbook_level[0][-1])
+                orderbook_level = int(orderbook_level.upper().lstrip('L'))
             else:
                 orderbook_level = self.DEFAULT_ORDERBOOK_LEVEL
         else:
@@ -116,12 +116,13 @@ class Resolution:
     
     def to_seconds(self) -> int:
         assert self.is_bar(), f"{self!r} is not a bar resolution"
-        return self._value()
+        return self.period * self.timeframe.unit.value
 
-    def _value(self) -> int:
-        """lower value = higher resolution"""
-        return self.period * self.timeframe.unit.value * (self.orderbook_level or 1)
-
+    def _comparable(self) -> tuple[int, int, int]:
+        """Lower tuple = higher resolution. Uses tuple comparison to avoid
+        collisions between different timeframe units (e.g. quote vs tick)."""
+        return (self.timeframe.unit.value, self.period, -(self.orderbook_level or 1))
+    
     def is_quote_l1(self):
         return self.is_quote() and self.orderbook_level == 1
 
@@ -248,40 +249,40 @@ class Resolution:
         return resoultion
 
     def __hash__(self):
-        return self._value()
+        return hash(self._comparable())
 
     def is_strict_equal(self, other: Any) -> bool:
         """1h = 60m when using __eq__ to compare resolutions, but in strict_equal, 1h != 60m"""
-        return self._value() == other._value() and self.timeframe == other.timeframe
+        return self._comparable() == other._comparable() and self.timeframe == other.timeframe
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Resolution):
             return NotImplemented
-        return self._value() == other._value()
+        return self._comparable() == other._comparable()
 
     def __ne__(self, other: Any) -> bool:
         if not isinstance(other, Resolution):
             return NotImplemented
         return not self == other
 
-    # NOTE: higher value = lower resolution and vice versa
-    # e.g. 1m (higher resolution, value=60) > 1h (lower resolution, value=3600)
+    # NOTE: lower tuple = higher resolution
+    # e.g. 1m (60, 1, -1) > 1h (3600, 1, -1) because (60,1,-1) < (3600,1,-1)
     def __lt__(self, other: Any) -> bool:
         if not isinstance(other, Resolution):
             return NotImplemented
-        return self._value() > other._value()
+        return self._comparable() > other._comparable()
 
     def __le__(self, other: Any) -> bool:
         if not isinstance(other, Resolution):
             return NotImplemented
-        return self._value() >= other._value()
+        return self._comparable() >= other._comparable()
 
     def __gt__(self, other: Any) -> bool:
         if not isinstance(other, Resolution):
             return NotImplemented
-        return self._value() < other._value()
+        return self._comparable() < other._comparable()
 
     def __ge__(self, other: Any) -> bool:
         if not isinstance(other, Resolution):
             return NotImplemented
-        return self._value() <= other._value()
+        return self._comparable() <= other._comparable()

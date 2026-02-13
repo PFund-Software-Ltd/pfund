@@ -28,7 +28,7 @@ from pfund.brokers.broker_base import BaseBroker
 class CryptoBroker(BaseBroker):
     name: ClassVar[Broker] = Broker.CRYPTO
 
-    _portfolio_manager: PortfolioManager[CryptoBalance, CryptoPosition]
+    _portfolio_manager: PortfolioManager[CryptoBalance, CryptoPosition]  # pyright: ignore[reportIncompatibleVariableOverride]
 
     def __init__(self, env: Environment | str=Environment.SANDBOX, settings: TradeEngineSettings | None=None):
         super().__init__(env=env, settings=settings)
@@ -145,6 +145,7 @@ class CryptoBroker(BaseBroker):
             self._logger.debug(f'added {position}')
         return position
 
+    # TODO: also reconcile with strategies
     def reconcile_orders(self):
         def work():
             for exch in self._accounts:
@@ -162,6 +163,7 @@ class CryptoBroker(BaseBroker):
             account = self.get_account(exch, acc)
             return exchange.get_orders(account, pdt=pdt, **kwargs)
 
+    # TODO: also reconcile with strategies
     def reconcile_trades(self):
         def work():
             for exch in self._accounts:
@@ -179,6 +181,7 @@ class CryptoBroker(BaseBroker):
             account = self.get_account(exch, acc)
             return exchange.get_trades(account, pdt=pdt, **kwargs)
 
+    # TODO: also reconcile with strategies
     def reconcile_balances(self):
         def work():
             for exch in self._accounts:
@@ -210,6 +213,7 @@ class CryptoBroker(BaseBroker):
             account = self.get_account(exch, acc)
             return exchange.get_balances(account, ccy=ccy, **kwargs)
 
+    # TODO: also reconcile with strategies
     def reconcile_positions(self):
         def work():
             for exch in self._accounts:

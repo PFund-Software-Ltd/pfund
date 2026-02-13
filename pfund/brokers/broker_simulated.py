@@ -10,6 +10,8 @@ if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
     from pfund.brokers.broker_base import BaseBroker
     from pfund.entities.accounts.account_base import BaseAccount
+    from pfund.entities.balances.balance_base import BaseBalance
+    from pfund.entities.positions.position_base import BasePosition
 
 import logging
 from decimal import Decimal
@@ -51,7 +53,7 @@ class SimulatedBroker:
     _products: dict[TradingVenue, dict[ProductName, BaseProduct]]
     _accounts: dict[TradingVenue, dict[AccountName, BaseAccount]]
     _order_manager: OrderManager
-    _portfolio_manager: PortfolioManager
+    _portfolio_manager: PortfolioManager[BaseBalance, BasePosition]
 
     # TODO
     def _safety_check(self):
@@ -71,19 +73,6 @@ class SimulatedBroker:
                 if v and k not in self.WHITELISTED_ACCOUNT_FIELDS:
                     self._logger.warning(f'removed non-whitelisted attribute {k} from {self.name} account {account.name}')
                     delattr(account, k)
-
-        # FIXME: no longer needed? or only needs it for SANDBOX env?
-        if self.name == Broker.IBKR:
-            from pfund.entities.accounts.account_ibkr import IBKRAccount
-            account = list(self._accounts.values())[0]  # IB has only one account for SANDBOX trading
-            # create an IB account to check if host, port, client_id are provided, if not, it raises an error
-            IBKRAccount(
-                env=self._env, 
-                name=account.name,
-                host=getattr(account, 'host', ''),
-                port=getattr(account, 'port', None),
-                client_id=getattr(account, 'client_id', None),
-            )
 
     def _initialize_balances(self):
         from pfund.entities.balances.balance_update import BalanceUpdate

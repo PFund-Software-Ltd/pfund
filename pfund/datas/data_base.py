@@ -7,9 +7,9 @@ from abc import ABC, abstractmethod
 
 
 class BaseData(ABC):
-    def __init__(self, data_source: DataSource, data_origin: str):
+    def __init__(self, data_source: DataSource, data_origin: str=''):
         self.source: DataSource = data_source
-        self.origin: str = data_origin or data_source.value
+        self.origin: str = data_origin
         self._extra_data: dict[str, Any] = {}
         self._custom_data: dict[Any, Any] = {}
         
