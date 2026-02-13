@@ -100,12 +100,22 @@ class BacktestEngine(BaseEngine):
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
         return _DummyStrategy.name
         
-    def add_strategy(self, strategy: StrategyT, resolution: str, name: str='') -> StrategyT:
+    def add_strategy(
+        self, 
+        strategy: StrategyT, 
+        resolution: str, 
+        name: str='',
+        min_data: int | None=None,
+        max_data: int | None=None,
+    ) -> StrategyT:
         '''
         Args:
-            ray_actor_options:
-                Options for Ray actor.
-                will be passed to ray actor like this: Actor.options(**ray_options).remote(**ray_kwargs)
+            min_data (int | None): Minimum number of data rows required before the strategy can produce signals.
+                When `preload_min_data` is enabled in engine settings, these rows are pre-loaded during materialization
+                for event-driven backtesting so the strategy starts warm.
+            max_data (int | None): Maximum number of data rows kept in memory.
+                Once exceeded, oldest rows are dropped (sliding window). Useful for bounding memory usage.
+                If None, all rows are kept (unlimited).
         '''
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
         from pfund.components.strategies.strategy_backtest import BacktestStrategy
@@ -116,9 +126,14 @@ class BacktestEngine(BaseEngine):
         if Strategy is not _DummyStrategy:
             if name == self._dummy:
                 raise ValueError(f'strategy name "{self._dummy}" is reserved, please use another name')
-        name = name or Strategy.__name__
         strategy: StrategyT = BacktestStrategy(Strategy, *strategy.__pfund_args__, **strategy.__pfund_kwargs__)
-        return cast("StrategyT", super().add_strategy(strategy=strategy, resolution=resolution, name=name))
+        return cast("StrategyT", super().add_strategy(
+            strategy=strategy,
+            resolution=resolution,
+            name=name or Strategy.__name__,
+            min_data=min_data,
+            max_data=max_data,
+        ))
 
     def add_model(
         self, 

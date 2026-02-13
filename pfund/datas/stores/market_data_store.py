@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from narwhals.typing import Frame
     from pfeed.typing import GenericFrame
 
 import narwhals as nw
@@ -15,7 +16,7 @@ from pfund.datas.stores.base_data_store import BaseDataStore
 
 
 class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
-    def materialize(self):
+    def materialize(self) -> Frame:
         '''Materializes market data by loading from storage, with optional auto-download fallback.
 
         For each registered data feed, attempts to retrieve data from pfeed's data lakehouse.
@@ -91,13 +92,10 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             else:
                 dfs.append(df)
         
-        if dfs:
-            df = nw.concat([nw.from_native(df) for df in dfs])
-            df = df.with_columns(
-                source_type=nw.lit(SourceType.BATCH).cast(nw.String)
-            )
-        else:
-            df = None
+        df = nw.concat([nw.from_native(df) for df in dfs])
+        df = df.with_columns(
+            source_type=nw.lit(SourceType.BATCH).cast(nw.String)
+        )
         return df
         
     # TODO:

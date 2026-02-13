@@ -121,6 +121,8 @@ class ComponentMixin:
         run_mode: RunMode,
         resolution: Resolution | str,
         engine_context: EngineContext,
+        min_data: int | None,
+        max_data: int | None,
     ):
         """
         Hydrates the component with necessary attributes after initialization.
@@ -138,7 +140,7 @@ class ComponentMixin:
         self._set_resolution(resolution)
         if self.is_remote():
             self._setup_logging()
-        self._store = TradingStore(engine_context)
+        self._store = TradingStore(engine_context, min_data=min_data, max_data=max_data)
         if self.env != Environment.BACKTEST:
             self.databoy._setup_messaging()
     

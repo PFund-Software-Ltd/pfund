@@ -11,9 +11,20 @@ class BacktestEngineSettings(BaseEngineSettings):
     # If not provided, will use the default initial balances in SimulatedBroker
     initial_balances: dict[TradingVenue | str, dict[Currency, Decimal]] = Field(default_factory=dict)
     initial_positions: dict[TradingVenue | str, dict[ProductName, Decimal]] = Field(default_factory=dict)
+    
+    # FIXME: these 3 params require "mtflow" installed
     retention_period: int = Field(default=7, ge=1, description='the retention period for backtests in days')
     commit_to_git: bool = Field(default=False)
     save_backtests: bool = Field(default=True)
+
+    preload_min_data: bool = Field(
+        default=True,
+        description='''
+        if True, pre-loads each component's `min_data` rows during materialization for event-driven backtesting,
+        so strategies start with enough data to produce signals immediately.
+        Set to False to simulate every bar from the start, including the warm-up phase.
+        '''
+    )
     reuse_signals: bool = Field(
         default=False,
         description='''

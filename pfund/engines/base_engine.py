@@ -128,6 +128,8 @@ class BaseEngine:
         strategy: StrategyT,
         resolution: str, 
         name: str='', 
+        min_data: int | None=None,
+        max_data: int | None=None,
         ray_actor_options: dict[str, Any] | None=None,
         **ray_kwargs: Any,
     ) -> StrategyT | ActorProxy[StrategyT]:
@@ -159,7 +161,9 @@ class BaseEngine:
             name=strat,
             run_mode=RunMode.REMOTE if ray_kwargs else RunMode.LOCAL,
             resolution=resolution,
-            engine_context=self._context
+            engine_context=self._context,
+            min_data=min_data,
+            max_data=max_data,
         )
         strategy._set_top_strategy()
 

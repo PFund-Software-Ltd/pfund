@@ -1,13 +1,13 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    from narwhals.typing import Frame
     from pfund.engines.engine_context import EngineContext
-    from pfeed.typing import GenericFrame, GenericSeries
+    from pfeed.typing import GenericFrame
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.sources.pfund.component_feed import PFundComponentFeed
     from pfeed.sources.pfund.component_data_model import PFundComponentDataModel
     from pfund.datas.stores.market_data_store import MarketDataStore
-    from pfund.datas.data_time_based import TimeBasedData
 
 import logging
 
@@ -21,19 +21,17 @@ class TradingStore:
     '''
     A TradingStore is a store that contains all data used by a component (e.g. strategy) in trading, from market data, computed features, to model predictions etc.
     '''
-    def __init__(self, context: EngineContext):
+    def __init__(self, context: EngineContext, min_data: int | None=None, max_data: int | None=None):
         self._logger: logging.Logger = logging.getLogger('pfund')
         self._context: EngineContext = context
+        self._data_stores: dict[DataCategory, MarketDataStore] = {}
+        self._min_data: int | None = min_data
+        self._max_data: int | None = max_data
+        self._df: Frame | None = None
+        self._df_updates = []
         self._feed: PFundComponentFeed = pe.PFund(env=context.env).component_feed
         # TEMP
         # self._storage: BaseStorage = self._create_storage()
-        self._data_stores: dict[DataCategory, MarketDataStore] = {}
-        self._df: GenericFrame | None = None
-        self._df_updates = []
-    
-    # TODO
-    def _prepare_df(self) -> GenericFrame:
-        pass
     
     @property
     def market_data_store(self) -> MarketDataStore:
@@ -53,6 +51,19 @@ class TradingStore:
             data_store = self._create_data_store(category)
             self._data_stores[category] = data_store
             return data_store
+    
+    def _set_df(self, df: Frame):
+        self._df = df
+        
+    def get_df(self) -> Frame | None:
+        return self._df
+    
+    # TODO: only handle market data store for now
+    def materialize(self):
+        # for data_store in self._data_stores.values():
+        data_store = self.market_data_store
+        df = data_store.materialize()
+        self._set_df(df)
 
     def _create_storage(self) -> BaseStorage:
         '''Create storage for component data to store signal dfs.
@@ -87,63 +98,6 @@ class TradingStore:
             )
         )
 
-    def get_market_data_df(self, data: TimeBasedData | None=None, unstack: bool=False) -> GenericFrame | None:
-        if data is None:
-            return self.market.data
-        else:
-            # TODO: filter data based on data.product and data.resolution
-            return self.market.data
-    
-    def get_complete_df(self) -> GenericFrame | None:
-        pass
-    
-    def get_strategy_df(
-        self, 
-        name: str='', 
-        include_data: bool=False,
-        as_series: bool=False,
-    ) -> GenericFrame | GenericSeries | None:
-        '''
-        Get the dataframe of the strategy's outputs.
-        Args:
-            name: the name of the strategy
-            include_data: whether to include the data dataframe in the output dataframe
-                if not, only returns the strategy's outputs as a dataframe
-            as_series: whether to return the dataframe as a series
-        '''
-        pass
-    
-    def get_model_df(
-        self, 
-        name: str='', 
-        include_data: bool=False,
-        as_series: bool=False,
-    ) -> GenericFrame | GenericSeries | None:
-        pass
-    
-    def get_indicator_df(
-        self, 
-        name: str='', 
-        include_data: bool=False,
-        as_series: bool=False,
-    ) -> GenericFrame | GenericSeries | None:
-        pass
-     
-    def get_feature_df(
-        self, 
-        name: str='', 
-        include_data: bool=False,
-        as_series: bool=False,
-    ) -> GenericFrame | GenericSeries | None:
-        pass
-    
-    def _get_df(self) -> GenericFrame | None:
-        pass
-
-    def materialize(self):
-        for data_store in self._data_stores.values():
-            df = data_store.materialize()
-        
     # TODO: I/O should be async
     def _write_to_storage(self, data: GenericFrame):
         '''Load pfund's component (strategy/model/feature/indicator) data 
