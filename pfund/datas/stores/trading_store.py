@@ -65,7 +65,8 @@ class TradingStore:
     def _set_df(self, df: Frame):
         self._df = df
         
-    def get_df(self) -> Frame | None:
+    def get_df(self) -> Frame:
+        assert self._df is not None, "df is not set"
         return self._df
     
     # TODO: only handle market data store for now

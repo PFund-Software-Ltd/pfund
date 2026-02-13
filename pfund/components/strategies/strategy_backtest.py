@@ -2,7 +2,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from pfund.typing import StrategyT
-    from pfund._backtest.typing import BacktestDataFrame
     
 from pfund._backtest.backtest_mixin import BacktestMixin
 from pfund.enums import BacktestMode
@@ -16,9 +15,6 @@ def BacktestStrategy(Strategy: type[StrategyT], *args: Any, **kwargs: Any) -> St
             else:
                 class_name = Strategy.__name__
                 raise AttributeError(f"'{class_name}' object has no attribute '{name}'")
-        
-        def backtest(self, df: BacktestDataFrame):  # pyright: ignore[reportUnusedParameter]
-            raise Exception(f'Strategy "{self.name}" does not have a backtest() method, cannot run vectorized backtesting')
         
         def add_strategy(self, strategy: StrategyT, name: str='') -> StrategyT:
             strategy: StrategyT = BacktestStrategy(type(strategy), *strategy.__pfund_args__, **strategy.__pfund_kwargs__)
@@ -43,7 +39,7 @@ def BacktestStrategy(Strategy: type[StrategyT], *args: Any, **kwargs: Any) -> St
         
         def start(self):
             # TODO:
-            if self.backtest_mode == BacktestMode.event_driven:
+            if self.backtest_mode == BacktestMode.EVENT_DRIVEN:
                 super().start()
             else:
                 pass

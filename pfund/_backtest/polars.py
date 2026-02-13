@@ -1,17 +1,7 @@
-from __future__ import annotations
-
 import polars as pl
 
-from pfund._backtest.narwhals_mixin import NarwhalsMixin
 
-
-class BacktestDataFrame(NarwhalsMixin, pl.DataFrame):
-    def lazy(self) -> BacktestLazyFrame:
-        """Convert to lazy evaluation."""
-        return BacktestLazyFrame(super().lazy())
-
-
-class BacktestLazyFrame(NarwhalsMixin, pl.LazyFrame):
-    def collect(self) -> BacktestDataFrame:
-        """Execute and return eager DataFrame."""
-        return BacktestDataFrame(super().collect())
+# TODO: maybe create a subclass like SafeFrame(pd.DataFrame) to prevent users from peeking into the future?
+# e.g. df['close'] = df['close'].shift(-1) should not be allowed
+class BacktestDataFrame(pl.DataFrame):
+    pass

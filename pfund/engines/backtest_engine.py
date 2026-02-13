@@ -1,8 +1,9 @@
-# pyright: reportUninitializedInstanceVariable=false, reportUnsafeMultipleInheritance=false, reportIncompatibleVariableOverride=false
+# pyright: reportUninitializedInstanceVariable=false, reportUnsafeMultipleInheritance=false, reportIncompatibleVariableOverride=false, reportAssignmentType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Literal, Any, cast
 if TYPE_CHECKING:
-    import pandas as pd
+    from narwhals.typing import Frame
+    from pfeed.typing import DataFrame
     from sklearn.model_selection import TimeSeriesSplit
     from pfund.typing import StrategyT, ModelT, FeatureT, IndicatorT
     from pfund.components.strategies.strategy_base import BaseStrategy
@@ -20,12 +21,11 @@ if TYPE_CHECKING:
     class BacktestEngineContext(EngineContext):
         backtest: BacktestContext
 
-import inspect
 import time
+import importlib
 from dataclasses import dataclass
 
-import polars as pl
-
+from pfeed.enums import DataTool
 from pfund_kit.utils.progress_bar import track, ProgressBar
 from pfund_kit.style import cprint, RichColor
 from pfund.enums import BacktestMode, ComponentType, Environment
@@ -46,7 +46,7 @@ class BacktestEngine(BaseEngine):
     def __init__(
         self,
         data_range: str | DataRangeDict | Literal['ytd']='1mo',
-        mode: Literal['vectorized', 'hybrid', 'event_driven']='vectorized',
+        mode: BacktestMode | Literal['vectorized', 'hybrid', 'event_driven']=BacktestMode.VECTORIZED,
         dataset_splits: int | DatasetSplitsDict | TimeSeriesSplit=721,
         cv_test_ratio: float=0.1,
         settings: BacktestEngineSettings | None=None,
@@ -63,7 +63,7 @@ class BacktestEngine(BaseEngine):
         from pfund.utils.dataset_splitter import DatasetSplitter
         super().__init__(env=Environment.BACKTEST, data_range=data_range, settings=settings)
         self._context.backtest = BacktestContext(
-            backtest_mode=BacktestMode[mode.lower()],
+            backtest_mode=BacktestMode[mode.upper()],
             dataset_splitter=DatasetSplitter(
                 dataset_start=self.data_start,
                 dataset_end=self.data_end,
@@ -71,7 +71,7 @@ class BacktestEngine(BaseEngine):
                 cv_test_ratio=cv_test_ratio
             )
         )
-        if self.backtest_mode == BacktestMode.event_driven:
+        if self.backtest_mode == BacktestMode.EVENT_DRIVEN:
             # REVIEW:
             if self.settings.reuse_signals:
                 if self.settings.assert_signals:
@@ -218,132 +218,132 @@ class BacktestEngine(BaseEngine):
 
         backtest_results = {}
 
-        # try:
-        #     for strategy in self.strategies.values():
-        #         if strategy.name == self._dummy:
-        #             # nothing to run when backtesting model in vectorized or hybrid mode
-        #             if self.backtest_mode in [BacktestMode.vectorized, BacktestMode.hybrid]:
-        #                 continue
-        #             elif self.backtest_mode == BacktestMode.event_driven:
-        #                 # dummy strategy has exactly one model
-        #                 model: BaseModel = cast("BaseModel", list(strategy.models.values())[0])
-        #                 backtestee = model
-        #             else:
-        #                 raise NotImplementedError(f'Backtesting mode {self.backtest_mode} is not supported for model backtesting')
-        #         else:
-        #             backtestee = strategy
+        try:
+            for strategy in self.strategies.values():
+                if strategy.name == self._dummy:
+                    # nothing to run when backtesting model in vectorized or hybrid mode
+                    if self.backtest_mode in [BacktestMode.VECTORIZED, BacktestMode.HYBRID]:
+                        continue
+                    elif self.backtest_mode == BacktestMode.EVENT_DRIVEN:
+                        # dummy strategy has exactly one model
+                        model: BaseModel = cast("BaseModel", list(strategy.models.values())[0])
+                        backtestee = model
+                    else:
+                        raise NotImplementedError(f'Backtesting mode {self.backtest_mode} is not supported for model backtesting')
+                else:
+                    backtestee = strategy
 
-        #         backtest_results.update(
-        #             self._backtest(backtestee, num_chunks=num_chunks)
-        #         )
+                backtest_results.update(
+                    self._backtest(backtestee, num_chunks=num_chunks)
+                )
 
-        # except Exception:
-        #     self._logger.exception('Error in backtesting:')
-        # finally:
-        #     self.end()
+        except Exception:
+            self._logger.exception('Error in backtesting:')
+        finally:
+            self.end()
         
         return backtest_results
     
-    def _assert_backtest_function(self, backtestee: BaseStrategy | BaseModel):
-        assert self.backtest_mode == BacktestMode.vectorized, 'assert_backtest_function() is only for vectorized backtesting'
-        if not hasattr(backtestee, 'backtest'):
-            raise Exception(f'class "{backtestee.name}" does not have backtest() method, cannot run vectorized backtesting')
-        # TODO: use pfund_kit?
-        sig = inspect.signature(backtestee.backtest)
-        params = list(sig.parameters.values())
-        if not params or params[0].name != 'df':
-            raise Exception(f'{backtestee.name} backtest() must have "df" as its first arg, i.e. backtest(self, df)')
-
     def _backtest(self, backtestee: BaseStrategy | BaseModel, num_chunks: int=1) -> dict:       
+        import narwhals as nw
+        from pfeed import get_config
+        
         backtest_result = {}
-        
-        df = backtestee.get_df(copy=True)
         is_using_ray = num_chunks > 1
-        
+        ray_tasks = []
+        df_chunks: list[DataFrame[Any]] = []
+            
+
         ### Pre-Backtesting ###
-        if self.backtest_mode == BacktestMode.vectorized:
-            self._assert_backtest_function(backtestee)
-            df_chunks = []
-        elif self.backtest_mode == BacktestMode.event_driven:
+        pfeed_config = get_config()
+        data_tool: DataTool = pfeed_config.data_tool
+        df: Frame = backtestee.get_df(to_native=False)
+        if isinstance(df, nw.LazyFrame):
+            df = df.collect()
+        if self.backtest_mode == BacktestMode.EVENT_DRIVEN:
             # NOTE: clear dfs so that strategies/models don't know anything about the incoming data
             backtestee.clear_dfs()
-        else:
-            raise NotImplementedError(f'Backtesting mode {self.backtest_mode} is not supported')
         
         
         ### Backtesting ###
-        if not is_using_ray:
-            progress_desc = f'Backtesting {backtestee.name} (per chunk)'
-            progress_bar = track(total=num_chunks, description=progress_desc)
-        else:
-            ray_tasks = []
-        
         start_time = time.time()
-        for chunk_num, df_chunk in enumerate(dtl.iterate_df_by_chunks(df, num_chunks=num_chunks)):
-            if self._use_ray:
-                ray_tasks.append((df_chunk, chunk_num))
-            else:
-                if self.backtest_mode == BacktestMode.vectorized:
-                    df_chunk = dtl.preprocess_vectorized_df(df_chunk)
-                    backtestee.backtest(df_chunk)
-                    df_chunks.append(df_chunk)
-                elif self.backtest_mode == BacktestMode.event_driven:
-                    df_chunk = dtl.preprocess_event_driven_df(df_chunk)
-                    self._event_driven_loop(df_chunk, chunk_num=chunk_num)
-                progress_bar.advance(1)
-            
-        if is_using_ray:
-            import ray
-            from ray.util.queue import Queue
-            from pfeed.utils.ray import shutdown_ray, setup_logger_in_ray_task, ray_logging_context
-            
-            @ray.remote
-            def _run_task(log_queue: Queue,  _df_chunk: pd.DataFrame | pl.LazyFrame, _chunk_num: int, _batch_num: int):
-                try:
-                    logger =setup_logger_in_ray_task(backtestee.logger.name, log_queue)
-                    if self.backtest_mode == BacktestMode.vectorized:
-                        _df_chunk = dtl.preprocess_vectorized_df(_df_chunk, backtestee)
-                        backtestee.backtest(_df_chunk)
-                    elif self.backtest_mode == BacktestMode.event_driven:
-                        _df_chunk = dtl.preprocess_event_driven_df(_df_chunk)
-                        self._event_driven_loop(_df_chunk, chunk_num=_chunk_num, batch_num=_batch_num)
-                except Exception:
-                    logger.exception(f'Error in backtest-chunk{_chunk_num}-batch{_batch_num}:')
-                    return False
-                return True
 
-            logger = backtestee.logger
-            with ray_logging_context(logger) as log_queue:
-                try:
-                    batch_size = ray_kwargs['num_cpus']  # FIXME: replace with num_chunks
-                    batches = [ray_tasks[i: i + batch_size] for i in range(0, len(ray_tasks), batch_size)]
-                    with ProgressBar(
-                        total=len(batches),
-                        description=f'Backtesting {backtestee.name} ({batch_size} chunks per batch)', 
-                    ) as progress_bar:
-                        for batch_num, batch in enumerate(batches):
-                            futures = [_run_task.remote(log_queue, *task, batch_num) for task in batch]
-                            results = ray.get(futures)
-                            if not all(results):
-                                logger.warning(f'Some backtesting tasks in batch{batch_num} failed, check {logger.name}.log for details')
-                            progress_bar.advance(1)
-                except Exception:
-                    logger.exception('Error in backtesting:')
-            self._logger.debug('shutting down ray...')
-            shutdown_ray()
-        end_time = time.time()
-        cprint(f'Backtest elapsed time: {end_time - start_time:.3f}(s)', style='bold')
+        total_rows = df.shape[0]
+        chunk_size = total_rows // num_chunks
+        with ProgressBar(total=num_chunks, description=f'Backtesting {backtestee.name} (per chunk)') as pbar:
+            for chunk_num, row_offset in enumerate(range(0, total_rows, chunk_size)):
+                df_chunk = df[row_offset : row_offset + chunk_size].to_native()
+                if is_using_ray:
+                    ray_tasks.append((df_chunk, chunk_num))
+                else:
+                    if self.backtest_mode == BacktestMode.VECTORIZED:
+                        BacktestDataFrame = importlib.import_module(f'pfund._backtest.{data_tool.lower()}').BacktestDataFrame
+                        df_chunk = BacktestDataFrame(df_chunk)
+                        backtestee.backtest(df_chunk)
+                        df_chunks.append(df_chunk)
+                    elif self.backtest_mode == BacktestMode.HYBRID:
+                        raise NotImplementedError(f'{self.backtest_mode} is not supported yet')
+                    elif self.backtest_mode == BacktestMode.EVENT_DRIVEN:
+                        df_chunk = dtl.preprocess_event_driven_df(df_chunk)
+                        self._event_driven_loop(df_chunk, chunk_num=chunk_num)
+                    else:
+                        raise ValueError(f'{self.backtest_mode} is not supported')
+                    pbar.advance(1)
+
+
+        # if is_using_ray:
+        #     import ray
+        #     from ray.util.queue import Queue
+        #     from pfeed.utils.ray import shutdown_ray, setup_logger_in_ray_task, ray_logging_context
+            
+        #     @ray.remote
+        #     def _run_task(log_queue: Queue,  _df_chunk: pd.DataFrame | pl.LazyFrame, _chunk_num: int, _batch_num: int):
+        #         try:
+        #             logger =setup_logger_in_ray_task(backtestee.logger.name, log_queue)
+        #             if self.backtest_mode == BacktestMode.VECTORIZED:
+        #                 _df_chunk = dtl.preprocess_vectorized_df(_df_chunk, backtestee)
+        #                 backtestee.backtest(_df_chunk)
+        #             elif self.backtest_mode == BacktestMode.EVENT_DRIVEN:
+        #                 _df_chunk = dtl.preprocess_event_driven_df(_df_chunk)
+        #                 self._event_driven_loop(_df_chunk, chunk_num=_chunk_num, batch_num=_batch_num)
+        #         except Exception:
+        #             logger.exception(f'Error in backtest-chunk{_chunk_num}-batch{_batch_num}:')
+        #             return False
+        #         return True
+
+        #     logger = backtestee.logger
+        #     with ray_logging_context(logger) as log_queue:
+        #         try:
+        #             batch_size = ray_kwargs['num_cpus']  # FIXME: replace with num_chunks
+        #             batches = [ray_tasks[i: i + batch_size] for i in range(0, len(ray_tasks), batch_size)]
+        #             with ProgressBar(
+        #                 total=len(batches),
+        #                 description=f'Backtesting {backtestee.name} ({batch_size} chunks per batch)', 
+        #             ) as progress_bar:
+        #                 for batch_num, batch in enumerate(batches):
+        #                     futures = [_run_task.remote(log_queue, *task, batch_num) for task in batch]
+        #                     results = ray.get(futures)
+        #                     if not all(results):
+        #                         logger.warning(f'Some backtesting tasks in batch{batch_num} failed, check {logger.name}.log for details')
+        #                     progress_bar.advance(1)
+        #         except Exception:
+        #             logger.exception('Error in backtesting:')
+        #     self._logger.debug('shutting down ray...')
+        #     shutdown_ray()
+        # end_time = time.time()
+        # cprint(f'Backtest elapsed time: {end_time - start_time:.3f}(s)', style='bold')
         
         
-        ### Post-Backtesting ###
-        if backtestee.component_type == ComponentType.strategy:
-            if self.backtest_mode == BacktestMode.vectorized:
-                df = dtl.postprocess_vectorized_df(df_chunks)
-            # TODO
-            elif self.backtest_mode == BacktestMode.event_driven:
-                pass
-            backtest_history: dict = self.history.create(backtestee, df, start_time, end_time)
-            backtest_result[backtestee.name] = backtest_history
+        # ### Post-Backtesting ###
+        # if backtestee.component_type == ComponentType.strategy:
+        #     if self.backtest_mode == BacktestMode.VECTORIZED:
+        #         df = dtl.postprocess_vectorized_df(df_chunks)
+        #     # TODO
+        #     elif self.backtest_mode == BacktestMode.EVENT_DRIVEN:
+        #         pass
+        #     backtest_history: dict = self.history.create(backtestee, df, start_time, end_time)
+        #     backtest_result[backtestee.name] = backtest_history
+
         return backtest_result
 
     def _event_driven_loop(self, df_chunk, chunk_num=0, batch_num=0):

@@ -7,8 +7,6 @@ if TYPE_CHECKING:
     from narwhals.typing import Frame
     from pfeed.typing import GenericFrame
 
-import narwhals as nw
-
 from pfeed.enums import DataLayer, DataAccessType, DataStorage
 from pfeed.feeds.market_feed import MarketFeed
 from pfund.enums import SourceType
@@ -19,7 +17,7 @@ from pfund.datas.stores.base_data_store import BaseDataStore
 class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
     def _should_cache_resampled(self, feed: MarketFeed) -> bool:
         '''Determine if the retrieved data should be cached to the CURATED layer.'''
-        setting = self._context.settings.cache_resampled_data
+        setting = self._context.settings.cache_materialized_data
         if setting is True:
             return True
         if setting is False:
@@ -40,6 +38,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             DataNotFoundError: If no data is found and auto-download is disabled,
                 or if the data source is paid-by-usage (auto-download of paid data is not allowed).
         '''
+        import narwhals as nw
         from pfeed.errors import DataNotFoundError
 
         dfs: list[GenericFrame] = []
@@ -68,7 +67,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             )
 
             # check cache first for previously resampled data
-            if settings.cache_resampled_data is not False:
+            if settings.cache_materialized_data is not False:
                 df: GenericFrame | None = (
                     retrieve(storage_config=cache_storage_config)
                     .run()

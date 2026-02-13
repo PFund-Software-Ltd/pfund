@@ -18,13 +18,15 @@ class BaseEngineSettings(BaseModel):
             if False, the engine will not download data automatically.
         """,
     )
-    cache_resampled_data: bool | Literal['auto'] = Field(
+    cache_materialized_data: bool | Literal['auto'] = Field(
         default='auto',
         description="""
-            Controls whether resampled data is cached to the CURATED data layer for faster future retrieval.
+            Controls whether materialized data is cached to the CURATED data layer for faster future retrieval.
+            Materialized data is the output of MarketDataStore.materialize(), where raw/stored data is
+            processed (e.g. cleaned from RAW, resampled from tick to bar) into a format pfund can use.
             - 'auto': cache only when the stored resolution differs from the requested resolution (e.g. tick data resampled to second bars).
             - True: always cache retrieved data to the CURATED layer.
-            - False: never cache, always resample on the fly.
+            - False: never cache, always process on the fly.
         """,
     )
 
@@ -38,7 +40,7 @@ class BaseEngineSettings(BaseModel):
     storage_options: dict[Database, dict[str, Any]] = Field(default_factory=dict)
     io_options: dict[IOFormat, dict[str, Any]] = Field(default_factory=dict)
  
-    @field_validator('cache_resampled_data', mode='before')
+    @field_validator('cache_materialized_data', mode='before')
     @classmethod
     def _normalize_cache_resampled_data(cls, v: Any) -> bool | str:
         if isinstance(v, str):

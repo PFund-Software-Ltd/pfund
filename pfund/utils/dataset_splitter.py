@@ -10,8 +10,6 @@ try:
 except ImportError:
     TimeSeriesSplit = None
 
-from pfund_kit.style import cprint
-
 
 class DatasetSplitsDict(TypedDict, total=True):
     train: float
@@ -89,7 +87,6 @@ class DatasetSplitter:
             else:
                 test_start = test_end = None
         else:
-            cprint('development/validation set is EMPTY', style='bold')
             dev_start = dev_end = None
             test_start = test_end = None
         

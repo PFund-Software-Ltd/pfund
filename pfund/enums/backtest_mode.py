@@ -2,6 +2,6 @@ from enum import StrEnum
 
 
 class BacktestMode(StrEnum):
-    vectorized = 'vectorized'
-    hybrid = 'hybrid'
-    event_driven = 'event_driven'
+    VECTORIZED = 'VECTORIZED'
+    HYBRID = 'HYBRID'
+    EVENT_DRIVEN = 'EVENT_DRIVEN'

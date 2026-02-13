@@ -6,6 +6,7 @@ if TYPE_CHECKING:
     import pandas as pd
     import polars as pl
     from pfeed.typing import GenericFrame
+    from pfund._backtest.typing import BacktestDataFrame
     from pfund.typing import ModelT
     from pfund.entities.products.product_base import BaseProduct
     from pfund.datas.data_base import BaseData
@@ -32,7 +33,7 @@ def vectorized(func):
     def wrapper(*args, **kwargs):
         # FIXME
         self = args[0]
-        if self.backtest_mode == BacktestMode.vectorized:
+        if self.backtest_mode == BacktestMode.VECTORIZED:
             return func(*args, **kwargs)
         else:
             raise Exception(f"{func.__name__}() is only available in vectorized backtesting.")
@@ -48,7 +49,7 @@ def event_driven(func):
     def wrapper(*args, **kwargs):
         # FIXME
         self = args[0]
-        if self.backtest_mode == BacktestMode.event_driven:
+        if self.backtest_mode == BacktestMode.EVENT_DRIVEN:
             return func(*args, **kwargs)
         else:
             raise Exception(f"{func.__name__}() is only available in event driven backtesting.")
@@ -69,6 +70,9 @@ class BacktestMixin:
         self._signal_list_num = 0
             
         self._is_dummy_strategy = False
+
+    def backtest(self, df: BacktestDataFrame):  # pyright: ignore[reportUnknownParameterType,reportUnusedParameter]
+        raise NotImplementedError(f'{self.name} does not have a backtest() method, cannot run vectorized backtesting')
     
     @property
     def context(self) -> BacktestEngineContext:
@@ -91,9 +95,9 @@ class BacktestMixin:
     def _is_signal_df_required(self) -> bool:
         if self._is_dummy_strategy:
             return False
-        elif self.backtest_mode == BacktestMode.vectorized:
+        elif self.backtest_mode == BacktestMode.VECTORIZED:
             return True
-        elif self.backtest_mode == BacktestMode.event_driven:
+        elif self.backtest_mode == BacktestMode.EVENT_DRIVEN:
             return self.settings.reuse_signals
         # TODO: handle hybrid backtesting
         else:
@@ -129,7 +133,7 @@ class BacktestMixin:
     
     def on_stop(self):
         super().on_stop()
-        if self.backtest_mode == BacktestMode.event_driven and self.settings.assert_signals and self._has_signal_df():
+        if self.backtest_mode == BacktestMode.EVENT_DRIVEN and self.settings.assert_signals and self._has_signal_df():
             self._assert_consistent_signals()
             
     def _next(self, data: BaseData) -> torch.Tensor | np.ndarray:
@@ -208,7 +212,7 @@ class BacktestMixin:
     def _prepare_df(self):
         if self._is_dummy_strategy and isinstance(self, BaseStrategy):
             return
-        ts_col_type = 'timestamp' if self.backtest_mode == BacktestMode.event_driven else 'datetime'
+        ts_col_type = 'timestamp' if self.backtest_mode == BacktestMode.EVENT_DRIVEN else 'datetime'
         self.data_tool.prepare_df(ts_col_type=ts_col_type)
         if self._is_signal_df_required:
             self._merge_signal_dfs_with_df()
@@ -222,7 +226,7 @@ class BacktestMixin:
             self.data_tool.merge_signal_dfs_with_df(signal_dfs)
     
     def clear_dfs(self):
-        assert self.backtest_mode == BacktestMode.event_driven
+        assert self.backtest_mode == BacktestMode.EVENT_DRIVEN
         if not self._is_signal_df_required:
             self.data_tool.clear_df()
         if isinstance(self, BaseStrategy):
@@ -235,7 +239,7 @@ class BacktestMixin:
         data_config = cast("ComponentMixin", super())._resolve_data_config(product, data_config)
         # extra_resolutions are not always supported in backtesting, print out warnings
         if data_config.extra_resolutions:
-            if self.backtest_mode != BacktestMode.event_driven:
+            if self.backtest_mode != BacktestMode.EVENT_DRIVEN:
                 cprint(
                     f'{product.name} extra_resolutions={data_config.extra_resolutions} will be ignored in {self.backtest_mode.value} backtesting',
                     style=TextStyle.BOLD + RichColor.RED
@@ -283,7 +287,7 @@ class BacktestMixin:
                       resolution (e.g., '1h' cannot be cleanly resampled from '45m')
         '''
         # Only event-driven mode supports extra resolutions
-        if self.backtest_mode != BacktestMode.event_driven:
+        if self.backtest_mode != BacktestMode.EVENT_DRIVEN:
             return data_config  # Skip processing extra resolutions
 
         original_resample = data_config.resample.copy()
