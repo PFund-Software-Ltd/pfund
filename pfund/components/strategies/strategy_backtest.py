@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from pfund._backtest.typing import BacktestDataFrame
     
 from pfund._backtest.backtest_mixin import BacktestMixin
+from pfund.enums import BacktestMode
 
 
 def BacktestStrategy(Strategy: type[StrategyT], *args: Any, **kwargs: Any) -> StrategyT:
@@ -39,6 +40,13 @@ def BacktestStrategy(Strategy: type[StrategyT], *args: Any, **kwargs: Any) -> St
                 # signal_df: pd.DataFrame | pl.LazyFrame = self.flow()
                 # self._set_signal_df(signal_df)
             super().on_start()
+        
+        def start(self):
+            # TODO:
+            if self.backtest_mode == BacktestMode.event_driven:
+                super().start()
+            else:
+                pass
         
         # TODO
         def load(self):

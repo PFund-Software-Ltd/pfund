@@ -1,8 +1,8 @@
-from typing import Any
+from typing import Any, Literal
 
 import os
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from pfeed.enums import IOFormat
 from pfund.enums.database import Database
@@ -18,8 +18,18 @@ class BaseEngineSettings(BaseModel):
             if False, the engine will not download data automatically.
         """,
     )
+    cache_resampled_data: bool | Literal['auto'] = Field(
+        default='auto',
+        description="""
+            Controls whether resampled data is cached to the CURATED data layer for faster future retrieval.
+            - 'auto': cache only when the stored resolution differs from the requested resolution (e.g. tick data resampled to second bars).
+            - True: always cache retrieved data to the CURATED layer.
+            - False: never cache, always resample on the fly.
+        """,
+    )
+
     num_batch_workers: int | None = Field(
-        default=os.cpu_count(),
+        default=None,
         description="""
             number of workers to fetch data using pfeed, equivalent to the parameter 'num_batch_workers' in pfeed.
             if None, Ray will NOT be used for fetching data and it will be done sequentially.
@@ -28,3 +38,9 @@ class BaseEngineSettings(BaseModel):
     storage_options: dict[Database, dict[str, Any]] = Field(default_factory=dict)
     io_options: dict[IOFormat, dict[str, Any]] = Field(default_factory=dict)
  
+    @field_validator('cache_resampled_data', mode='before')
+    @classmethod
+    def _normalize_cache_resampled_data(cls, v: Any) -> bool | str:
+        if isinstance(v, str):
+            return v.lower()
+        return v

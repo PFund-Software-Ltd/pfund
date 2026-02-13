@@ -2,14 +2,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 if TYPE_CHECKING:
-    from pfeed.typing import GenericData
     from pfund.engines.engine_context import EngineContext
 
 import logging
 from abc import ABC, abstractmethod
 
 from pfeed.feeds.base_feed import BaseFeed
-from pfeed.enums import DataTool
+from pfeed.enums import DataTool, DataStorage, DataLayer
 from pfeed import get_config as get_pfeed_config
 from pfeed.storages.storage_config import StorageConfig
 from pfund.datas.data_base import BaseData
@@ -46,6 +45,16 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
             pipeline_mode=True,
             num_batch_workers=self._context.settings.num_batch_workers,
             num_stream_workers=None,
+        )
+    
+    def _create_cache_storage_config(self, storage_config: StorageConfig) -> StorageConfig:
+        '''Create a cache storage config inheriting io settings from the original storage config.'''
+        return StorageConfig(
+            storage=DataStorage.CACHE,
+            data_path=storage_config.data_path,
+            data_layer=DataLayer.CURATED,
+            io_format=storage_config.io_format,
+            compression=storage_config.compression,
         )
 
     def add_data(self, data: DataT, storage_config: StorageConfig | None=None):

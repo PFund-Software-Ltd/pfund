@@ -22,11 +22,21 @@ class TradingStore:
     A TradingStore is a store that contains all data used by a component (e.g. strategy) in trading, from market data, computed features, to model predictions etc.
     '''
     def __init__(self, context: EngineContext, min_data: int | None=None, max_data: int | None=None):
+        '''
+        Args:
+            min_data (int | None): Minimum number of data rows required before the component can produce signals.
+                When `preload_min_data` is enabled in engine settings, these rows are pre-loaded during materialization
+                for event-driven backtesting so the component starts warm.
+                Defaults to 1 if None.
+            max_data (int | None): Maximum number of data rows kept in memory.
+                Once exceeded, oldest rows are dropped (sliding window).
+                Defaults to -1 (unlimited) if None.
+        '''
         self._logger: logging.Logger = logging.getLogger('pfund')
         self._context: EngineContext = context
         self._data_stores: dict[DataCategory, MarketDataStore] = {}
-        self._min_data: int | None = min_data
-        self._max_data: int | None = max_data
+        self._min_data: int = min_data if min_data else 1
+        self._max_data: int = max_data if max_data else -1
         self._df: Frame | None = None
         self._df_updates = []
         self._feed: PFundComponentFeed = pe.PFund(env=context.env).component_feed
