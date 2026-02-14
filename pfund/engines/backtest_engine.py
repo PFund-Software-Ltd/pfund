@@ -27,10 +27,14 @@ from dataclasses import dataclass
 
 from pfeed.enums import DataTool
 from pfund_kit.utils.progress_bar import track, ProgressBar
-from pfund_kit.style import cprint, RichColor
+from pfund_kit.style import cprint, RichColor, TextStyle
 from pfund.enums import BacktestMode, ComponentType, Environment
 from pfund.engines.base_engine import BaseEngine
 from pfund.utils.dataset_splitter import DatasetSplitter
+try:
+    import mtflow as mt
+except ImportError:
+    mt = None
 
 
 @dataclass(frozen=True)
@@ -244,9 +248,31 @@ class BacktestEngine(BaseEngine):
         
         return backtest_results
     
-    def _backtest(self, backtestee: BaseStrategy | BaseModel, num_chunks: int=1) -> dict:       
+    def _backtest(
+        self, 
+        backtestee: BaseStrategy | BaseModel, 
+        num_chunks: int=1,
+    ) -> dict:       
+        '''
+        Args:
+            polars_engine:
+                The engine to use for polars's:
+                    pl.Config.set_engine_affinity(engine="{polars_engine}")
+                This will be ignored if data_tool is not polars.
+        '''
         import narwhals as nw
         from pfeed import get_config
+
+        pfeed_config = get_config()
+        data_tool: DataTool = pfeed_config.data_tool
+        if num_chunks > 1 and data_tool == DataTool.polars:
+            cprint(
+                f"{num_chunks=} is ignored when using Polars — " +
+                "Polars already parallelizes internally via Rust threads. " +
+                "Adding multiprocessing on top adds overhead and risks deadlocks.",
+                style=TextStyle.BOLD + RichColor.YELLOW
+            )
+            num_chunks = 1
         
         backtest_result = {}
         is_using_ray = num_chunks > 1
@@ -255,8 +281,6 @@ class BacktestEngine(BaseEngine):
             
 
         ### Pre-Backtesting ###
-        pfeed_config = get_config()
-        data_tool: DataTool = pfeed_config.data_tool
         df: Frame = backtestee.get_df(to_native=False)
         if isinstance(df, nw.LazyFrame):
             df = df.collect()
@@ -335,7 +359,7 @@ class BacktestEngine(BaseEngine):
         
         
         # ### Post-Backtesting ###
-        # if backtestee.component_type == ComponentType.strategy:
+        # if backtestee.is_strategy():
         #     if self.backtest_mode == BacktestMode.VECTORIZED:
         #         df = dtl.postprocess_vectorized_df(df_chunks)
         #     # TODO

@@ -71,8 +71,11 @@ class BacktestMixin:
             
         self._is_dummy_strategy = False
 
-    def backtest(self, df: BacktestDataFrame):  # pyright: ignore[reportUnknownParameterType,reportUnusedParameter]
-        raise NotImplementedError(f'{self.name} does not have a backtest() method, cannot run vectorized backtesting')
+    def backtest(self, df: BacktestDataFrame):
+        if hasattr(super(), 'backtest'):
+            return super().backtest(df)
+        else:
+            raise NotImplementedError(f'{self.name} does not have a backtest(self, df) method, cannot run vectorized backtesting')
     
     @property
     def context(self) -> BacktestEngineContext:

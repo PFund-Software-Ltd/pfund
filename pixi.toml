@@ -65,6 +65,7 @@ mlflow = ">=3.9.0"
 trackio = ">=0.15.0"
 optuna = ">=4.7.0"
 optuna-dashboard = ">=0.20.0"
+vectorbt = ">=0.28.4"
 
 [feature.test.pypi-dependencies]
 pytest = ">=9.0.2"
