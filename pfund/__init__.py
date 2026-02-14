@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     import pfund_plot as plot
     from pfund.aliases import ALIASES as alias
     from pfund.engines.backtest_engine import BacktestEngine
+    from pfund._backtest.typing import BacktestDataFrame
     from pfund.engines.trade_engine import TradeEngine
     from pfund.components.strategies.strategy_base import BaseStrategy as Strategy
     from pfund.components.models.model_base import BaseModel as Model
@@ -42,6 +43,19 @@ def __getattr__(name: str):
     elif name == 'BacktestEngine':
         from pfund.engines.backtest_engine import BacktestEngine
         return BacktestEngine
+    elif name == 'BacktestDataFrame':
+        from pfeed.enums import DataTool
+        from pfeed import get_config
+        pfeed_config = get_config()
+        if pfeed_config.data_tool == DataTool.polars:
+            from pfund._backtest.polars import BacktestDataFrame
+            return BacktestDataFrame
+        elif pfeed_config.data_tool == DataTool.pandas:
+            from pfund._backtest.pandas import BacktestDataFrame
+            return BacktestDataFrame
+        else:
+            raise ValueError(f"Unsupported data tool: {pfeed_config.data_tool}")
+        return BacktestDataFrame
     elif name == 'TradeEngine':
         from pfund.engines.trade_engine import TradeEngine
         return TradeEngine
@@ -108,6 +122,8 @@ __all__ = (
     'TradeEngine',
     'TradeEngineSettings',
     'BacktestEngineSettings',
+    # backtest
+    'BacktestDataFrame',
     # components
     'Strategy',
     'Model',
