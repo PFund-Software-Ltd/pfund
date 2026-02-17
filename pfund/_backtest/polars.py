@@ -310,11 +310,11 @@ class BacktestDataFrame(pl.DataFrame):
             market_order_trade_condition = (
                 (long_order & (prev_close <= opened_order_price)) |
                 (short_order & (prev_close >= opened_order_price))
-            )
+            ).fill_null(False)
             limit_order_trade_condition = (
                 (long_order & (opened_order_price >= pl.col('low'))) |
                 (short_order & (opened_order_price <= pl.col('high')))
-            )
+            ).fill_null(False)
 
             for tp_or_sl, sign in [(stop_loss, -1), (take_profit, 1)]:
                 if tp_or_sl is None:
