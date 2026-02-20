@@ -300,13 +300,11 @@ class BacktestEngine(BaseEngine):
                 if is_using_ray:
                     ray_tasks.append((df_chunk, chunk_num))
                 else:
-                    if self.backtest_mode == BacktestMode.VECTORIZED:
+                    if self.backtest_mode in [BacktestMode.VECTORIZED, BacktestMode.HYBRID]:
                         BacktestDataFrame = importlib.import_module(f'pfund._backtest.{data_tool.lower()}').BacktestDataFrame
-                        df_chunk = BacktestDataFrame(df_chunk)
+                        df_chunk = BacktestDataFrame(df_chunk, backtest_mode=self.backtest_mode)
                         backtestee.backtest(df_chunk)
                         df_chunks.append(df_chunk)
-                    elif self.backtest_mode == BacktestMode.HYBRID:
-                        raise NotImplementedError(f'{self.backtest_mode} is not supported yet')
                     elif self.backtest_mode == BacktestMode.EVENT_DRIVEN:
                         df_chunk = dtl.preprocess_event_driven_df(df_chunk)
                         self._event_driven_loop(df_chunk, chunk_num=chunk_num)

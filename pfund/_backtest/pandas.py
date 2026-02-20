@@ -1,11 +1,25 @@
 # pyright: reportArgumentType=false, reportUnnecessaryComparison=false, reportOperatorIssue=false, reportAssignmentType=false, reportAttributeAccessIssue=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportGeneralTypeIssues=false
-from typing import Self
+from typing import Any, Literal, Self
 
 import numpy as np
 import pandas as pd
 
+from pfund._backtest.narwhals_mixin import NarwhalsMixin
+from pfund.enums import BacktestMode
 
-class BacktestDataFrame(pd.DataFrame):
+
+class BacktestDataFrame(NarwhalsMixin, pd.DataFrame):
+    def __init__(self, *args: Any, backtest_mode: BacktestMode, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        import warnings
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', message='.*Pandas doesn.*t allow columns.*')
+            self._backtest_mode: BacktestMode = backtest_mode
+            if self._backtest_mode not in [BacktestMode.VECTORIZED, BacktestMode.HYBRID]:
+                raise ValueError(f"Invalid backtest mode: {self._backtest_mode}")
+            self._open_position_inputs: dict[str, Any] = {}
+            self._close_position_inputs: dict[str, Any] = {}
+    
     def create_signal(
         self,
         buy_condition: pd.Series | None=None,
@@ -63,12 +77,13 @@ class BacktestDataFrame(pd.DataFrame):
         return self
     
     def open_position(
-        self, 
+        self,
         order_price: pd.Series | None=None,
         order_quantity: pd.Series | int | float=1,
         first_only: bool=False,
         long_only: bool=False,
         short_only: bool=False,
+        fill_price: Literal['open', 'close']='close',
     ) -> Self:
         '''
         Opens positions in a vectorized manner.
@@ -77,21 +92,62 @@ class BacktestDataFrame(pd.DataFrame):
         - If the order price >= close price of bar N, it is a market order,
             by assuming that the close price is the current best price; otherwise it is a limit order.
         Then the orders are opened at the beginning of bar N+1,
-        and filled in the duration of bar N+1, if high >= order price >= low.
+        and filled during bar N+1 if high >= order price >= low.
+        If bar N+1 gaps through the limit (order price is outside [low, high]),
+        the order is treated as a marketable gap-through and fills at N+1 open.
         Opened orders are considered as cancelled at the end of bar N+1 if not filled.
         Args:
             order_price: price to place the order.
                 If None, use 'close' price (market order).
             order_quantity: quantity to place the order.
-                If None, use 1.
             first_only: first trade only, do not trade after the first trade until signal changes
             long_only: all order_size in signal=-1 will be set to 0, meaning the order_size will be determined in close_position()
                 useful for long-only strategy with signal=-1 to close the position
             short_only: all order_size in signal=1 will be set to 0, meaning the order_size will be determined in close_position()
                 useful for short-only strategy with signal=1 to close the position
+            fill_price: fill price for market orders.
+                An order is placed at bar N's close. 'close' fills at bar N's close price,
+                'open' fills at bar N+1's open price.
+                Applies to regular market orders (aggressive vs close).
+                Gap-through limits always fill at bar N+1 open.
+                In-range limit orders fill at their limit price.
+                Default is 'close', which avoids gap exposure (e.g. overnight gaps on daily bars).
         '''
         assert 'signal' in self.columns, "No 'signal' column is found, please use create_signal() first"
         assert not (long_only and short_only), "Cannot be long_only and short_only at the same time"
+
+        assert fill_price in ('open', 'close'), "'fill_price' must be 'open' or 'close'"
+
+        # HYBRID mode will delay everything to backtest_loop(), store the inputs here first
+        if self._backtest_mode == BacktestMode.HYBRID:
+            self._open_position_inputs = {
+                'order_price': order_price,
+                'order_quantity': order_quantity,
+                'first_only': first_only,
+                'long_only': long_only,
+                'short_only': short_only,
+                'fill_price': fill_price,
+            }
+            return self
+
+        # Validate that opposite signals exist for long_only/short_only.
+        # Without opposite signals, positions can only be closed by SL/TP,
+        # but re-entry after SL/TP close is not possible in vectorized mode (limitation #3).
+        signal_values = self['signal'].dropna().unique()
+        if long_only and -1 not in signal_values:
+            raise ValueError(
+                'long_only=True with no sell signals (-1) is not supported in vectorized mode. ' +
+                'Without opposite signals, positions can only be closed by SL/TP, ' +
+                'but re-entry is not possible after that. ' +
+                'Please use backtest mode="hybrid" instead.'
+            )
+        if short_only and 1 not in signal_values:
+            raise ValueError(
+                'short_only=True with no buy signals (1) is not supported in vectorized mode. ' +
+                'Without opposite signals, positions can only be closed by SL/TP, ' +
+                'but re-entry is not possible after that. ' +
+                'Please use backtest mode="hybrid" instead.'
+            )
         
         # 1. create orders
         if order_price is None:
@@ -119,19 +175,32 @@ class BacktestDataFrame(pd.DataFrame):
         short_order = (opened_order_side == -1)
         # NOTE: here prev_close is used instead of df['open'] to trigger market orders
         # because it's convenient to place market orders by setting order_price=df['close']
-        market_order_trade_condition = (
+        # Regular market order: order price aggressive vs prev_close
+        regular_market_condition = (
             (long_order & (prev_close <= opened_order_price)) |
             (short_order & (prev_close >= opened_order_price))
         )
+        # Gap-through: open crosses through the limit price → always fills at open
+        gap_through_market_condition = (
+            (long_order & ~regular_market_condition & (self['open'] < opened_order_price)) |
+            (short_order & ~regular_market_condition & (self['open'] > opened_order_price))
+        )
+        market_order_trade_condition = regular_market_condition | gap_through_market_condition
+        # Limit order: one-sided check suffices since gap-through is absorbed into market
         limit_order_trade_condition = (
             (long_order & (opened_order_price >= self['low'])) |
             (short_order & (opened_order_price <= self['high']))
         )
-        # NOTE: the actual trade price is 'open', not prev_close
+        # Fill prices: gap-through always at open; regular market follows fill_price policy
+        regular_market_fill = self['open'] if fill_price == 'open' else prev_close
         self['trade_price'] = np.where(
-            market_order_trade_condition, 
+            gap_through_market_condition,
             self['open'],
-            np.where(limit_order_trade_condition, opened_order_price, np.nan)
+            np.where(
+                regular_market_condition,
+                regular_market_fill,
+                np.where(limit_order_trade_condition, opened_order_price, np.nan)
+            )
         )
         trade_condition = market_order_trade_condition | limit_order_trade_condition
         # NOTE: ignore the actual traded 'volume', just use the order size directly
@@ -209,6 +278,7 @@ class BacktestDataFrame(pd.DataFrame):
         take_profit: float | None=None,
         stop_loss: float | None=None,
         time_window: int | None=None,
+        fill_price: Literal['open', 'close']='close',
     ) -> Self:
         '''
         Closes positions in a vectorized manner.
@@ -230,9 +300,7 @@ class BacktestDataFrame(pd.DataFrame):
                 and the -1 trade does not contribute to the avg_price calculation but only realizes the profit/loss of the position.
                 Therefore, we need to make sure that the position has flipped or closed before calculating the avg_price.
                 From then on, we can also calculate stop-loss/take-profit correctly.
-        2. To ensure #1 is always true and the position can always be closed, 
-            the actual total traded volume available is ignored when closing position.
-            i.e. the traded volume for closing position might be larger than the actual traded volume in 'volume' column,
+        2. Volume is ignored: trades fill at the full order size regardless of the bar's actual traded volume.
         3. position cannot be re-entered after being closed by stop-loss/take-profit in the same trade streak
             This is a huge limitation for long-only/short-only strategies with only +1s/only -1s signals.
             For example, if the strategy is long-only and depends on stop-loss to close the position,
@@ -242,6 +310,10 @@ class BacktestDataFrame(pd.DataFrame):
             then #1 still applies.
         4. stop_loss/take_profit only supports stop market orders, because the exact price movement after stop_loss/take_profit is unknown,
             placing limit orders might not get filled.
+            Immediately triggered stops have two cases:
+            - regular immediate: prev_close breaches stop price, respects fill_price
+            - gap-through immediate: stop price is outside [low, high], fills at next open
+            Non-immediately triggered stops (high/low breaches stop price during the bar) fill at the stop trigger price.
         5. assumes stop loss is always triggered before take profit if the order of happening cannot be determined.
             - in long position, check 'low' first; in short position, check 'high' first
         6. conceptually that we are at the end of bar N, assume only one trade per bar. order of precedence (highest to lowest):
@@ -250,7 +322,18 @@ class BacktestDataFrame(pd.DataFrame):
             3. market order (opened order where order_price >= close)
             4. at bar N+1, limit order filled first, only when limit order price is better than stop price
             5. non-immediately triggered stop order (SL/TP, high/low breaches stop price during the bar)
-        ''' 
+
+        Args:
+            take_profit: take profit percentage (e.g. 0.1 = 10%).
+            stop_loss: stop loss percentage between 0 and 1 (e.g. 0.05 = 5%).
+            time_window: max number of bars to hold a position before auto-closing.
+            fill_price: fill price for market close orders (immediately triggered SL/TP and time_window).
+                These trigger at bar N's close. 'close' fills at bar N's close price,
+                'open' fills at bar N+1's open price.
+                Gap-through immediate SL/TP (stop outside [low, high]) always fill at bar N+1 open.
+                Non-immediately triggered SL/TP (high/low breach during bar) always fill at their trigger price.
+                Default is 'close', which avoids gap exposure (e.g. overnight gaps on daily bars).
+        '''
         def _calculate_stop_price():
             '''Calculates stop price for stop-loss, take-profit and time_window at the same time,
             only triggered stop prices are shown.
@@ -266,15 +349,21 @@ class BacktestDataFrame(pd.DataFrame):
             opened_order_price = self['order_price'].shift(1)
             long_order = (opened_order_side == 1)
             short_order = (opened_order_side == -1)
+            # Market order: order price aggressive vs prev_close, or gap-through (price outside [low, high])
             market_order_trade_condition = (
-                (long_order & (prev_close <= opened_order_price)) |
-                (short_order & (prev_close >= opened_order_price))
+                (long_order & ((prev_close <= opened_order_price) | (opened_order_price > self['high']))) |
+                (short_order & ((prev_close >= opened_order_price) | (opened_order_price < self['low'])))
             )
+            # Limit order: one-sided check suffices since gap-through is absorbed into market.
+            # NOTE: this is only used for limit_before_stop priority, not for fill price,
+            # so gap-through fill-at-open doesn't matter here.
             limit_order_trade_condition = (
                 (long_order & (opened_order_price >= self['low'])) |
                 (short_order & (opened_order_price <= self['high']))
             )
-            
+
+            self['_immediate_stop'] = False
+            self['_gap_through_stop'] = False
             for tp_or_sl, sign in [(stop_loss, -1), (take_profit, 1)]:
                 if tp_or_sl is None:
                     continue
@@ -284,20 +373,24 @@ class BacktestDataFrame(pd.DataFrame):
                 positive_sign = (start_position_side * sign == 1)
                 negative_sign = (start_position_side * sign == -1)
 
-                # stop orders that are triggered immediately
-                # NOTE: here prev_close is used instead of self['open'] to trigger market orders
-                # because market_order uses prev_close (for convenience), 
-                # and since stop market order has higher priority than market order, it should be also use prev_close for consistency
-                stop_market_order_triggered_condition_immediate = (
+                # Regular immediate: prev_close already breaches stop price
+                regular_immediate_stop = (
                     (negative_sign & (prev_close <= opened_stop_order_price)) |
-                    (positive_sign & (prev_close >= opened_stop_order_price))    
+                    (positive_sign & (prev_close >= opened_stop_order_price))
                 )
-                
+                # Gap-through: open crosses through the stop price — always fills at open
+                gap_through_stop = (
+                    (negative_sign & ~regular_immediate_stop & (self['open'] < opened_stop_order_price)) |
+                    (positive_sign & ~regular_immediate_stop & (self['open'] > opened_stop_order_price))
+                )
+                stop_market_order_triggered_condition_immediate = regular_immediate_stop | gap_through_stop
+
+                # Non-immediate: one-sided check suffices since gap-through is absorbed into immediate
                 stop_market_order_triggered_condition = (
                     (negative_sign & (self['low'] <= opened_stop_order_price)) |
                     (positive_sign & (self['high'] >= opened_stop_order_price))
                 )
-                
+
                 # Concept:
                 # - An opened order is "market" if it is already aggressive vs prev_close:
                 #     long: opened_order_price >= prev_close
@@ -318,7 +411,7 @@ class BacktestDataFrame(pd.DataFrame):
                        positive_sign & short_order & (opened_order_price <= opened_stop_order_price)
                     )
                 )
-                
+
                 stop_market_order_trade_condition = np.where(
                     stop_market_order_triggered_condition_immediate,
                     True,
@@ -328,15 +421,16 @@ class BacktestDataFrame(pd.DataFrame):
                         False
                     )
                 )
-                
+
                 # only keep those triggered stop prices
-                self['stop_price'] = np.where(
-                    # needs df['stop_price'].isna() so that the first stop price is kept, i.e. stop loss won't be overridden by take profit
-                    stop_market_order_trade_condition & self['stop_price'].isna(),  
-                    opened_stop_order_price,
-                    self['stop_price']
-                )
+                # needs df['stop_price'].isna() so that the first stop price is kept, i.e. stop loss won't be overridden by take profit
+                should_set_stop = stop_market_order_trade_condition & self['stop_price'].isna()
+                self['stop_price'] = np.where(should_set_stop, opened_stop_order_price, self['stop_price'])
+                self['_immediate_stop'] = np.where(should_set_stop, stop_market_order_triggered_condition_immediate, self['_immediate_stop'])
+                self['_gap_through_stop'] = np.where(should_set_stop, gap_through_stop, self['_gap_through_stop'])
             self['stop_price'] = self['stop_price'].shift(-1)  # shift back stop_price from trade row to order row
+            self['_immediate_stop'] = self['_immediate_stop'].shift(-1, fill_value=False)
+            self['_gap_through_stop'] = self['_gap_through_stop'].shift(-1, fill_value=False)
 
             # NOTE: time_window close orders reuse the stop_price column,
             # written after SL/TP so that SL/TP have higher priority (limitation #6).
@@ -348,6 +442,9 @@ class BacktestDataFrame(pd.DataFrame):
                 bar_count = global_bar_count - streak_start_bar_count
                 # _time_window is on the order row: place a market close order at end of this bar
                 self['_time_window'] = (bar_count == time_window) & has_position
+                # Use close price as trigger price for time_window:
+                # 1. Conceptually correct — close price is the reference for market order detection
+                # 2. The actual fill price (trade_price) is handled separately via fill_price logic downstream
                 self['stop_price'] = np.where(
                     self['_time_window'] & self['stop_price'].isna(),
                     self['close'],
@@ -362,7 +459,20 @@ class BacktestDataFrame(pd.DataFrame):
             assert 1 > stop_loss > 0, "'stop_loss' must be between 0 and 1"
         if time_window is not None:
             assert isinstance(time_window, int) and time_window > 0, "'time_window' must be a positive integer"
+        assert fill_price in ('open', 'close'), "'fill_price' must be 'open' or 'close'"
+            
         
+        # HYBRID mode will delay everything to backtest_loop(), store the inputs here first
+        if self._backtest_mode == BacktestMode.HYBRID:
+            self._close_position_inputs = {
+                'take_profit': take_profit,
+                'stop_loss': stop_loss,
+                'time_window': time_window,
+                'fill_price': fill_price,
+            }
+            return self
+
+
         # Step 1: calculate position
         # NOTE: some trade_size values were set to 0s (placeholders) in open_position() to indicate places to close the position for long_only/short_only strategies
         # so that "_position_change" below can be computed directly
@@ -430,9 +540,21 @@ class BacktestDataFrame(pd.DataFrame):
             offset_size = self['position'].shift(1, fill_value=0) * (-1)
             first_stop_trade = self['_first_stop_order'].shift(1, fill_value=False)
             self['trade_size'] = np.where(first_stop_trade, offset_size, self['trade_size'])
+            stop_fill = self['stop_price'].shift(1)
+            # Gap-through stops always fill at open (prev_close didn't breach the stop)
+            is_gap_stop_trade = self['_gap_through_stop'].shift(1, fill_value=False)
+            stop_fill = np.where(is_gap_stop_trade, self['open'], stop_fill)
+            # Regular immediate stops and time_window close orders follow fill_price policy
+            is_market_stop_trade = self['_immediate_stop'].shift(1, fill_value=False) & ~is_gap_stop_trade
+            if time_window:
+                is_market_stop_trade = is_market_stop_trade | self['_time_window'].shift(1, fill_value=False)
+            if fill_price == 'open':
+                stop_fill = np.where(is_market_stop_trade, self['open'], stop_fill)
+            else:  # fill_price == 'close'
+                stop_fill = np.where(is_market_stop_trade, self['close'].shift(1), stop_fill)
             self['trade_price'] = np.where(
                 first_stop_trade,
-                self['stop_price'].shift(1),  # self['stop_price'].shift(1) * (1 - start_position_side * slippage),
+                stop_fill,
                 self['trade_price']
             )
 
