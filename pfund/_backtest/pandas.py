@@ -588,5 +588,15 @@ class BacktestDataFrame(NarwhalsMixin, pd.DataFrame):
         )
         if self['stop_price'].isna().all():
             self.drop(columns=['stop_price'], inplace=True)
-            
+
+        # Clean up 0-size no-op trades/orders (e.g. long_only close signals when no position exists)
+        zero_trade = self['trade_size'].eq(0)
+        if zero_trade.any():
+            self['trade_price'] = np.where(zero_trade, np.nan, self['trade_price'])
+            self['trade_size'] = np.where(zero_trade, np.nan, self['trade_size'])
+        zero_order = self['order_size'].eq(0)
+        if zero_order.any():
+            self['order_price'] = np.where(zero_order, np.nan, self['order_price'])
+            self['order_size'] = np.where(zero_order, np.nan, self['order_size'])
+
         return self

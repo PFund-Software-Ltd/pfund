@@ -691,4 +691,26 @@ class BacktestDataFrame(NarwhalsMixin, pl.DataFrame):
         if df.get_column('stop_price').is_null().all():
             df = df.drop('stop_price')
 
+        # Clean up 0-size no-op trades/orders (e.g. long_only close signals when no position exists)
+        df = df.with_columns(
+            pl.when(pl.col('trade_size').eq(0))
+            .then(pl.lit(None, dtype=pl.Float64))
+            .otherwise(pl.col('trade_price'))
+            .alias('trade_price'),
+            pl.when(pl.col('trade_size').eq(0))
+            .then(pl.lit(None, dtype=pl.Float64))
+            .otherwise(pl.col('trade_size'))
+            .alias('trade_size'),
+        )
+        df = df.with_columns(
+            pl.when(pl.col('order_size').eq(0))
+            .then(pl.lit(None, dtype=pl.Float64))
+            .otherwise(pl.col('order_price'))
+            .alias('order_price'),
+            pl.when(pl.col('order_size').eq(0))
+            .then(pl.lit(None, dtype=pl.Float64))
+            .otherwise(pl.col('order_size'))
+            .alias('order_size'),
+        )
+
         return self.__class__(df, backtest_mode=self._backtest_mode)
