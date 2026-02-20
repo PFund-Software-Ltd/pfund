@@ -1,0 +1,1 @@
+Tests in tmp/ are temporary tests vibe-coded by llms. They will be removed when proper tests are written.
