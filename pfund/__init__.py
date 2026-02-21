@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     # need these imports to support IDE hints:
     import pfund_plot as plot
-    from pfund.aliases import ALIASES as alias
+    from pfund.utils.aliases import ALIASES as alias
     from pfund.engines.backtest_engine import BacktestEngine
     from pfund._backtest.typing import BacktestDataFrame
     from pfund.engines.trade_engine import TradeEngine
@@ -32,7 +32,7 @@ from pfund.config import get_config, configure, configure_logging
 
 def __getattr__(name: str):
     if name == 'alias':
-        from pfund.aliases import ALIASES
+        from pfund.utils.aliases import ALIASES
         return ALIASES
     elif name == 'plot':
         import pfund_plot as plot
