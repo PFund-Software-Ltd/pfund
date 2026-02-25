@@ -3,7 +3,8 @@ from typing import Annotated, ClassVar, cast
 from pydantic import BaseModel, Field, ConfigDict, model_validator, field_validator, PrivateAttr
 
 from pfeed.enums import DataSource
-from pfund.datas.resolution import Resolution, ResolutionUnit
+from pfund.datas.resolution import Resolution
+from pfund.datas.timeframe import Timeframe
 
 
 class DataConfig(BaseModel):
@@ -188,7 +189,7 @@ class DataConfig(BaseModel):
     def auto_shift(self):
         pass
     
-    def auto_resample(self, supported_resolutions: dict[ResolutionUnit, list[int]]) -> bool:
+    def auto_resample(self, supported_resolutions: dict[Timeframe, list[int]]) -> bool:
         '''Resamples the resolutions automatically if not supported officially.
         Returns True if auto_resampling is needed.
         '''
@@ -197,7 +198,7 @@ class DataConfig(BaseModel):
             Returns None if the resolution is not officially supported.
             """
             period: int = resolution.period
-            unit: ResolutionUnit = resolution.unit
+            unit: Timeframe = resolution.timeframe
             if unit in supported_resolutions:
                 supported_periods = supported_resolutions[unit]
                 if period in supported_periods:
@@ -208,7 +209,7 @@ class DataConfig(BaseModel):
                     # e.g. 6m with supported [1, 3, 5, 15, 30] -> divisors=[1, 3] -> use 1m
                     if divisors := [p for p in supported_periods if period % p == 0]:
                         smallest_period = min(divisors)
-                        return Resolution(str(smallest_period) + str(unit))
+                        return Resolution(str(smallest_period) + unit.canonical)
             # if resolution is already at tick level, no more higher resolution to try to convert to
             if resolution.is_tick():
                 return None

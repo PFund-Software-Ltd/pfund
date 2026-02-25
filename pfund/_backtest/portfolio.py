@@ -76,4 +76,43 @@ Summary
     No capital tracking               | Rebalancing with normalization
     Per-product SL/TP                 | Portfolio-level risk management
     groupby(product) / .over(product) | Sequential loop per timestamp
+
+
+Interesting Equivalence: pfund backtesting ≈ Portfolio Backtesting
+-----------------------------------------------------------------
+When you strip pfund's vectorized backtest down to its simplest form:
+    - Multi-product, same resolution bar data
+    - Signals (+1/-1) per product converted to weights (-1 <= w <= +1)
+    - Fill at close price (market orders only)
+    - No SL/TP, no limit orders, no time_window
+
+Then pfund's vectorized backtest is conceptually equivalent to what
+dedicated portfolio backtesting libraries (e.g. bt, vectorbt) compute:
+
+    portfolio P&L = sum(weight_i * return_i) per bar
+
+Both approaches reduce to the same per-bar weighted return calculation.
+The weights-based approach is more elegant because weight changes *implicitly*
+define trades — there is no explicit order/fill model needed.
+
+The one remaining subtle difference is compounding:
+
+    Portfolio libraries:  portfolio_value_{t+1} = portfolio_value_t * (1 + sum(w_i * r_i))
+                          (geometric, weights are relative to current portfolio value)
+
+    pfund vectorized:     pnl = trade_size * (exit_price - entry_price)
+                          (arithmetic, fixed quantities)
+
+    → Over many bars these diverge. To fully close the gap, pfund would need
+      to scale order_quantity proportionally to current portfolio value at each
+      rebalancing bar, which introduces a sequential dependency and effectively
+      pushes it toward hybrid mode.
+
+Why this is interesting:
+    Portfolio backtesting libraries give up trade-level realism (exact fill prices,
+    limit orders, SL/TP, gap handling) in exchange for an elegant closed-form
+    weighted-return model. pfund's vectorized mode is the same thing underneath —
+    the fill logic, SL/TP, and order types are what distinguish it and justify its
+    additional complexity. Without those features, a weights-based approach is
+    simpler and equally correct.
 """

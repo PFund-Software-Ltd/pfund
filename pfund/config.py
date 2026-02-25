@@ -65,10 +65,10 @@ def get_logging_config() -> dict[str, Any]:
 
 
 def configure(
-    data_path: str | None = None,
-    log_path: str | None = None,
-    cache_path: str | None = None,
-    database: Literal['duckdb'] | None = None,
+    data_path: str | None = None,  # pyright: ignore[reportUnusedParameter]
+    log_path: str | None = None,  # pyright: ignore[reportUnusedParameter]
+    cache_path: str | None = None,  # pyright: ignore[reportUnusedParameter]
+    database: Literal['duckdb'] | None = None,  # pyright: ignore[reportUnusedParameter]
     persist: bool = False,
 ) -> PFundConfig:
     '''

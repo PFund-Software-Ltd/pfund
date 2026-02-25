@@ -21,7 +21,7 @@ from collections import defaultdict
 from pfund.datas import QuoteData, TickData, BarData
 from pfund.entities.products.product_base import BaseProduct
 from pfund.datas.data_config import DataConfig
-from pfund.datas.resolution import Resolution, ResolutionUnit
+from pfund.datas.resolution import Resolution
 from pfund.enums import Broker, PublicDataChannel, PrivateDataChannel
 
 

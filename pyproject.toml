@@ -28,13 +28,18 @@ dependencies = [
     "pfolio>=0.0.2",
     "pfund-kit>=0.1.3",
     "httpx>=0.28.1",
-    "websockets>=15.0.1",
-    "numba>=0.63.1",
+    "websockets>=16.0.0",
+    "numba>=0.64.0",
 ]
 
 [project.optional-dependencies]
 ibkr = ["pfund-ibapi>=10.42.1"]
 ta-lib = ["ta-lib>=0.6.4"]
+
+[dependency-groups]
+dev = [
+    "afterpython>=0.2.1",
+]
 
 [project.scripts]
 pfund = "pfund.__main__:run_cli"
@@ -48,7 +53,7 @@ repository = "https://github.com/PFund-Software-Ltd/pfund"
 documentation = "https://pfund-docs.pfund.ai"
 
 [build-system]
-requires = ["uv_build>=0.10.2,<0.11.0"]
+requires = ["uv_build>=0.10.4,<0.11.0"]
 build-backend = "uv_build"
 
 [tool.pyright]

@@ -39,7 +39,8 @@ import datetime
 from pfund_kit.utils import yaml
 from pfeed.enums import DataSource
 from pfeed.storages.storage_config import StorageConfig
-from pfund.datas.resolution import Resolution, ResolutionUnit
+from pfund.datas.resolution import Resolution
+from pfund.datas.timeframe import Timeframe
 from pfund.datas.data_config import DataConfig
 from pfund.components.actor_proxy import ActorProxy
 from pfund.enums import ComponentType, RunMode, Environment, Broker, TradingVenue
@@ -404,8 +405,8 @@ class ComponentMixin:
         return self.__class__.__name__
     
     @staticmethod
-    def _get_supported_resolutions(product: BaseProduct) -> dict[ResolutionUnit, list[int]]:
-        supported_resolutions: dict[ResolutionUnit, list[int]]
+    def _get_supported_resolutions(product: BaseProduct) -> dict[Timeframe, list[int]]:
+        supported_resolutions: dict[Timeframe, list[int]]
         if product.bkr == Broker.CRYPTO:
             Exchange = getattr(importlib.import_module(f'pfund.brokers.crypto.exchanges.{product.exch.lower()}.exchange'), 'Exchange')
             supported_resolutions = Exchange.get_supported_resolutions(product)

@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from pfund.brokers.crypto.exchanges.ws_api_base import BaseWebSocketAPI
     from pfund.brokers.crypto.exchanges.rest_api_base import Result, ApiResponse
     from pfund.entities.products.product_bybit import BybitProduct
-    from pfund.datas.resolution import ResolutionUnit
+    from pfund.datas.timeframe import Timeframe
 
 import asyncio
 import datetime
@@ -42,7 +42,7 @@ class Exchange(BaseExchange):
 
     @classmethod
     @override
-    def get_supported_resolutions(cls, product: BybitProduct) -> dict[ResolutionUnit, list[int]]:
+    def get_supported_resolutions(cls, product: BybitProduct) -> dict[Timeframe, list[int]]:
         import importlib
         from pfund_kit.utils.text import to_camel_case
         name = cls.name.lower()

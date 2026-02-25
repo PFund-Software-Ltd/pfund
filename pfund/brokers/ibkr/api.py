@@ -16,7 +16,7 @@ from collections import defaultdict
 from pfund.brokers.ibkr.client import InteractiveBrokersClient as IBClient
 from pfund.brokers.ibkr.wrapper import InteractiveBrokersWrapper as IBWrapper
 from pfund.brokers.ibkr.wrapper import *
-from pfund.datas.timeframe import TimeframeUnit
+from pfund.datas.timeframe import Timeframe
 from pfund.enums import Environment, Broker, PublicDataChannel, PrivateDataChannel, TraditionalAssetType, DataChannelType
 
 
@@ -24,8 +24,8 @@ from pfund.enums import Environment, Broker, PublicDataChannel, PrivateDataChann
 class InteractiveBrokersAPI(IBClient, IBWrapper):
     SUPPORTED_ORDERBOOK_LEVELS = [1, 2]
     SUPPORTED_RESOLUTIONS = {
-        TimeframeUnit.TICK: [1],
-        TimeframeUnit.SECOND: [5],
+        Timeframe.TICK: [1],
+        Timeframe.SECOND: [5],
     }
     CHECK_FREQ = 10  # check connections frequency (in seconds)
     PING_FREQ = 20  # application-level ping to exchange (in seconds)
@@ -134,10 +134,10 @@ class InteractiveBrokersAPI(IBClient, IBWrapper):
             channel = PublicDataChannel.candlestick
             echannel = self._adapter(channel.value, group='channel')
             period, timeframe = resolution.period, resolution.timeframe
-            if timeframe.unit not in self.SUPPORTED_RESOLUTIONS:
-                raise ValueError(f'{self.exch} ({channel}.{product.symbol}) {resolution=} (timeframe={timeframe.unit.name}) is not supported, supported timeframes: {[tf.name for tf in self.SUPPORTED_RESOLUTIONS]}')
-            elif period not in self.SUPPORTED_RESOLUTIONS[timeframe.unit]:
-                raise ValueError(f'{self.exch} ({channel}.{product.symbol}) {resolution=} ({period=}) is not supported, supported periods: {self.SUPPORTED_RESOLUTIONS[timeframe.unit]}')
+            if timeframe not in self.SUPPORTED_RESOLUTIONS:
+                raise ValueError(f'{self.exch} ({channel}.{product.symbol}) {resolution=} (timeframe={timeframe.name}) is not supported, supported timeframes: {[tf.name for tf in self.SUPPORTED_RESOLUTIONS]}')
+            elif period not in self.SUPPORTED_RESOLUTIONS[timeframe]:
+                raise ValueError(f'{self.exch} ({channel}.{product.symbol}) {resolution=} ({period=}) is not supported, supported periods: {self.SUPPORTED_RESOLUTIONS[timeframe]}')
             eresolution = self._adapter(repr(resolution), group='resolution')
             full_channel = '.'.join([echannel, product.symbol, eresolution])
         else:

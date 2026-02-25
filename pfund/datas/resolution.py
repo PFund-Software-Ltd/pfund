@@ -1,52 +1,9 @@
 from __future__ import annotations
-from typing import ClassVar, cast, Any
-from typing_extensions import override
+from typing import ClassVar, Any
 
 import re
-from enum import StrEnum
 
-
-class ResolutionUnit(StrEnum):
-    # MEANING = canonical value, (aliases, ...)
-    YEAR = 'y', ('yr', 'year', 'years')
-    MONTH = 'mo', ('mon', 'mons', 'month', 'months')
-    WEEK = 'w', ('wk', 'week', 'weeks')
-    DAY = 'd', ('day', 'days')
-    HOUR = 'h', ('hour', 'hours')
-    MINUTE = 'm', ('min', 'mins', 'minute', 'minutes')
-    SECOND = 's', ('sec', 'secs', 'second', 'seconds')
-    TICK = 't', ('tick', 'ticks')
-    QUOTE = 'q', ('quote', 'quotes')
-
-    _aliases: tuple[str, ...]
-
-    def __new__(cls, value: str, aliases: tuple[str, ...] = ()):
-        obj = str.__new__(cls, value)
-        obj._value_ = value
-        obj._aliases = (value,) + aliases  # include canonical value
-        return obj
-
-    @property
-    def aliases(self) -> tuple[str, ...]:
-        return self._aliases
-
-    @classmethod
-    @override
-    def _missing_(cls, value: str) -> ResolutionUnit | None:
-        '''Called when lookup fails - search by alias'''
-        value_lower = value.lower()
-        for unit in cls:
-            if value_lower in unit._aliases:
-                return unit
-        return None  # Let default error handling take over
-
-    @classmethod
-    def pattern(cls) -> str:
-        """Generate regex pattern matching any alias for all units."""
-        all_aliases = []
-        for unit in cls:
-            all_aliases.extend(unit._aliases)
-        return '|'.join(all_aliases)
+from pfund.datas.timeframe import Timeframe
 
 
 class Resolution:
@@ -60,17 +17,14 @@ class Resolution:
             it will be converted to resolution by adding '1' to the beginning.
             e.g. 'minute' -> '1m', 'daily' -> '1d'
         """
-        from pfund.datas.timeframe import Timeframe, TimeframeStr
-
         if isinstance(resolution, Resolution):
             # Copy all attributes from the resolution object
             self.__dict__.update(resolution.__dict__)
             return
 
-        period, timeframe, orderbook_level = self._parse(resolution)
+        period, timeframe_str, orderbook_level = self._parse(resolution)
         self.period: int = int(period)
-        self.unit: ResolutionUnit = ResolutionUnit(timeframe)
-        self.timeframe: Timeframe = Timeframe(cast(TimeframeStr, self.unit.value))
+        self.timeframe: Timeframe = Timeframe(timeframe_str)
         self.orderbook_level: int | None = self._resolve_orderbook_level(orderbook_level)
 
     def _parse(self, resolution: str) -> tuple[str, str, str | None]:
@@ -80,19 +34,19 @@ class Resolution:
         """
         # Reject invalid characters before transformation
         assert not resolution.strip().startswith('-'), f"Invalid {resolution=}, period cannot be negative"
-        
+
         # Add "1" if the resolution doesn't start with a number
         if not re.match(r"^\d", resolution):
             resolution = "1" + resolution
 
         # Only remove hyphens and underscores after the initial numbers
         resolution = re.sub(r"^(\d+)[-_]", r"\1", resolution)
-        
+
         # validate resolution pattern
-        assert re.match(rf"^[1-9]\d*({ResolutionUnit.pattern()})(?:_L[1-3])?$", resolution, re.IGNORECASE), (
+        assert re.match(rf"^[1-9]\d*({Timeframe.pattern()})(?:_L[1-3])?$", resolution, re.IGNORECASE), (
             f"Invalid {resolution=}, pattern should be e.g. '1d', '2m', '3h', '1quote_L1' etc."
         )
-        
+
         # extract orderbook level if it exists
         resolution, *orderbook_level = resolution.strip().split("_")
         if not orderbook_level:
@@ -103,26 +57,26 @@ class Resolution:
         # extract period and timeframe
         period, timeframe = re.split(r"(\d+)", resolution.strip())[1:]
         return period, timeframe, orderbook_level
-    
+
     def _resolve_orderbook_level(self, orderbook_level: str | None) -> int | None:
         if self.is_quote():
             if orderbook_level:
-                orderbook_level = int(orderbook_level.upper().lstrip('L'))
+                resolved_orderbook_level = int(orderbook_level.upper().lstrip('L'))
             else:
-                orderbook_level = self.DEFAULT_ORDERBOOK_LEVEL
+                resolved_orderbook_level = self.DEFAULT_ORDERBOOK_LEVEL
         else:
-            orderbook_level = None
-        return orderbook_level
-    
+            resolved_orderbook_level = None
+        return resolved_orderbook_level
+
     def to_seconds(self) -> int:
         assert self.is_bar(), f"{self!r} is not a bar resolution"
-        return self.period * self.timeframe.unit.value
+        return self.period * self.timeframe.value
 
     def _comparable(self) -> tuple[int, int, int]:
         """Lower tuple = higher resolution. Uses tuple comparison to avoid
         collisions between different timeframe units (e.g. quote vs tick)."""
-        return (self.timeframe.unit.value, self.period, -(self.orderbook_level or 1))
-    
+        return (self.timeframe.value, self.period, -(self.orderbook_level or 1))
+
     def is_quote_l1(self):
         return self.is_quote() and self.orderbook_level == 1
 
@@ -152,20 +106,20 @@ class Resolution:
 
     def is_day(self):
         return self.timeframe.is_day()
-    
+
     def is_week(self):
         return self.timeframe.is_week()
-    
+
     def is_month(self):
         return self.timeframe.is_month()
-    
+
     def is_year(self):
         return self.timeframe.is_year()
 
     def higher(self) -> Resolution:
         """Rotate to the next higher resolution. e.g. 1m > 1h, higher resolution = lower timeframe"""
         if self.is_quote():
-            if self.orderbook_level < 3:
+            if self.orderbook_level is not None and self.orderbook_level < 3:
                 return Resolution(
                     "1" + repr(self.timeframe) + "_L" + str(self.orderbook_level + 1)
                 )
@@ -176,7 +130,7 @@ class Resolution:
 
     def lower(self) -> Resolution:
         """Rotate to the next lower resolution. e.g. 1h < 1m, lower resolution = higher timeframe"""
-        if self.is_quote() and self.orderbook_level > 1:
+        if self.is_quote() and self.orderbook_level is not None and self.orderbook_level > 1:
             return Resolution(
                 "1" + repr(self.timeframe) + "_L" + str(self.orderbook_level - 1)
             )
@@ -237,16 +191,16 @@ class Resolution:
         return lower_resolutions
 
     def __str__(self):
-        resolution = f"{self.period}_{self.unit.name}"
+        resolution = f"{self.period}_{self.timeframe.name}"
         if self.orderbook_level:
             resolution += f"_L{self.orderbook_level}"
         return resolution
 
     def __repr__(self):
-        resoultion = f"{self.period}{self.unit.value}"
+        resolution = f"{self.period}{self.timeframe.canonical}"
         if self.orderbook_level:
-            resoultion += f"_L{self.orderbook_level}"
-        return resoultion
+            resolution += f"_L{self.orderbook_level}"
+        return resolution
 
     def __hash__(self):
         return hash(self._comparable())
