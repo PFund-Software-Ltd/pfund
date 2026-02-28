@@ -84,4 +84,6 @@ class BybitProduct(CryptoProduct):
             option_type = self.option_type[0]
             strike_price = str(self.strike_price)
             symbol = '-'.join([ebase_asset, expiration, strike_price, option_type])
+        else:
+            raise ValueError(f'Invalid asset type: {self.asset_type}')
         return symbol

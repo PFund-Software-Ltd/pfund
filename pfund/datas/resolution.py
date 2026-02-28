@@ -21,6 +21,9 @@ class Resolution:
             # Copy all attributes from the resolution object
             self.__dict__.update(resolution.__dict__)
             return
+        
+        if not resolution:
+            raise ValueError(f'{resolution=} is not a valid resolution')
 
         period, timeframe_str, orderbook_level = self._parse(resolution)
         self.period: int = int(period)

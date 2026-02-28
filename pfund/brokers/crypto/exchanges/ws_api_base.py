@@ -28,9 +28,10 @@ from pfund.enums import Environment, Broker, CryptoExchange, PrivateDataChannel,
 
 
 WebSocketName: TypeAlias = str
+Message: TypeAlias = dict[str, Any]
 Price: TypeAlias = float
 class NamedWebSocket(WebSocket):
-    name: str
+    name: str  # pyright: ignore[reportUninitializedInstanceVariable]
 
 
 class BaseWebSocketAPI(ABC):
@@ -48,7 +49,7 @@ class BaseWebSocketAPI(ABC):
         self._logger = logging.getLogger(self.exch.lower())
         Exchange: type[BaseExchange] = getattr(importlib.import_module(f'pfund.brokers.crypto.exchanges.{self.exch.lower()}.exchange'), 'Exchange')
         self._adapter: Adapter = Exchange.adapter
-        self._callback: Callable[[str], Awaitable[None] | None] | None = None
+        self._callback: Callable[[WebSocketName, Message], Awaitable[None] | None] | None = None
         self._callback_raw_msg: bool = False
 
         self._products: dict[ProductName, CryptoProduct] = {}
@@ -104,7 +105,7 @@ class BaseWebSocketAPI(ABC):
     def set_logger(self, name: str):
         self._logger = logging.getLogger(name)
     
-    def set_callback(self, callback: Callable[[str], Awaitable[None] | None], raw_msg: bool=False):
+    def set_callback(self, callback: Callable[[WebSocketName, Message], Awaitable[None] | None], raw_msg: bool=False):
         '''
         Args:
             raw_msg: 

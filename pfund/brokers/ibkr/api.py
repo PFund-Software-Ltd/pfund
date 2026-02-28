@@ -2,9 +2,11 @@
 Conceptually, this is equivalent to ws_api_base.py in crypto
 """
 from __future__ import annotations
-from typing import Callable, TYPE_CHECKING, Awaitable, Literal
+from typing import Callable, TYPE_CHECKING, Literal
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
     from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
+    from pfund.brokers.crypto.exchanges.ws_api_base import WebSocketName, Message
     from pfund.entities.accounts.account_ibkr import IBKRAccount
     from pfund.enums import Environment
     from pfund.datas.resolution import Resolution
@@ -75,7 +77,7 @@ class InteractiveBrokersAPI(IBClient, IBWrapper):
         self._subscribed_market_data_tick_types = defaultdict(list)
         self._ib_thread = None
 
-    def set_callback(self, callback: Callable[[str], Awaitable[None] | None], raw_msg: bool=False):
+    def set_callback(self, callback: Callable[[WebSocketName, Message], Awaitable[None] | None], raw_msg: bool=False):
         '''
         Args:
             raw_msg: 

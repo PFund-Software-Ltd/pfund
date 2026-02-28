@@ -1,10 +1,11 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, Callable, Awaitable, ClassVar
+from typing import TYPE_CHECKING, Literal, Callable, ClassVar, Any
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
     from pfund.entities.accounts.account_crypto import CryptoAccount
     from pfund.typing import tEnvironment, FullDataChannel
+    from pfund.brokers.crypto.exchanges.ws_api_base import WebSocketName, Message
     from pfund.datas.resolution import Resolution
-    from pfund.brokers.crypto.exchanges.bybit.exchange import tProductCategory
     from pfund.brokers.crypto.exchanges.bybit.ws_api_bybit import BybitWebSocketAPI
     from pfund.enums import Environment
 
@@ -31,7 +32,7 @@ class WebSocketAPI(BaseWebSocketAPI):
         }
     
     @staticmethod
-    def _get_api_class(category: ProductCategory | tProductCategory) -> type[BybitWebSocketAPI]:
+    def _get_api_class(category: ProductCategory | str) -> type[BybitWebSocketAPI]:
         from pfund.brokers.crypto.exchanges.bybit.ws_api_linear import LinearWebSocketAPI
         from pfund.brokers.crypto.exchanges.bybit.ws_api_inverse import InverseWebSocketAPI
         from pfund.brokers.crypto.exchanges.bybit.ws_api_spot import SpotWebSocketAPI
@@ -44,7 +45,7 @@ class WebSocketAPI(BaseWebSocketAPI):
             ProductCategory.OPTION: OptionWebSocketAPI,
         }[category]
         
-    def get_api(self, category: tProductCategory | None=None):
+    def get_api(self, category: ProductCategory | str | None=None):
         # for some actions that are not specific to a product category, just use the first api
         # e.g. connecting to private channels
         if category is None:
@@ -52,25 +53,25 @@ class WebSocketAPI(BaseWebSocketAPI):
         else:
             return self._apis[ProductCategory[category.upper()]]
     
-    async def _subscribe(self, *args, **kwargs):
+    async def _subscribe(self, *args: Any, **kwargs: Any):
         raise NotImplementedError("this method should not be called in this Websocket Facade class")
     
-    async def _unsubscribe(self, *args, **kwargs):
+    async def _unsubscribe(self, *args: Any, **kwargs: Any):
         raise NotImplementedError("this method should not be called in this Websocket Facade class")
     
-    async def _authenticate(self, *args, **kwargs):
+    async def _authenticate(self, *args: Any, **kwargs: Any):
         raise NotImplementedError("this method should not be called in this Websocket Facade class")
     
-    async def _ping(self, *args, **kwargs):
+    async def _ping(self, *args: Any, **kwargs: Any):
         raise NotImplementedError("this method should not be called in this Websocket Facade class")
     
-    async def _on_message(self, *args, **kwargs):
+    async def _on_message(self, *args: Any, **kwargs: Any):
         raise NotImplementedError("this method should not be called in this Websocket Facade class")
     
-    def _parse_message(self, msg: dict) -> dict:
+    def _parse_message(self, msg: dict[str, Any]) -> dict[str, Any]:
         raise NotImplementedError("this method should not be called in this Websocket Facade class")
     
-    def _create_public_channel(self, product: BybitProduct, resolution: Resolution):
+    def _create_public_channel(self, product: BybitProduct, resolution: Resolution) -> str:
         api = self.get_api(product.category)
         return api._create_public_channel(product, resolution)
     
@@ -79,7 +80,7 @@ class WebSocketAPI(BaseWebSocketAPI):
         for api in self._apis.values():
             api.set_logger(name)
     
-    def set_callback(self, callback: Callable[[str], Awaitable[None] | None], raw_msg: bool=False):
+    def set_callback(self, callback: Callable[[WebSocketName, Message], Awaitable[None] | None], raw_msg: bool=False):
         for api in self._apis.values():
             api.set_callback(callback, raw_msg=raw_msg)
     
@@ -96,7 +97,7 @@ class WebSocketAPI(BaseWebSocketAPI):
         channel: FullDataChannel, 
         *,
         channel_type: Literal['public', 'private'],
-        category: ProductCategory | tProductCategory | None=None,
+        category: ProductCategory | str | None=None,
     ):
         api = self.get_api(category)
         api.add_channel(channel, channel_type=channel_type)

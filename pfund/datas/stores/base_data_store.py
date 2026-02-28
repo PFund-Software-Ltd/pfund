@@ -43,8 +43,7 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
             data_source=data.source,
             data_category=data.category,
             pipeline_mode=True,
-            num_batch_workers=self._context.settings.num_batch_workers,
-            num_stream_workers=None,
+            num_workers=self._context.settings.num_workers,
         )
     
     def _create_cache_storage_config(self, storage_config: StorageConfig) -> StorageConfig:

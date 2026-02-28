@@ -1,7 +1,8 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Any
 if TYPE_CHECKING:
     from pfund.enums import Environment
+    from pfund.brokers.crypto.exchanges.ws_api_base import Message, WebSocketName
     from pfund.datas.resolution import Resolution
     from pfund.entities.accounts.account_crypto import CryptoAccount
 
@@ -21,6 +22,11 @@ from pfund.datas.timeframe import Timeframe
 
 
 ProductCategory = BybitProduct.ProductCategory
+
+
+def _convert_mts_to_ts(ms: int) -> float:
+    '''Convert milliseconds timestamp to timestamp in seconds'''
+    return ms / 10**3
 
 
 class BybitWebSocketAPI(BaseWebSocketAPI):
@@ -110,7 +116,7 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
             else:
                 self._logger.warning(f'{ws_name} unhandled msg {msg}')
                 
-            if not self._callback_raw_msg:
+            if not self._callback_raw_msg and 'topic' in msg:
                 msg = self._parse_message(msg)
             result = self._callback(ws_name, msg)
             if inspect.isawaitable(result):
@@ -153,21 +159,31 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
         return full_channel
     
     @staticmethod
-    def _parse_message(msg: dict) -> dict:
+    def _parse_message(msg: Message) -> Message:
         channel: str = msg['topic']
         if channel.startswith('kline'):
             return BybitWebSocketAPI._parse_candlestick(msg)
+        elif channel.startswith('publicTrade'):
+            return BybitWebSocketAPI._parse_tradebook(msg)
+        elif channel.startswith('orderbook'):
+            return BybitWebSocketAPI._parse_orderbook(msg)
+        # TODO: handle private channels
+        # elif channel == 'position':
+        #     return self._process_position_msg(ws_name, msg)
+        # elif channel == 'wallet':
+        #     return self._process_balance_msg(ws_name, msg)
+        # elif channel == 'order':
+        #     return self._process_order_msg(ws_name, msg)
+        # elif channel == 'execution':
+        #     return self._process_trade_msg(ws_name, msg)
         else:
             raise NotImplementedError(f'{BybitWebSocketAPI.exch} {channel=} is not supported')
     
     # REVIEW: schema only for linear products?
     @staticmethod
-    def _parse_candlestick(msg: dict) -> dict:
-        # since timestamp in bybit is in mts
-        def adjust_ts(ms: int) -> float:
-            return ms / 10**3
+    def _parse_candlestick(msg: Message) -> Message:
         schema = {
-            'ts': ('ts', adjust_ts),
+            'ts': ('ts', _convert_mts_to_ts),
             'channel': ['topic'],
             '@data': ['data'],
             'data': {
@@ -176,7 +192,7 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
                 'low': ('low', float),
                 'close': ('close', float),
                 'volume': ('volume', float),
-                'ts': ('timestamp', float, adjust_ts),
+                'ts': ('timestamp', float, _convert_mts_to_ts),
             },
             'extra_data': (
                 'data',
@@ -187,37 +203,38 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
                 ]
             ),
         }
-        data: dict = SchemaParser.convert(msg, schema)
+        data: dict[str, Any] = SchemaParser.convert(msg, schema)
         data['data'] = data['data'][0]  # only one element in the list, access it
         data['extra_data'] = data['extra_data'][0]  # only one element in the list, access it
         data['is_incremental'] = True  # if True, it is an incremental bar update, otherwise it is a full bar update
         return data
-
-    # FIXME: to be removed
-    def _process_message(self, ws, msg: dict) -> dict | None:
-        ws_name = ws.name
-        channel = msg['topic']
-        if channel.startswith('orderbook'):
-            return self._process_orderbook_l2_msg(channel, msg)
-        elif channel.startswith('publicTrade'):
-            return self._process_tradebook_msg(channel, msg)
-        elif channel.startswith('kline'):
-            return self._parse_candlestick(msg)
-        # TODO, EXTEND, custom data
-        # elif channel.startswith('tickers'):
-        #     pass
-        # elif channel.startswith('liquidation'):
-        #     pass
-        elif channel == 'position':
-            return self._process_position_msg(ws_name, msg)
-        elif channel == 'wallet':
-            return self._process_balance_msg(ws_name, msg)
-        elif channel == 'order':
-            return self._process_order_msg(ws_name, msg)
-        elif channel == 'execution':
-            return self._process_trade_msg(ws_name, msg)
-        else:
-            self._logger.warning(f'unhandled topic ws={ws_name} msg {msg}')
+    
+    @staticmethod
+    def _parse_tradebook(msg: Message) -> Message:
+        schema = {
+            'ts': ('ts', _convert_mts_to_ts),
+            'channel': ['topic'],
+            '@data': ['data'],
+            'data': {
+                'price': ('p', float,),
+                'volume': ('v', float, abs),
+                'ts': ('T', float, _convert_mts_to_ts),
+            },
+            # NOTE: extra_data only exists in public data, e.g. orderbook, tradebook, candlestick etc.
+            '@extra_data': ['data'],
+            'extra_data': {
+                'trade_id': ('i',),
+                'taker_side': ('S',),
+                'tick_direction': ('L',),
+                'is_block_trade': ('BT',),
+            }
+        }
+        data: dict[str, Any] = SchemaParser.convert(msg, schema)
+        return data
+    
+    @staticmethod
+    def _parse_orderbook(msg: Message) -> Message:
+        pass
 
     def _process_orderbook_l2_msg(self, ws_name, full_channel, msg):
         quote = {'ts': None, 'data': {'bids': None, 'asks': None}, 'extra_data': {}}
@@ -287,27 +304,6 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
         else:
             data = {'bkr': self.bkr, 'exch': self.exch, 'pdt': pdt, 'channel': 'orderbook', 'data': quote}
             return data
-
-    def _process_tradebook_msg(self, ws_name, full_channel, msg):
-        schema = {
-            'result': 'data',
-            'ts': 'ts',
-            'ts_adj': 1/10**3,  # since timestamp in bybit is in mts
-            'data': {
-                'px': ('p', float,),
-                'qty': ('v', float, abs),
-                'ts': ('T', float),
-            },
-            # NOTE: extra_data only exists in public data, e.g. orderbook, tradebook, candlestick etc.
-            'extra_data': {
-                # 'trade_id': ('i',),
-                'taker_side': ('S',),
-                'px_direction': ('L',),  # e.g. PlusTick
-            }
-        }
-        echannel, epdt = full_channel.split('.')
-        pdt = self._adapter(epdt, group=ws_name)
-        return super()._process_tradebook_msg(ws_name, msg, pdt, schema)
 
     def _process_position_msg(self, ws_name, msg):
         schema = {

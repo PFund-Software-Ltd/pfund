@@ -1,10 +1,10 @@
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false
+# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false, reportArgumentType=false
 from __future__ import annotations
 from typing import TYPE_CHECKING
 from functools import partial
 
 if TYPE_CHECKING:
-    from narwhals.typing import Frame
+    from narwhals.typing import Frame, IntoFrame
     from pfeed.typing import GenericFrame
 
 from pfeed.enums import DataLayer, DataAccessType, DataStorage
@@ -40,8 +40,19 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         '''
         import narwhals as nw
         from pfeed.errors import DataNotFoundError
+        
+        def _prepare_df_before_append(data: MarketData, df: IntoFrame) -> Frame:
+            '''Adds a 'product' column to the dataframe using product name'''
+            nwdf = (
+                nw
+                .from_native(df)
+                .with_columns(
+                    product=nw.lit(data.product.name).cast(nw.String)
+                )
+            )
+            return nwdf
 
-        dfs: list[GenericFrame] = []
+        dfs: list[Frame] = []
         settings = self._context.settings
         start_date, end_date = self._context.data_start, self._context.data_end
 
@@ -68,17 +79,17 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
 
             # check cache first for previously resampled data
             if settings.cache_materialized_data is not False:
-                df: GenericFrame | None = (
+                _df: GenericFrame | None = (
                     retrieve(storage_config=cache_storage_config)
                     .run()
                 )
-                if df is not None:
+                if _df is not None:
                     self._logger.debug(f'Cache hit for {data.product.name} {data.resolution}')
-                    dfs.append(df)
+                    dfs.append(_prepare_df_before_append(data, _df))
                     continue
 
             # cache miss or caching disabled, retrieve from original storage
-            df: GenericFrame | None = (
+            _df: GenericFrame | None = (
                 retrieve(storage_config=storage_config)
                 .load(
                     storage=DataStorage.CACHE if self._should_cache_resampled(feed) else None,
@@ -90,7 +101,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                 .run()
             )
             
-            if df is None:
+            if _df is None:
                 if settings.auto_download_data:
                     # PAID data cannot be downloaded automatically, user must download it manually
                     if feed.data_source.access_type == DataAccessType.PAID_BY_USAGE:
@@ -99,7 +110,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                     self._logger.warning(
                         f'No data found for {data.product.name} {data.resolution}, auto-downloading data...'
                     )
-                    df: GenericFrame | None = (
+                    _df: GenericFrame | None = (
                         feed
                         .download(
                             product=product,
@@ -113,19 +124,20 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                         )
                         .run()
                     )
-                    if df is None:
+                    if _df is None:
                         raise DataNotFoundError(f'Failed to download data for {data.product.name} {data.resolution}')
                     else:
-                        dfs.append(df)
+                        dfs.append(_prepare_df_before_append(data, _df))
                 else:
                     raise DataNotFoundError(
                         f'No data found for {data.product.name} {data.resolution}.\n' +
                         "and 'auto_download_data' is disabled in settings, please enable it in engine settings or use 'pfeed' to download the data manually."
                     )
             else:
-                dfs.append(df)
+                dfs.append(_prepare_df_before_append(data, _df))
+            
         
-        df = nw.concat([nw.from_native(df) for df in dfs])
+        df: Frame = nw.concat(dfs)
         df = df.with_columns(
             source_type=nw.lit(SourceType.BATCH).cast(nw.String)
         )

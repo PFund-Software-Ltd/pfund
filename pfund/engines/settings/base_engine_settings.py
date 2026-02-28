@@ -30,10 +30,10 @@ class BaseEngineSettings(BaseModel):
         """,
     )
 
-    num_batch_workers: int | None = Field(
+    num_workers: int | None = Field(
         default=None,
         description="""
-            number of workers to fetch data using pfeed, equivalent to the parameter 'num_batch_workers' in pfeed.
+            number of workers to fetch data using pfeed, equivalent to the parameter 'num_workers' in pfeed.
             if None, Ray will NOT be used for fetching data and it will be done sequentially.
         """,
     )
