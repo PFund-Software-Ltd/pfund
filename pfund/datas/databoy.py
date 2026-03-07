@@ -155,7 +155,7 @@ class DataBoy:
             self._deliver(data)
         else:
             # deliver the closed bar before update() clears it for the next bar
-            if data.is_closed(now=msg.ts):
+            if data.is_closed(now=msg.ts or msg.msg_ts):
                 self._deliver(data)
             data.on_bar(
                 o=msg.open, h=msg.high, l=msg.low, c=msg.close, v=msg.volume, ts=msg.ts, 

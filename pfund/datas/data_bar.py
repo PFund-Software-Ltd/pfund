@@ -119,7 +119,7 @@ class Bar:
     
     def update(
         self, 
-        o: float, h: float, l: float, c: float, v: float, 
+        o: float, h: float, l: float, c: float, v: float,  # noqa: E741
         is_incremental: bool, is_snapshot: bool,
         ts: float | None=None, start_ts: float | None=None, end_ts: float | None=None,
     ):  # noqa: E741
@@ -138,6 +138,7 @@ class Bar:
             else:
                 self._volume += v
         else:
+            self.clear()
             self._open, self._high, self._low, self._close, self._volume = o, h, l, c, v
             self._set_closed()
         self._update_ts(ts=ts, start_ts=start_ts, end_ts=end_ts, is_incremental=is_incremental)
@@ -151,9 +152,10 @@ class Bar:
         5. Only ts provided + is_incremental=False → ts is past the bar, shift back one period
         '''
         def _compute_end_ts_from_start_ts(_start_ts: float) -> float:
-            return _start_ts + self._resolution_in_seconds - 1
+            return _start_ts + self._resolution_in_seconds - 0.001
         def _compute_start_ts_from_end_ts(_end_ts: float) -> float:
-            return int(_end_ts) - self._resolution_in_seconds + 1
+            from math import ceil
+            return ceil(_end_ts + 0.001) - self._resolution_in_seconds
         if ts:
             self._ts = ts
         if self._start_ts and self._end_ts:
@@ -172,6 +174,8 @@ class Bar:
                 # ts is past the bar (confirmation timestamp), shift back one period
                 self._start_ts = ts // self._resolution_in_seconds * self._resolution_in_seconds - self._resolution_in_seconds + self._shift_in_seconds
             self._end_ts = _compute_end_ts_from_start_ts(self._start_ts)
+        else:
+            raise ValueError('ts, start_ts, and end_ts are all None')
 
 
 class BarData(MarketData):
