@@ -1,8 +1,7 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from datetime import datetime
-    from pfeed.streaming import BarMessage
     from pfeed.enums import DataSource
     from pfund.datas.resolution import Resolution
     from pfund.datas.timeframe import Timeframe
@@ -32,7 +31,7 @@ class Bar:
         self._close = 0.0
         self._volume = 0.0
         self._start_ts = self._end_ts = self._ts = 0.0
-        self._is_ready = False
+        self._is_closed = False
     
     @property
     def resolution(self) -> Resolution:
@@ -82,20 +81,20 @@ class Bar:
     def dt(self) -> datetime | None:
         return convert_ts_to_dt(self._ts) if self._ts else None
 
-    def _set_ready(self):
-        self._is_ready = True
+    def _set_closed(self):
+        self._is_closed = True
     
     def is_empty(self):
         return not self.open
 
-    def is_ready(self, now: float | None=None) -> bool:
-        # if not ready, check if the bar is ready
-        if not self._is_ready:
+    def is_closed(self, now: float | None=None) -> bool:
+        # check if the bar is closed
+        if not self._is_closed:
             now = now or time.time()
-            is_ready = now >= self._end_ts > 0
-            if is_ready:
-                self._set_ready()
-        return self._is_ready
+            is_closed = now >= self._end_ts > 0
+            if is_closed:
+                self._set_closed()
+        return self._is_closed
 
     def _calculate_shift_in_seconds(self, shift: int) -> int:
         '''
@@ -118,9 +117,15 @@ class Bar:
         shift_in_seconds = int(shift_unit * seconds_per_unit)
         return shift_in_seconds
     
-    def update(self, o: float, h: float, l: float, c: float, v: float, ts: float, is_incremental: bool):
-        self._update_ts(ts)
+    def update(
+        self, 
+        o: float, h: float, l: float, c: float, v: float, 
+        is_incremental: bool, is_snapshot: bool,
+        ts: float | None=None, start_ts: float | None=None, end_ts: float | None=None,
+    ):  # noqa: E741
         if is_incremental:
+            if self.is_closed(now=ts):
+                self.clear()
             if not self._open:
                 self._open = o
             if h > self._high:
@@ -128,16 +133,45 @@ class Bar:
             if l < self._low:
                 self._low = l
             self._close = c
-            self._volume += v
+            if is_snapshot:
+                self._volume = v
+            else:
+                self._volume += v
         else:
             self._open, self._high, self._low, self._close, self._volume = o, h, l, c, v
-            self._set_ready()
-    
-    def _update_ts(self, ts: float):
-        self._ts = ts
-        if not self._start_ts:
-            self._start_ts = self._ts // self._resolution_in_seconds * self._resolution_in_seconds + self._shift_in_seconds
-            self._end_ts = self._start_ts + self._resolution_in_seconds - 1  # exclusively
+            self._set_closed()
+        self._update_ts(ts=ts, start_ts=start_ts, end_ts=end_ts, is_incremental=is_incremental)
+
+    def _update_ts(self, ts: float | None=None, start_ts: float | None=None, end_ts: float | None=None, is_incremental: bool=True):
+        '''Determine the bar's time window (start_ts, end_ts) with the following priority:
+        1. start_ts and end_ts provided (e.g. Bybit) → use them directly
+        2. Only start_ts provided (e.g. OKX) → derive end_ts from resolution
+        3. Only end_ts provided → derive start_ts from resolution
+        4. Only ts provided + is_incremental=True → ts is within the bar, floor to derive start_ts
+        5. Only ts provided + is_incremental=False → ts is past the bar, shift back one period
+        '''
+        def _compute_end_ts_from_start_ts(_start_ts: float) -> float:
+            return _start_ts + self._resolution_in_seconds - 1
+        def _compute_start_ts_from_end_ts(_end_ts: float) -> float:
+            return int(_end_ts) - self._resolution_in_seconds + 1
+        if ts:
+            self._ts = ts
+        if self._start_ts and self._end_ts:
+            return
+        if start_ts:
+            self._start_ts = start_ts
+            self._end_ts = end_ts if end_ts else _compute_end_ts_from_start_ts(start_ts)
+        elif end_ts:
+            self._end_ts = end_ts
+            self._start_ts = _compute_start_ts_from_end_ts(end_ts)
+        elif ts:
+            if is_incremental:
+                # ts is within the current bar, safe to derive both
+                self._start_ts = ts // self._resolution_in_seconds * self._resolution_in_seconds + self._shift_in_seconds
+            else:
+                # ts is past the bar (confirmation timestamp), shift back one period
+                self._start_ts = ts // self._resolution_in_seconds * self._resolution_in_seconds - self._resolution_in_seconds + self._shift_in_seconds
+            self._end_ts = _compute_end_ts_from_start_ts(self._start_ts)
 
 
 class BarData(MarketData):
@@ -148,7 +182,7 @@ class BarData(MarketData):
         product: BaseProduct, 
         resolution: Resolution, 
         shift: int=0, 
-        skip_first_bar: bool=True
+        skip_first_bar: bool=True,
     ):
         super().__init__(data_source, data_origin, product, resolution)
         self._bar = Bar(resolution, shift=shift)
@@ -166,25 +200,77 @@ class BarData(MarketData):
     kline = bar
     candlestick = bar
     
-    # TODO: handle backfilling
-    def on_bar(self, msg: BarMessage, is_backfill=False):
+    def on_bar(
+        self, o: float, h: float, l: float, c: float, v: float,  # noqa: E741
+        is_incremental: bool,
+        is_snapshot: bool=True,
+        # TODO: handle backfilling
+        is_backfill: bool=False,
+        ts: float | None=None, start_ts: float | None=None, end_ts: float | None=None,
+        msg_ts: float | None=None,
+        extra_data: dict[str, Any] | None=None,
+        custom_data: dict[str, Any] | None=None,
+    ):
         '''
         Args:
-            is_incremental: if True, the bar update is incremental, otherwise it is a full bar update
-                some exchanges may push incremental bar updates, some may only push when the bar is complete
+            ts: the timestamp of when the bar data was generated/confirmed.
+                This is NOT the bar's time range — it's the moment the exchange produced the update.
+                When is_incremental=True, ts falls within (start_ts, end_ts) since the bar is still open.
+                When is_incremental=False (complete bar), ts > end_ts because the exchange can only
+                confirm a bar is complete after its time window has passed.
+            start_ts: the start timestamp of the bar's time window, if provided by the exchange.
+            end_ts: the end timestamp of the bar's time window, if provided by the exchange.
+                If start_ts/end_ts are not provided, they are derived from ts (see _update_ts).
+            msg_ts: the timestamp of the message sent
+            is_incremental: if True, the bar is not yet complete (still forming).
+                If False, the bar is complete/closed.
+                Some exchanges push updates while the bar is still open, others only push when the bar is closed.
+            is_snapshot: if True, the OHLCV values represent the full state of the bar so far
+                (e.g. volume is the bar's total volume up to now), so values are overwritten on each update.
+                If False, the values are deltas (e.g. volume is per-trade), so values are accumulated.
+                Typically True for exchange bar/kline pushes, False when building bars from tick data.
         '''
-        o, h, l, c, v, ts = msg.open, msg.high, msg.low, msg.close, msg.volume, msg.ts
-        self._bar.update(o, h, l, c, v, ts, msg.is_incremental)
-        self.update_timestamps(msg.ts, msg_ts=msg.msg_ts)
-        self.update_extra_data(msg.extra_data)
-        self.update_custom_data(msg.custom_data)
+        self._bar.update(
+            o, h, l, c, v, 
+            ts=ts, start_ts=start_ts, end_ts=end_ts,
+            is_incremental=is_incremental, is_snapshot=is_snapshot
+        )
+        # NOTE: use msg_ts if ts is not provided
+        ts = ts or msg_ts
+        self.update_timestamps(ts=ts, msg_ts=msg_ts)
+        if extra_data is not None:
+            self.update_extra_data(extra_data)
+        if custom_data is not None:
+            self.update_custom_data(custom_data)
         for resamplee in self._resamplees:
-            resamplee.on_bar(o, h, l, c, v, ts, is_incremental=True)
+            resamplee.on_bar(
+                o=o, h=h, l=l, c=c, v=v, ts=ts, 
+                msg_ts=msg_ts, 
+                extra_data=extra_data,
+                custom_data=custom_data,
+                is_backfill=is_backfill,
+                is_incremental=is_incremental,
+            )
 
     # TODO: store all the ticks used to create the bar?
     # use tick updates to update bar
-    def on_tick(self, price, quantity, ts, is_backfill=False):
-        self.on_bar(price, price, price, price, quantity, ts, is_incremental=True, is_backfill=is_backfill)
+    def on_tick(
+        self, price: float, volume: float, ts: float, 
+        # TODO: handle backfilling
+        is_backfill: bool=False,
+        msg_ts: float | None=None, 
+        extra_data: dict[str, Any] | None=None, 
+        custom_data: dict[str, Any] | None=None, 
+    ):
+        self.on_bar(
+            o=price, h=price, l=price, c=price, v=volume, ts=ts, 
+            msg_ts=msg_ts, 
+            extra_data=extra_data,
+            custom_data=custom_data,
+            is_backfill=is_backfill,
+            is_incremental=True,
+            is_snapshot=False,
+        )
 
     def is_second(self):
         return self.bar._timeframe.is_second()
@@ -198,17 +284,13 @@ class BarData(MarketData):
     def is_day(self):
         return self.bar._timeframe.is_day()
 
-    def is_ready(self, now: float | None=None) -> bool:
-        is_ready = self._bar.is_ready(now=now)
-        if is_ready and self._skip_first_bar:
+    def is_closed(self, now: float | None=None) -> bool:
+        is_closed = self._bar.is_closed(now=now)
+        if is_closed and self._skip_first_bar:
             self._skip_first_bar = False
-            self.clear()
             return False
-        return is_ready
+        return is_closed
     
-    def clear(self):
-        self._bar.clear()
-
     def __str__(self):
         base_info = ':'.join([
             'BarData',

@@ -32,7 +32,7 @@ pfeed = { path = "../pfeed", editable = true, extras = ["duckdb"] }
 pfolio = { path = "../pfolio", editable = true }
 pfund-kit = { path = "../pfund-kit", editable = true }
 # pfeed = { version = ">=0.0.5", extras = ["duckdb"] }
-# pfolio = ">=0.0.2"
+# pfolio = ">=0.0.3"
 # pfund-kit = ">=0.1.3"
 numba = ">=0.64.0"
 httpx = ">=0.28.1"

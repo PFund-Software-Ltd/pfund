@@ -1,7 +1,7 @@
 import logging
 import time
 
-import orjson
+from msgspec import json
 from zmq.log.handlers import PUBHandler
 
 from pfund.enums import PFundDataChannel
@@ -20,7 +20,7 @@ class ZMQPubHandler(PUBHandler):
             channel = PFundDataChannel.logging
             topic = record.levelname
             text = self.format(record)
-            data = orjson.dumps(text)
+            data = json.encode(text)
             ts = time.time()
             msg = (
                 channel.encode(),

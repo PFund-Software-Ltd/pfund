@@ -54,6 +54,8 @@ class BacktestEngine(BaseEngine):
         dataset_splits: int | DatasetSplitsDict | TimeSeriesSplit=721,
         cv_test_ratio: float=0.1,
         settings: BacktestEngineSettings | None=None,
+        # TODO: add profiling option for event-driven backtesting?
+        # profiling: bool=False,
     ):
         '''
         Args:

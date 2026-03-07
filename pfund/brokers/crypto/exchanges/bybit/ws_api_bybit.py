@@ -11,6 +11,7 @@ import time
 import hmac
 import inspect
 from decimal import Decimal
+from pprint import pformat
 
 from msgspec import json
 
@@ -149,7 +150,7 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
             echannel = self._adapter(channel.value, group='channel')
             period = resolution.period
             if resolution.timeframe not in self.SUPPORTED_RESOLUTIONS:
-                raise ValueError(f'{self.exch} ({channel}.{product.symbol}) {resolution=} is not supported, supported resolutions: {[tf.name for tf in self.SUPPORTED_RESOLUTIONS]}')
+                raise ValueError(f'{self.exch} ({channel}.{product.symbol}) {resolution=} is not supported, supported resolutions:\n{pformat(self.SUPPORTED_RESOLUTIONS)}')
             elif period not in self.SUPPORTED_RESOLUTIONS[resolution.timeframe]:
                 raise ValueError(f'{self.exch} ({channel}.{product.symbol}) {resolution=} ({period=}) is not supported, supported periods: {self.SUPPORTED_RESOLUTIONS[resolution.timeframe]}')
             eresolution = self._adapter(repr(resolution), group='resolution')
@@ -165,8 +166,9 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
             return BybitWebSocketAPI._parse_candlestick(msg)
         elif channel.startswith('publicTrade'):
             return BybitWebSocketAPI._parse_tradebook(msg)
-        elif channel.startswith('orderbook'):
-            return BybitWebSocketAPI._parse_orderbook(msg)
+        # TODO: handle orderbook
+        # elif channel.startswith('orderbook'):
+        #     return BybitWebSocketAPI._parse_orderbook(msg)
         # TODO: handle private channels
         # elif channel == 'position':
         #     return self._process_position_msg(ws_name, msg)
@@ -187,13 +189,16 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
             'channel': ['topic'],
             '@data': ['data'],
             'data': {
+                'start_ts': ('start', float, _convert_mts_to_ts),
+                'end_ts': ('end', float, _convert_mts_to_ts),
+                'ts': ('timestamp', float, _convert_mts_to_ts),
                 'open': ('open', float),
                 'high': ('high', float),
                 'low': ('low', float),
                 'close': ('close', float),
                 'volume': ('volume', float),
-                'ts': ('timestamp', float, _convert_mts_to_ts),
             },
+            'is_incremental': ('confirm', lambda x: not x),  # pyright: ignore[reportUnknownLambdaType]
             'extra_data': (
                 'data',
                 # add the remaining fields other than ['open', 'high', 'low', 'close', 'volume', 'timestamp'] to the extra_data
@@ -204,9 +209,6 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
             ),
         }
         data: dict[str, Any] = SchemaParser.convert(msg, schema)
-        data['data'] = data['data'][0]  # only one element in the list, access it
-        data['extra_data'] = data['extra_data'][0]  # only one element in the list, access it
-        data['is_incremental'] = True  # if True, it is an incremental bar update, otherwise it is a full bar update
         return data
     
     @staticmethod
@@ -216,9 +218,9 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
             'channel': ['topic'],
             '@data': ['data'],
             'data': {
+                'ts': ('T', float, _convert_mts_to_ts),
                 'price': ('p', float,),
                 'volume': ('v', float, abs),
-                'ts': ('T', float, _convert_mts_to_ts),
             },
             # NOTE: extra_data only exists in public data, e.g. orderbook, tradebook, candlestick etc.
             '@extra_data': ['data'],
@@ -232,6 +234,7 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
         data: dict[str, Any] = SchemaParser.convert(msg, schema)
         return data
     
+    # TODO
     @staticmethod
     def _parse_orderbook(msg: Message) -> Message:
         pass

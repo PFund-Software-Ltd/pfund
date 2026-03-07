@@ -95,7 +95,7 @@ class Resolution:
     def is_tick(self):
         return self.timeframe.is_tick()
 
-    def is_bar(self):
+    def is_bar(self) -> bool:
         return self.is_second() or self.is_minute() or self.is_hour() or self.is_day()
 
     def is_second(self):

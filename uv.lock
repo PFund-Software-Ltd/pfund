@@ -1884,11 +1884,9 @@ duckdb = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.14.3" },
     { name = "cloudpathlib", extras = ["s3", "gs", "azure"], specifier = ">=0.23.0" },
-    { name = "coiled", marker = "extra == 'coiled'", specifier = ">=1.131.0" },
     { name = "dask", extras = ["complete", "dataframe"], marker = "extra == 'dask'", specifier = ">=2026.1.2" },
     { name = "deltalake", specifier = ">=1.4.2" },
     { name = "duckdb", marker = "extra == 'duckdb'", specifier = ">=1.4.4" },
-    { name = "fmp-api-client", marker = "extra == 'fmp'", editable = "../fmp-api-client" },
     { name = "huggingface-hub", marker = "extra == 'hf'", specifier = ">=1.4.1" },
     { name = "lancedb", marker = "extra == 'lancedb'", specifier = ">=0.29.2" },
     { name = "msgspec", specifier = ">=0.20.0" },
@@ -1897,8 +1895,7 @@ requires-dist = [
     { name = "pandera", specifier = ">=0.29.0" },
     { name = "pfund", editable = "." },
     { name = "polars", specifier = ">=1.38.1" },
-    { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.6.18" },
-    { name = "psycopg", extras = ["binary", "pool"], marker = "extra == 'postgresql'", specifier = ">=3.3.3" },
+    { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.6.19" },
     { name = "pyarrow", specifier = ">=23.0.1" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pyspark", extras = ["connect", "pandas-on-spark", "sql"], marker = "extra == 'spark'", specifier = ">=4.1.1" },
@@ -1907,7 +1904,7 @@ requires-dist = [
     { name = "yfinance", marker = "extra == 'yfinance'", specifier = ">=1.2.0" },
     { name = "zstandard", specifier = ">=0.25.0" },
 ]
-provides-extras = ["fmp", "yfinance", "prefect", "hf", "dask", "coiled", "spark", "duckdb", "lancedb", "postgresql"]
+provides-extras = ["prefect", "yfinance", "hf", "dask", "spark", "duckdb", "lancedb"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "afterpython", specifier = ">=0.2.1" }]
@@ -1930,7 +1927,7 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "afterpython", specifier = ">=0.2.0" }]
+dev = [{ name = "afterpython", specifier = ">=0.2.1" }]
 
 [[package]]
 name = "pfund"

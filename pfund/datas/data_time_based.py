@@ -19,8 +19,8 @@ class TimeBasedData(BaseData):
             msg_ts: is the timestamp of the data sent by the trading venue
         '''
         super().__init__(data_source, data_origin)
-        self._ts = 0.0
-        self._msg_ts = 0.0
+        self._ts: float | None = None
+        self._msg_ts: float | None = None
     
     @property
     def ts(self):
@@ -35,7 +35,8 @@ class TimeBasedData(BaseData):
         from pfund_kit.utils.temporal import convert_ts_to_dt
         return convert_ts_to_dt(self._ts) if self._ts else None
     
-    def update_timestamps(self, ts: float, msg_ts: float | None=None):
-        self._ts = ts
+    def update_timestamps(self, ts: float | None=None, msg_ts: float | None=None):
+        if ts:
+            self._ts = ts
         if msg_ts:
             self._msg_ts = msg_ts

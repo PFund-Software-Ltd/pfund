@@ -404,19 +404,6 @@ class ComponentMixin:
     def _get_default_name(self):
         return self.__class__.__name__
     
-    @staticmethod
-    def _get_supported_resolutions(product: BaseProduct) -> dict[Timeframe, list[int]]:
-        supported_resolutions: dict[Timeframe, list[int]]
-        if product.bkr == Broker.CRYPTO:
-            Exchange = getattr(importlib.import_module(f'pfund.brokers.crypto.exchanges.{product.exch.lower()}.exchange'), 'Exchange')
-            supported_resolutions = Exchange.get_supported_resolutions(product)
-        elif product.bkr == Broker.IBKR:
-            InteractiveBrokersAPI = getattr(importlib.import_module('pfund.brokers.ibkr.api'), 'InteractiveBrokersAPI')
-            supported_resolutions = InteractiveBrokersAPI.SUPPORTED_RESOLUTIONS
-        else:
-            raise NotImplementedError(f'broker {product.bkr} is not supported')
-        return supported_resolutions
-    
     def _resolve_data_config(self, product: BaseProduct, data_config: DataConfig | None) -> DataConfig:
         '''Resolves and configures DataConfig with defaults and automatic settings.
 
@@ -450,7 +437,8 @@ class ComponentMixin:
         return data_config
     
     def _auto_resample_data_config(self, product: BaseProduct, data_config: DataConfig) -> DataConfig:
-        supported_resolutions = self._get_supported_resolutions(product)
+        from pfund.utils import get_supported_resolutions
+        supported_resolutions = get_supported_resolutions(product)
         original_resample = data_config.resample.copy()
         is_auto_resampled = data_config.auto_resample(supported_resolutions)
         if is_auto_resampled:

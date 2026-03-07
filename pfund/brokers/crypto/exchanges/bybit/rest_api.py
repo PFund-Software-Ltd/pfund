@@ -13,7 +13,7 @@ import urllib
 import datetime
 from decimal import Decimal
 
-import orjson as json
+from msgspec import json
 
 from pfund.enums import Environment, CryptoExchange, CryptoAssetType, OptionType
 from pfund.brokers.crypto.exchanges.rest_api_base import BaseRESTfulAPI, RequestMethod
@@ -86,7 +86,7 @@ class RESTfulAPI(BaseRESTfulAPI):
         recv_window = '5000'
         query_str = timestamp + account._key + recv_window
         if method == RequestMethod.POST:
-            query_str += json.dumps(params)
+            query_str += json.encode(params)
         elif method == RequestMethod.GET:
             query_str += urllib.parse.urlencode(params)
         signature = hmac.new(

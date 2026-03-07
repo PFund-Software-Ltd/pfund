@@ -11,10 +11,10 @@ class BaseData(ABC):
         self.source: DataSource = data_source
         self.origin: str = data_origin
         self._extra_data: dict[str, Any] = {}
-        self._custom_data: dict[Any, Any] = {}
+        self._custom_data: dict[str, Any] = {}
         
     @abstractmethod
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         pass
     
     @property
@@ -30,10 +30,10 @@ class BaseData(ABC):
     def custom_data(self):
         return self._custom_data
     
-    def update_extra_data(self, extra_data: dict):
+    def update_extra_data(self, extra_data: dict[str, Any]):
         self._extra_data = extra_data
     
-    def update_custom_data(self, custom_data: dict):
+    def update_custom_data(self, custom_data: dict[str, Any]):
         self._custom_data = custom_data
 
     def __eq__(self, other: Any) -> bool:

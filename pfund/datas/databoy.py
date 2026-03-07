@@ -146,15 +146,28 @@ class DataBoy:
         if ready, deliver the bar data to the component
         '''
         if not msg.is_incremental:  # means the bar is complete
-            data.on_bar(msg)
+            data.on_bar(
+                o=msg.open, h=msg.high, l=msg.low, c=msg.close, v=msg.volume, ts=msg.ts, 
+                msg_ts=msg.msg_ts, 
+                extra_data=msg.extra_data,
+                custom_data=msg.custom_data,
+                is_incremental=msg.is_incremental
+            )
             self._deliver(data)
         else:
-            if data.is_ready(now=msg.ts):
+            # deliver the closed bar before update() clears it for the next bar
+            if data.is_closed(now=msg.ts):
                 self._deliver(data)
-            data.on_bar(msg)
+            data.on_bar(
+                o=msg.open, h=msg.high, l=msg.low, c=msg.close, v=msg.volume, ts=msg.ts, 
+                msg_ts=msg.msg_ts, 
+                extra_data=msg.extra_data,
+                custom_data=msg.custom_data,
+                is_incremental=msg.is_incremental
+            )
     
     def _flush_stale_bar(self, data: BarData):
-        if data.is_ready():
+        if data.is_closed():
             self._deliver(data)
     
     def schedule_jobs(self, scheduler: BackgroundScheduler):
@@ -335,6 +348,5 @@ class DataBoy:
             elif data.resolution.is_bar():
                 self._component._on_bar(data)
                 for data_resamplee in data.get_resamplees():
-                    if data_resamplee.is_ready(now=data.end_ts) and not data_resamplee.skip_first_bar():
+                    if data_resamplee.is_closed(now=data.end_ts) and not data_resamplee.skip_first_bar():
                         self._deliver(data_resamplee)
-                data.clear()
