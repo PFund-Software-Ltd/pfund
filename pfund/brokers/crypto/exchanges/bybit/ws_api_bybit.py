@@ -1,6 +1,7 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, ClassVar, Any
+from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
+    from pfund.typing import ParsedMessage
     from pfund.enums import Environment
     from pfund.brokers.crypto.exchanges.ws_api_base import Message, WebSocketName
     from pfund.datas.resolution import Resolution
@@ -160,7 +161,7 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
         return full_channel
     
     @staticmethod
-    def _parse_message(msg: Message) -> Message:
+    def _parse_message(msg: Message) -> ParsedMessage:
         channel: str = msg['topic']
         if channel.startswith('kline'):
             return BybitWebSocketAPI._parse_candlestick(msg)
@@ -183,7 +184,7 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
     
     # REVIEW: schema only for linear products?
     @staticmethod
-    def _parse_candlestick(msg: Message) -> Message:
+    def _parse_candlestick(msg: Message) -> ParsedMessage:
         schema = {
             'ts': ('ts', _convert_mts_to_ts),
             'channel': ['topic'],
@@ -197,22 +198,18 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
                 'low': ('low', float),
                 'close': ('close', float),
                 'volume': ('volume', float),
+                'is_incremental': ('confirm', lambda x: not x),  # pyright: ignore[reportUnknownLambdaType]
+                '@extra_data': [],  # extra_data is a self-defined field, empty list = no need to parse it from anything
+                'extra_data': {
+                    'turnover': ('turnover', float),
+                }
             },
-            'is_incremental': ('confirm', lambda x: not x),  # pyright: ignore[reportUnknownLambdaType]
-            'extra_data': (
-                'data',
-                # add the remaining fields other than ['open', 'high', 'low', 'close', 'volume', 'timestamp'] to the extra_data
-                lambda data: [
-                    {k: v for k, v in bar_dict.items() if k not in ['open', 'high', 'low', 'close', 'volume', 'timestamp']} 
-                    for bar_dict in data
-                ]
-            ),
         }
-        data: dict[str, Any] = SchemaParser.convert(msg, schema)
+        data: ParsedMessage = SchemaParser.convert(msg, schema)
         return data
     
     @staticmethod
-    def _parse_tradebook(msg: Message) -> Message:
+    def _parse_tradebook(msg: Message) -> ParsedMessage:
         schema = {
             'ts': ('ts', _convert_mts_to_ts),
             'channel': ['topic'],
@@ -221,22 +218,21 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
                 'ts': ('T', float, _convert_mts_to_ts),
                 'price': ('p', float,),
                 'volume': ('v', float, abs),
+                '@extra_data': [],  # extra_data is a self-defined field, empty list = no need to parse it from anything
+                'extra_data': {
+                    'trade_id': ('i',),
+                    'taker_side': ('S',),
+                    'tick_direction': ('L',),
+                    'is_block_trade': ('BT',),
+                }
             },
-            # NOTE: extra_data only exists in public data, e.g. orderbook, tradebook, candlestick etc.
-            '@extra_data': ['data'],
-            'extra_data': {
-                'trade_id': ('i',),
-                'taker_side': ('S',),
-                'tick_direction': ('L',),
-                'is_block_trade': ('BT',),
-            }
         }
-        data: dict[str, Any] = SchemaParser.convert(msg, schema)
+        data: ParsedMessage = SchemaParser.convert(msg, schema)
         return data
     
     # TODO
     @staticmethod
-    def _parse_orderbook(msg: Message) -> Message:
+    def _parse_orderbook(msg: Message) -> ParsedMessage:
         pass
 
     def _process_orderbook_l2_msg(self, ws_name, full_channel, msg):

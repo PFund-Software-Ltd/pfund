@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, TypeVar, Literal, TypeAlias
+from typing import TYPE_CHECKING, TypeVar, Literal, TypeAlias, TypedDict, Any
 if TYPE_CHECKING:
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.components.models.model_base import BaseModel
@@ -25,6 +25,13 @@ AccountName: TypeAlias = str
 Currency: TypeAlias = str
 # when user types in the full channel name, it is of type FullDataChannel
 FullDataChannel: TypeAlias = str
+
+
+class ParsedMessage(TypedDict):
+    ts: float
+    channel: str
+    data: dict[str, Any]
+    
 
 # since Literal doesn't support variables as inputs, define variables in common.py here with prefix 't'
 tEnvironment = Literal['BACKTEST', 'SANDBOX', 'PAPER', 'LIVE']

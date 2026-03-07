@@ -1,7 +1,8 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Literal, ClassVar, TypeAlias, Awaitable, Any
+from typing import TYPE_CHECKING, Callable, Literal, ClassVar, TypeAlias, Any
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
     from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
     from pfund.utils.adapter import Adapter
     from pfund.datas.resolution import Resolution
