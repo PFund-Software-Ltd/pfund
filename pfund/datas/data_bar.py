@@ -209,7 +209,6 @@ class BarData(MarketData):
         ts: float | None=None, start_ts: float | None=None, end_ts: float | None=None,
         msg_ts: float | None=None,
         extra_data: dict[str, Any] | None=None,
-        custom_data: dict[str, Any] | None=None,
     ):
         '''
         Args:
@@ -230,24 +229,21 @@ class BarData(MarketData):
                 If False, the values are deltas (e.g. volume is per-trade), so values are accumulated.
                 Typically True for exchange bar/kline pushes, False when building bars from tick data.
         '''
+        # NOTE: use msg_ts if ts is not provided
+        ts = ts or msg_ts
         self._bar.update(
             o, h, l, c, v, 
             ts=ts, start_ts=start_ts, end_ts=end_ts,
             is_incremental=is_incremental, is_snapshot=is_snapshot
         )
-        # NOTE: use msg_ts if ts is not provided
-        ts = ts or msg_ts
         self.update_timestamps(ts=ts, msg_ts=msg_ts)
         if extra_data is not None:
             self.update_extra_data(extra_data)
-        if custom_data is not None:
-            self.update_custom_data(custom_data)
         for resamplee in self._resamplees:
             resamplee.on_bar(
                 o=o, h=h, l=l, c=c, v=v, ts=ts, 
                 msg_ts=msg_ts, 
                 extra_data=extra_data,
-                custom_data=custom_data,
                 is_backfill=is_backfill,
                 is_incremental=is_incremental,
             )
@@ -260,13 +256,11 @@ class BarData(MarketData):
         is_backfill: bool=False,
         msg_ts: float | None=None, 
         extra_data: dict[str, Any] | None=None, 
-        custom_data: dict[str, Any] | None=None, 
     ):
         self.on_bar(
             o=price, h=price, l=price, c=price, v=volume, ts=ts, 
             msg_ts=msg_ts, 
             extra_data=extra_data,
-            custom_data=custom_data,
             is_backfill=is_backfill,
             is_incremental=True,
             is_snapshot=False,

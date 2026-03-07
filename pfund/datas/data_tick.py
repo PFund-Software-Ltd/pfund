@@ -45,22 +45,18 @@ class TickData(MarketData):
         is_backfill=False, 
         msg_ts: float | None=None,
         extra_data: dict[str, Any] | None=None,
-        custom_data: dict[str, Any] | None=None,
     ):
         self._price = price
         self._volume = volume
         self.update_timestamps(ts=ts, msg_ts=msg_ts)
         if extra_data is not None:
             self.update_extra_data(extra_data)
-        if custom_data is not None:
-            self.update_custom_data(custom_data)
         for resamplee in self._resamplees:
             resamplee.on_tick(
                 price=price, volume=volume, ts=ts, 
                 is_backfill=is_backfill,
                 msg_ts=msg_ts, 
                 extra_data=extra_data,
-                custom_data=custom_data,
             )
             
         # if self._is_appended:

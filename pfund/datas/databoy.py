@@ -150,7 +150,6 @@ class DataBoy:
                 o=msg.open, h=msg.high, l=msg.low, c=msg.close, v=msg.volume, ts=msg.ts, 
                 msg_ts=msg.msg_ts, 
                 extra_data=msg.extra_data,
-                custom_data=msg.custom_data,
                 is_incremental=msg.is_incremental
             )
             self._deliver(data)
@@ -162,7 +161,6 @@ class DataBoy:
                 o=msg.open, h=msg.high, l=msg.low, c=msg.close, v=msg.volume, ts=msg.ts, 
                 msg_ts=msg.msg_ts, 
                 extra_data=msg.extra_data,
-                custom_data=msg.custom_data,
                 is_incremental=msg.is_incremental
             )
     
