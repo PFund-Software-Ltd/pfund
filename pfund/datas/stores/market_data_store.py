@@ -15,6 +15,9 @@ from pfund.datas.stores.base_data_store import BaseDataStore
 
 
 class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
+    # Columns pinned to the left side of the materialized dataframe for readability
+    LEFT_COLS = ['date', 'resolution', 'product', 'symbol', 'source_type']
+    
     def _should_cache_resampled(self, feed: MarketFeed) -> bool:
         '''Determine if the retrieved data should be cached to the CURATED layer.'''
         setting = self._context.settings.cache_materialized_data
@@ -47,9 +50,14 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                 nw
                 .from_native(df)
                 .with_columns(
-                    product=nw.lit(data.product.name).cast(nw.String)
+                    product=nw.lit(data.product.name).cast(nw.String),
+                    source_type=nw.lit(SourceType.BATCH).cast(nw.String)
                 )
             )
+            # re-order columns
+            cols = nwdf.collect_schema().names()
+            target_cols = self.LEFT_COLS + [col for col in cols if col not in self.LEFT_COLS]
+            nwdf = nwdf.select(target_cols)
             return nwdf
 
         dfs: list[Frame] = []
@@ -72,8 +80,6 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                 end_date=end_date,
                 data_origin=data.origin,
                 dataflow_per_date=None,  # setting it to None, pfeed will automatically determine it
-                # pfund can only deal with cleaned data, must clean raw data in retrieval if raw data is stored
-                clean_raw_data=True if storage_config.data_layer == DataLayer.RAW else False,
                 **product_specs,
             )
 
@@ -84,7 +90,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                     .run()
                 )
                 if _df is not None:
-                    self._logger.debug(f'Cache hit for {data.product.name} {data.resolution}')
+                    self._logger.info(f'loaded data from {storage_config.data_path} for {data.product.name} {data.resolution}')
                     dfs.append(_prepare_df_before_append(data, _df))
                     continue
 
@@ -100,8 +106,10 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                 )
                 .run()
             )
-            
-            if _df is None:
+            if _df is not None:
+                dfs.append(_prepare_df_before_append(data, _df))
+                self._logger.info(f'loaded data from {storage_config.data_path} for {data.product.name} {data.resolution}')
+            else:
                 if settings.auto_download_data:
                     # PAID data cannot be downloaded automatically, user must download it manually
                     if feed.data_source.access_type == DataAccessType.PAID_BY_USAGE:
@@ -133,15 +141,8 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                         f'No data found for {data.product.name} {data.resolution}.\n' +
                         "and 'auto_download_data' is disabled in settings, please enable it in engine settings or use 'pfeed' to download the data manually."
                     )
-            else:
-                dfs.append(_prepare_df_before_append(data, _df))
-            
         
-        df: Frame = nw.concat(dfs)
-        df = df.with_columns(
-            source_type=nw.lit(SourceType.BATCH).cast(nw.String)
-        )
-        return df
+        return nw.concat(dfs)
         
     # TODO:
     def swap_live_for_eod(self):

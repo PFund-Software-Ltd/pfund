@@ -269,6 +269,8 @@ class ComponentMixin:
             return ComponentType.feature
         elif isinstance(self, BaseModel):
             return ComponentType.model
+        else:
+            raise ValueError(f"Unknown component type: {self.__class__.__name__}")
     
     def get_df(self, to_native: bool=False) -> GenericFrame | Frame:
         df: Frame = self.store.get_df()

@@ -1,9 +1,8 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, TypedDict
 if TYPE_CHECKING:
     from logging import Logger
     from pfeed.streaming.zeromq import ZeroMQ
-    from pfeed.streaming import BarMessage
     from pfund.datas.data_market import MarketData
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.typing import (
@@ -13,6 +12,16 @@ if TYPE_CHECKING:
         ResolutionRepr, 
         ZeroMQSenderName, 
     )
+    class BarUpdate(TypedDict, total=True):
+        ts: float
+        open: float
+        high: float
+        low: float
+        close: float
+        volume: float
+        is_incremental: bool
+        msg_ts: float | None
+        extra_data: dict[str, Any]
 
 import importlib
 from threading import Thread
@@ -141,27 +150,27 @@ class DataBoy:
         data.on_tick(px, qty, ts, **extra_data)
         self._deliver(data, **extra_data)
 
-    def _update_bar(self, data: BarData, msg: BarMessage):
+    def _update_bar(self, data: BarData, update: BarUpdate):
         '''update bar data from streaming message
         if ready, deliver the bar data to the component
         '''
-        if not msg.is_incremental:  # means the bar is complete
+        if not update['is_incremental']:  # means the bar is complete
             data.on_bar(
-                o=msg.open, h=msg.high, l=msg.low, c=msg.close, v=msg.volume, ts=msg.ts, 
-                msg_ts=msg.msg_ts, 
-                extra_data=msg.extra_data,
-                is_incremental=msg.is_incremental
+                o=update['open'], h=update['high'], l=update['low'], c=update['close'], v=update['volume'], ts=update['ts'], 
+                msg_ts=update['msg_ts'], 
+                extra_data=update['extra_data'],
+                is_incremental=update['is_incremental']
             )
             self._deliver(data)
         else:
             # deliver the closed bar before update() clears it for the next bar
-            if data.is_closed(now=msg.ts or msg.msg_ts):
+            if data.is_closed(now=update['ts'] or update['msg_ts']):
                 self._deliver(data)
             data.on_bar(
-                o=msg.open, h=msg.high, l=msg.low, c=msg.close, v=msg.volume, ts=msg.ts, 
-                msg_ts=msg.msg_ts, 
-                extra_data=msg.extra_data,
-                is_incremental=msg.is_incremental
+                o=update['open'], h=update['high'], l=update['low'], c=update['close'], v=update['volume'], ts=update['ts'], 
+                msg_ts=update['msg_ts'], 
+                extra_data=update['extra_data'],
+                is_incremental=update['is_incremental']
             )
     
     def _flush_stale_bar(self, data: BarData):
@@ -303,6 +312,7 @@ class DataBoy:
         pass
     
     def _collect(self):
+        from msgspec import structs
         while self._component.is_running():
             if msg_tuple := self._data_zmq.recv():
                 channel, topic, msg, msg_ts = msg_tuple
@@ -320,7 +330,7 @@ class DataBoy:
                 elif topic == PublicDataChannel.tradebook:
                     self._update_tick(data, msg)
                 elif topic == PublicDataChannel.candlestick:
-                    self._update_bar(data, msg)
+                    self._update_bar(data, structs.asdict(msg))
                 else:
                     raise NotImplementedError(f'{topic=} is not supported')
             # TODO:

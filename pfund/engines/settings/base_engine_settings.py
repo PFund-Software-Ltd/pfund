@@ -1,7 +1,5 @@
 from typing import Any, Literal
 
-import os
-
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from pfeed.enums import IOFormat

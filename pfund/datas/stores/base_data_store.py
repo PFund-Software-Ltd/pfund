@@ -58,5 +58,7 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
 
     def add_data(self, data: DataT, storage_config: StorageConfig | None=None):
         storage_config = storage_config or StorageConfig()
+        if storage_config.data_layer == DataLayer.RAW:
+            raise ValueError('Loading data from RAW data layer is not supported, pfund can only deal with cleaned data')
         self._storage_configs[data] = storage_config
         self._feeds[data] = self._create_feed(data)

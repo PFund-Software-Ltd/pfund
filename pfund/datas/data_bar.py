@@ -15,6 +15,7 @@ from pfund.datas.data_market import MarketData
 from pfund_kit.utils.temporal import convert_ts_to_dt
 
 
+# OPTIMIZE: too slow for second data
 class Bar:
     def __init__(self, resolution: Resolution, shift: int=0):
         self._resolution: Resolution = resolution
@@ -178,6 +179,7 @@ class Bar:
             raise ValueError('ts, start_ts, and end_ts are all None')
 
 
+# OPTIMIZE: too slow for second data, especially using tick data to resample to bar data
 class BarData(MarketData):
     def __init__(
         self,

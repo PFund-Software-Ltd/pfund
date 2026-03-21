@@ -1,6 +1,6 @@
-# pyright: reportUninitializedInstanceVariable=false
+# pyright: reportUninitializedInstanceVariable=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, overload, cast, Any
+from typing import TYPE_CHECKING, overload, cast, Any, Callable
 if TYPE_CHECKING:
     import torch
     import pandas as pd
@@ -71,9 +71,37 @@ class BacktestMixin:
             
         self._is_dummy_strategy = False
 
-    def backtest(self, df: BacktestDataFrame):
+    @staticmethod
+    def _validate_backtest_signature(func: Callable[[BacktestDataFrame], BacktestDataFrame]):
+        '''Validates the signature of the backtest() function.
+        The backtest() function must accept exactly 1 argument (df) and return a BacktestDataFrame.
+        '''
+        import ast
+        import inspect
+        import textwrap
+
+        sig = inspect.signature(func)
+        params = [p for p in sig.parameters if p not in ('self', 'cls')]
+        if len(params) != 1:
+            raise TypeError(f"backtest() must accept exactly 1 argument (df), got {len(params)}: {params}")
+
+        try:
+            source = textwrap.dedent(inspect.getsource(func))
+            tree = ast.parse(source)
+            func_def = tree.body[0]
+            has_return = any(isinstance(node, ast.Return) and node.value is not None for node in ast.walk(func_def))
+            if not has_return:
+                raise TypeError("backtest() must return a BacktestDataFrame. No return statement found. Did you forget to return df?")
+        except OSError:
+            pass  # source not available (e.g. built-in), skip check
+
+    def backtest(self, df: BacktestDataFrame) -> BacktestDataFrame:
         if hasattr(super(), 'backtest'):
-            return super().backtest(df)
+            self._validate_backtest_signature(getattr(super(), 'backtest'))
+            backtest_df: BacktestDataFrame | None = cast("BacktestDataFrame | None", super().backtest(df))
+            if backtest_df is None:
+                raise TypeError(f"{self.name}.backtest() must return a BacktestDataFrame, got None. Did you forget to return df?")
+            return backtest_df
         else:
             raise NotImplementedError(f'{self.name} does not have a backtest(self, df) method, cannot run vectorized backtesting')
     

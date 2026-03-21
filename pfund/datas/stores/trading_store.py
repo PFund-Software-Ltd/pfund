@@ -1,9 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from narwhals.typing import Frame
+    from narwhals.typing import Frame, IntoFrame
     from pfund.engines.engine_context import EngineContext
-    from pfeed.typing import GenericFrame
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.sources.pfund.component_feed import PFundComponentFeed
     from pfeed.sources.pfund.component_data_model import PFundComponentDataModel
@@ -110,7 +109,7 @@ class TradingStore:
         )
 
     # TODO: I/O should be async
-    def _write_to_storage(self, data: GenericFrame):
+    def _write_to_storage(self, data: IntoFrame):
         '''Load pfund's component (strategy/model/feature/indicator) data 
         from the online store (TradingStore) to the offline store (pfeed's data lakehouse).
         '''

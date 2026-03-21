@@ -23,7 +23,6 @@ from pfund.engines.base_engine import BaseEngine
 from pfund.enums import Environment, PFundDataChannel
 
 
-# TODO: SANDBOX env + backtest data = replaying
 class TradeEngine(BaseEngine):
     def __init__(
         self,

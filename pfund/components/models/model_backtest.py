@@ -64,7 +64,9 @@ def BacktestModel(Model: type[ModelT], model: MachineLearningModel, *args, **kwa
         else:
             return _BacktestModel(*args, **kwargs)
     except TypeError as e:
-        raise TypeError(
-            f'if super().__init__() is called in {Model.__name__ }.__init__() (which is unnecssary), '
-            'make sure it is called with args and kwargs, i.e. super().__init__(*args, **kwargs)'
-        ) from e
+        if '__init__()' in str(e):
+            raise TypeError(
+                f'if super().__init__() is called in {Model.__name__}.__init__() (which is unnecssary), ' +
+                'make sure it is called with args and kwargs, i.e. super().__init__(*args, **kwargs)'
+            ) from e
+        raise
