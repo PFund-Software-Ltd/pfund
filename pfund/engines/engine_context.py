@@ -4,8 +4,6 @@ if TYPE_CHECKING:
     import datetime
     from pfund.config import PFundConfig
 
-import uuid
-
 from pfund.enums import Environment, RunMode
 from pfund.datas.resolution import Resolution
 from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
@@ -19,9 +17,10 @@ class DataRangeDict(TypedDict, total=False):
 
 
 class EngineContext:
-    def __init__(self, env: Environment, data_range: str | Resolution | DataRangeDict | Literal['ytd']):
+    def __init__(self, env: Environment, name: str, data_range: str | Resolution | DataRangeDict | Literal['ytd']):
+        import pfeed as pe
         self.env = env
-        self.id = uuid.uuid4().hex[:8]
+        self.name = name
         self._env_var_prefix = f'PFUND_{env.upper()}_'
         self._env_vars = self._load_env_vars()
         self.run_mode = self._derive_run_mode()
@@ -29,12 +28,9 @@ class EngineContext:
         self.settings = self._load_settings()
         # NOTE: config obtained by get_config() inside ray actor could be different from the one in the main thread (e.g. after calling pf.configure())
         # so we create the config object here in the context and treat it as the source of truth
-        self.config: PFundConfig = get_config()
+        self.pfund_config: PFundConfig = get_config()
+        self.pfeed_config = pe.get_config()
         self.logging_config: dict[str, Any] = get_logging_config()
-
-    @property
-    def name(self) -> str:
-        return f'{self.env.lower()}-engine-{self.id}'
 
     @staticmethod
     def _derive_run_mode() -> RunMode:

@@ -20,7 +20,6 @@ ComponentT = TypeVar("ComponentT", bound="Component")
 EngineName: TypeAlias = str
 ComponentName: TypeAlias = str
 ProductName: TypeAlias = str
-ResolutionRepr: TypeAlias = str
 AccountName: TypeAlias = str
 Currency: TypeAlias = str
 # when user types in the full channel name, it is of type FullDataChannel

@@ -28,10 +28,11 @@ class TradeEngine(BaseEngine):
         self,
         *,
         env: Environment | Literal['SANDBOX', 'PAPER', 'LIVE']=Environment.SANDBOX,
+        name: str='engine',
         data_range: str | Resolution | DataRangeDict | Literal['ytd']='ytd',
         settings: TradeEngineSettings | None=None,
     ):
-        super().__init__(env=Environment[env.upper()], data_range=data_range, settings=settings)
+        super().__init__(env=Environment[env.upper()], name=name, data_range=data_range, settings=settings)
         self._proxy: ZeroMQ | None = None
         self._worker: ZeroMQ | None = None
         self._setup_proxy()
@@ -122,6 +123,7 @@ class TradeEngine(BaseEngine):
             except KeyboardInterrupt:
                 self._logger.warning(f'KeyboardInterrupt received, ending {self.name}')
                 break
+        # TODO: set self.results?
         if self.is_running():
             self.end()
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Any
 if TYPE_CHECKING:
+    from pfeed.sources.pfund.engine_feed import EngineFeed
     from pfund.datas.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
     from pfund.entities.accounts.account_base import BaseAccount
@@ -41,6 +42,7 @@ class BaseEngine:
         self, 
         *,
         env: Environment, 
+        name: str,
         data_range: str | Resolution | DataRangeDict | Literal['ytd'],
         settings: TradeEngineSettings | BacktestEngineSettings | None=None,
     ):
@@ -51,6 +53,7 @@ class BaseEngine:
                 when it is a dict, it is a dict with keys 'start_date' and 'end_date', 
                     e.g. {'start_date': '2024-01-01', 'end_date': '2024-12-31'}
         '''
+        import pfeed as pe
         from pfund.config import setup_logging
         from pfund.engines.engine_context import EngineContext
         
@@ -60,24 +63,23 @@ class BaseEngine:
         if env == Environment.LIVE:
             raise ValueError(f"{env=} is not allowed for now")
         
-        setup_logging(env=env)
+        setup_logging(env=env, engine_name=name)
         self._logger: logging.Logger = logging.getLogger('pfund')
-        self._context: EngineContext = EngineContext(env=env, data_range=data_range)
+        self._context: EngineContext = EngineContext(env=env, name=name, data_range=data_range)
         self._is_running: bool = False
         self._is_gathered: bool = False
+        self._feed: EngineFeed = pe.PFund().engine_feed
+        # self.id = uuid.uuid4().hex[:8]
         self.brokers: dict[Broker, BaseBroker] = {}
         self.strategies: dict[str, BaseStrategy | ActorProxy[BaseStrategy]] = {}
         if settings:
             self.configure_settings(settings, persist=False)
-        cprint(f"{self.name} is running (data_range=({self.data_start}, {self.data_end}))", style=ENV_COLORS[self.env])
+        self.results: dict[str, Any] | None = None
+        cprint(f"{self.env} {self.name} is running (data_range=({self.data_start}, {self.data_end}))", style=ENV_COLORS[self.env])
     
     @property
     def env(self) -> Environment:
         return self._context.env
-    
-    @property
-    def id(self) -> str:
-        return self._context.id
     
     @property
     def name(self) -> str:

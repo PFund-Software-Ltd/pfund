@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 if TYPE_CHECKING:
+    from narwhals.typing import Frame
     from pfund.engines.engine_context import EngineContext
 
 import logging
@@ -9,7 +10,6 @@ from abc import ABC, abstractmethod
 
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.enums import DataTool, DataStorage, DataLayer
-from pfeed import get_config as get_pfeed_config
 from pfeed.storages.storage_config import StorageConfig
 from pfund.datas.data_base import BaseData
 
@@ -18,24 +18,48 @@ DataT = TypeVar('DataT', bound=BaseData)
 FeedT = TypeVar('FeedT', bound=BaseFeed)
 
 
-pfeed_config = get_pfeed_config()
-
-
 class BaseDataStore(ABC, Generic[DataT, FeedT]):
     SUPPORTED_DATA_TOOLS = [DataTool.pandas, DataTool.polars]
     
     def __init__(self, context: EngineContext):
         self._logger: logging.Logger = logging.getLogger("pfund")
-        self._data_tool = pfeed_config.data_tool
+        self._data_tool = context.pfeed_config.data_tool
         if self._data_tool not in self.SUPPORTED_DATA_TOOLS:
             raise ValueError(f"Unsupported data tool: {self._data_tool}")
         self._context: EngineContext = context
+        self._df: Frame | None = None  # data df, long form
+        self._df_updates = []
         self._feeds: dict[DataT, FeedT] = {}
-        self._storage_configs: dict[BaseData, StorageConfig] = {}
+        self._storage_configs: dict[DataT, StorageConfig] = {}
 
     @abstractmethod
-    def materialize(self, *args: Any, **kwargs: Any):
+    def materialize(self, *args: Any, **kwargs: Any) -> None:
         pass
+    
+
+    @abstractmethod
+    def create_data(self, *args: Any, **kwargs: Any) -> DataT:
+        pass
+
+    @abstractmethod
+    def add_data(self, *args: Any, **kwargs: Any) -> list[DataT]:
+        pass
+    
+    @abstractmethod
+    def get_data(self, *args: Any, **kwargs: Any) -> DataT | None:
+        pass
+
+    @property
+    def df(self) -> Frame:
+        assert self._df is not None, "df is not set"
+        return self._df
+    
+    @df.setter
+    def df(self, df: Frame):
+        self._df = df
+        
+    def get_datas(self) -> list[DataT]:
+        return list(self._feeds.keys())
 
     def _create_feed(self, data: DataT) -> FeedT:
         from pfeed.feeds import create_feed
@@ -55,10 +79,3 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
             io_format=storage_config.io_format,
             compression=storage_config.compression,
         )
-
-    def add_data(self, data: DataT, storage_config: StorageConfig | None=None):
-        storage_config = storage_config or StorageConfig()
-        if storage_config.data_layer == DataLayer.RAW:
-            raise ValueError('Loading data from RAW data layer is not supported, pfund can only deal with cleaned data')
-        self._storage_configs[data] = storage_config
-        self._feeds[data] = self._create_feed(data)

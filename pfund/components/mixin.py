@@ -14,7 +14,6 @@ if TYPE_CHECKING:
         Component,
         ComponentName,
         ProductName,
-        ResolutionRepr,
     )
     from pfund.engines.engine_context import EngineContext
     from pfund.datas.data_market import MarketData
@@ -122,8 +121,7 @@ class ComponentMixin:
         run_mode: RunMode,
         resolution: Resolution | str,
         engine_context: EngineContext,
-        min_data: int | None,
-        max_data: int | None,
+        warmup_period: int | None,
     ):
         """
         Hydrates the component with necessary attributes after initialization.
@@ -141,7 +139,7 @@ class ComponentMixin:
         self._set_resolution(resolution)
         if self.is_remote():
             self._setup_logging()
-        self._store = TradingStore(engine_context, min_data=min_data, max_data=max_data)
+        self._store = TradingStore(engine_context, warmup_period=warmup_period)
         if self.env != Environment.BACKTEST:
             self.databoy._setup_messaging()
     
@@ -397,8 +395,8 @@ class ComponentMixin:
     def get_product(self, name: ProductName) -> BaseProduct | None:
         return self.products.get(name, None)
     
-    def get_data(self, product: ProductName, resolution: ResolutionRepr) -> MarketData | None:
-        return self.databoy.get_data(product, resolution)
+    def get_data(self, product: ProductName, resolution: Resolution) -> MarketData | None:
+        return self.databoy.market_data_store.get_data(product, resolution)
     
     def _append_to_df(self, data: BaseData):
         return self.data_tool.append_to_df(data, self.predictions)
@@ -489,14 +487,11 @@ class ComponentMixin:
             name=product_name,
             **product_specs
         )
-        datas: list[MarketData] = self.databoy.add_data(
+        datas: list[MarketData] = self.databoy.market_data_store.add_data(
             product=product, 
+            storage_config=storage_config or StorageConfig(),
             data_config=self._resolve_data_config(product, data_config)
         )
-        for data in datas:
-            if not data.is_bar():
-                continue
-            self.store.market.add_data(data=data, storage_config=storage_config)
         return datas
     
     # TODO
@@ -513,20 +508,13 @@ class ComponentMixin:
             self._add_data(data)
             self._consumer._add_listener(self, data)
         return datas
-
-    def get_orderbook(self, product: BaseProduct) -> TimeBasedData | None:
-        return self.get_data(product, '1q')
-    
-    def get_tradebook(self, product: BaseProduct) -> TimeBasedData | None:
-        return self.get_data(product, '1t')
     
     def _add_component(
         self, 
         component: ComponentT | ActorProxy[ComponentT],
         name: str='', 
-        min_data: int | None=None,
-        max_data: int | None=None,
-        group_data: bool=True,
+        warmup_period: int | None=None,
+        group_data: bool=True,  # FIXME: DEPRECATED?
         signal_cols: list[str] | None=None,
         ray_actor_options: dict | None=None,
         **ray_kwargs
@@ -534,15 +522,12 @@ class ComponentMixin:
         '''Adds a model component to the current component.
         A model component is a model, feature, or indicator.
         Args:
-            min_data (int): Minimum number of data points required for the model to make a prediction.
-            max_data (int | None): Maximum number of data points required for the model to make a prediction.
-            - If None: max_data is set to min_data.
-            - If value=-1: include all data
+            warmup_period (int): Minimum number of data points required for the model to make a prediction.
             
-            group_data (bool): Determines how `min_data` and `max_data` are applied to the whole df:
-            - If True: `min_data` and `max_data` apply to each group=(product, resolution).
+            group_data (bool): Determines how `min_data` are applied to the whole df:
+            - If True: `min_data` apply to each group=(product, resolution).
             e.g. if `min_data=2`, at least two data points are required for each group=(product, resolution).
-            - If False: `min_data` and `max_data` apply to the entire dataset, not segregated by product or resolution.
+            - If False: `min_data` apply to the entire dataset, not segregated by product or resolution.
             e.g. if `min_data=2`, at least two data points are required for the whole dataset.
             
             signal_cols: signal columns, if not provided, it will be derived in predict()
@@ -588,17 +573,16 @@ class ComponentMixin:
                 run_mode=RunMode.REMOTE if ray_kwargs else RunMode.LOCAL,
                 resolution=self._resolution,
                 engine=self._context,
+                warmup_period=warmup_period,
             )
             
             if signal_cols:
                 component._set_signal_cols(signal_cols)
 
             # FIXME: check if min_data, max_data and group_data are needed when component_type is strategy
-            if min_data:
-                component._set_min_data(min_data)
-            if max_data:
-                component._set_max_data(max_data)
-            component._set_group_data(group_data)
+            # if min_data:
+            #     component._set_min_data(min_data)
+            # component._set_group_data(group_data)
         else:
             is_remote = True
         component._add_consumer(self._proxy if is_remote else self)
@@ -721,6 +705,11 @@ class ComponentMixin:
             for i, col in enumerate(signal_cols):
                 self.predictions[col] = pred_y[i]
     
+    def _materialize(self):
+        self.store.materialize()
+        for data_store in self.databoy.data_stores.values():
+            data_store.materialize()
+    
     def _gather(self):
         '''Sets up everything before start'''
         # NOTE: use is_gathered to avoid a component being gathered multiple times when it's a shared component
@@ -735,8 +724,7 @@ class ComponentMixin:
             # TODO:
             # self._add_datas_from_consumer_if_none()
             
-            assert self.store is not None, "trading store must be initialized before gathering"
-            self.store.materialize()
+            self._materialize()
             
             for component in self.components:
                 component._gather()
@@ -800,22 +788,15 @@ class ComponentMixin:
     
     def on_stop(self):
         pass
-    
-    
+
+
     '''
     ************************************************
     Sugar Functions
     ************************************************
     '''
-    def get_second_bar(self, product: BaseProduct, period: int) -> BarData | None:
-        return self.get_data(product, resolution=f'{period}s')
+    def get_orderbook(self, product: ProductName) -> MarketData | None:
+        return self.get_data(product, Resolution('1q'))
     
-    def get_minute_bar(self, product: BaseProduct, period: int) -> BarData | None:
-        return self.get_data(product, resolution=f'{period}m')
-    
-    def get_hour_bar(self, product: BaseProduct, period: int) -> BarData | None:
-        return self.get_data(product, resolution=f'{period}h')
-    
-    def get_day_bar(self, product: BaseProduct, period: int) -> BarData | None:
-        return self.get_data(product, resolution=f'{period}d')
-    
+    def get_tradebook(self, product: ProductName) -> MarketData | None:
+        return self.get_data(product, Resolution('1t'))

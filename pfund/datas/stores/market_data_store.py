@@ -1,22 +1,128 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false, reportArgumentType=false
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict, Any
 from functools import partial
 
 if TYPE_CHECKING:
     from narwhals.typing import Frame, IntoFrame
     from pfeed.typing import GenericFrame
+    from pfund.typing import ProductName
+    from pfund.entities.products.product_base import BaseProduct
+    from pfund.engines.engine_context import EngineContext
+    from pfund.datas.data_config import DataConfig
+    class BarUpdate(TypedDict, total=True):
+        ts: float
+        open: float
+        high: float
+        low: float
+        close: float
+        volume: float
+        is_incremental: bool
+        msg_ts: float | None
+        extra_data: dict[str, Any]
+
+from collections import defaultdict
 
 from pfeed.enums import DataLayer, DataAccessType, DataStorage
+from pfeed.storages.storage_config import StorageConfig
 from pfeed.feeds.market_feed import MarketFeed
+from pfund.datas.data_config import DataConfig
+from pfund.datas.resolution import Resolution
 from pfund.enums import SourceType
 from pfund.datas.data_market import MarketData
 from pfund.datas.stores.base_data_store import BaseDataStore
+from pfund.datas import QuoteData, TickData, BarData
 
 
 class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
     # Columns pinned to the left side of the materialized dataframe for readability
     LEFT_COLS = ['date', 'resolution', 'product', 'symbol', 'source_type']
+
+    def __init__(self, context: EngineContext):
+        super().__init__(context)
+        self._datas: dict[ProductName, dict[Resolution, MarketData]] = defaultdict(dict)
+        self.stale_bar_timeouts: dict[BarData, int] = {}
+    
+    def get_data(self, product: ProductName, resolution: Resolution) -> MarketData | None:
+        if product not in self._datas:
+            return None
+        return self._datas[product].get(resolution, None)
+    
+    def add_data(self, product: BaseProduct, storage_config: StorageConfig, data_config: DataConfig) -> list[MarketData]:
+        datas: list[MarketData] = []
+        for resolution in data_config.resolutions:
+            data = self.get_data(product.name, resolution)
+            if data is None:
+                data = self.create_data(product, resolution, data_config)
+                self._datas[product.name][resolution] = data
+                if storage_config.data_layer == DataLayer.RAW:
+                    raise ValueError('Loading data from RAW data layer is not supported, pfund can only deal with cleaned data')
+                self._storage_configs[data] = storage_config
+                if data.is_bar():
+                    self.stale_bar_timeouts[data] = data_config.stale_bar_timeout[resolution]
+                    # self._feeds is used in materialization, and pfund only supports bar data as the main resolution
+                    self._feeds[data] = self._create_feed(data)
+            datas.append(data)
+        
+        # mutually bind data_resampler and data_resamplee
+        for resamplee_resolution, resampler_resolution in data_config.resample.items():
+            data_resamplee = self.get_data(product.name, resamplee_resolution)
+            data_resampler = self.get_data(product.name, resampler_resolution)
+            data_resamplee.bind_resampler(data_resampler)
+            self._logger.debug(f'{product.name} resolution={resampler_resolution} (resampler) added listener resolution={resamplee_resolution} (resamplee) data')
+        
+        return datas
+    
+    def create_data(self, product: BaseProduct, resolution: Resolution, data_config: DataConfig) -> MarketData:
+        if resolution.is_quote():
+            data = QuoteData(
+                data_source=data_config.data_source, 
+                data_origin=data_config.data_origin, 
+                product=product, 
+                resolution=resolution
+            )
+        elif resolution.is_tick():
+            data = TickData(
+                data_source=data_config.data_source, 
+                data_origin=data_config.data_origin, 
+                product=product, 
+                resolution=resolution
+            )
+        else:
+            data = BarData(
+                data_source=data_config.data_source, 
+                data_origin=data_config.data_origin, 
+                product=product, 
+                resolution=resolution, 
+                shift=data_config.shift.get(resolution, 0), 
+                skip_first_bar=data_config.skip_first_bar.get(resolution, True)
+            )
+        return data
+    
+    # TODO
+    def update_quote(self, data: QuoteData, update: QuoteUpdate):
+        ts = update['ts']
+        extra_data = update['extra_data']
+        bids, asks = update['bids'], update['asks']
+        data.on_quote(bids, asks, ts, **extra_data)
+
+    # TODO
+    def update_tick(self, data: TickData, update: TickUpdate):
+        extra_data = update['extra_data']
+        px, qty, ts = update['px'], update['qty'], update['ts']
+        data.on_tick(px, qty, ts, **extra_data)
+    
+    # FIXME: should get_data() in update_bar, pass in product and resolution to update_bar() instead of data
+    def update_bar(self, data: BarData, update: BarUpdate):
+        '''update bar data from streaming message
+        if ready, deliver the bar data to the component
+        '''
+        data.on_bar(
+            o=update['open'], h=update['high'], l=update['low'], c=update['close'], v=update['volume'], ts=update['ts'], 
+            msg_ts=update['msg_ts'], 
+            extra_data=update['extra_data'],
+            is_incremental=update['is_incremental']
+        )
     
     def _should_cache_resampled(self, feed: MarketFeed) -> bool:
         '''Determine if the retrieved data should be cached to the CURATED layer.'''
@@ -29,7 +135,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         request = feed._current_request
         return request.data_resolution != request.target_resolution
 
-    def materialize(self) -> Frame:
+    def materialize(self) -> None:
         '''Materializes market data by loading from storage, with optional auto-download fallback.
 
         For each registered data feed, first checks the cache for previously resampled data.
@@ -142,7 +248,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                         "and 'auto_download_data' is disabled in settings, please enable it in engine settings or use 'pfeed' to download the data manually."
                     )
         
-        return nw.concat(dfs)
+        self.df = nw.concat(dfs)
         
     # TODO:
     def swap_live_for_eod(self):

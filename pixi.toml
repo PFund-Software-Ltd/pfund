@@ -4,7 +4,7 @@ channels = ["conda-forge"]
 name = "pfund"
 platforms = ["osx-arm64", "linux-64"]
 # updating this needs to also update the version in the ci.yml and templates/ci-workflow-template.yml files
-requires-pixi = ">=0.63.2"  # command: pixi workspace requires-pixi set ">=0.63.2"
+requires-pixi = ">=0.66.0"  # command: pixi workspace requires-pixi set ">=0.66.0"
 
 [tasks]
 
@@ -23,18 +23,18 @@ py313 = ["py313", "test", "optional"]
 
 [dependencies]
 python = ">=3.11.14"
-uv = ">=0.10.4"
+uv = ">=0.11.2"
 gh = ">=2.87.2"
 
 [pypi-dependencies]
 # TEMP
 pfeed = { path = "../pfeed", editable = true, extras = ["duckdb"] }
 pfolio = { path = "../pfolio", editable = true }
-pfund-kit = { path = "../pfund-kit", editable = true }
+pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo"] }
 mtflow = { path = "../mtflow", editable = true }
 # pfeed = { version = ">=0.0.5", extras = ["duckdb"] }
 # pfolio = ">=0.0.3"
-# pfund-kit = ">=0.1.3"
+# pfund-plot = {version = ">=0.0.1.dev3", extras = ["marimo"]}
 # mtflow = ">=0.0.1.dev2"
 numba = ">=0.64.0"
 httpx = ">=0.28.1"
@@ -45,9 +45,9 @@ pfund-ibapi = ">=10.42.1"
 [feature.optional.dependencies]
 ta-lib = ">=0.6.4"
 
-# TEMP
 [pypi-options.dependency-overrides]
 pfund = { path = ".", editable = true }
+# TEMP
 pfeed = { path = "../pfeed", editable = true, extras = ["duckdb", "yfinance", "hf"] }
 pfolio = { path = "../pfolio", editable = true }
 pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo", "jupyter", "matplotlib", "plotly", "altair"] }
@@ -55,7 +55,6 @@ pfund-kit = { path = "../pfund-kit", editable = true }
 mtflow = { path = "../mtflow", editable = true }
 
 [feature.dev.pypi-dependencies]
-pfund = { path = ".", editable = true }
 afterpython = ">=0.2.1"
 basedpyright = ">=1.38.1"
 # TEMP

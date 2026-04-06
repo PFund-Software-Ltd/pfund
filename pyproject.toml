@@ -27,6 +27,7 @@ dependencies = [
     "pfeed[duckdb]>=0.0.5",
     "pfolio>=0.0.3",
     "pfund-plot[marimo]>=0.0.1.dev3",
+    "pfund-kit>=0.1.4",
     "mtflow>=0.0.1.dev2",
     "httpx>=0.28.1",
     "websockets>=16.0.0",
@@ -54,7 +55,7 @@ repository = "https://github.com/PFund-Software-Ltd/pfund"
 documentation = "https://pfund-docs.pfund.ai"
 
 [build-system]
-requires = ["uv_build>=0.10.4,<0.11.0"]
+requires = ["uv_build>=0.11.2,<0.12.0"]
 build-backend = "uv_build"
 
 [tool.pyright]
@@ -88,7 +89,9 @@ pfund-kit = { path = "../pfund-kit", editable = true }
 # build-backend = "hatchling.build"
 
 # [tool.hatch.build.targets.sdist]
+# TODO: also include templates/
 # include = ['/pfund', 'logging.yml', 'docker-compose.yml']
 
 # [tool.hatch.build.targets.wheel]
+# TODO: also include templates/
 # include = ['/pfund', 'logging.yml', 'docker-compose.yml']

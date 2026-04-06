@@ -2,9 +2,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
-from pfeed.enums import IOFormat
-from pfund.enums.database import Database
-
 
 class BaseEngineSettings(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra='forbid', frozen=True)
@@ -27,7 +24,6 @@ class BaseEngineSettings(BaseModel):
             - False: never cache, always process on the fly.
         """,
     )
-
     num_workers: int | None = Field(
         default=None,
         description="""
@@ -35,12 +31,29 @@ class BaseEngineSettings(BaseModel):
             if None, Ray will NOT be used for fetching data and it will be done sequentially.
         """,
     )
-    storage_options: dict[Database, dict[str, Any]] = Field(default_factory=dict)
-    io_options: dict[IOFormat, dict[str, Any]] = Field(default_factory=dict)
+    max_rows: int | None = Field(
+        default=None,
+        description="""
+            Maximum number of data rows kept in memory.
+            Once exceeded, oldest rows are dropped (sliding window).
+            if None, all rows of data will be kept (unlimited).
+        """,
+    )
  
     @field_validator('cache_materialized_data', mode='before')
     @classmethod
     def _normalize_cache_resampled_data(cls, v: Any) -> bool | str:
         if isinstance(v, str):
             return v.lower()
+        return v
+    
+    @field_validator('max_rows', mode='after')
+    @classmethod
+    def _warn_if_max_rows_is_not_set(cls, v: int | None) -> int | None:
+        from pfund_kit.style import cprint, RichColor, TextStyle
+        if v is None:
+            cprint(
+                "WARNING: max_rows is not set, data will be unbounded",
+                style=TextStyle.BOLD + RichColor.YELLOW,
+            )
         return v

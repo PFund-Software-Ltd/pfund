@@ -77,9 +77,6 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
     def _set_min_data(self, min_data: int | dict[BaseData, int]):
         self._min_data = min_data
 
-    def _set_max_data(self, max_data: int | dict[BaseData, int]):
-        self._max_data = max_data
-    
     def _set_group_data(self, group_data: bool):
         self._group_data = group_data
     
@@ -123,6 +120,7 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         joblib.dump(obj, file_path, compress=True)
         self.logger.debug(f"dumped '{self.name}' to {trim_path(file_path)}")
     
+    # FIXME: DEPRECATED?
     def _convert_min_max_data_to_dict(self):
         '''Converts min_data and max_data from int to dict[product, dict[resolution, int]]'''
         from sys import maxsize

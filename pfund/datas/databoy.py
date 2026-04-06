@@ -1,54 +1,37 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from logging import Logger
     from pfeed.streaming.zeromq import ZeroMQ
+    from pfund.datas.stores.market_data_store import MarketDataStore
     from pfund.datas.data_market import MarketData
-    from pfund.datas.data_time_based import TimeBasedData
+    from pfund.datas.stores.base_data_store import BaseDataStore
+    from pfund.datas.data_base import BaseData
+    from pfund.datas.data_bar import BarData
+    from pfund.engines.engine_context import EngineContext
     from pfund.typing import (
         ComponentName, 
         Component, 
-        ProductName, 
-        ResolutionRepr, 
         ZeroMQSenderName, 
     )
-    class BarUpdate(TypedDict, total=True):
-        ts: float
-        open: float
-        high: float
-        low: float
-        close: float
-        volume: float
-        is_incremental: bool
-        msg_ts: float | None
-        extra_data: dict[str, Any]
 
-import importlib
 from threading import Thread
-from collections import defaultdict
 
-from pfund.datas import QuoteData, TickData, BarData
+from pfeed.enums import DataCategory
 from pfund.entities.products.product_base import BaseProduct
-from pfund.datas.data_config import DataConfig
+
 from pfund.datas.resolution import Resolution
-from pfund.enums import Broker, PublicDataChannel, PrivateDataChannel
+from pfund.enums import PublicDataChannel, PrivateDataChannel
 
 
 class DataBoy:
     def __init__(self, component: Component):
-        '''
-        Args:
-            _datas: datas directly used by the component, added via add_data()
-            _subscribed_data: all data in `datas` + data subscribed on behalf of local components
-        '''
         self._component: Component = component
-        self._datas: dict[ProductName, dict[Resolution, MarketData]] = defaultdict(dict)
-        self._stale_bar_timeouts: dict[BarData, int] = {}
+        self._data_stores: dict[DataCategory, BaseDataStore] = {}
         self._data_zmq: ZeroMQ | None = None
         self._signals_zmq: ZeroMQ | None = None
         # TODO: save data signatures properly, data_signatures should be a set
         # TODO: add data_config (dict form) to data_signatures
-        # TODO: rename data_signatures to data_inputs?
         self._data_signatures = []
         # REVIEW: currently all non-WASM components use ZeroMQ and a thread to run _collect()
         # including even the local ones. if theres any performance issue, 
@@ -56,6 +39,10 @@ class DataBoy:
         self._zmq_thread: Thread | None = None
         self._zmq_ports_in_use: dict[ZeroMQSenderName, int] = {}
 
+    @property
+    def logger(self) -> Logger:
+        return self._component.logger
+    
     @property
     def name(self) -> ComponentName:
         return self._component.name
@@ -67,118 +54,49 @@ class DataBoy:
     @property
     def consumers(self) -> list[Component]:
         return self._component.consumers
-
-    @property
-    def datas(self) -> dict[ProductName, dict[ResolutionRepr, MarketData]]:
-        return self._datas
-    
-    def get_datas(self) -> list[MarketData]:
-        return [data for product in self._datas for data in self._datas[product].values()]
     
     @property
-    def logger(self) -> Logger:
-        return self._component.logger
+    def context(self) -> EngineContext:
+        return self._component.context
+    
+    @property
+    def data_stores(self) -> dict[DataCategory, BaseDataStore]:
+        return self._data_stores
+    
+    @property
+    def market_data_store(self) -> MarketDataStore:
+        return self.get_data_store(DataCategory.MARKET_DATA)
     
     def is_remote(self) -> bool:
         return self._component.is_remote()
-    
-    def _add_data(self, product: BaseProduct, resolution: Resolution, data_config: DataConfig) -> TimeBasedData:
-        if resolution.is_quote():
-            data = QuoteData(
-                data_source=data_config.data_source, 
-                data_origin=data_config.data_origin, 
-                product=product, 
-                resolution=resolution
-            )
-        elif resolution.is_tick():
-            data = TickData(
-                data_source=data_config.data_source, 
-                data_origin=data_config.data_origin, 
-                product=product, 
-                resolution=resolution
-            )
+
+    def _create_data_store(self, category: DataCategory) -> MarketDataStore:
+        if category == DataCategory.MARKET_DATA:
+            return MarketDataStore(self.context)
         else:
-            data = BarData(
-                data_source=data_config.data_source, 
-                data_origin=data_config.data_origin, 
-                product=product, 
-                resolution=resolution, 
-                shift=data_config.shift.get(resolution, 0), 
-                skip_first_bar=data_config.skip_first_bar.get(resolution, True)
-            )
-            self._stale_bar_timeouts[data] = data_config.stale_bar_timeout[resolution]
-        self._datas[product.name][resolution] = data
-        return data
-    
-    def get_data(self, product: ProductName, resolution: Resolution) -> MarketData | None:
-        if product not in self._datas:
-            return None
-        return self._datas[product].get(resolution, None)
-    
-    def add_data(self, product: BaseProduct, data_config: DataConfig) -> list[MarketData]:
-        datas: list[MarketData] = []
-        for resolution in data_config.resolutions:
-            if resolution not in self._datas[product.name]:
-                data = self._add_data(product, resolution, data_config)
-            else:
-                data = self.get_data(product.name, resolution)
-            datas.append(data)
+            raise ValueError(f'{category} is not supported')
         
-        # mutually bind data_resampler and data_resamplee
-        for resamplee_resolution, resampler_resolution in data_config.resample.items():
-            data_resamplee = self.get_data(product.name, resamplee_resolution)
-            data_resampler = self.get_data(product.name, resampler_resolution)
-            data_resamplee.bind_resampler(data_resampler)
-            self.logger.debug(f'{product.name} resolution={resampler_resolution} (resampler) added listener resolution={resamplee_resolution} (resamplee) data')
-        
+    def get_data_store(self, category: DataCategory | str) -> MarketDataStore:
+        category = DataCategory[category.upper()]
+        if category in self._data_stores:
+            return self._data_stores[category]
+        else:
+            data_store = self._create_data_store(category)
+            self._data_stores[category] = data_store
+            return data_store
+
+    def get_datas(self) -> list[BaseData]:
+        datas = []
+        for data_store in self._data_stores.values():
+            datas.extend(data_store.get_datas())
         return datas
-
-    def _update_quote(self, data: QuoteData, msg):
-        ts = quote['ts']
-        update = quote['data']
-        extra_data = quote['extra_data']
-        bids, asks = update['bids'], update['asks']
-        data = self.get_data(product, '1q')
-        data.on_quote(bids, asks, ts, **extra_data)
-        self._deliver(data, **extra_data)
-
-    def _update_tick(self, data: TickData, msg):
-        update = tick['data']
-        extra_data = tick['extra_data']
-        px, qty, ts = update['px'], update['qty'], update['ts']
-        data = self.get_data(product, '1t')
-        data.on_tick(px, qty, ts, **extra_data)
-        self._deliver(data, **extra_data)
-
-    def _update_bar(self, data: BarData, update: BarUpdate):
-        '''update bar data from streaming message
-        if ready, deliver the bar data to the component
-        '''
-        if not update['is_incremental']:  # means the bar is complete
-            data.on_bar(
-                o=update['open'], h=update['high'], l=update['low'], c=update['close'], v=update['volume'], ts=update['ts'], 
-                msg_ts=update['msg_ts'], 
-                extra_data=update['extra_data'],
-                is_incremental=update['is_incremental']
-            )
-            self._deliver(data)
-        else:
-            # deliver the closed bar before update() clears it for the next bar
-            if data.is_closed(now=update['ts'] or update['msg_ts']):
-                self._deliver(data)
-            data.on_bar(
-                o=update['open'], h=update['high'], l=update['low'], c=update['close'], v=update['volume'], ts=update['ts'], 
-                msg_ts=update['msg_ts'], 
-                extra_data=update['extra_data'],
-                is_incremental=update['is_incremental']
-            )
     
     def _flush_stale_bar(self, data: BarData):
         if data.is_closed():
             self._deliver(data)
     
     def schedule_jobs(self, scheduler: BackgroundScheduler):
-        for data, timeout in self._stale_bar_timeouts.items():
+        for data, timeout in self.market_data_store.stale_bar_timeouts.items():
             scheduler.add_job(lambda: self._flush_stale_bar(data), 'interval', seconds=timeout)
     
     def _setup_messaging(self):
@@ -315,6 +233,7 @@ class DataBoy:
         from msgspec import structs
         while self._component.is_running():
             if msg_tuple := self._data_zmq.recv():
+                # TODO: how to know which data store to use from msg_tuple?
                 channel, topic, msg, msg_ts = msg_tuple
                 
                 # TEMP
@@ -322,15 +241,23 @@ class DataBoy:
                 
                 product: BaseProduct = self._component.get_product(msg.product)
                 resolution = Resolution(msg.resolution)
-                data: MarketData = self.get_data(product.name, resolution)
-                if data is None:
-                    raise ValueError(f'data {product.name} {resolution} is not found in {self._datas}')
+                data: MarketData = self.market_data_store.get_data(product.name, resolution)
+                update = structs.asdict(msg)
                 if topic == PublicDataChannel.orderbook:
-                    self._update_quote(data, msg)
+                    self.market_data_store.update_quote(data, update)
+                    self._deliver(data)
                 elif topic == PublicDataChannel.tradebook:
-                    self._update_tick(data, msg)
+                    self.market_data_store.update_tick(data, update)
+                    self._deliver(data)
                 elif topic == PublicDataChannel.candlestick:
-                    self._update_bar(data, structs.asdict(msg))
+                    # deliver the closed bar before update() clears it for the next bar
+                    if not update['is_incremental']:
+                        self.market_data_store.update_bar(data, update)
+                        self._deliver(data)
+                    else:
+                        if data.is_closed(now=update['ts'] or update['msg_ts']):
+                            self._deliver(data)
+                        self.market_data_store.update_bar(data, update)
                 else:
                     raise NotImplementedError(f'{topic=} is not supported')
             # TODO:

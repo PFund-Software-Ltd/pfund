@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from pfund.brokers.crypto.broker import CryptoBroker
     from pfund.brokers.ibkr.broker import InteractiveBrokers
     from pfund.brokers.broker_simulated import SimulatedBroker
-    from pfund.datas.databoy import BarUpdate
+    from pfund.datas.stores.market_data_store import BarUpdate
     class SimulatedCryptoBroker(SimulatedBroker, CryptoBroker): ...
     class SimulatedInteractiveBrokers(SimulatedBroker, InteractiveBrokers): ...
     class BacktestEngineContext(EngineContext):
@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     BacktesteeName: TypeAlias = str
 
 import os
-import time
 import importlib
 from dataclasses import dataclass
 
@@ -50,6 +49,7 @@ class BacktestEngine(BaseEngine):
 
     def __init__(
         self,
+        name: str='engine',
         data_range: str | DataRangeDict | Literal['ytd']='1mo',
         mode: BacktestMode | Literal['vectorized', 'hybrid', 'event_driven']=BacktestMode.VECTORIZED,
         dataset_splits: int | DatasetSplitsDict | TimeSeriesSplit=721,
@@ -68,7 +68,7 @@ class BacktestEngine(BaseEngine):
                 if provided, will override the settings in settings.toml.
         '''
         from pfund.utils.dataset_splitter import DatasetSplitter
-        super().__init__(env=Environment.BACKTEST, data_range=data_range, settings=settings)
+        super().__init__(env=Environment.BACKTEST, name=name, data_range=data_range, settings=settings)
         self._context.backtest = BacktestContext(
             backtest_mode=BacktestMode[mode.upper()],
             dataset_splitter=DatasetSplitter(
@@ -257,6 +257,7 @@ class BacktestEngine(BaseEngine):
         finally:
             self.end()
         
+        self.results = backtest_results
         return backtest_results
     
     def _backtest(
@@ -266,10 +267,7 @@ class BacktestEngine(BaseEngine):
         num_cpus: int | None=None,
     ) -> list[pf.BacktestDataFrame]:       
         ### Pre-Backtest ###
-        from pfeed import get_config
-
-        pfeed_config = get_config()
-        data_tool: DataTool = pfeed_config.data_tool
+        data_tool: DataTool = self._context.pfeed_config.data_tool
         is_using_ray = num_chunks > 1
         backtest_dfs: list[pf.BacktestDataFrame] = []
 
@@ -318,7 +316,6 @@ class BacktestEngine(BaseEngine):
         
         
         ### Backtest ###
-        start_time = time.time()
         if not is_using_ray:
             backtest_df: pf.BacktestDataFrame = _run_backtest(
                 backtestee=backtestee,
@@ -409,10 +406,6 @@ class BacktestEngine(BaseEngine):
             self._logger.debug('shutting down ray...')
             shutdown_ray()
 
-        end_time = time.time()
-        cprint(f'Backtest elapsed time: {end_time - start_time:.3f}(s)', style=TextStyle.BOLD)
-
-
         # ### Post-Backtest ###
         if backtestee.is_strategy():
             backtest_dfs: list[pf.BacktestDataFrame] = [
@@ -442,7 +435,7 @@ class BacktestEngine(BaseEngine):
         ):
             ts, resolution, product_name, symbol, source_type, o, h, l, c, v = row  # pyright: ignore[reportGeneralTypeIssues, reportUnusedVariable]  # noqa: E741
             databoy = backtestee.databoy
-            data = cast("BarData", databoy.get_data(product_name, resolution))
+            data = cast("BarData", backtestee.get_data(product_name, resolution))
             update: BarUpdate = {
                 'ts': ts,
                 'open': o,

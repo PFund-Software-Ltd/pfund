@@ -1,8 +1,10 @@
+# pyright: reportUnusedParameter=false
 from __future__ import annotations
 from typing import Literal, Any
 
 from pathlib import Path
 
+from pfeed.enums import IOFormat, DataStorage
 from pfund.enums import Environment, Database
 from pfund_kit.config import Configuration
 
@@ -20,11 +22,11 @@ _config: PFundConfig | None = None
 _logging_config: dict[str, Any] | None = None
 
 
-def setup_logging(env: Environment | None=None, reset: bool=False):
+def setup_logging(env: Environment, engine_name: str, reset: bool=False):
     from pfund_kit.logging import clear_logging_handlers, setup_exception_logging
     from pfund_kit.logging.configurator import LoggingDictConfigurator
     
-    env = Environment[env.upper()] if env else None
+    env = Environment[env.upper()]
     
     if reset:
         clear_logging_handlers()
@@ -32,7 +34,7 @@ def setup_logging(env: Environment | None=None, reset: bool=False):
     config: PFundConfig = get_config()
     logging_config: dict[str, Any] = get_logging_config()
 
-    log_path = config.log_path / env if env else config.log_path
+    log_path = config.log_path / env / engine_name
     log_path.mkdir(parents=True, exist_ok=True)
 
     # ≈ logging.config.dictConfig(logging_config) with a custom configurator
@@ -65,10 +67,13 @@ def get_logging_config() -> dict[str, Any]:
 
 
 def configure(
-    data_path: str | None = None,  # pyright: ignore[reportUnusedParameter]
-    log_path: str | None = None,  # pyright: ignore[reportUnusedParameter]
-    cache_path: str | None = None,  # pyright: ignore[reportUnusedParameter]
-    database: Literal['duckdb'] | None = None,  # pyright: ignore[reportUnusedParameter]
+    data_path: str | None = None,
+    log_path: str | None = None,
+    cache_path: str | None = None,
+    database: Literal[Database.DUCKDB, 'duckdb'] | None = None,
+    storage: DataStorage | str | None = None,
+    storage_options: dict[DataStorage | str, dict[str, Any]] | None = None,
+    io_options: dict[IOFormat | str, dict[str, Any]] | None = None,
     persist: bool = False,
 ) -> PFundConfig:
     '''
@@ -77,7 +82,11 @@ def configure(
         data_path: Path to the data directory.
         log_path: Path to the log directory.
         cache_path: Path to the cache directory.
-        database: database to use for storing data, e.g. "duckdb"
+        database: database for storing engine states, e.g. "duckdb"
+        storage: storage for storing component data, e.g. "local"
+            if database is file-based (e.g. .duckdb), storage will also store it
+        storage_options: storage options for data storages, used by database and storage
+        io_options: io options for io formats, used by database and storage
         persist: If True, the config will be saved to the config file.
     '''
     config = get_config()
@@ -92,6 +101,12 @@ def configure(
                 v = Path(v)
             elif k == 'database':
                 v = Database[v.upper()]
+            elif k == 'storage':
+                v = DataStorage[v.upper()]
+            elif k == 'storage_options':
+                v = { DataStorage[k.upper()]: v for k, v in v.items() }
+            elif k == 'io_options':
+                v = { IOFormat[k.upper()]: v for k, v in v.items() }
             setattr(config, k, v)
     
     config.ensure_dirs()
@@ -146,11 +161,17 @@ class PFundConfig(Configuration):
     def _initialize_from_data(self):
         """Initialize PFundConfig-specific attributes from config data."""
         self.database = Database[self._data.get('database', Database.DUCKDB).upper()]
+        self.storage = DataStorage[self._data.get('storage', DataStorage.LOCAL).upper()]
+        self.storage_options = self._data.get('storage_options', {})
+        self.io_options = self._data.get('io_options', {})
     
     def to_dict(self) -> dict[str, Any]:
         return {
             **super().to_dict(),
             'database': self.database,
+            'storage': self.storage,
+            'storage_options': self.storage_options,
+            'io_options': self.io_options,
         }
 
     @property
