@@ -20,22 +20,6 @@ def BacktestModel(Model: type[ModelT], model: MachineLearningModel, *args, **kwa
             else:
                 class_name = Model.__name__
                 raise AttributeError(f"'{class_name}' object has no attribute '{name}'")
-
-        def on_start(self):
-            if self._is_signal_df_required:
-                self._set_group_data(False)
-            super().on_start()
-            
-        def flow(self) -> pd.DataFrame | pl.LazyFrame:
-            self.logger.warning(
-                f"creating '{self.name}' signal_df on the fly: "
-                "featurize() -> predict(X) -> signalize(X, pred_y)"
-            )
-            self._set_group_data(False)
-            X: pd.DataFrame | pl.LazyFrame = self.featurize()
-            pred_y: torch.Tensor | np.ndarray = self.predict(X)
-            signal_df: pd.DataFrame | pl.LazyFrame = self.signalize(X, pred_y)
-            return signal_df
         
         def load(self) -> dict:
             obj: dict = super().load()

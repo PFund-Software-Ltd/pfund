@@ -1,4 +1,4 @@
-# pyright: reportUninitializedInstanceVariable=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false
+# pyright: reportUninitializedInstanceVariable=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, overload, cast, Any, Callable
 if TYPE_CHECKING:
@@ -161,12 +161,31 @@ class BacktestMixin:
     @property
     def test_set(self) -> GenericFrame:
         return self.store.load_data(...)
+
+    def _gather(self):
+        # TODO: see what should be skipped for dummy strategy
+        if self._is_dummy_strategy and isinstance(self, BaseStrategy):
+            self._is_gathered = True
+            return
+        super()._gather()
     
-    def on_stop(self):
-        super().on_stop()
-        if self.backtest_mode == BacktestMode.EVENT_DRIVEN and self.settings.assert_signals and self._has_signal_df():
-            self._assert_consistent_signals()
-            
+    def add_model(
+        self, 
+        model: ModelT, 
+        resolution: str,
+        name: str='',
+        signal_cols: list[str] | None=None,
+    ) -> ModelT:
+        from pfund.components.models.model_backtest import BacktestModel
+        Model = type(model)
+        model = BacktestModel(Model, model.model, *model.__pfund_args__, **model.__pfund_kwargs__)
+        return super().add_model(
+            model, 
+            resolution=resolution,
+            name=name or Model.__name__, 
+            signal_cols=signal_cols,
+        )
+    
     def _next(self, data: BaseData) -> torch.Tensor | np.ndarray:
         if not self._is_signal_df_required:
             new_pred = super()._next(data)
@@ -182,89 +201,11 @@ class BacktestMixin:
         self._is_signal_df_required = self._check_if_signal_df_required()
         self._is_append_to_df = self._check_if_append_to_df()
     
-    def _append_to_df(self, data: BaseData, **kwargs: Any):
-        if self._is_append_to_df:
-            return self.data_tool.append_to_df(data, self.predictions, **kwargs)
-    
     def _has_signal_df(self) -> bool:
         return ( isinstance(self, BaseStrategy) and self.is_sub_strategy() ) or isinstance(self, BaseModel)
     
-    def signalize(
-        self, 
-        X: pd.DataFrame | pl.LazyFrame,
-        pred_y: torch.Tensor | np.ndarray,
-    ) -> pd.DataFrame | pl.LazyFrame:
-        try:
-            import torch
-        except ImportError:
-            torch = None
-        if torch is not None and isinstance(pred_y, torch.Tensor):
-            pred_y = pred_y.detach().numpy() if pred_y.requires_grad else pred_y.numpy()
-        signal_cols = self.get_signal_cols()
-        signal_df: pd.DataFrame | pl.LazyFrame = self.data_tool.signalize(X, pred_y, columns=signal_cols)
-        return signal_df
-    
-    def _set_signal_df(self, signal_df: pd.DataFrame | pl.LazyFrame):
-        assert signal_df.shape[0] == self.df.shape[0], f"{signal_df.shape[0]=} != {self.df.shape[0]=}"
-        nan_columns = self.data_tool.get_nan_columns(signal_df)
-        assert not nan_columns, f"{self.name} signal_df has all NaN values in columns: {nan_columns}"
-        self._signal_list = signal_df.drop(columns=self.INDEX).to_numpy().tolist()
-        self._signal_df = signal_df
-    
-    @event_driven
-    def _assert_consistent_signals(self):
-        '''Asserts consistent signals from vectorized and event-driven backtesting, triggered in event-driven backtesting'''
-        from pfeed.enums import DataTool
-
-        self.logger.debug(f"asserting {self.name}'s signals...")
-        
-        # since current strategy/model's signal_df is its consumer's prediction column
-        # get the signal_df from the consumer
-        consumer_df = self._consumer.df
-
-        # load the signal_df dumped from vectorized backtesting
-        self._is_signal_df_required = True
-        self.load()
-
-        if self.data_tool.name == DataTool.pandas:
-            event_driven_signal_df = consumer_df[self.INDEX + self._signal_cols]
-            # NOTE: since the loaded signal_df might have a few more rows than event_driven_signal_df
-            # because the last bar is not pushed in event-driven backtesting.
-            # truncate the signal_df to the same length as event_driven_signal_df
-            vectorized_signal_df = self._signal_df.iloc[:len(event_driven_signal_df)]
-        elif self.data_tool.name == DataTool.polars:
-            event_driven_signal_df = consumer_df.select(self.INDEX + self._signal_cols)
-            vectorized_signal_df = self._signal_df.slice(0, len(event_driven_signal_df))
-        # TODO
-        else:
-            raise NotImplementedError
-        self.data_tool.assert_frame_equal(vectorized_signal_df, event_driven_signal_df)
-
-    def _prepare_df(self):
-        if self._is_dummy_strategy and isinstance(self, BaseStrategy):
-            return
-        ts_col_type = 'timestamp' if self.backtest_mode == BacktestMode.EVENT_DRIVEN else 'datetime'
-        self.data_tool.prepare_df(ts_col_type=ts_col_type)
-        if self._is_signal_df_required:
-            self._merge_signal_dfs_with_df()
-    
-    def _merge_signal_dfs_with_df(self):
-        '''Merge df with signal dfs from all listeners (strategies/models)'''
-        if isinstance(self, BaseStrategy):
-            if signal_dfs := [strategy._signal_df for strategy in self.strategies.values()]:
-                self.data_tool.merge_signal_dfs_with_df(signal_dfs)
-        if signal_dfs := [model._signal_df for model in self.models.values()]:
-            self.data_tool.merge_signal_dfs_with_df(signal_dfs)
-    
-    def clear_dfs(self):
-        assert self.backtest_mode == BacktestMode.EVENT_DRIVEN
-        if not self._is_signal_df_required:
-            self.data_tool.clear_df()
-        if isinstance(self, BaseStrategy):
-            for strategy in self.strategies.values():
-                strategy.clear_dfs()
-        for model in self.models.values():
-            model.clear_dfs()
+    @overload
+    def dump(self, signal_df: pd.DataFrame | pl.LazyFrame): ...
     
     def _resolve_data_config(self, product: BaseProduct, data_config: DataConfig | None) -> DataConfig:
         data_config = cast("ComponentMixin", super())._resolve_data_config(product, data_config)
@@ -340,27 +281,3 @@ class BacktestMixin:
             else:
                 raise ValueError(f'extra resolution {resolution} higher than primary resolution {primary_resolution} is not allowed in backtesting')
         return data_config
-    
-    @overload
-    def dump(self, signal_df: pd.DataFrame | pl.LazyFrame): ...
-        
-    def add_model(
-        self, 
-        model: ModelT, 
-        name: str='',
-        min_data: int | None=None,
-        max_data: int | None=None,
-        group_data: bool=True,
-        signal_cols: list[str] | None=None,
-    ) -> BacktestMixin | ModelT:
-        from pfund.components.models.model_backtest import BacktestModel
-        name = name or model.get_default_name()
-        model = BacktestModel(type(model), model.model, *model._args, **model._kwargs)
-        return super().add_model(
-            model, 
-            name=name, 
-            min_data=min_data, 
-            max_data=max_data, 
-            group_data=group_data,
-            signal_cols=signal_cols,
-        )

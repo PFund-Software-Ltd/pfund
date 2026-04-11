@@ -29,6 +29,7 @@ class DataConfig(BaseModel):
         default_factory=dict,
         description='shifts the start_ts of the bar by a number, only supports "minute", "hour", "day" timeframe. e.g. {"1h": 30} means the hour bar starts at 00:30-01:30.'
     )
+    # FIXMEL: should not be per resolution, just use bool?
     skip_first_bar: dict[Resolution | str, bool] = Field(
         default_factory=dict,
         description='''
@@ -38,9 +39,24 @@ class DataConfig(BaseModel):
             e.g. hourly bar shifts 30 minutes, first bar is 00:00 to 00:30, which is incomplete
         '''
     )
+    # FIXME: should allow passing in a float.
     stale_bar_timeout: dict[Resolution | str, Annotated[float, Field(strict=True, gt=0)]] = Field(
         default_factory=dict,
         description="time (in seconds) after a bar's expected completion (bar.end_ts) to wait for any delayed updates before flushing the bar."
+    )
+    num_batch_workers: int | None = Field(
+        default=None,
+        description="""
+        number of workers for batch processing (e.g. retrieve, download data) using pfeed, equivalent to the parameter 'num_workers' in pfeed.
+        if None, Ray will NOT be used and it will be done sequentially.
+        """,
+    )
+    num_stream_workers: int | None = Field(
+        default=None,
+        description="""
+        number of workers for streaming data using pfeed, equivalent to the parameter 'num_workers' in pfeed.
+        if None, Ray will NOT be used and it will be done sequentially.
+        """,
     )
     
     @property

@@ -19,6 +19,7 @@ def BacktestStrategy(Strategy: type[StrategyT], *args: Any, **kwargs: Any) -> St
                 class_name = Strategy.__name__
                 raise AttributeError(f"'{class_name}' object has no attribute '{name}'")
         
+        # FIXME: add sub-strategy
         def add_strategy(self, strategy: StrategyT, name: str='') -> StrategyT:
             strategy: StrategyT = BacktestStrategy(type(strategy), *strategy.__pfund_args__, **strategy.__pfund_kwargs__)
             return super().add_strategy(strategy, name=name)

@@ -20,6 +20,7 @@ default = ["py311", "dev", "optional"]
 py311 = ["py311", "test", "optional"]
 py312 = ["py312", "test", "optional"]
 py313 = ["py313", "test", "optional"]
+# TODO: add default-wasm, py311-wasm, py312-wasm, py313-wasm
 
 [dependencies]
 python = ">=3.11.14"
@@ -36,7 +37,7 @@ mtflow = { path = "../mtflow", editable = true }
 # pfolio = ">=0.0.3"
 # pfund-plot = {version = ">=0.0.1.dev3", extras = ["marimo"]}
 # mtflow = ">=0.0.1.dev2"
-numba = ">=0.64.0"
+numba = ">=0.65.0"
 httpx = ">=0.28.1"
 websockets = ">=16.0.0"
 
@@ -55,7 +56,9 @@ pfund-kit = { path = "../pfund-kit", editable = true }
 mtflow = { path = "../mtflow", editable = true }
 
 [feature.dev.pypi-dependencies]
+pfund = { path = ".", editable = true }
 afterpython = ">=0.2.1"
+graphviz = ">=0.21"
 basedpyright = ">=1.38.1"
 # TEMP
 pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo", "jupyter", "matplotlib", "plotly", "altair"] }
@@ -71,9 +74,6 @@ trackio = ">=0.19.0"
 optuna = ">=4.8.0"
 botorch = ">=0.17.2"
 optuna-dashboard = ">=0.20.0"
-vectorbt = ">=0.28.4"
-backtesting = ">=0.6.5"
-backtrader = ">=1.9.78.123"
 
 [feature.test.pypi-dependencies]
 pytest = ">=9.0.2"

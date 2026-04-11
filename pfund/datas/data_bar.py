@@ -2,7 +2,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from datetime import datetime
+    from pfeed.storages.storage_config import StorageConfig
     from pfeed.enums import DataSource
+    from pfund.datas.data_config import DataConfig
     from pfund.datas.resolution import Resolution
     from pfund.datas.timeframe import Timeframe
     from pfund.entities.products.product_base import BaseProduct
@@ -187,12 +189,20 @@ class BarData(MarketData):
         data_origin: str,
         product: BaseProduct, 
         resolution: Resolution, 
-        shift: int=0, 
-        skip_first_bar: bool=True,
+        data_config: DataConfig,
+        storage_config: StorageConfig,
     ):
-        super().__init__(data_source, data_origin, product, resolution)
-        self._bar = Bar(resolution, shift=shift)
-        self._skip_first_bar = skip_first_bar
+        super().__init__(
+            data_source=data_source,
+            data_origin=data_origin,
+            product=product,
+            resolution=resolution,
+            data_config=data_config,
+            storage_config=storage_config,
+        )
+        self._bar = Bar(resolution, shift=data_config.shift.get(resolution, 0))
+        self._stale_bar_timeout = data_config.stale_bar_timeout[resolution]
+        self._skip_first_bar = data_config.skip_first_bar[resolution]
 
     def __getattr__(self, attr):
         if '_bar' in self.__dict__:
@@ -207,7 +217,8 @@ class BarData(MarketData):
     candlestick = bar
     
     def on_bar(
-        self, o: float, h: float, l: float, c: float, v: float,  # noqa: E741
+        self, 
+        o: float, h: float, l: float, c: float, v: float,  # noqa: E741
         is_incremental: bool,
         is_snapshot: bool=True,
         # TODO: handle backfilling
@@ -245,32 +256,6 @@ class BarData(MarketData):
         self.update_timestamps(ts=ts, msg_ts=msg_ts)
         if extra_data is not None:
             self.update_extra_data(extra_data)
-        for resamplee in self._resamplees:
-            resamplee.on_bar(
-                o=o, h=h, l=l, c=c, v=v, ts=ts, 
-                msg_ts=msg_ts, 
-                extra_data=extra_data,
-                is_backfill=is_backfill,
-                is_incremental=is_incremental,
-            )
-
-    # TODO: store all the ticks used to create the bar?
-    # use tick updates to update bar
-    def on_tick(
-        self, price: float, volume: float, ts: float, 
-        # TODO: handle backfilling
-        is_backfill: bool=False,
-        msg_ts: float | None=None, 
-        extra_data: dict[str, Any] | None=None, 
-    ):
-        self.on_bar(
-            o=price, h=price, l=price, c=price, v=volume, ts=ts, 
-            msg_ts=msg_ts, 
-            extra_data=extra_data,
-            is_backfill=is_backfill,
-            is_incremental=True,
-            is_snapshot=False,
-        )
 
     def is_second(self):
         return self.bar._timeframe.is_second()

@@ -1,22 +1,27 @@
+# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false, reportArgumentType=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, Literal
 if TYPE_CHECKING:
     from torch import Tensor
     from numpy import ndarray
     import torch.nn as nn
+    from narwhals._native import NativeDataFrame
     from sklearn.base import BaseEstimator
-    from pfeed.typing import GenericFrame
-    from pfund.components.indicators.indicator_base import TaFunction, TalibFunction
-    MachineLearningModel = Union[
-        nn.Module,
-        BaseEstimator,
-        TaFunction,  # ta.utils.IndicatorMixin
-        TalibFunction,
-    ]
+    from pfund.typing import ComponentName
+    from pfund.enums import RunMode, TradingVenue
+    from pfund.datas.data_market import MarketData
+    from pfund.datas.data_config import DataConfig
+    from pfeed.storages.storage_config import StorageConfig
+    from pfund.datas.resolution import Resolution
+    from pfund.engines.engine_context import EngineContext
+    from pfund.components.indicators.indicator_base import TalibFunction
+    MachineLearningModel = nn.Module | BaseEstimator | TalibFunction
     from pfund.datas.data_base import BaseData
 
 import os
 from abc import ABC, abstractmethod
+
+import narwhals as nw
 
 from pfund_kit.logging.filters.trimmed_path_filter import TrimmedPathFilter
 from pfund.components.models.model_meta import MetaModel
@@ -30,16 +35,15 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
     def __init__(self, model: MachineLearningModel, *args, **kwargs):
         from collections import defaultdict
         self.model = model  # user-defined machine learning model
+        self._signal_cols: list[str] = []
+        self._df_form: Literal['long', 'wide'] = 'wide'
 
-        self._min_data = {}  # {data: int}
-        self._max_data = {}  # {data: int}
         self._num_data = defaultdict(int)  # {data: int}
-        self._group_data = True
         
         self.__mixin_post_init__(model, *args, **kwargs)  # calls ComponentMixin.__mixin_post_init__()
     
     @abstractmethod
-    def predict(self, X: GenericFrame, *args, **kwargs) -> Tensor | ndarray:
+    def predict(self, X: NativeDataFrame, *args, **kwargs) -> Tensor | ndarray:
         pass
 
     def to_dict(self) -> dict:
@@ -47,6 +51,45 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             **super().to_dict(),
             'model': self.model.__class__.__name__,
         }
+    
+    def add_data(
+        self, 
+        trading_venue: TradingVenue | str,
+        product: str,
+        exchange: str='',
+        symbol: str='',
+        product_name: str='',
+        data_config: DataConfig | None=None,
+        storage_config: StorageConfig | None=None,
+        warmup_period: int | None=None,
+        lookback_period: int | None=None,
+        **product_specs: Any
+    ) -> list[MarketData]:
+        datas: list[MarketData] = super().add_data(
+            trading_venue=trading_venue,
+            product=product,
+            exchange=exchange,
+            symbol=symbol,
+            product_name=product_name,
+            data_config=data_config,
+            storage_config=storage_config,
+            **product_specs
+        )
+        self.databoy.market_data_store.set_periods(warmup_period, lookback_period)
+        return datas
+
+    def _hydrate(
+        self, 
+        name: ComponentName,
+        run_mode: RunMode,
+        resolution: Resolution | str,
+        engine_context: EngineContext,
+        signal_cols: list[str] | None=None, 
+        df_form: Literal['long', 'wide']='wide',
+    ):
+        super()._hydrate(name=name, run_mode=run_mode, resolution=resolution, engine_context=engine_context)
+        self._signal_cols = signal_cols or []
+        self._df_form = df_form
     
     def _assert_functions_signatures(self):
         from pfund_kit.utils.function import get_function_args_and_kwargs
@@ -56,29 +99,49 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             if not args or args[0] != 'X':
                 raise Exception(f'{self.name} predict() must have "X" as its first arg, i.e. predict(self, X, *args, **kwargs)')
         _assert_predict_function()
-    
-    def featurize(self) -> GenericFrame:
-        from pfund_kit.style import cprint
-        cprint(
-            f"WARNING: '{self.name}' is using the default featurize(), "
-            "which assumes X = self.df, it could be a wrong input for predict(X).\n"
-            f"It is highly recommended to override featurize() in your '{self.name}'.",
-            style='bold magenta'
-        )
-        return self.get_df()
+        
+    def get_default_signal_cols(self, num_cols: int) -> list[str]:
+        if num_cols == 1:
+            columns = [self.name]
+        else:
+            columns = [f'{self.name}-{i}' for i in range(num_cols)]
+        return columns
    
+    def featurize(self) -> NativeDataFrame:
+        '''Creates the input DataFrame X for predict(X)'''
+        data_dfs: list[nw.DataFrame[Any]] = []
+        for category in self.databoy.data_stores.keys():
+            data_df = self.databoy.get_df(
+                kind='data',
+                category=category,
+                to_native=False,
+            )
+            data_dfs.append(data_df)
+        data_df = nw.concat(data_dfs, how='vertical')
+        for component in self.components:
+            signals_df = component.signalize()
+            assert 'date' in signals_df.columns, \
+                f"{component.name} signals_df generated by signalize() must contain 'date' column, but got {signals_df.columns}"
+            X = X.join(signals_df, on=['date'], how='full')
+        return X
+    
+    def signalize(self) -> nw.DataFrame[Any]:
+        if torch is not None and isinstance(pred_y, torch.Tensor):
+            pred_y = pred_y.detach().numpy() if pred_y.requires_grad else pred_y.numpy()
+        X: NativeDataFrame = self.featurize(df.to_native())
+        # FIXME: pred_y could have different shapes than X (n rows in, m rows out), need to handle this
+        pred_y: torch.Tensor | np.ndarray = self.predict(X)
+        signal_cols = self.get_signal_cols()
+        pred_df = nw.DataFrame(pred_y, columns=signal_cols)
+        signals_df = nw.concat([X, pred_df], how='horizontal')
+        return signals_df
+    
     def is_ready(self, data: BaseData) -> bool:
         if not self._is_ready[data]:
             self._num_data[data] += 1
             if self._num_data[data] >= self._min_data[data]:
                 self._is_ready[data] = True
         return self._is_ready[data]
-    
-    def _set_min_data(self, min_data: int | dict[BaseData, int]):
-        self._min_data = min_data
-
-    def _set_group_data(self, group_data: bool):
-        self._group_data = group_data
     
     def _get_file_path(self, extension='.joblib'):
         from pfund import get_config
@@ -179,6 +242,8 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             resolution=resolution_filter,
             copy=False
         )
+
+        # FIXME: should add featurize() to get X, feature_df != data_df
         
         pred_y: Tensor | ndarray = self.predict(X)
         new_pred: Tensor | ndarray = pred_y[-1]

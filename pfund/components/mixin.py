@@ -1,11 +1,10 @@
-# pyright: reportUninitializedInstanceVariable=false
+# pyright: reportUninitializedInstanceVariable=false, reportUnknownParameterType=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, cast, Literal
 if TYPE_CHECKING:
     import torch
     import numpy as np
-    from narwhals.typing import Frame
-    from pfeed.typing import GenericFrame
+    from narwhals._native import NativeDataFrame
     from pfund.typing import (
         ComponentT, 
         ModelT, 
@@ -17,7 +16,6 @@ if TYPE_CHECKING:
     )
     from pfund.engines.engine_context import EngineContext
     from pfund.datas.data_market import MarketData
-    from pfund.datas.data_bar import Bar
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.entities.products.product_base import BaseProduct
@@ -27,11 +25,9 @@ if TYPE_CHECKING:
     from pfund.components.models.model_base import BaseModel
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.indicators.indicator_base import BaseIndicator
-    from pfund.datas.stores.trading_store import TradingStore
     from pfund.brokers.broker_base import BaseBroker
 
 import time
-import importlib
 import logging
 import datetime
 
@@ -39,7 +35,6 @@ from pfund_kit.utils import yaml
 from pfeed.enums import DataSource
 from pfeed.storages.storage_config import StorageConfig
 from pfund.datas.resolution import Resolution
-from pfund.datas.timeframe import Timeframe
 from pfund.datas.data_config import DataConfig
 from pfund.components.actor_proxy import ActorProxy
 from pfund.enums import ComponentType, RunMode, Environment, Broker, TradingVenue
@@ -64,22 +59,17 @@ class ComponentMixin:
         self.name = self._get_default_name()
         self._run_mode: RunMode | None = None
         self._resolution: Resolution | None = None
+        self._df_form: Literal['long', 'wide'] = 'long'
         
         self.logger: logging.Logger = logging.getLogger('pfund')
-        self._proxy: ActorProxy[Component] | None = None
         self._context: EngineContext | None = None
         self._consumers: list[Component | ActorProxy[Component]] = []
-        self._store: TradingStore | None = None
-        self.databoy = DataBoy(self)
+        self.databoy = DataBoy(self)  # pyright: ignore[reportArgumentType]
 
         self.products: dict[ProductName, BaseProduct] = {}
         self.models: dict[str, BaseModel | ActorProxy[BaseModel]] = {}
         self.features: dict[str, BaseFeature | ActorProxy[BaseFeature]] = {}
         self.indicators: dict[str, BaseIndicator | ActorProxy[BaseIndicator]] = {}
-
-        # FIXME: to be removed, should return dict with keys as column names in predict()
-        # otherwise, use default cols
-        self._signal_cols: list[str] = []
         
 
         # FIXME
@@ -104,16 +94,17 @@ class ComponentMixin:
     
     @property
     def settings(self) -> TradeEngineSettings:
-        return cast(TradeEngineSettings, self.context.settings)
-    
-    @property
-    def store(self) -> TradingStore:
-        assert self._store is not None, 'store is not set'
-        return self._store
+        return cast("TradeEngineSettings", self.context.settings)
     
     # TODO: also check on_bar, on_tick, on_quote etc.
     def _assert_functions_signatures(self):
         pass
+
+    # useful when user wants to set logger specific to the component. currently 'pfund' is the default logger.
+    def set_logger(self, logger: logging.Logger):
+        self.logger = logger
+        if self.is_remote(direct_only=False):
+            self._setup_logging()
 
     def _hydrate(
         self,
@@ -121,7 +112,6 @@ class ComponentMixin:
         run_mode: RunMode,
         resolution: Resolution | str,
         engine_context: EngineContext,
-        warmup_period: int | None,
     ):
         """
         Hydrates the component with necessary attributes after initialization.
@@ -132,27 +122,32 @@ class ComponentMixin:
             resolution (Resolution | str): The data resolution used by this component.
             engine_context (EngineContext): The engine context associated with this component. It is None if the component is running in a remote process.
         """
-        from pfund.datas.stores.trading_store import TradingStore
         self._context = engine_context
         self._run_mode = run_mode
         self._set_name(name)
         self._set_resolution(resolution)
-        if self.is_remote():
-            self._setup_logging()
-        self._store = TradingStore(engine_context, warmup_period=warmup_period)
-        if self.env != Environment.BACKTEST:
-            self.databoy._setup_messaging()
+        self.set_logger(self.logger)
+        
+    def _setup_messaging(self):
+        self.databoy._setup_messaging()
+        for component in self.components:
+            component._setup_messaging()
+        self.databoy._subscribe()
     
-    # FIXME: integrate pfund_kit logging instead
     def _setup_logging(self):
-        '''Sets up logging for component running in remote process, uses zmq's PUBHandler to send logs to engine'''
-        from pfund.utils.zmq_pub_handler import ZMQPubHandler
+        '''Sets up logging for component running in remote process, uses zmq's PUSHHandler to send logs to engine'''
+        from pfund.utils.zmq_push_handler import ZMQPushHandler
         from pfeed.streaming.zeromq import ZeroMQ
-        from pfund.logging.config import LoggingDictConfigurator
+        from pfund_kit.logging.configurator import LoggingDictConfigurator
         from pfund_kit.utils import get_free_port
 
         # configure logging based on pfund's logging config, e.g. log_level, log_file, log_format, etc.
-        logging_configurator = LoggingDictConfigurator(self._context.logging_config)
+        logging_configurator = LoggingDictConfigurator.create(
+            log_path=self.context.pfund_config.log_path / self.env / self.context.name, 
+            logging_config=self.context.logging_config, 
+            lazy=True,
+            use_colored_logger=True,
+        )
         logging_configurator.configure()
         
         # remove existing handlers
@@ -160,22 +155,22 @@ class ComponentMixin:
             self.logger.removeHandler(handler)
             handler.close()
             
-        # add zmq PUBhandler
-        zmq_url = self._context.settings.zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL)
+        # add zmq PushHandler
+        zmq_url = self.settings.zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL)
         zmq_port = get_free_port()
-        zmq_handler = ZMQPubHandler(f'{zmq_url}:{zmq_port}')
+        zmq_handler = ZMQPushHandler(f'{zmq_url}:{zmq_port}')
         zmq_formatter = logging.Formatter(
             fmt='%(message)s | from:%(filename)s fn:%(funcName)s ln:%(lineno)d (sent@%(asctime)s.%(msecs)03d)',
             datefmt='%H:%M:%S'
         )
         zmq_handler.setFormatter(zmq_formatter)
         self.logger.addHandler(zmq_handler)
-        self.databoy._update_zmq_ports_in_use(
-            {self.name + '_logger': zmq_port}
-        )
-    
-    def _get_zmq_ports_in_use(self) -> dict[str, int]:
-        return self.databoy._get_zmq_ports_in_use()
+        self.settings.zmq_urls.update({
+            self.name: zmq_url 
+        })
+        self.settings.zmq_ports.update({
+            self.name + '_logger': zmq_port
+        })
     
     def _get_datas_in_use(self) -> list[BaseData]:
         '''
@@ -187,9 +182,6 @@ class ComponentMixin:
         for component in self.components:
             datas.extend(component._get_datas_in_use())
         return list(set(datas))
-    
-    def _set_proxy(self, proxy: ActorProxy[Component]):
-        self._proxy = proxy
     
     @classmethod
     def load_config(cls, config: dict | None=None, file_path: str=''):
@@ -228,26 +220,16 @@ class ComponentMixin:
         }
         return metadata
     
-    def get_default_signal_cols(self, num_cols: int) -> list[str]:
-        if num_cols == 1:
-            columns = [self.name]
-        else:
-            columns = [f'{self.name}-{i}' for i in range(num_cols)]
-        return columns
-   
-    def _set_signal_cols(self, columns: list[str]):
-        self._signal_cols = [f'{self.name}-{col}' if not col.startswith(self.name) else col for col in columns]
-    
-    @property
-    def datas(self) -> dict[BaseProduct, dict[Resolution, TimeBasedData]]:
-        return self.databoy.datas
-    
     @property
     def components(self) -> list[Component | ActorProxy[Component]]:
-        components = [*self.models.values(), *self.features.values(), *self.indicators.values()]
-        if self.is_strategy():
-            components.extend([*self.strategies.values()])
-        return components
+        return self.get_components()
+    
+    def get_components(self) -> list[Component | ActorProxy[Component]]:
+        return [
+            *self.models.values(), 
+            *self.features.values(), 
+            *self.indicators.values(),
+        ]
     
     @property
     def consumers(self) -> list[Component | ActorProxy[Component]]:
@@ -270,21 +252,9 @@ class ComponentMixin:
         else:
             raise ValueError(f"Unknown component type: {self.__class__.__name__}")
     
-    def get_df(self, to_native: bool=False) -> GenericFrame | Frame:
-        df: Frame = self.store.get_df()
-        return df.to_native() if to_native else df
-    
     @property
-    def df(self) -> GenericFrame | None:
-        return self.get_df(to_native=True)
-
-    @property
-    def INDEX(self):
-        return self.data_tool.INDEX
-    
-    @property
-    def GROUP(self):
-        return self.data_tool.GROUP
+    def df(self) -> NativeDataFrame | None:
+        return self.databoy.get_df(kind='signals', to_native=True)
 
     @staticmethod
     def dt(ts: float) -> datetime.datetime:
@@ -300,7 +270,8 @@ class ComponentMixin:
         return time.time() - ts
     
     @property
-    def resolution(self) -> Resolution | None:
+    def resolution(self) -> Resolution:
+        assert self._resolution is not None, 'resolution is not set'
         return self._resolution
     
     def _set_resolution(self, resolution: Resolution | str):
@@ -366,6 +337,12 @@ class ComponentMixin:
                 return True
         return False
     
+    def _has_any_remote_component(self) -> bool:
+        for component in self.get_components():
+            if component.is_remote() or component._has_any_remote_component():
+                return True
+        return False
+    
     def _add_product(
         self,
         tv: TradingVenue | str,
@@ -397,9 +374,6 @@ class ComponentMixin:
     
     def get_data(self, product: ProductName, resolution: Resolution) -> MarketData | None:
         return self.databoy.market_data_store.get_data(product, resolution)
-    
-    def _append_to_df(self, data: BaseData):
-        return self.data_tool.append_to_df(data, self.predictions)
     
     def _get_default_name(self):
         return self.__class__.__name__
@@ -512,31 +486,24 @@ class ComponentMixin:
     def _add_component(
         self, 
         component: ComponentT | ActorProxy[ComponentT],
+        resolution: str='',
         name: str='', 
-        warmup_period: int | None=None,
-        group_data: bool=True,  # FIXME: DEPRECATED?
+        df_form: Literal['long', 'wide']='wide',
         signal_cols: list[str] | None=None,
-        ray_actor_options: dict | None=None,
-        **ray_kwargs
+        ray_actor_options: dict[str, Any] | None=None,
+        **ray_kwargs: Any
     ) -> ComponentT | ActorProxy[ComponentT] | None:
         '''Adds a model component to the current component.
         A model component is a model, feature, or indicator.
         Args:
-            warmup_period (int): Minimum number of data points required for the model to make a prediction.
-            
-            group_data (bool): Determines how `min_data` are applied to the whole df:
-            - If True: `min_data` apply to each group=(product, resolution).
-            e.g. if `min_data=2`, at least two data points are required for each group=(product, resolution).
-            - If False: `min_data` apply to the entire dataset, not segregated by product or resolution.
-            e.g. if `min_data=2`, at least two data points are required for the whole dataset.
-            
             signal_cols: signal columns, if not provided, it will be derived in predict()
-
             ray_kwargs: kwargs for ray actor, e.g. num_cpus
             ray_actor_options:
                 Options for Ray actor.
                 will be passed to ray actor like this: Actor.options(**ray_options).remote(**ray_kwargs)
         '''
+        from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
+
         Component = component.__class__
         ComponentName = Component.__name__
         if component.is_model():
@@ -563,33 +530,33 @@ class ComponentMixin:
                 raise ValueError(f"{component_name} already exists")
             
             if ray_kwargs:
-                if not self.is_remote(direct_only=False):
-                    from pfeed.utils.ray import setup_ray
-                    setup_ray()
-                component = ActorProxy(component, name=component_name, ray_actor_options=ray_actor_options, **ray_kwargs)
-                component._set_proxy(component)
+                component = ActorProxy(
+                    component, 
+                    name=component_name,
+                    resolution=resolution or self.resolution,
+                    ray_actor_options=ray_actor_options, 
+                    **ray_kwargs
+                )
+                if isinstance(self.context.settings, TradeEngineSettings):
+                    self.context.settings.zmq_urls.enable_ray()
+                    self.context.settings.zmq_ports.enable_ray()
+
             component._hydrate(
                 name=component_name,
                 run_mode=RunMode.REMOTE if ray_kwargs else RunMode.LOCAL,
-                resolution=self._resolution,
-                engine=self._context,
-                warmup_period=warmup_period,
+                resolution=resolution or self.resolution,
+                engine_context=self.context,
+                signal_cols=signal_cols,
+                df_form=df_form,
             )
-            
-            if signal_cols:
-                component._set_signal_cols(signal_cols)
+        
+        # FIXME: 
+        # component._add_consumer(self._proxy if is_remote else self)
 
-            # FIXME: check if min_data, max_data and group_data are needed when component_type is strategy
-            # if min_data:
-            #     component._set_min_data(min_data)
-            # component._set_group_data(group_data)
-        else:
-            is_remote = True
-        component._add_consumer(self._proxy if is_remote else self)
         components[component.name] = component
         self.logger.debug(f"{self.name} added {component.name}")
     
-        if self.is_remote() and not is_remote:
+        if self.is_remote() and not component.is_remote():
             # NOTE: returns None when adding a local component to a remote component to avoid returning a serialized (copied) object
             return None
         else:
@@ -597,106 +564,87 @@ class ComponentMixin:
     
     def add_model(
         self, 
-        model: ModelT | ActorProxy,
+        model: ModelT | ActorProxy[ModelT],
+        resolution: str='',
         name: str='',
-        min_data: int | None=None,
-        max_data: int | None=None,
-        group_data: bool=True,
+        df_form: Literal['long', 'wide']='wide',
         signal_cols: list[str] | None=None,
-        ray_actor_options: dict | None=None,
-        **ray_kwargs
-    ) -> ModelT | ActorProxy | None:
+        ray_actor_options: dict[str, Any] | None=None,
+        **ray_kwargs: Any
+    ) -> ModelT | ActorProxy[ModelT] | None:
         return self._add_component(
             component=model,
+            resolution=resolution,
             name=name,
-            min_data=min_data,
-            max_data=max_data,
-            group_data=group_data,
+            df_form=df_form,
             signal_cols=signal_cols,
             ray_actor_options=ray_actor_options,
             **ray_kwargs
         )
-    
-    def get_model(self, name: str) -> BaseModel | ActorProxy:
-        return self.models[name]
     
     def add_feature(
         self, 
-        feature: FeatureT | ActorProxy, 
+        feature: FeatureT | ActorProxy[FeatureT], 
+        resolution: str='',
         name: str='',
-        min_data: int | None=None,
-        max_data: int | None=None,
-        group_data: bool=True,
+        df_form: Literal['long', 'wide']='wide',
         signal_cols: list[str] | None=None,
-        ray_actor_options: dict | None=None,
-        **ray_kwargs
-    ) -> FeatureT | ActorProxy | None:
+        ray_actor_options: dict[str, Any] | None=None,
+        **ray_kwargs: Any
+    ) -> FeatureT | ActorProxy[FeatureT] | None:
         return self._add_component(
             component=feature, 
+            resolution=resolution,
             name=name, 
-            min_data=min_data, 
-            max_data=max_data, 
-            group_data=group_data,
+            df_form=df_form,
             signal_cols=signal_cols,
             ray_actor_options=ray_actor_options,
             **ray_kwargs
         )
-    
-    def get_feature(self, name: str) -> BaseFeature | ActorProxy:
-        return self.features[name]
     
     def add_indicator(
         self, 
-        indicator: IndicatorT | ActorProxy,
+        indicator: IndicatorT | ActorProxy[IndicatorT],
+        resolution: str='',
         name: str='',
-        min_data: int | None=None,
-        max_data: int | None=None,
-        group_data: bool=True,
+        df_form: Literal['long', 'wide']='wide',
         signal_cols: list[str] | None=None,
-        ray_actor_options: dict | None=None,
-        **ray_kwargs
-    ) -> IndicatorT | ActorProxy | None:
+        ray_actor_options: dict[str, Any] | None=None,
+        **ray_kwargs: Any
+    ) -> IndicatorT | ActorProxy[IndicatorT] | None:
         return self._add_component(
             component=indicator,
+            resolution=resolution,
             name=name,
-            min_data=min_data,
-            max_data=max_data,
-            group_data=group_data,
+            df_form=df_form,
             signal_cols=signal_cols,
             ray_actor_options=ray_actor_options,
             **ray_kwargs
         )
     
-    def get_indicator(self, name: str) -> BaseIndicator | ActorProxy:
-        return self.indicators[name]
-
     def _on_quote(self, data: QuoteData):
-        product, bids, asks, ts = data.product, data.bids, data.asks, data.ts
         local_components = self._local_components.get(data, [])
         for component in local_components:
             component._on_quote(data)
             self._update_signals(data, component)
-        self._append_to_df(data)
-        self.on_quote(product, bids, asks, ts)
+        self.databoy.trading_store.append_to_df(data, self.predictions)
+        self.on_quote(data)
 
     def _on_tick(self, data: TickData):
-        product, px, qty, ts = data.product, data.px, data.qty, data.ts
         for listener in self._listeners[data]:
             listener._on_tick(data)
             self._update_signals(data, listener)
-        self._append_to_df(data)
-        self.on_tick(product, px, qty, ts)
+        self.databoy.trading_store.append_to_df(data, self.predictions)
+        self.on_tick(data)
     
     def _on_bar(self, data: BarData):
-        product, bar, ts = data.product, data.bar, data.bar.end_ts
         # TODO: wait for remote components' outputs
         for listener in self._listeners[data]:
             listener._on_bar(data)
             self._update_signals(data, listener)
         # TODO: non-wasm: send_signal, wasm: loop consumers.on_signal
-        # TODO: add to trading store, self.store
-        self._append_to_df(data)
-        self.on_bar(product, bar, ts)
+        self.databoy.trading_store.append_to_df(data, self.predictions)
+        self.on_bar(data)
 
     def _update_signals(self, data: BaseData, listener: BaseStrategy | BaseModel):
         pred_y: torch.Tensor | np.ndarray | None = listener._next(data)
@@ -704,12 +652,7 @@ class ComponentMixin:
             signal_cols = listener.get_signal_cols()
             for i, col in enumerate(signal_cols):
                 self.predictions[col] = pred_y[i]
-    
-    def _materialize(self):
-        self.store.materialize()
-        for data_store in self.databoy.data_stores.values():
-            data_store.materialize()
-    
+
     def _gather(self):
         '''Sets up everything before start'''
         # NOTE: use is_gathered to avoid a component being gathered multiple times when it's a shared component
@@ -718,14 +661,13 @@ class ComponentMixin:
             self.add_models()
             self.add_features()
             self.add_indicators()
-            if self.env != Environment.BACKTEST:
-                self.databoy._subscribe()
-            self._is_gathered = True
             # TODO:
             # self._add_datas_from_consumer_if_none()
             
-            self._materialize()
+            # TODO
+            # self.databoy._materialize()
             
+            self._is_gathered = True
             for component in self.components:
                 component._gather()
             self.logger.info(f"'{self.name}' has gathered")
@@ -762,14 +704,14 @@ class ComponentMixin:
     Override these methods in your subclass to implement your custom behavior.
     ************************************************
     '''
-    def on_quote(self, product, bids, asks, ts, **kwargs):
-        raise NotImplementedError(f"Please define your own on_quote(product, bids, asks, ts, **kwargs) in your strategy '{self.name}'.")
+    def on_quote(self, data: QuoteData):
+        raise NotImplementedError(f"Please define your own on_quote(data: QuoteData) in your strategy '{self.name}'.")
     
-    def on_tick(self, product, px, qty, ts, **kwargs):
-        raise NotImplementedError(f"Please define your own on_tick(product, px, qty, ts, **kwargs) in your strategy '{self.name}'.")
+    def on_tick(self, data: TickData):
+        raise NotImplementedError(f"Please define your own on_tick(data: TickData) in your strategy '{self.name}'.")
 
-    def on_bar(self, product, bar: Bar, ts, **kwargs):
-        raise NotImplementedError(f"Please define your own on_bar(product, bar, ts, **kwargs) in your strategy '{self.name}'.")
+    def on_bar(self, data: BarData):
+        raise NotImplementedError(f"Please define your own on_bar(data: BarData) in your strategy '{self.name}'.")
 
     def add_datas(self):
         pass

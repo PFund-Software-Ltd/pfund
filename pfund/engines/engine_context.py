@@ -1,9 +1,11 @@
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, TypedDict, Any
 if TYPE_CHECKING:
     import datetime
     from pfund.config import PFundConfig
 
+from pfeed.enums import DataTool
 from pfund.enums import Environment, RunMode
 from pfund.datas.resolution import Resolution
 from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
@@ -17,32 +19,42 @@ class DataRangeDict(TypedDict, total=False):
 
 
 class EngineContext:
-    def __init__(self, env: Environment, name: str, data_range: str | Resolution | DataRangeDict | Literal['ytd']):
+    def __init__(
+        self, 
+        env: Environment, 
+        name: str, 
+        data_range: str | Resolution | DataRangeDict | Literal['ytd'],
+        settings: TradeEngineSettings | BacktestEngineSettings | None=None,
+    ):
         import pfeed as pe
         self.env = env
         self.name = name
         self._env_var_prefix = f'PFUND_{env.upper()}_'
         self._env_vars = self._load_env_vars()
-        self.run_mode = self._derive_run_mode()
+        self.run_mode = self._detect_run_mode()
         self.data_start, self.data_end = self._parse_data_range(data_range)
-        self.settings = self._load_settings()
+        self.settings = settings or self._load_settings()
+        if settings and settings.persist:
+            settings.save(self.env)
         # NOTE: config obtained by get_config() inside ray actor could be different from the one in the main thread (e.g. after calling pf.configure())
         # so we create the config object here in the context and treat it as the source of truth
         self.pfund_config: PFundConfig = get_config()
         self.pfeed_config = pe.get_config()
+        if self.pfeed_config.data_tool not in [DataTool.pandas, DataTool.polars]:
+            raise ValueError(f"Unsupported data tool: {self.pfeed_config.data_tool}")
         self.logging_config: dict[str, Any] = get_logging_config()
-
+        
+    # REVIEW: engine has no REMOTE run mode
     @staticmethod
-    def _derive_run_mode() -> RunMode:
-        import ray
-        if not ray.is_initialized():
-            return RunMode.LOCAL
-        ctx = ray.get_runtime_context()
-        actor_id = ctx.get_actor_id()   # empty/None if not in an actor
-        if actor_id is not None and actor_id != "":
-            return RunMode.REMOTE
+    def _detect_run_mode() -> RunMode:
+        import sys
+        if sys.platform == 'emscripten':
+            return RunMode.WASM
         else:
             return RunMode.LOCAL
+        # import ray
+        # ctx = ray.get_runtime_context()
+        # actor_id = ctx.get_actor_id()   # empty/None if not in an actor
     
     def _load_env_vars(self) -> dict[str, str]:
         from dotenv import find_dotenv, dotenv_values

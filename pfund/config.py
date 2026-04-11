@@ -39,8 +39,8 @@ def setup_logging(env: Environment, engine_name: str, reset: bool=False):
 
     # ≈ logging.config.dictConfig(logging_config) with a custom configurator
     logging_configurator: LoggingDictConfigurator = LoggingDictConfigurator.create(
-        log_path=log_path, 
-        logging_config=logging_config, 
+        log_path=log_path,
+        logging_config=logging_config,
         lazy=True,
         use_colored_logger=True,
     )

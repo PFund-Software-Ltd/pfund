@@ -1,4 +1,4 @@
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false, reportArgumentType=false
+# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false, reportArgumentType=false, reportUnnecessaryComparison=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, TypedDict, Any
 from functools import partial
@@ -8,9 +8,11 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericFrame
     from pfund.typing import ProductName
     from pfund.entities.products.product_base import BaseProduct
-    from pfund.engines.engine_context import EngineContext
     from pfund.datas.data_config import DataConfig
+    from pfund.datas.databoy import DataBoy
     class BarUpdate(TypedDict, total=True):
+        product: ProductName
+        resolution: Resolution
         ts: float
         open: float
         high: float
@@ -22,6 +24,8 @@ if TYPE_CHECKING:
         extra_data: dict[str, Any]
 
 from collections import defaultdict
+
+import narwhals as nw
 
 from pfeed.enums import DataLayer, DataAccessType, DataStorage
 from pfeed.storages.storage_config import StorageConfig
@@ -38,30 +42,34 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
     # Columns pinned to the left side of the materialized dataframe for readability
     LEFT_COLS = ['date', 'resolution', 'product', 'symbol', 'source_type']
 
-    def __init__(self, context: EngineContext):
-        super().__init__(context)
+    def __init__(self, databoy: DataBoy):
+        super().__init__(databoy)
         self._datas: dict[ProductName, dict[Resolution, MarketData]] = defaultdict(dict)
-        self.stale_bar_timeouts: dict[BarData, int] = {}
+        # periods based on the component's resolution
+        self._warmup_period: int | None = None
+        self._lookback_period: int | None = None
     
     def get_data(self, product: ProductName, resolution: Resolution) -> MarketData | None:
         if product not in self._datas:
             return None
         return self._datas[product].get(resolution, None)
     
-    def add_data(self, product: BaseProduct, storage_config: StorageConfig, data_config: DataConfig) -> list[MarketData]:
+    def get_datas(self) -> list[MarketData]:
+        return list(set(
+            data 
+            for data_per_resolution in self._datas.values() 
+            for data in data_per_resolution.values()
+        ))
+    
+    def add_data(self, product: BaseProduct, data_config: DataConfig, storage_config: StorageConfig) -> list[MarketData]:
         datas: list[MarketData] = []
         for resolution in data_config.resolutions:
             data = self.get_data(product.name, resolution)
             if data is None:
-                data = self.create_data(product, resolution, data_config)
-                self._datas[product.name][resolution] = data
                 if storage_config.data_layer == DataLayer.RAW:
                     raise ValueError('Loading data from RAW data layer is not supported, pfund can only deal with cleaned data')
-                self._storage_configs[data] = storage_config
-                if data.is_bar():
-                    self.stale_bar_timeouts[data] = data_config.stale_bar_timeout[resolution]
-                    # self._feeds is used in materialization, and pfund only supports bar data as the main resolution
-                    self._feeds[data] = self._create_feed(data)
+                data = self.create_data(product=product, resolution=resolution, data_config=data_config, storage_config=storage_config)
+                self._datas[product.name][resolution] = data
             datas.append(data)
         
         # mutually bind data_resampler and data_resamplee
@@ -73,20 +81,24 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         
         return datas
     
-    def create_data(self, product: BaseProduct, resolution: Resolution, data_config: DataConfig) -> MarketData:
+    def create_data(self, product: BaseProduct, resolution: Resolution, data_config: DataConfig, storage_config: StorageConfig) -> MarketData:
         if resolution.is_quote():
             data = QuoteData(
                 data_source=data_config.data_source, 
                 data_origin=data_config.data_origin, 
                 product=product, 
-                resolution=resolution
+                resolution=resolution,
+                data_config=data_config,
+                storage_config=storage_config
             )
         elif resolution.is_tick():
             data = TickData(
                 data_source=data_config.data_source, 
                 data_origin=data_config.data_origin, 
                 product=product, 
-                resolution=resolution
+                resolution=resolution,
+                data_config=data_config,
+                storage_config=storage_config
             )
         else:
             data = BarData(
@@ -94,39 +106,88 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                 data_origin=data_config.data_origin, 
                 product=product, 
                 resolution=resolution, 
-                shift=data_config.shift.get(resolution, 0), 
-                skip_first_bar=data_config.skip_first_bar.get(resolution, True)
+                data_config=data_config,
+                storage_config=storage_config,
             )
         return data
     
+    def set_periods(self, warmup_period: int, lookback_period: int):
+        if not warmup_period or warmup_period < 0:
+            raise ValueError(f'warmup_period must be a positive integer, got {warmup_period}')
+        if not lookback_period or lookback_period < 0:
+            raise ValueError(f'lookback_period must be a positive integer, got {lookback_period}')
+        self._warmup_period = warmup_period
+        self._lookback_period = lookback_period
+    
     # TODO
-    def update_quote(self, data: QuoteData, update: QuoteUpdate):
-        ts = update['ts']
-        extra_data = update['extra_data']
-        bids, asks = update['bids'], update['asks']
-        data.on_quote(bids, asks, ts, **extra_data)
+    def update_quote(self, update: QuoteUpdate):
+        data = self.get_data(update['product'], update['resolution'])
+        data.on_quote(update['bids'], update['asks'], update['ts'], **update['extra_data'])
+        self._databoy._deliver(data)
 
     # TODO
-    def update_tick(self, data: TickData, update: TickUpdate):
-        extra_data = update['extra_data']
-        px, qty, ts = update['px'], update['qty'], update['ts']
-        data.on_tick(px, qty, ts, **extra_data)
-    
-    # FIXME: should get_data() in update_bar, pass in product and resolution to update_bar() instead of data
-    def update_bar(self, data: BarData, update: BarUpdate):
-        '''update bar data from streaming message
-        if ready, deliver the bar data to the component
-        '''
-        data.on_bar(
-            o=update['open'], h=update['high'], l=update['low'], c=update['close'], v=update['volume'], ts=update['ts'], 
-            msg_ts=update['msg_ts'], 
-            extra_data=update['extra_data'],
-            is_incremental=update['is_incremental']
+    def update_tick(self, update: TickUpdate):
+        data = self.get_data(update['product'], update['resolution'])
+        data.on_tick(
+            price=update['price'], volume=update['volume'], 
+            ts=update['ts'], msg_ts=update['msg_ts'], 
+            extra_data=update['extra_data']
         )
+        self._databoy._deliver(data)
+        if data_resamplees := data.get_resamplees():
+            price = update.pop('price')
+            volume = update.pop('volume')
+            bar_update = update.copy()
+            bar_update['is_incremental'] = True
+            bar_update['open'] = price
+            bar_update['high'] = price
+            bar_update['low'] = price
+            bar_update['close'] = price
+            bar_update['volume'] = volume
+            for data_resamplee in data_resamplees:
+                bar_update['resolution'] = data_resamplee.resolution
+                self.update_bar(bar_update)
+        
+    def update_bar(self, update: BarUpdate):
+        '''update bar data from streaming message
+        if ready, deliver the bar data to databoy
+        '''
+        data = self.get_data(update['product'], update['resolution'])
+        if not update['is_incremental']:
+            data.on_bar(
+                o=update['open'], h=update['high'], l=update['low'], c=update['close'], v=update['volume'], ts=update['ts'], 
+                msg_ts=update['msg_ts'], 
+                extra_data=update['extra_data'],
+                is_incremental=update['is_incremental']
+            )
+            self._databoy._deliver(data)
+            # NOTE: in case update['ts'] < data.end_ts but the bar is already closed
+            # pick the max value so that resamplees can use the correct ts to determine if they are closed
+            # e.g. data is 1m bar, resamplee is 15m bar
+            # without this, resamplee might not know the bar is closed when update['ts'] < data.end_ts
+            update['ts'] = max(update['ts'], data.end_ts)
+        else:
+            # deliver the closed bar before update() clears it for the next bar
+            if data.is_closed(now=update['ts'] or update['msg_ts']):
+                self._databoy._deliver(data)
+            data.on_bar(
+                o=update['open'], h=update['high'], l=update['low'], c=update['close'], v=update['volume'], ts=update['ts'], 
+                msg_ts=update['msg_ts'], 
+                extra_data=update['extra_data'],
+                is_incremental=update['is_incremental']
+            )
+        # update resamplees
+        if data_resamplees := data.get_resamplees():
+            resamplee_update = update.copy()
+            resamplee_update['is_incremental'] = True
+            for data_resamplee in data_resamplees:
+                resamplee_update['resolution'] = data_resamplee.resolution
+                self.update_bar(resamplee_update)
     
     def _should_cache_resampled(self, feed: MarketFeed) -> bool:
         '''Determine if the retrieved data should be cached to the CURATED layer.'''
-        setting = self._context.settings.cache_materialized_data
+        engine_settings = self._databoy.context.settings
+        setting = engine_settings.cache_materialized_data
         if setting is True:
             return True
         if setting is False:
@@ -135,7 +196,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         request = feed._current_request
         return request.data_resolution != request.target_resolution
 
-    def materialize(self) -> None:
+    def materialize(self) -> nw.DataFrame[Any]:
         '''Materializes market data by loading from storage, with optional auto-download fallback.
 
         For each registered data feed, first checks the cache for previously resampled data.
@@ -147,7 +208,6 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             DataNotFoundError: If no data is found and auto-download is disabled,
                 or if the data source is paid-by-usage (auto-download of paid data is not allowed).
         '''
-        import narwhals as nw
         from pfeed.errors import DataNotFoundError
         
         def _prepare_df_before_append(data: MarketData, df: IntoFrame) -> Frame:
@@ -167,18 +227,23 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             return nwdf
 
         dfs: list[Frame] = []
-        settings = self._context.settings
-        start_date, end_date = self._context.data_start, self._context.data_end
+        engine_context = self._databoy.context
+        settings = engine_context.settings
+        start_date, end_date = engine_context.data_start, engine_context.data_end
 
-        for data, feed in self._feeds.items():
+        for data in self.get_datas():
+            # pfund only supports bar data as the main resolution
+            if not data.is_bar():
+                continue
+            feed = self._create_feed(data)
             self._logger.debug(f'Materializing market data {data.product.name} {data.resolution}...')
-            storage_config = self._storage_configs[data]
+            storage_config = data.storage_config
             product, symbol = str(data.product.basis), data.product.symbol
             product_specs = data.product.specs
             cache_storage_config = self._create_cache_storage_config(storage_config)
             retrieve = partial(
                 feed.retrieve,
-                env=self._context.env,
+                env=engine_context.env,
                 product=product,
                 resolution=data.resolution,
                 symbol=symbol,
@@ -247,10 +312,9 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                         f'No data found for {data.product.name} {data.resolution}.\n' +
                         "and 'auto_download_data' is disabled in settings, please enable it in engine settings or use 'pfeed' to download the data manually."
                     )
-        
-        self.df = nw.concat(dfs)
-        
-    # TODO:
-    def swap_live_for_eod(self):
-        '''Discard the interim live-stream buffer and load the official end-of-day dataset (if any).'''
-        pass
+
+        df: Frame = nw.concat(dfs)
+        if isinstance(df, nw.LazyFrame):
+            df = df.collect()
+        self._df = df
+        return df

@@ -112,18 +112,7 @@ class BacktestEngine(BaseEngine):
         strategy: StrategyT, 
         resolution: str, 
         name: str='',
-        min_data: int | None=None,
-        max_data: int | None=None,
     ) -> StrategyT:
-        '''
-        Args:
-            min_data (int | None): Minimum number of data rows required before the strategy can produce signals.
-                When `preload_min_data` is enabled in engine settings, these rows are pre-loaded during materialization
-                for event-driven backtesting so the strategy starts warm.
-            max_data (int | None): Maximum number of data rows kept in memory.
-                Once exceeded, oldest rows are dropped (sliding window). Useful for bounding memory usage.
-                If None, all rows are kept (unlimited).
-        '''
         from pfund.components.strategies._dummy_strategy import DummyStrategy
         from pfund.components.strategies.strategy_backtest import BacktestStrategy
 
@@ -138,8 +127,6 @@ class BacktestEngine(BaseEngine):
             strategy=strategy,
             resolution=resolution,
             name=name or Strategy.__name__,
-            min_data=min_data,
-            max_data=max_data,
         ))
 
     def add_model(
@@ -147,9 +134,7 @@ class BacktestEngine(BaseEngine):
         model: ModelT, 
         resolution: str,
         name: str='',
-        min_data: int | None=None,
-        max_data: int | None=None,
-        group_data: bool=True,
+        df_form: Literal['long', 'wide']='wide',
         signal_cols: list[str] | None=None,
     ) -> BacktestMixin | ModelT:
         '''Add model without creating a strategy (using dummy strategy)'''
@@ -162,10 +147,9 @@ class BacktestEngine(BaseEngine):
         assert not strategy.models, 'Adding more than 1 model to dummy strategy in backtesting is not supported, you should train and dump your models one by one'
         model = strategy.add_model(
             model,
+            resolution,
             name=name,
-            min_data=min_data,
-            max_data=max_data,
-            group_data=group_data,
+            df_form=df_form,
             signal_cols=signal_cols,
         )
         model.set_flags(True)
@@ -176,18 +160,14 @@ class BacktestEngine(BaseEngine):
         feature: FeatureT, 
         resolution: str,
         name: str='',
-        min_data: int | None=None,
-        max_data: int | None=None,
-        group_data: bool=True,
+        df_form: Literal['long', 'wide']='wide',
         signal_cols: list[str] | None=None,
     ) -> BacktestMixin | FeatureT:
         return self.add_model(
             feature, 
-            resolution,
+            resolution=resolution,
             name=name, 
-            min_data=min_data, 
-            max_data=max_data, 
-            group_data=group_data,
+            df_form=df_form,
             signal_cols=signal_cols,
         )
     
@@ -196,18 +176,14 @@ class BacktestEngine(BaseEngine):
         indicator: IndicatorT, 
         resolution: str,
         name: str='',
-        min_data: int | None=None,
-        max_data: int | None=None,
-        group_data: bool=True,
+        df_form: Literal['long', 'wide']='wide',
         signal_cols: list[str] | None=None,
     ) -> BacktestMixin | IndicatorT:
         return self.add_model(
             indicator, 
-            resolution,
+            resolution=resolution,
             name=name, 
-            min_data=min_data, 
-            max_data=max_data, 
-            group_data=group_data,
+            df_form=df_form,
             signal_cols=signal_cols,
         )
     
@@ -270,17 +246,14 @@ class BacktestEngine(BaseEngine):
         data_tool: DataTool = self._context.pfeed_config.data_tool
         is_using_ray = num_chunks > 1
         backtest_dfs: list[pf.BacktestDataFrame] = []
-
-        df: Frame = backtestee.get_df(to_native=False)
-        if isinstance(df, nw.LazyFrame):
-            df = df.collect()
-        # REVIEW: still needed for event-driven backtesting?
-        if self.backtest_mode == BacktestMode.EVENT_DRIVEN:
-            # NOTE: clear dfs so that strategies/models don't know anything about the incoming data
-            # FIXME
-            # backtestee.clear_dfs()
-            pass
-    
+        
+        # FIXME: only support MarketData for now, but still need to handle cases with multiple products
+        # should we use long/wide form for multi-product dataframes?
+        df: nw.DataFrame[Any] = backtestee.databoy.get_df(
+            kind='data',
+            # category=DataCategory.MARKET_DATA,
+            to_native=False,
+        )
 
         def _run_backtest(
             backtestee: BaseStrategy | BaseModel,

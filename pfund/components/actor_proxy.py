@@ -3,29 +3,26 @@ from typing import TYPE_CHECKING, Any, cast, Generic
 from typing_extensions import override
 if TYPE_CHECKING:
     from ray.actor import ActorHandle, ActorClass
-    from pfund.datas.resolution import Resolution
 
 from pfund.typing import ComponentT
-from pfund_kit.style import cprint
+from pfund.datas.resolution import Resolution
 
 
 class ActorProxy(Generic[ComponentT]):
-    def __init__(self, component: ComponentT, name: str='', ray_actor_options: dict[str, Any] | None=None, **ray_kwargs: Any):
+    def __init__(self, component: ComponentT, name: str, resolution: Resolution | str, ray_actor_options: dict[str, Any] | None=None, **ray_kwargs: Any):
+        from pfeed.utils.ray import setup_ray
+        setup_ray()
         if 'num_cpus' not in ray_kwargs:
             raise ValueError('`num_cpus` must be set for a Ray actor')
         if ray_kwargs['num_cpus'] <= 0:
             raise ValueError('`num_cpus` must be greater than 0')
-        component_name = name or component.name
         ray_actor_options = ray_actor_options or {}
         if 'name' not in ray_actor_options:
-            ray_actor_options['name'] = component_name
+            ray_actor_options['name'] = name
         self._actor: ActorHandle[ComponentT] = self._create_actor(component, ray_actor_options, **ray_kwargs)
-        cprint(f'Ray Actor "{component_name}" is created', style='bold')
-
-        # set up essential attributes for convenience
-        self.name: str = component_name
-        self.resolution: Resolution | None = component.resolution
-    
+        self.name: str = name
+        self.resolution: Resolution = Resolution(resolution)
+        
     @staticmethod
     def _create_actor(component: ComponentT, ray_actor_options: dict[str, Any], **ray_kwargs: Any) -> ActorHandle[ComponentT]:
         import ray
@@ -36,12 +33,16 @@ class ActorProxy(Generic[ComponentT]):
             raise ValueError(f"{ComponentClass.__name__} {ray_kwargs=}:\n{err}")
         
         return cast(
-            ActorHandle[ComponentT], (
+            "ActorHandle[ComponentT]", (
                 ComponentActor  # pyright: ignore[reportUnknownMemberType]
                 .options(**ray_actor_options)
                 .remote(*component.__pfund_args__, **component.__pfund_kwargs__)
             )
         )
+    
+    @property
+    def actor(self) -> ActorHandle[ComponentT]:
+        return self._actor
         
     # NOTE: added __setstate__ and __getstate__ to avoid ray's serialization issues when returning ActorProxy objects
     def __setstate__(self, state: dict[str, Any]):

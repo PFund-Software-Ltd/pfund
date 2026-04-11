@@ -2,7 +2,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pfeed.enums import DataSource
+    from pfeed.storages.storage_config import StorageConfig
     from pfund.datas.resolution import Resolution
+    from pfund.datas.data_config import DataConfig
     from pfund.entities.products.product_base import BaseProduct
 
 import time
@@ -17,9 +19,18 @@ class TickData(MarketData):
         data_source: DataSource,
         data_origin: str,
         product: BaseProduct,
-        resolution: Resolution
+        resolution: Resolution,
+        data_config: DataConfig,
+        storage_config: StorageConfig,
     ):
-        super().__init__(data_source, data_origin, product, resolution)
+        super().__init__(
+            data_source=data_source,
+            data_origin=data_origin,
+            product=product,
+            resolution=resolution,
+            data_config=data_config,
+            storage_config=storage_config,
+        )
         self._price = self._volume = 0.0
         assert 0 < self.period <= 1, f'period {self.period} is not supported for TickData'
         # TODO: support period > 1?
@@ -51,13 +62,5 @@ class TickData(MarketData):
         self.update_timestamps(ts=ts, msg_ts=msg_ts)
         if extra_data is not None:
             self.update_extra_data(extra_data)
-        for resamplee in self._resamplees:
-            resamplee.on_tick(
-                price=price, volume=volume, ts=ts, 
-                is_backfill=is_backfill,
-                msg_ts=msg_ts, 
-                extra_data=extra_data,
-            )
-            
         # if self._is_appended:
         #     self.ticks.append((px, qty, ts))

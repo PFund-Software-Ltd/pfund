@@ -3,6 +3,7 @@ from typing import Literal, TYPE_CHECKING, overload, Any
 if TYPE_CHECKING:
     from pfund.typing import (
         StrategyT,
+        Component,
         ProductName,
         AccountName,
         Currency,
@@ -25,6 +26,8 @@ if TYPE_CHECKING:
 
 from collections import deque
 from abc import ABC, abstractmethod
+
+import narwhals as nw
 
 from pfund_kit.style import cprint, RichColor, TextStyle
 from pfund.components.strategies.strategy_meta import MetaStrategy
@@ -62,9 +65,9 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     
     def is_sub_strategy(self) -> bool:
         return not self._is_top_strategy
-    
-    def get_strategy(self, name: str) -> BaseStrategy | ActorProxy[BaseStrategy]:
-        return self.strategies[name]
+
+    def get_components(self) -> list[Component | ActorProxy[Component]]:
+        return [*self.strategies.values(), *super().get_components()]
     
     @overload
     def get_position(self, account: CryptoAccount, pdt: str) -> CryptoPosition | None: ...

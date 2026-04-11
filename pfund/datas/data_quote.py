@@ -2,6 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, TypeAlias
 if TYPE_CHECKING:
     from pfeed.enums import DataSource
+    from pfeed.storages.storage_config import StorageConfig
+    from pfund.datas.data_config import DataConfig
     from pfund.datas.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
 
@@ -18,11 +20,20 @@ class QuoteData(MarketData):
         data_source: DataSource,
         data_origin: str,
         product: BaseProduct,
-        resolution: Resolution
+        resolution: Resolution,
+        data_config: DataConfig,
+        storage_config: StorageConfig,
     ):
-        super().__init__(data_source, data_origin, product, resolution)
+        super().__init__(
+            data_source=data_source, 
+            data_origin=data_origin,
+            product=product,
+            resolution=resolution,
+            data_config=data_config,
+            storage_config=storage_config,
+        )
         self._orderbook_depth: int = resolution.period
-        self._orderbook_level: int = resolution.orderbook_level
+        self._orderbook_level: int | None = resolution.orderbook_level
         assert self._orderbook_level in [1, 2, 3]
         self._orderbook = OrderBook()
     
@@ -37,6 +48,14 @@ class QuoteData(MarketData):
     @property
     def depth(self) -> int:
         return self._orderbook_depth
+
+    @property
+    def bids(self) -> dict[Price, Size]:
+        return self._orderbook.bids
+
+    @property
+    def asks(self) -> dict[Price, Size]:
+        return self._orderbook.asks
     
     def get_bid(self, level: int=0) -> tuple[Price, Size]:
         return self._orderbook.get_bid(level)
@@ -69,9 +88,6 @@ class QuoteData(MarketData):
         self.update_ts(ts)
         self.update_extra_data(extra_data)
         
-        for resamplee in self._resamplees:
-            resamplee.on_quote(bids, asks, ts)
-
     def __getstate__(self):
         state = self.__dict__.copy()
         # TODO: when the orederbook is written in Rust, drop it since its non-picklable

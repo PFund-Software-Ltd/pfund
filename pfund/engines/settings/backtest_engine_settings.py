@@ -17,10 +17,11 @@ class BacktestEngineSettings(BaseEngineSettings):
     commit_to_git: bool = Field(default=False)
     save_backtests: bool = Field(default=True)
 
-    preload_min_data: bool = Field(
+    # FIXME: unused for now
+    pre_warmup: bool = Field(
         default=True,
         description='''
-        if True, pre-loads each component's `min_data` rows during materialization for event-driven backtesting,
+        if True, pre-loads each component's `warmup_period` rows during materialization for event-driven backtesting,
         so strategies start with enough data to produce signals immediately.
         Set to False to simulate every bar from the start, including the warm-up phase.
         '''

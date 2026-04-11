@@ -33,6 +33,7 @@ class ParsedMessage(TypedDict):
     
 
 # since Literal doesn't support variables as inputs, define variables in common.py here with prefix 't'
+# DEPRECATED: to be removed
 tEnvironment = Literal['BACKTEST', 'SANDBOX', 'PAPER', 'LIVE']
 tTradingVenue = Literal['IB', 'BINANCE', 'BYBIT', 'OKX']
 tBroker = Literal['CRYPTO', 'DEFI', 'IB']
@@ -40,17 +41,13 @@ tCryptoExchange = Literal['BINANCE', 'BYBIT', 'OKX']
 tDatabase = Literal['DUCKDB', 'POSTGRESQL']
 tOrderType = Literal['LIMIT', 'MARKET', 'STOP_MARKET', 'STOP_LIMIT']
 
+EngineNameWithProxy: TypeAlias = EngineName
 ComponentNameWithData: TypeAlias = ComponentName
 ComponentNameWithLogger: TypeAlias = ComponentName
-ZeroMQSenderName = (
-    Literal[
-        "data_engine",  # ZeroMQ data engine for pulling data from trading venues
-        "proxy",  # ZeroMQ publisher for broadcasting internal states to external apps
-    ]
-    # each component has TWO ZeroMQ ports:
-    # ComponentName is used for component's signals_zmq
-    # ComponentNameWithData is used for component's data_zmq
-    | ComponentName
+ZMQUrlKey = EngineName | Literal["data_engine"] | ComponentName
+# NOTE: only senders need to set ports
+ZMQPortKey = (
+    ZMQUrlKey 
     | ComponentNameWithData  # {component_name}_data
     | ComponentNameWithLogger  # {component_name}_logger
 )

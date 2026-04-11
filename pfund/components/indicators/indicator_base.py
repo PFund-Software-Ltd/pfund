@@ -31,9 +31,6 @@ class BaseIndicator(BaseModel):
         raise NotImplementedError
     indicate = predict
 
-    def featurize(self) -> pd.DataFrame | pl.LazyFrame:
-        return self.get_df()
-    
     @property
     def indicator(self):
         return self.model

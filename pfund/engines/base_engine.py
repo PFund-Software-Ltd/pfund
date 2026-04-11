@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Any
 if TYPE_CHECKING:
@@ -10,12 +11,12 @@ if TYPE_CHECKING:
     from pfund.brokers.broker_base import BaseBroker
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.engines.engine_context import DataRangeDict
+    from pfund.components.actor_proxy import ActorProxy
 
 import logging
 import datetime
 
 from pfund_kit.style import cprint, RichColor, TextStyle
-from pfund.components.actor_proxy import ActorProxy
 from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
 from pfund.enums import (
@@ -31,7 +32,7 @@ ENV_COLORS = {
     # 'magenta': 'bold magenta on #fff0ff',
     # 'TRAIN': 'bold cyan on #d0ffff',
     Environment.BACKTEST: TextStyle.BOLD + RichColor.BLUE,
-    Environment.SANDBOX: TextStyle.BOLD + RichColor.BLACK,
+    Environment.SANDBOX: TextStyle.BOLD + RichColor.GREY0,
     Environment.PAPER: TextStyle.BOLD + RichColor.RED,
     Environment.LIVE: TextStyle.BOLD + RichColor.GREEN,
 }
@@ -65,15 +66,13 @@ class BaseEngine:
         
         setup_logging(env=env, engine_name=name)
         self._logger: logging.Logger = logging.getLogger('pfund')
-        self._context: EngineContext = EngineContext(env=env, name=name, data_range=data_range)
+        self._context: EngineContext = EngineContext(env=env, name=name, data_range=data_range, settings=settings)
         self._is_running: bool = False
-        self._is_gathered: bool = False
+        # TODO: write engine's states using engine_feed.load()
         self._feed: EngineFeed = pe.PFund().engine_feed
         # self.id = uuid.uuid4().hex[:8]
         self.brokers: dict[Broker, BaseBroker] = {}
         self.strategies: dict[str, BaseStrategy | ActorProxy[BaseStrategy]] = {}
-        if settings:
-            self.configure_settings(settings, persist=False)
         self.results: dict[str, Any] | None = None
         cprint(f"{self.env} {self.name} is running (data_range=({self.data_start}, {self.data_end}))", style=ENV_COLORS[self.env])
     
@@ -84,6 +83,10 @@ class BaseEngine:
     @property
     def name(self) -> str:
         return self._context.name
+    
+    @property
+    def run_mode(self) -> RunMode:
+        return self._context.run_mode
     
     @property
     def settings(self) -> TradeEngineSettings | BacktestEngineSettings:
@@ -100,38 +103,11 @@ class BaseEngine:
     def is_running(self) -> bool:
         return self._is_running
     
-    def is_remote(self) -> bool:
-        return self._context.run_mode == RunMode.REMOTE
-    
-    def configure_settings(self, settings: TradeEngineSettings | BacktestEngineSettings, persist: bool=False):
-        '''Overrides the loaded settings with the given settings object and saves it to settings.toml
-
-        Args:
-            settings: settings object to override the current settings (if any)
-        '''
-        from pfund_kit.utils import toml
-        from pfund import get_config
-
-        if not isinstance(settings, (TradeEngineSettings, BacktestEngineSettings)):
-            raise ValueError(f"Invalid settings type: {type(settings)}")
-        
-        # write settings to settings.toml
-        if persist:
-            config = get_config()
-            env_section = self.env
-            data = {env_section: settings.model_dump()}
-            toml.dump(data, config.settings_file_path, mode='update', auto_inline=True)
-
-        # update settings in context
-        self._context.settings = settings
-    
     def add_strategy(
         self, 
         strategy: StrategyT,
         resolution: str, 
         name: str='', 
-        min_data: int | None=None,
-        max_data: int | None=None,
         ray_actor_options: dict[str, Any] | None=None,
         **ray_kwargs: Any,
     ) -> StrategyT | ActorProxy[StrategyT]:
@@ -141,7 +117,9 @@ class BaseEngine:
                 Options for Ray actor.
                 will be passed to ray actor like this: Actor.options(**ray_options).remote(**ray_kwargs)
         '''
+        from pfund.components.actor_proxy import ActorProxy
         from pfund.components.strategies.strategy_base import BaseStrategy
+        from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
         
         Strategy = strategy.__class__
         StrategyName = Strategy.__name__
@@ -153,19 +131,22 @@ class BaseEngine:
             raise ValueError(f"{strat} already exists")
 
         if ray_kwargs:
-            if not self.is_remote():
-                from pfeed.utils.ray import setup_ray
-                setup_ray()
-            strategy: ActorProxy[StrategyT] = ActorProxy(strategy, name=name, ray_actor_options=ray_actor_options, **ray_kwargs)
-            strategy._set_proxy(strategy)
+            strategy: ActorProxy[StrategyT] = ActorProxy(
+                strategy, 
+                name=strat,
+                resolution=resolution,
+                ray_actor_options=ray_actor_options, 
+                **ray_kwargs
+            )
+            if isinstance(self.settings, TradeEngineSettings):
+                self.settings.zmq_urls.enable_ray()
+                self.settings.zmq_ports.enable_ray()
 
         strategy._hydrate(
             name=strat,
             run_mode=RunMode.REMOTE if ray_kwargs else RunMode.LOCAL,
             resolution=resolution,
             engine_context=self._context,
-            min_data=min_data,
-            max_data=max_data,
         )
         strategy._set_top_strategy()
 
@@ -199,35 +180,27 @@ class BaseEngine:
         self._logger.debug(f'added account {account}')
     
     def _gather(self):
-        '''
-        Sets up everything before run.
-        - updates zmq ports in settings
-        '''
         from pfund.datas.data_market import MarketData
-        if not self._is_gathered:
-            for strategy in self.strategies.values():
-                strategy: BaseStrategy | ActorProxy[BaseStrategy]
-                strategy._gather()
-                
-                accounts: list[BaseAccount] = strategy.get_accounts()
-                for account in accounts:
-                    self._add_account(account)
-                
-                datas: list[BaseData] = strategy._get_datas_in_use()
-                for data in datas:
-                    if isinstance(data, MarketData):
-                        self._add_product(data.product)
-                    else:
-                        if hasattr(data, 'product'):
-                            raise NotImplementedError(f"Unhandled data type that has product attribute: {type(data)}. It should also call add_product().")
-        else:
-            self._logger.debug(f'{self.name} is already gathered')
+        for strategy in self.strategies.values():
+            strategy: BaseStrategy | ActorProxy[BaseStrategy]
+            strategy._gather()
+            
+            accounts: list[BaseAccount] = strategy.get_accounts()
+            for account in accounts:
+                self._add_account(account)
+            
+            datas: list[BaseData] = strategy._get_datas_in_use()
+            for data in datas:
+                if isinstance(data, MarketData):
+                    self._add_product(data.product)
+                else:
+                    raise NotImplementedError(f"Unhandled data type: {type(data)}")
     
     def run(self):
         if not self.is_running():
+            self._logger.debug(f'Running {self.name}...')
             self._is_running = True
             self._gather()
-            self._is_gathered = True
             for broker in self.brokers.values():
                 broker.start()
             for strategy in self.strategies.values():
@@ -238,6 +211,7 @@ class BaseEngine:
     def end(self):
         from pfeed.utils.ray import shutdown_ray
         if self.is_running():
+            self._logger.debug(f'Ending {self.name}...')
             self._is_running = False
             for strategy in self.strategies.values():
                 strategy.stop()
