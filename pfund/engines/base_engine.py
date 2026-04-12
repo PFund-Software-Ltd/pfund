@@ -12,13 +12,14 @@ if TYPE_CHECKING:
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.engines.engine_context import DataRangeDict
     from pfund.components.actor_proxy import ActorProxy
+    from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
+    from pfund.engines.settings.sandbox_engine_settings import SandboxEngineSettings
+    from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
 
 import logging
 import datetime
 
 from pfund_kit.style import cprint, RichColor, TextStyle
-from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
-from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
 from pfund.enums import (
     Environment,
     Broker,
@@ -45,7 +46,7 @@ class BaseEngine:
         env: Environment, 
         name: str,
         data_range: str | Resolution | DataRangeDict | Literal['ytd'],
-        settings: TradeEngineSettings | BacktestEngineSettings | None=None,
+        settings: TradeEngineSettings | BacktestEngineSettings | SandboxEngineSettings | None=None,
     ):
         '''
         Args:
@@ -89,7 +90,7 @@ class BaseEngine:
         return self._context.run_mode
     
     @property
-    def settings(self) -> TradeEngineSettings | BacktestEngineSettings:
+    def settings(self) -> TradeEngineSettings | BacktestEngineSettings | SandboxEngineSettings:
         return self._context.settings
     
     @property

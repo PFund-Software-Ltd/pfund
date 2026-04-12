@@ -52,6 +52,7 @@ class TradeEngine(BaseEngine):
             import graphviz
         except ImportError:
             raise ImportError('graphviz is not installed, please install it using `pip install graphviz`')
+        raise NotImplementedError('show_zmq_graph is not implemented')
     
     def _setup_data_engine(self):
         import pfeed as pe
@@ -224,8 +225,9 @@ class TradeEngine(BaseEngine):
     def run(self):
         super().run()
         if self._data_engine:
-            self._zmq_thread = Thread(target=self._run_zmq_loop, daemon=True)
-            self._zmq_thread.start()
+            if self._is_using_zmq():
+                self._zmq_thread = Thread(target=self._run_zmq_loop, daemon=True)
+                self._zmq_thread.start()
             self._data_engine.run()  # blocking call
         else:
             self._run_zmq_loop()

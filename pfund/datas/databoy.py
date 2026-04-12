@@ -313,14 +313,15 @@ class DataBoy:
         Args:
             msg: StreamingMessage, only provided when data is not being sent via zeromq
         '''
-        from msgspec import structs
-        # when not using zeromq
+        # when not using zeromq (guaranteed ALL components are local components)
         if msg is not None:
             # TODO: update market_data_store from msg
             for component in self._component.get_components():
                 component.databoy._collect(msg=msg)
-        # when using zeromq
+            print('***databoy _collect:', msg)
+        # when using zeromq (there could be some local and remote components, but both use zeromq to receive data anyways)
         else:
+            from msgspec import structs
             while self._component.is_running():
                 if msg_tuple := self._data_zmq.recv():
                     # TODO: how to know which data store to use from msg_tuple?

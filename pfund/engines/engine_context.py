@@ -9,6 +9,7 @@ from pfeed.enums import DataTool
 from pfund.enums import Environment, RunMode
 from pfund.datas.resolution import Resolution
 from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
+from pfund.engines.settings.sandbox_engine_settings import SandboxEngineSettings
 from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
 from pfund.config import get_config, get_logging_config
 
@@ -24,7 +25,7 @@ class EngineContext:
         env: Environment, 
         name: str, 
         data_range: str | Resolution | DataRangeDict | Literal['ytd'],
-        settings: TradeEngineSettings | BacktestEngineSettings | None=None,
+        settings: TradeEngineSettings | SandboxEngineSettings | BacktestEngineSettings | None=None,
     ):
         import pfeed as pe
         self.env = env
@@ -52,9 +53,6 @@ class EngineContext:
             return RunMode.WASM
         else:
             return RunMode.LOCAL
-        # import ray
-        # ctx = ray.get_runtime_context()
-        # actor_id = ctx.get_actor_id()   # empty/None if not in an actor
     
     def _load_env_vars(self) -> dict[str, str]:
         from dotenv import find_dotenv, dotenv_values
@@ -75,14 +73,22 @@ class EngineContext:
             rollback_period=data_range if not is_data_range_dict else '',
         )
     
-    def _load_settings(self) -> TradeEngineSettings | BacktestEngineSettings:
+    def _load_settings(self) -> TradeEngineSettings | SandboxEngineSettings | BacktestEngineSettings:
         '''Load settings from settings.toml'''
         from pfund_kit.utils import toml
         from pfund import get_config
         
         config = get_config()
 
-        EngineSettings = BacktestEngineSettings if self.env == Environment.BACKTEST else TradeEngineSettings
+        if self.env == Environment.BACKTEST:
+            EngineSettings = BacktestEngineSettings
+        elif self.env == Environment.SANDBOX:
+            EngineSettings = SandboxEngineSettings
+        elif self.env in [Environment.PAPER, Environment.LIVE]:
+            EngineSettings = TradeEngineSettings
+        else:
+            raise ValueError(f"Unsupported environment: {self.env}")
+
         settings_file_path = config.settings_file_path
         if settings_file_path.exists():
             settings_toml = toml.load(settings_file_path)

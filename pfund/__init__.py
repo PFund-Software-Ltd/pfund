@@ -7,6 +7,10 @@ if TYPE_CHECKING:
     from pfund.engines.backtest_engine import BacktestEngine
     from pfund._backtest.typing import BacktestDataFrame
     from pfund.engines.trade_engine import TradeEngine
+    from pfund.engines.sandbox_engine import SandboxEngine
+    from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
+    from pfund.engines.settings.sandbox_engine_settings import SandboxEngineSettings
+    from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.components.strategies.strategy_base import BaseStrategy as Strategy
     from pfund.components.models.model_base import BaseModel as Model
     from pfund.components.models.pytorch_model import PytorchModel
@@ -14,8 +18,6 @@ if TYPE_CHECKING:
     from pfund.components.features.feature_base import BaseFeature as Feature
     from pfund.components.indicators.indicator_base import BaseIndicator as Indicator
     from pfund.components.indicators.talib_indicator import TalibIndicator
-    from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
-    from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.datas.data_config import DataConfig
     from pfund.brokers.crypto.broker import CryptoBroker
     from pfund.brokers.broker_defi import DeFiBroker
@@ -59,9 +61,15 @@ def __getattr__(name: str):
     elif name == 'TradeEngine':
         from pfund.engines.trade_engine import TradeEngine
         return TradeEngine
+    elif name == 'SandboxEngine':
+        from pfund.engines.sandbox_engine import SandboxEngine
+        return SandboxEngine
     elif name == 'TradeEngineSettings':
         from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
         return TradeEngineSettings
+    elif name == 'SandboxEngineSettings':
+        from pfund.engines.settings.sandbox_engine_settings import SandboxEngineSettings
+        return SandboxEngineSettings
     elif name == 'BacktestEngineSettings':
         from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
         return BacktestEngineSettings
@@ -120,7 +128,9 @@ __all__ = (
     # engines
     'BacktestEngine',
     'TradeEngine',
+    'SandboxEngine',
     'TradeEngineSettings',
+    'SandboxEngineSettings',
     'BacktestEngineSettings',
     # backtest
     'BacktestDataFrame',
@@ -132,7 +142,6 @@ __all__ = (
     'SklearnModel',
     'Indicator',
     'TalibIndicator',
-    'TaIndicator',
     # brokers
     'IBKR', 'IB',
     'CryptoBroker',

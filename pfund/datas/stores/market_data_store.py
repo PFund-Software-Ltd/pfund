@@ -122,12 +122,16 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
     # TODO
     def update_quote(self, update: QuoteUpdate):
         data = self.get_data(update['product'], update['resolution'])
+        if data is None:
+            return
         data.on_quote(update['bids'], update['asks'], update['ts'], **update['extra_data'])
         self._databoy._deliver(data)
 
     # TODO
     def update_tick(self, update: TickUpdate):
         data = self.get_data(update['product'], update['resolution'])
+        if data is None:
+            return
         data.on_tick(
             price=update['price'], volume=update['volume'], 
             ts=update['ts'], msg_ts=update['msg_ts'], 
@@ -153,6 +157,10 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         if ready, deliver the bar data to databoy
         '''
         data = self.get_data(update['product'], update['resolution'])
+        # NOTE: when not using zeromq, ALL msgs are passed to all components. 
+        # If this component didn't subscribe to this data (via add_data()), get_data() returns None and the update is skipped.
+        if data is None:
+            return 
         if not update['is_incremental']:
             data.on_bar(
                 o=update['open'], h=update['high'], l=update['low'], c=update['close'], v=update['volume'], ts=update['ts'], 

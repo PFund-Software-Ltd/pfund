@@ -638,12 +638,9 @@ class ComponentMixin:
         self.on_tick(data)
     
     def _on_bar(self, data: BarData):
-        # TODO: wait for remote components' outputs
-        for listener in self._listeners[data]:
-            listener._on_bar(data)
-            self._update_signals(data, listener)
-        # TODO: non-wasm: send_signal, wasm: loop consumers.on_signal
-        self.databoy.trading_store.append_to_df(data, self.predictions)
+        # TODO: update signals and append to df
+        # self._update_signals(data)
+        # self.databoy.trading_store.append_to_df(data, self.predictions)
         self.on_bar(data)
 
     def _update_signals(self, data: BaseData, listener: BaseStrategy | BaseModel):
