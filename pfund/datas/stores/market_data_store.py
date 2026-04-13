@@ -1,6 +1,6 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false, reportArgumentType=false, reportUnnecessaryComparison=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, TypedDict, Any
+from typing import TYPE_CHECKING, TypedDict, Any, TypeAlias
 from functools import partial
 
 if TYPE_CHECKING:
@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
     from pfund.datas.data_config import DataConfig
     from pfund.datas.databoy import DataBoy
+    ResolutionRepr: TypeAlias = str
     class BarUpdate(TypedDict, total=True):
         product: ProductName
         resolution: Resolution
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
         msg_ts: float | None
         extra_data: dict[str, Any]
 
+import time
 from collections import defaultdict
 
 import narwhals as nw
@@ -41,17 +43,21 @@ from pfund.datas import QuoteData, TickData, BarData
 class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
     # Columns pinned to the left side of the materialized dataframe for readability
     LEFT_COLS = ['date', 'resolution', 'product', 'symbol', 'source_type']
+    INDEX_COLS = ['date']
+    PIVOT_COLS = ['resolution', 'product']
 
     def __init__(self, databoy: DataBoy):
         super().__init__(databoy)
-        self._datas: dict[ProductName, dict[Resolution, MarketData]] = defaultdict(dict)
+        self._datas: dict[ProductName, dict[ResolutionRepr, MarketData]] = defaultdict(dict)
         # periods based on the component's resolution
         self._warmup_period: int | None = None
         self._lookback_period: int | None = None
     
-    def get_data(self, product: ProductName, resolution: Resolution) -> MarketData | None:
+    def get_data(self, product: ProductName, resolution: Resolution | ResolutionRepr) -> MarketData | None:
         if product not in self._datas:
             return None
+        if isinstance(resolution, Resolution):
+            resolution = repr(resolution)
         return self._datas[product].get(resolution, None)
     
     def get_datas(self) -> list[MarketData]:
@@ -69,7 +75,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                 if storage_config.data_layer == DataLayer.RAW:
                     raise ValueError('Loading data from RAW data layer is not supported, pfund can only deal with cleaned data')
                 data = self.create_data(product=product, resolution=resolution, data_config=data_config, storage_config=storage_config)
-                self._datas[product.name][resolution] = data
+                self._datas[product.name][repr(resolution)] = data
             datas.append(data)
         
         # mutually bind data_resampler and data_resamplee
@@ -156,18 +162,21 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         '''update bar data from streaming message
         if ready, deliver the bar data to databoy
         '''
-        data = self.get_data(update['product'], update['resolution'])
-        # NOTE: when not using zeromq, ALL msgs are passed to all components. 
-        # If this component didn't subscribe to this data (via add_data()), get_data() returns None and the update is skipped.
-        if data is None:
-            return 
-        if not update['is_incremental']:
+        def _update_data(data: MarketData):
             data.on_bar(
                 o=update['open'], h=update['high'], l=update['low'], c=update['close'], v=update['volume'], ts=update['ts'], 
                 msg_ts=update['msg_ts'], 
                 extra_data=update['extra_data'],
                 is_incremental=update['is_incremental']
             )
+
+        data = self.get_data(update['product'], update['resolution'])
+        # NOTE: when not using zeromq, ALL msgs are passed to all components. 
+        # If this component didn't subscribe to this data (via add_data()), get_data() returns None and the update is skipped.
+        if data is None:
+            return 
+        if not update['is_incremental']:
+            _update_data(data)
             self._databoy._deliver(data)
             # NOTE: in case update['ts'] < data.end_ts but the bar is already closed
             # pick the max value so that resamplees can use the correct ts to determine if they are closed
@@ -176,14 +185,14 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             update['ts'] = max(update['ts'], data.end_ts)
         else:
             # deliver the closed bar before update() clears it for the next bar
-            if data.is_closed(now=update['ts'] or update['msg_ts']):
+            if not data.is_closed() and data.is_closed(now=update['ts'] or update['msg_ts'] or time.time()):
                 self._databoy._deliver(data)
-            data.on_bar(
-                o=update['open'], h=update['high'], l=update['low'], c=update['close'], v=update['volume'], ts=update['ts'], 
-                msg_ts=update['msg_ts'], 
-                extra_data=update['extra_data'],
-                is_incremental=update['is_incremental']
-            )
+                _update_data(data)
+            else:
+                _update_data(data)
+                if data.config.push_incomplete_bar:
+                    self._databoy._deliver(data)
+
         # update resamplees
         if data_resamplees := data.get_resamplees():
             resamplee_update = update.copy()
@@ -194,7 +203,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
     
     def _should_cache_resampled(self, feed: MarketFeed) -> bool:
         '''Determine if the retrieved data should be cached to the CURATED layer.'''
-        engine_settings = self._databoy.context.settings
+        engine_settings = self._databoy._component.context.settings
         setting = engine_settings.cache_materialized_data
         if setting is True:
             return True
@@ -235,7 +244,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             return nwdf
 
         dfs: list[Frame] = []
-        engine_context = self._databoy.context
+        engine_context = self._databoy._component.context
         settings = engine_context.settings
         start_date, end_date = engine_context.data_start, engine_context.data_end
 

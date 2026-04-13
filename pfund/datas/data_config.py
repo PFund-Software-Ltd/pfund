@@ -29,6 +29,7 @@ class DataConfig(BaseModel):
         default_factory=dict,
         description='shifts the start_ts of the bar by a number, only supports "minute", "hour", "day" timeframe. e.g. {"1h": 30} means the hour bar starts at 00:30-01:30.'
     )
+    push_incomplete_bar: bool = Field(default=False)
     # FIXMEL: should not be per resolution, just use bool?
     skip_first_bar: dict[Resolution | str, bool] = Field(
         default_factory=dict,

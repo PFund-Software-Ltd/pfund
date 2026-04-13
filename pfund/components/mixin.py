@@ -2,8 +2,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast, Literal
 if TYPE_CHECKING:
-    import torch
-    import numpy as np
     from narwhals._native import NativeDataFrame
     from pfund.typing import (
         ComponentT, 
@@ -21,18 +19,19 @@ if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
     from pfund.datas import QuoteData, TickData, BarData
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
-    from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.components.models.model_base import BaseModel
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.indicators.indicator_base import BaseIndicator
     from pfund.brokers.broker_base import BaseBroker
-
-import time
+    
 import logging
 import datetime
 
+import narwhals as nw
+
 from pfund_kit.utils import yaml
-from pfeed.enums import DataSource
+from pfund_kit.style import cprint, RichColor, TextStyle
+from pfeed.enums import DataCategory, DataSource
 from pfeed.storages.storage_config import StorageConfig
 from pfund.datas.resolution import Resolution
 from pfund.datas.data_config import DataConfig
@@ -57,9 +56,9 @@ class ComponentMixin:
         cls.load_params()
         
         self.name = self._get_default_name()
-        self._run_mode: RunMode | None = None
+        self.run_mode: RunMode | None = None
+        self.df_form: Literal['wide', 'long'] = 'wide'
         self._resolution: Resolution | None = None
-        self._df_form: Literal['long', 'wide'] = 'long'
         
         self.logger: logging.Logger = logging.getLogger('pfund')
         self._context: EngineContext | None = None
@@ -67,10 +66,12 @@ class ComponentMixin:
         self.databoy = DataBoy(self)  # pyright: ignore[reportArgumentType]
 
         self.products: dict[ProductName, BaseProduct] = {}
+        self.signals: dict[ComponentName, Any] = {}
+        self.signal_cols: list[str] = []
+
         self.models: dict[str, BaseModel | ActorProxy[BaseModel]] = {}
         self.features: dict[str, BaseFeature | ActorProxy[BaseFeature]] = {}
         self.indicators: dict[str, BaseIndicator | ActorProxy[BaseIndicator]] = {}
-        
 
         # FIXME
         # self._is_ready = defaultdict(bool)  # {data: bool}
@@ -82,10 +83,6 @@ class ComponentMixin:
     def env(self) -> Environment:
         assert self._context is not None, 'context is not set'
         return self._context.env
-    
-    @property
-    def run_mode(self):
-        return self._run_mode
     
     @property
     def context(self) -> EngineContext:
@@ -112,6 +109,8 @@ class ComponentMixin:
         run_mode: RunMode,
         resolution: Resolution | str,
         engine_context: EngineContext,
+        df_form: Literal['wide', 'long'] = 'wide',
+        signal_cols: list[str] | None=None,
     ):
         """
         Hydrates the component with necessary attributes after initialization.
@@ -120,13 +119,16 @@ class ComponentMixin:
             name (ComponentName): The name to assign to this component.
             run_mode (RunMode): The mode in which the component will run (e.g., local or remote).
             resolution (Resolution | str): The data resolution used by this component.
+            df_form (Literal['wide', 'long']): The form of the dataframe used by this component.
             engine_context (EngineContext): The engine context associated with this component. It is None if the component is running in a remote process.
         """
         self._context = engine_context
-        self._run_mode = run_mode
+        self.run_mode = run_mode
+        self.df_form = df_form
         self._set_name(name)
         self._set_resolution(resolution)
         self.set_logger(self.logger)
+        self.set_signal_cols(signal_cols or [])
         
     def _setup_messaging(self):
         self.databoy._setup_messaging()
@@ -257,17 +259,13 @@ class ComponentMixin:
         return self.databoy.get_df(kind='signals', to_native=True)
 
     @staticmethod
-    def dt(ts: float) -> datetime.datetime:
+    def dt(ts: float, tz: datetime.tzinfo = datetime.timezone.utc) -> datetime.datetime:
         from pfund_kit.utils.temporal import convert_ts_to_dt
-        return convert_ts_to_dt(ts)
+        return convert_ts_to_dt(ts, tz=tz)
     
     @staticmethod
-    def now() -> datetime.datetime:
-        return datetime.datetime.now(tz=datetime.timezone.utc)
-    
-    @staticmethod
-    def get_delay(ts: float) -> float:
-        return time.time() - ts
+    def now(tz: datetime.tzinfo = datetime.timezone.utc) -> datetime.datetime:
+        return datetime.datetime.now(tz=tz)
     
     @property
     def resolution(self) -> Resolution:
@@ -488,7 +486,7 @@ class ComponentMixin:
         component: ComponentT | ActorProxy[ComponentT],
         resolution: str='',
         name: str='', 
-        df_form: Literal['long', 'wide']='wide',
+        df_form: Literal['wide', 'long'] = 'wide',
         signal_cols: list[str] | None=None,
         ray_actor_options: dict[str, Any] | None=None,
         **ray_kwargs: Any
@@ -546,8 +544,8 @@ class ComponentMixin:
                 run_mode=RunMode.REMOTE if ray_kwargs else RunMode.LOCAL,
                 resolution=resolution or self.resolution,
                 engine_context=self.context,
-                signal_cols=signal_cols,
                 df_form=df_form,
+                signal_cols=signal_cols,
             )
         
         # FIXME: 
@@ -567,7 +565,7 @@ class ComponentMixin:
         model: ModelT | ActorProxy[ModelT],
         resolution: str='',
         name: str='',
-        df_form: Literal['long', 'wide']='wide',
+        df_form: Literal['wide', 'long'] = 'wide',
         signal_cols: list[str] | None=None,
         ray_actor_options: dict[str, Any] | None=None,
         **ray_kwargs: Any
@@ -587,7 +585,7 @@ class ComponentMixin:
         feature: FeatureT | ActorProxy[FeatureT], 
         resolution: str='',
         name: str='',
-        df_form: Literal['long', 'wide']='wide',
+        df_form: Literal['wide', 'long'] = 'wide',
         signal_cols: list[str] | None=None,
         ray_actor_options: dict[str, Any] | None=None,
         **ray_kwargs: Any
@@ -607,7 +605,7 @@ class ComponentMixin:
         indicator: IndicatorT | ActorProxy[IndicatorT],
         resolution: str='',
         name: str='',
-        df_form: Literal['long', 'wide']='wide',
+        df_form: Literal['wide', 'long'] = 'wide',
         signal_cols: list[str] | None=None,
         ray_actor_options: dict[str, Any] | None=None,
         **ray_kwargs: Any
@@ -622,33 +620,101 @@ class ComponentMixin:
             **ray_kwargs
         )
     
+    # TODO
     def _on_quote(self, data: QuoteData):
-        local_components = self._local_components.get(data, [])
-        for component in local_components:
-            component._on_quote(data)
-            self._update_signals(data, component)
-        self.databoy.trading_store.append_to_df(data, self.predictions)
         self.on_quote(data)
 
+    # TODO
     def _on_tick(self, data: TickData):
-        for listener in self._listeners[data]:
-            listener._on_tick(data)
-            self._update_signals(data, listener)
-        self.databoy.trading_store.append_to_df(data, self.predictions)
         self.on_tick(data)
     
-    def _on_bar(self, data: BarData):
-        # TODO: update signals and append to df
-        # self._update_signals(data)
-        # self.databoy.trading_store.append_to_df(data, self.predictions)
+    def _on_bar(self, data: BarData, signals: dict[ComponentName, Any]):
+        self.signals = signals
         self.on_bar(data)
+    
+    def set_signal_cols(self, signal_cols: list[str]):
+        self.signal_cols = signal_cols
+    
+    def merge_data_dfs(self, data_dfs: dict[DataCategory, NativeDataFrame]) -> NativeDataFrame:
+        '''Creates data_df by merging data_dfs per data category in long form
+        Args:
+            data_dfs: dataframes per data category in long form
+        '''
+        if self.df_form == 'wide':
+            # REVIEW: this requires dynamic pivoting for EACH call, not efficient
+            pivoted_dfs = [
+                nw.from_native(
+                    self.databoy.pivot_data_df(data_category=category, data_df=df)
+                ) for category, df in data_dfs.items()
+            ]
+            data_df = pivoted_dfs[0]
+            for df in pivoted_dfs[1:]:
+                if 'date' not in df.columns:
+                    raise ValueError("data_df does not contain 'date' column")
+                data_df = data_df.join(df, on='date', how='full')
+        elif self.df_form == 'long':
+            long_dfs = {category: nw.from_native(df) for category, df in data_dfs.items()}
 
-    def _update_signals(self, data: BaseData, listener: BaseStrategy | BaseModel):
-        pred_y: torch.Tensor | np.ndarray | None = listener._next(data)
-        if pred_y is not None:
-            signal_cols = listener.get_signal_cols()
-            for i, col in enumerate(signal_cols):
-                self.predictions[col] = pred_y[i]
+            # Pass 1: find common columns and collect candidate key columns
+            common_cols: set[str] = set()
+            key_cols: set[str] = set()
+            for i, (category, df) in enumerate(long_dfs.items()):
+                data_store = self.databoy.get_data_store(category)
+                key_cols.update(data_store.INDEX_COLS + data_store.PIVOT_COLS)
+                if i == 0:
+                    common_cols = set(df.columns)
+                else:
+                    common_cols &= set(df.columns)
+            join_cols = [col for col in key_cols if col in common_cols]
+                                                                                                                                
+            # Pass 2: join all dfs
+            dfs = list(long_dfs.values())
+            data_df = dfs[0]
+            for df in dfs[1:]:
+                if not join_cols:
+                    raise ValueError(
+                        f"No common columns found in data_dfs in long form to join on for {self.name}. " +
+                        "Please define your own merge_data_dfs() to handle merging data_dfs manually."
+                    )
+                cprint(
+                    f"Auto-joining data_dfs in long form for {self.name} on columns={join_cols}. " +
+                    "If this is not ideal, please define a your own merge_data_dfs() to handle merging data_dfs manually.",
+                    style=TextStyle.BOLD + RichColor.YELLOW,
+                )
+                data_df = data_df.join(df, on=join_cols, how='full')
+        else:
+            raise ValueError(f'Invalid {self.df_form=}')
+        return data_df.to_native()
+    
+    def featurize(self, data_df: NativeDataFrame) -> NativeDataFrame:
+        '''Creates features_df = data_df + signals_df (combined signals from other components)
+        In machine learning, features_df is the X in predict(X).
+        Args:
+            data_df: dataframe in {self.df_form} form
+        '''
+        # for component in self.components:
+        #     signals_df = component.signalize()
+        #     assert 'date' in signals_df.columns, \
+        #         f"{component.name} signals_df generated by signalize() must contain 'date' column, but got {signals_df.columns}"
+        #     X = X.join(signals_df, on=['date'], how='full')
+        return features_df
+    
+    def signalize(self, data_df: NativeDataFrame) -> NativeDataFrame:
+        '''Creates signals_df (combined signals from other component)
+        Args:
+            data_df: dataframe in {self.df_form} form
+        '''
+        features_df: NativeDataFrame = self.featurize(data_df)
+        # if torch is not None and isinstance(pred_y, torch.Tensor):
+        #     pred_y = pred_y.detach().numpy() if pred_y.requires_grad else pred_y.numpy()
+        # X: NativeDataFrame = self.featurize(df.to_native())
+        # # FIXME: pred_y could have different shapes than X (n rows in, m rows out), need to handle this
+        # pred_y: torch.Tensor | np.ndarray = self.predict(X)
+        # signal_cols = self.get_signal_cols()
+        # pred_df = nw.DataFrame(pred_y, columns=signal_cols)
+        # signals_df = nw.concat([X, pred_df], how='horizontal')
+        return signals_df.to_native()
+    
 
     def _gather(self):
         '''Sets up everything before start'''
@@ -661,9 +727,7 @@ class ComponentMixin:
             # TODO:
             # self._add_datas_from_consumer_if_none()
             
-            # TODO
-            # self.databoy._materialize()
-            
+            self.databoy._gather()
             self._is_gathered = True
             for component in self.components:
                 component._gather()

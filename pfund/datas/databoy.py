@@ -12,7 +12,6 @@ if TYPE_CHECKING:
     from pfund.datas.stores.base_data_store import BaseDataStore
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_bar import BarData
-    from pfund.engines.engine_context import EngineContext
     from pfund.typing import (
         ComponentName,
         Component,
@@ -50,18 +49,6 @@ class DataBoy:
         return self._component.name
     
     @property
-    def components(self) -> list[Component]:
-        return self._component.components
-    
-    @property
-    def consumers(self) -> list[Component]:
-        return self._component.consumers
-    
-    @property
-    def context(self) -> EngineContext:
-        return self._component.context
-    
-    @property
     def data_stores(self) -> dict[DataCategory, BaseDataStore]:
         return self._data_stores
     
@@ -73,12 +60,12 @@ class DataBoy:
     def market_data_store(self) -> MarketDataStore:
         return self.get_data_store(DataCategory.MARKET_DATA)
     
-    def is_remote(self) -> bool:
-        return self._component.is_remote()
+    def is_remote(self, direct_only: bool=True) -> bool:
+        return self._component.is_remote(direct_only=direct_only)
     
     def _create_trading_store(self) -> TradingStore:
         from pfund.datas.stores.trading_store import TradingStore
-        return TradingStore(self.context)
+        return TradingStore(self)
 
     def _create_data_store(self, category: DataCategory) -> MarketDataStore:
         from pfund.datas.stores.market_data_store import MarketDataStore
@@ -106,6 +93,25 @@ class DataBoy:
         for data_store in self.data_stores.values():
             datas.extend(data_store.get_datas())
         return datas
+    
+    def pivot_data_df(self, data_category: DataCategory, data_df: NativeDataFrame) -> NativeDataFrame:
+        '''Pivots data dataframe from long form to wide form.'''
+        df = nw.from_native(data_df)
+        data_store = self.get_data_store(data_category)
+        if data_category == DataCategory.MARKET_DATA:
+            df = (
+                df
+                .pivot(
+                    on=data_store.PIVOT_COLS,
+                    index=data_store.INDEX_COLS,
+                )
+                .sort(data_store.INDEX_COLS)
+            )
+        # TODO: handle other data categories e.g. news data
+        else:
+            if data_store.PIVOT_COLS:
+                raise ValueError(f'Unhandled pivot columns: {data_store.PIVOT_COLS} for {data_store}')
+        return df.to_native()
     
     def get_df(
         self, 
@@ -140,35 +146,18 @@ class DataBoy:
             raise ValueError(f'{kind=} is not supported')
         
         # pivot to wide form (only meaningful for data because data are stored in long form)
-        # REVIEW: this requires dynamic pivoting for EACH call, not efficient
         if kind == 'data' and pivot_data:
-            cols = df.columns
-            if 'resolution' in cols and 'product' in cols:
-                df = (
-                    df
-                    .pivot(
-                        on=['resolution', 'product'],
-                        index=['date'],
-                    )
-                    .sort('date')
-                )
-            else:
-                # TODO: handle other data categories e.g. news data
-                raise Exception(f'Unhandled data category {category}, cannot pivot to wide form')
+            df = nw.from_native(
+                self.pivot_data_df(data_category=category, data_df=df.to_native())
+            )
         return df.to_native() if to_native else df
     
-    def _materialize(self):
-        data_dfs: dict[DataCategory, nw.DataFrame[Any]] = {}
-        for data_category, data_store in self.data_stores.items():
-            df: nw.DataFrame[Any] = data_store.materialize()
-            data_dfs[data_category] = df
-        signals_df: nw.DataFrame[Any] = self._component.signalize()
-        self.trading_store.materialize(data_dfs, signals_df)
-    
+    # FIXME: move to market_data_store
     def _flush_stale_bar(self, data: BarData):
         if data.is_closed():
             self._deliver(data)
     
+    # FIXME: move to market_data_store
     def schedule_jobs(self, scheduler: BackgroundScheduler):
         for data, timeout in self.market_data_store._stale_bar_timeouts.items():
             scheduler.add_job(lambda: self._flush_stale_bar(data), 'interval', seconds=timeout)
@@ -233,7 +222,7 @@ class DataBoy:
             self.logger.debug(f'{self.name} already subscribed')
             return
         
-        engine_name = self._component._context.name
+        engine_name = self._component.context.name
         settings = self._component.settings
         zmq_urls = settings.zmq_urls
         zmq_ports = settings.zmq_ports
@@ -273,7 +262,7 @@ class DataBoy:
             else:
                 raise NotImplementedError(f'Unhandled data type: {type(data)}')
 
-        for component in self.components:
+        for component in self._component.get_components():
             component_zmq_url = settings.zmq_urls.get(component.name, ZeroMQ.DEFAULT_URL)
             component_zmq_port = zmq_ports.get(component.name, None)
             self._signals_zmq.connect(
@@ -288,10 +277,15 @@ class DataBoy:
         """Pongs back to Engine's ping to show that it is alive"""
         zmq_msg = (0, 0, (self.strat,))
         self._zmq.send(*zmq_msg, receiver='engine')
+    
+    def _gather(self):
+        for data_store in self.data_stores.values():
+            data_store.materialize()
+        self.trading_store.materialize()
 
     def start(self):
         # set the ZMQPushHandler's receiver ready to flush the buffered log messages
-        if self.is_remote():
+        if self.is_remote(direct_only=False):
             self.logger.handlers[0].set_receiver_ready()
         if self._data_zmq or self._signals_zmq:
             self._zmq_thread = Thread(target=self._collect, daemon=True)
@@ -300,13 +294,26 @@ class DataBoy:
     def stop(self):
         if self._zmq_thread and self._zmq_thread.is_alive():
             self.logger.debug(f"{self.name} waiting for data thread to finish")
-            self._zmq_thread.join()  # Blocks until thread finishes
-            self.logger.debug(f"{self.name} data thread finished")
+            self._zmq_thread.join(timeout=10)  # Blocks until thread finishes
+            self.logger.debug(f"{self.name} data thread finished (alive={self._zmq_thread.is_alive()})")
     
-    # TODO:
-    def _send_signal(self, signal):
-        # self._signals_zmq.send(signal)
-        pass
+    def _update_data_store(self, msg: StreamingMessage):
+        from msgspec import structs
+        
+        data_store = self.get_data_store(msg.data_category)
+        update = structs.asdict(msg)
+        
+        if msg.data_category == DataCategory.MARKET_DATA:
+            if msg.is_quote():
+                data_store.update_quote(update)
+            elif msg.is_tick():
+                data_store.update_tick(update)
+            elif msg.is_bar():
+                data_store.update_bar(update)
+            else:
+                raise ValueError(f'Unhandled market data message: {msg}')
+        else:
+            raise NotImplementedError(f'Unhandled data category: {msg.data_category}')
     
     def _collect(self, msg: StreamingMessage | None=None):
         '''
@@ -315,46 +322,61 @@ class DataBoy:
         '''
         # when not using zeromq (guaranteed ALL components are local components)
         if msg is not None:
-            # TODO: update market_data_store from msg
             for component in self._component.get_components():
                 component.databoy._collect(msg=msg)
-            print('***databoy _collect:', msg)
+            self._update_data_store(msg)
         # when using zeromq (there could be some local and remote components, but both use zeromq to receive data anyways)
         else:
-            from msgspec import structs
             while self._component.is_running():
                 if msg_tuple := self._data_zmq.recv():
-                    # TODO: how to know which data store to use from msg_tuple?
                     channel, topic, msg, msg_ts = msg_tuple
                     
                     # TEMP
                     print('databoy data_zmq recv:', channel, topic, msg, msg_ts)
                     
-                    # TODO
-                    # update = structs.asdict(msg)
-                    # if topic == PublicDataChannel.orderbook:
-                    #     self.market_data_store.update_quote(update)
-                    # elif topic == PublicDataChannel.tradebook:
-                    #     self.market_data_store.update_tick(update)
-                    # elif topic == PublicDataChannel.candlestick:
-                    #     self.market_data_store.update_bar(update)
-                    # else:
-                    #     raise NotImplementedError(f'{topic=} is not supported')
+                    self._update_data_store(msg)
                 # TODO:
                 if msg_tuple := self._signals_zmq.recv():
                     pass
                 
                 # TODO: check if signals are ready, if yes, call back on trade(X)
     
+    def _wait_for_children_signals(self, timeout: float = 10.0):
+        '''Waits for all children's signals via signals_zmq before delivering data.
+        Only used in ZMQ mode when the component has children.
+        zmq.recv() releases the GIL, so other threads (children) can compute their signals.
+        '''
+        import time
+
+        pending = set(c.name for c in self._component.get_components())
+        deadline = time.monotonic() + timeout
+        while pending:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self.logger.warning(
+                    f'{self.name} timed out waiting for children signals: {pending}'
+                )
+                break
+            if msg_tuple := self._signals_zmq.recv(timeout=int(remaining * 1000)):
+                channel, topic, signal, msg_ts = msg_tuple
+                # TODO: store the signal and extract child name from msg
+                child_name = topic
+                pending.discard(child_name)
+
     def _deliver(self, data: MarketData):
         '''Deliver data to the component'''
-        if self._component.is_remote():
-            # TODO
-            self._send_signal(...)
-        else:
-            if data.resolution.is_quote():
-                self._component._on_quote(data)
-            elif data.resolution.is_tick():
-                self._component._on_tick(data)
-            elif data.resolution.is_bar():
-                self._component._on_bar(data)
+        # if self._component.is_remote():
+        #     # TODO
+        #     self._send_signal(...)
+        # else:
+        # NOTE: In ZMQ mode, children receive data independently via their own data_zmq.
+        # We must wait for their signals before proceeding, since there's no ordering guarantee.
+        # In non-ZMQ mode, children already processed (bottom-up ordering in _collect).
+        if self._signals_zmq and self._component.get_components():
+            self._wait_for_children_signals()
+        if data.is_quote():
+            self._component._on_quote(data)
+        elif data.is_tick():
+            self._component._on_tick(data)
+        elif data.is_bar():
+            self._component._on_bar(data)

@@ -215,31 +215,35 @@ class TradeEngine(BaseEngine):
                 # TODO: publish orders, positions, balances etc. to components
                 # self._proxy.send(...)
             except Exception:
-                self._logger.exception(f"Exception in {self.name} run():")
+                self._logger.exception(f"Exception in {self.name} _run_zmq_loop():")
             except KeyboardInterrupt:
-                self._logger.warning(f'KeyboardInterrupt received, ending {self.name}')
+                self._logger.warning('KeyboardInterrupt received, ending ZMQ loop')
                 break
         self._proxy.terminate()
         self._worker.terminate()
         
     def run(self):
-        super().run()
-        if self._data_engine:
-            if self._is_using_zmq():
-                self._zmq_thread = Thread(target=self._run_zmq_loop, daemon=True)
-                self._zmq_thread.start()
-            self._data_engine.run()  # blocking call
-        else:
-            self._run_zmq_loop()
+        try:
+            super().run()
+            if self._data_engine:
+                if self._is_using_zmq():
+                    self._zmq_thread = Thread(target=self._run_zmq_loop, daemon=True)
+                    self._zmq_thread.start()
+                self._data_engine.run()  # blocking call
+            else:
+                self._run_zmq_loop()
+        except KeyboardInterrupt:
+            self._logger.warning(f'KeyboardInterrupt received, ending {self.name}')
+        except Exception:
+            self._logger.exception(f"Exception in {self.name} run():")
+        finally:
+            self.end()
 
     def end(self):
         super().end()
         if self._data_engine:
             self._data_engine.end()
-        if self._zmq_thread:
+        if self._zmq_thread and self._zmq_thread.is_alive():
             self._logger.debug(f"{self.name} waiting for zmq thread to finish")
             self._zmq_thread.join(timeout=10)
-            if self._zmq_thread.is_alive():
-                self._logger.debug(f"{self.name} zmq thread is still running after timeout")
-            else:
-                self._logger.debug(f"{self.name} zmq thread finished")
+            self._logger.debug(f"{self.name} zmq thread finished (alive={self._zmq_thread.is_alive()})")

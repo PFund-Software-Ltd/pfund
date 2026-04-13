@@ -59,8 +59,8 @@ class TalibIndicator(BaseIndicator):
             df = grouped_df.droplevel([0, 1])
             df.sort_index(inplace=True)
 
-        if not self._signal_cols:
-            self._set_signal_cols(df.columns.to_list())
+        if not self.signal_cols:
+            self.set_signal_cols(df.columns.to_list())
         
         return df.to_numpy()
 

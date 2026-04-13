@@ -92,8 +92,7 @@ class Bar:
 
     def is_closed(self, now: float | None=None) -> bool:
         # check if the bar is closed
-        if not self._is_closed:
-            now = now or time.time()
+        if not self._is_closed and now is not None:
             is_closed = now >= self._end_ts > 0
             if is_closed:
                 self._set_closed()
@@ -141,7 +140,7 @@ class Bar:
             else:
                 self._volume += v
         else:
-            self.clear()
+            self._start_ts, self._end_ts, self._ts = start_ts, end_ts, ts
             self._open, self._high, self._low, self._close, self._volume = o, h, l, c, v
             self._set_closed()
         self._update_ts(ts=ts, start_ts=start_ts, end_ts=end_ts, is_incremental=is_incremental)
@@ -277,21 +276,12 @@ class BarData(MarketData):
         return is_closed
     
     def __str__(self):
-        base_info = ':'.join([
-            'BarData',
-            self.product.trading_venue,
-            self.product.name,
-            str(self.resolution)
-        ])
+        is_closed = self.bar._is_closed
+        header = f"[BarData {'●' if is_closed else '○'}] {self.product.trading_venue} | {self.product.name} | {self.resolution}"
         if not self.bar.start_ts or self.bar.is_empty():
-            return f"{base_info}"
-        ohlcv = f"O:{self.bar.open:.2f} H:{self.bar.high:.2f} L:{self.bar.low:.2f} C:{self.bar.close:.2f} V:{self.bar.volume:.2f}"
-        
+            return header
+        ohlcv = f"  {self.bar.open} / {self.bar.high} / {self.bar.low} / {self.bar.close} | volume={self.bar.volume}"
         if self.bar.start_dt and self.bar.end_dt and self.bar.dt:
-            start_dt = self.bar.start_dt.strftime('%H:%M:%S')
-            end_dt = self.bar.end_dt.strftime('%H:%M:%S')
-            last_dt = self.bar.dt.strftime('%H:%M:%S')
-            time_info = f"({start_dt} - {end_dt}) (last={last_dt})"
-            return f"{base_info} | {ohlcv} | {time_info}"
-        else:
-            return f"{base_info} | {ohlcv}"
+            time_info = f"  {self.bar.start_dt.strftime('%H:%M:%S')} → {self.bar.end_dt.strftime('%H:%M:%S')} | update@{self.bar.dt.strftime('%H:%M:%S.%f')[:-3]}"
+            return f"{header}\n{ohlcv}\n{time_info}"
+        return f"{header}\n{ohlcv}"

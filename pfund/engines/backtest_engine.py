@@ -112,6 +112,8 @@ class BacktestEngine(BaseEngine):
         strategy: StrategyT, 
         resolution: str, 
         name: str='',
+        df_form: Literal['wide', 'long'] = 'long',
+        signal_cols: list[str] | None=None,
     ) -> StrategyT:
         from pfund.components.strategies._dummy_strategy import DummyStrategy
         from pfund.components.strategies.strategy_backtest import BacktestStrategy
@@ -127,6 +129,8 @@ class BacktestEngine(BaseEngine):
             strategy=strategy,
             resolution=resolution,
             name=name or Strategy.__name__,
+            df_form=df_form,
+            signal_cols=signal_cols,
         ))
 
     def add_model(
@@ -134,7 +138,7 @@ class BacktestEngine(BaseEngine):
         model: ModelT, 
         resolution: str,
         name: str='',
-        df_form: Literal['long', 'wide']='wide',
+        df_form: Literal['wide', 'long'] = 'wide',
         signal_cols: list[str] | None=None,
     ) -> BacktestMixin | ModelT:
         '''Add model without creating a strategy (using dummy strategy)'''
@@ -160,7 +164,7 @@ class BacktestEngine(BaseEngine):
         feature: FeatureT, 
         resolution: str,
         name: str='',
-        df_form: Literal['long', 'wide']='wide',
+        df_form: Literal['wide', 'long'] = 'wide',
         signal_cols: list[str] | None=None,
     ) -> BacktestMixin | FeatureT:
         return self.add_model(
@@ -176,7 +180,7 @@ class BacktestEngine(BaseEngine):
         indicator: IndicatorT, 
         resolution: str,
         name: str='',
-        df_form: Literal['long', 'wide']='wide',
+        df_form: Literal['wide', 'long'] = 'wide',
         signal_cols: list[str] | None=None,
     ) -> BacktestMixin | IndicatorT:
         return self.add_model(

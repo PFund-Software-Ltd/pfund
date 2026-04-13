@@ -109,6 +109,8 @@ class BaseEngine:
         strategy: StrategyT,
         resolution: str, 
         name: str='', 
+        df_form: Literal['wide', 'long'] = 'long',
+        signal_cols: list[str] | None=None,
         ray_actor_options: dict[str, Any] | None=None,
         **ray_kwargs: Any,
     ) -> StrategyT | ActorProxy[StrategyT]:
@@ -148,6 +150,8 @@ class BaseEngine:
             run_mode=RunMode.REMOTE if ray_kwargs else RunMode.LOCAL,
             resolution=resolution,
             engine_context=self._context,
+            df_form=df_form,
+            signal_cols=signal_cols,
         )
         strategy._set_top_strategy()
 

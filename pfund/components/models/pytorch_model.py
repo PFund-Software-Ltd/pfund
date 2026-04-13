@@ -1,3 +1,9 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from torch import Tensor
+    from narwhals._native import NativeDataFrame
+
 import os
 
 import torch
@@ -46,20 +52,20 @@ class PytorchModel(BaseModel):
         
     def predict(
         self, 
-        X: torch.Tensor | pd.DataFrame | pl.LazyFrame, 
+        X: Tensor | NativeDataFrame,
         *args, 
         **kwargs
-    ) -> torch.Tensor:
-        if isinstance(X, pd.DataFrame):
+    ) -> Tensor:
+        if isinstance(X, (pd.DataFrame, pl.DataFrame)):
             X = torch.tensor( X.to_numpy(), dtype=torch.float32 )
         elif isinstance(X, pl.LazyFrame):
             X = torch.tensor( X.collect().to_numpy(), dtype=torch.float32 )
-        else:
+        elif not isinstance(X, torch.Tensor):
             raise ValueError(f"Unsupported data type: {type(X)}")
         pred_y = self.model(X, *args, **kwargs)
 
-        if not self._signal_cols:
+        if not self.signal_cols:
             num_cols = pred_y.shape[-1]
-            signal_cols = self.get_default_signal_cols(num_cols)
-            self._set_signal_cols(signal_cols)
+            signal_cols = self._get_default_signal_cols(num_cols)
+            self.set_signal_cols(signal_cols)
         return pred_y

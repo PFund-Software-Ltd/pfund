@@ -104,8 +104,8 @@ class TaIndicator(BaseIndicator):
             df = pd.concat(dfs, axis=1)
             df.sort_index(level='ts', inplace=True)
     
-        if not self._signal_cols:
-            self._set_signal_cols(df.columns.to_list())
+        if not self.signal_cols:
+            self.set_signal_cols(df.columns.to_list())
     
         return df.to_numpy()
 

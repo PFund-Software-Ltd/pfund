@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar, ClassVar
 
 if TYPE_CHECKING:
     from pfund.datas.databoy import DataBoy
@@ -20,6 +20,10 @@ FeedT = TypeVar('FeedT', bound=BaseFeed)
 
 
 class BaseDataStore(ABC, Generic[DataT, FeedT]):
+    LEFT_COLS: ClassVar[list[str]]
+    INDEX_COLS: ClassVar[list[str]]
+    PIVOT_COLS: ClassVar[list[str]]
+
     def __init__(self, databoy: DataBoy):
         self._logger: logging.Logger = logging.getLogger("pfund")
         self._databoy: DataBoy = databoy
