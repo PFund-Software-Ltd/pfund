@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from narwhals._native import NativeDataFrame
     from pfeed.sources.pfund.component_feed import ComponentFeed
     from pfund.datas.databoy import DataBoy
+    from pfund.typing import ComponentName
 
 import logging
 
@@ -49,7 +50,13 @@ class TradingStore:
             for category in self._databoy.data_stores.keys():
                 data_dfs[category] = self._databoy.get_df(kind='data', category=category)
             data_df = component.merge_data_dfs(data_dfs)
-            features_df = component.featurize(data_df)
+            # NOTE: component's signals_df (component.get_df()) should be ready before featurize() is called
+            # i.e. The component tree is BOTTOM-UP
+            signals_dfs: dict[ComponentName, NativeDataFrame] = {
+                _component.name: _component.get_df()
+                for _component in component.get_components()
+            }
+            features_df = component.featurize(data_df, signals_dfs)
             signals_df = component.signalize(features_df)
             self._df = nw.from_native(signals_df)
         # NOTE: strategy's signals are event-driven, i.e. you can't compute them using signal columns from its components

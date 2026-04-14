@@ -66,6 +66,9 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def signalize(self, features_df: NativeDataFrame) -> NativeDataFrame:
         X = nw.from_native(features_df)
         
+    # TODO: {product.name}_signal
+    def _get_default_signal_cols(self) -> list[str]:
+        pass
     
     def _set_top_strategy(self):
         self._is_top_strategy = True
@@ -75,6 +78,9 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     
     def is_sub_strategy(self) -> bool:
         return not self._is_top_strategy
+    
+    def get_component(self, name: ComponentName) -> Component | ActorProxy[Component] | None:
+        return self.strategies.get(name, None) or super().get_component(name)
 
     def get_components(self) -> list[Component | ActorProxy[Component]]:
         return [*self.strategies.values(), *super().get_components()]

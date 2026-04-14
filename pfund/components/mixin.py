@@ -1,6 +1,6 @@
 # pyright: reportUninitializedInstanceVariable=false, reportUnknownParameterType=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, cast, Literal
+from typing import TYPE_CHECKING, Any, cast, Literal, ClassVar
 if TYPE_CHECKING:
     from narwhals._native import NativeDataFrame
     from pfund.typing import (
@@ -37,9 +37,15 @@ from pfund.datas.resolution import Resolution
 from pfund.datas.data_config import DataConfig
 from pfund.components.actor_proxy import ActorProxy
 from pfund.enums import ComponentType, RunMode, Environment, Broker, TradingVenue
+from pfund.utils.decorators import ray_method
 
     
 class ComponentMixin:
+    # NOTE: INDEX_COLS and PIVOT_COLS are only used for pivoting signals_df from long form to wide form (e.g. in featurize())
+    # since market data are very common in all components, use date and resolution/product as the default pivot columns
+    INDEX_COLS: ClassVar[list[str]] = ['date']
+    PIVOT_COLS: ClassVar[list[str]] = ['resolution', 'product']
+    
     config = {}
     params = {}
 
@@ -226,6 +232,9 @@ class ComponentMixin:
     def components(self) -> list[Component | ActorProxy[Component]]:
         return self.get_components()
     
+    def get_component(self, name: ComponentName) -> Component | ActorProxy[Component] | None:
+        return self.models.get(name, None) or self.features.get(name, None) or self.indicators.get(name, None)
+    
     def get_components(self) -> list[Component | ActorProxy[Component]]:
         return [
             *self.models.values(), 
@@ -257,6 +266,14 @@ class ComponentMixin:
     @property
     def df(self) -> NativeDataFrame:
         return self.databoy.get_df(kind='signals', to_native=True)
+    
+    @ray_method
+    def get_df(self):
+        return self.df
+    
+    @ray_method
+    def get_df_form(self) -> Literal['wide', 'long']:
+        return self.df_form
 
     @staticmethod
     def dt(ts: float, tz: datetime.tzinfo = datetime.timezone.utc) -> datetime.datetime:
@@ -502,8 +519,6 @@ class ComponentMixin:
         '''
         from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 
-        assert df_form == self.df_form, f"{component.name} {df_form=} mismatches with {self.name}'s df_form={self.df_form}"
-
         Component = component.__class__
         ComponentName = Component.__name__
         if component.is_model():
@@ -550,6 +565,9 @@ class ComponentMixin:
                 signal_cols=signal_cols,
             )
         
+        # TEMP
+        print('self', self, type(self))
+        print('add component', component, type(component))
         # FIXME: 
         # component._add_consumer(self._proxy if is_remote else self)
 
@@ -692,18 +710,36 @@ class ComponentMixin:
             data_df = data_df.join(df, on=join_cols, how='full')
         return data_df.to_native()
     
-    def featurize(self, data_df: NativeDataFrame) -> NativeDataFrame:
+    def featurize(self, data_df: NativeDataFrame, signals_dfs: dict[ComponentName, NativeDataFrame]) -> NativeDataFrame:
         '''Creates features_df = data_df + signals_df (combined signals from other components)
         In machine learning, features_df is the X in predict(X).
         Args:
             data_df: dataframe in {self.df_form} form
+            signals_dfs: signals_dfs from other components
         '''
-        features_df: nw.DataFrame[Any] | None = nw.from_native(data_df)
-        for component in self.components:
-            # NOTE: component's signals_df should be ready before featurize() is called
-            # i.e. The component tree is BOTTOM-UP
-            component_signals_df = nw.from_native(component.df)
-            features_df = nw.concat([features_df, component_signals_df], how='horizontal')
+        features_df = nw.from_native(data_df)
+        for component_name, df in signals_dfs.items():
+            component = self.get_component(component_name)
+            signals_df = nw.from_native(df)
+            # pivot signals_df from long form to wide form
+            if self.df_form == 'wide' and component.get_df_form() == 'long':  # pyright: ignore[reportOptionalMemberAccess]
+                pivot_cols = [col for col in self.PIVOT_COLS if col in signals_df.columns]
+                if not pivot_cols:
+                    raise ValueError(
+                        f"Cannot pivot component '{component_name}' signals_df to wide form: " +
+                        f"none of {self.name}'s PIVOT_COLS={self.PIVOT_COLS} appear in " +
+                        f"signals_df columns={signals_df.columns}. " +
+                        "Please define PIVOT_COLS (class attribute) in your component class or write your own featurize()."
+                    )
+                index_cols = [col for col in self.INDEX_COLS if col in signals_df.columns]
+                signals_df = signals_df.pivot(on=pivot_cols, index=index_cols)
+            join_cols = [col for col in features_df.columns if col in signals_df.columns]
+            if not join_cols:
+                raise ValueError(
+                    f"No common columns between {self.name}'s features_df and " +
+                    f"component '{component_name}' signals_df"
+                )
+            features_df = features_df.join(signals_df, on=join_cols, how='left')
         return features_df.to_native()
 
     def _gather(self):
