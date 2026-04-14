@@ -165,7 +165,6 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
             strategy._set_name(name)
         strategy._set_trading_store()
         strategy._create_logger()
-        strategy._set_consumer(self)
         strategy._set_resolution(self.resolution)
         strat = strategy.name
         if strat in self.strategies:

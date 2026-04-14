@@ -1,4 +1,4 @@
-# pyright: reportUninitializedInstanceVariable=false, reportUnknownParameterType=false
+# pyright: reportUninitializedInstanceVariable=false, reportUnknownParameterType=false, reportUnknownMemberType=false, reportArgumentType=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast, Literal, ClassVar
 if TYPE_CHECKING:
@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from pfund.engines.engine_context import EngineContext
     from pfund.datas.data_market import MarketData
     from pfund.datas.data_base import BaseData
-    from pfund.datas.data_time_based import TimeBasedData
     from pfund.entities.products.product_base import BaseProduct
     from pfund.datas import QuoteData, TickData, BarData
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
@@ -68,7 +67,6 @@ class ComponentMixin:
         
         self.logger: logging.Logger = logging.getLogger('pfund')
         self._context: EngineContext | None = None
-        self._consumers: list[Component | ActorProxy[Component]] = []
         self.databoy = DataBoy(self)  # pyright: ignore[reportArgumentType]
 
         self.products: dict[ProductName, BaseProduct] = {}
@@ -218,7 +216,6 @@ class ComponentMixin:
             'run_mode': self.run_mode.value,
             'config': self.config,
             'params': self.params,
-            'consumers': [consumer.name for consumer in self._consumers],
             'datas': [data.to_dict() for data in self.databoy.get_datas()],
             'models': [model.to_dict() for model in self.models.values()],
             'features': [feature.to_dict() for feature in self.features.values()],
@@ -241,10 +238,6 @@ class ComponentMixin:
             *self.features.values(), 
             *self.indicators.values(),
         ]
-    
-    @property
-    def consumers(self) -> list[Component | ActorProxy[Component]]:
-        return self._consumers
     
     @property
     def component_type(self) -> ComponentType:
@@ -303,13 +296,7 @@ class ComponentMixin:
         self.name = name
         if not self.name.lower().endswith(self.component_type):
             self.name += f"_{self.component_type}"
-    
-    def _add_consumer(self, consumer: Component | ActorProxy[Component]):
-        if consumer not in self._consumers:
-            self._consumers.append(consumer)
-        else:
-            raise ValueError(f"{self.name} already has a consumer {consumer}")
-    
+        
     def is_strategy(self) -> bool:
         return self.component_type == ComponentType.strategy
     
@@ -330,26 +317,31 @@ class ComponentMixin:
         Returns whether this component is running in a remote (Ray) process.
 
         Args:
-            direct_only (bool): 
-                - If True (default), only checks the component's own `_run_mode`.
-                This reflects whether the component *itself* is declared to be remote.
-                e.g. a model is running inside a strategy (ray actor), relatively the model is "local"
-                - If False, walks up the `_consumer` chain to check if this component 
-                is running *within* a remote context (e.g., inside a Ray actor).
-                This captures whether the component is effectively remote due to being 
-                nested inside another remote component.
+            direct_only (bool):
+                - If True (default), only checks the component's own `run_mode`.
+                  Reflects whether the component *itself* is declared to be remote.
+                  e.g. a model running inside a strategy (ray actor) is "local" relative to itself.
+                - If False, also checks whether this component's code is currently
+                  executing inside a Ray actor process via `ray.get_runtime_context()`.
+                  This captures the case where a declaratively local component is
+                  nested inside a remote parent and therefore runs in the parent's
+                  actor process.
 
         Returns:
-            bool: True if the component (or any of its ancestors) is remote.
+            bool: True if the component is declared remote, or (when `direct_only=False`)
+                  is currently executing inside a Ray actor process.
         """
         assert self.run_mode is not None, f"{self.name} has no run mode"
         is_remote = self.run_mode == RunMode.REMOTE
         if is_remote or direct_only:
             return is_remote
-        # if not remote, walk up the consumer chain to check if any of the ancestors is remote
-        for consumer in self._consumers:
-            if consumer.is_remote(direct_only=direct_only):
-                return True
+        try:
+            import ray
+            if not ray.is_initialized():
+                return False
+            return ray.get_runtime_context().get_actor_id() is not None
+        except Exception:
+            return False
         return False
     
     def _has_any_remote_component(self) -> bool:
@@ -487,17 +479,6 @@ class ComponentMixin:
     def add_custom_data(self):
         raise NotImplementedError
     
-    def _add_datas_from_consumer_if_none(self) -> list[BaseData]:
-        has_no_data = self._consumer and not self.datas
-        if not has_no_data:
-            return []
-        self.logger.info(f"No data for {self.name}, adding datas from consumer {self._consumer.name}")
-        datas: list[TimeBasedData] = self._consumer.list_datas()
-        for data in datas:
-            self._add_data(data)
-            self._consumer._add_listener(self, data)
-        return datas
-    
     def _add_component(
         self, 
         component: ComponentT | ActorProxy[ComponentT],
@@ -565,20 +546,13 @@ class ComponentMixin:
                 signal_cols=signal_cols,
             )
         
-        # TEMP
-        print('self', self, type(self))
-        print('add component', component, type(component))
-        # FIXME: 
-        # component._add_consumer(self._proxy if is_remote else self)
-
         components[component.name] = component
         self.logger.debug(f"{self.name} added {component.name}")
     
-        if self.is_remote() and not component.is_remote():
-            # NOTE: returns None when adding a local component to a remote component to avoid returning a serialized (copied) object
+        # NOTE: returns None when adding a local component (not ActorProxy) to a remote component to avoid returning a serialized (copied) object
+        if self.is_remote() and not isinstance(component, ActorProxy):
             return None
-        else:
-            return component
+        return component
     
     def add_model(
         self, 
@@ -752,9 +726,6 @@ class ComponentMixin:
             self.add_models()
             self.add_features()
             self.add_indicators()
-            # TODO:
-            # self._add_datas_from_consumer_if_none()
-            
             self.databoy._gather()
             self._is_gathered = True
             self.logger.info(f"'{self.name}' has gathered")
