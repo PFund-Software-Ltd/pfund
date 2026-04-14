@@ -2,7 +2,10 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, overload, cast, Any, Callable
 if TYPE_CHECKING:
-    import torch
+    from sklearn.base import BaseEstimator
+    import torch.nn as nn
+    from torch import Tensor
+    from numpy import ndarray
     import pandas as pd
     import polars as pl
     from pfeed.typing import GenericFrame
@@ -18,8 +21,6 @@ if TYPE_CHECKING:
 
 import logging
 from functools import cached_property
-
-import numpy as np
 
 from pfund_kit.style import cprint, RichColor, TextStyle
 from pfund.components.strategies.strategy_base import BaseStrategy
@@ -171,12 +172,13 @@ class BacktestMixin:
     
     def add_model(
         self, 
-        model: ModelT, 
+        model: ModelT | BaseEstimator | nn.Module, 
         resolution: str,
         name: str='',
         signal_cols: list[str] | None=None,
     ) -> ModelT:
         from pfund.components.models.model_backtest import BacktestModel
+        model = cast("ModelT", self._wrap_model(model))
         Model = type(model)
         model = BacktestModel(Model, model.model, *model.__pfund_args__, **model.__pfund_kwargs__)
         return super().add_model(
@@ -186,7 +188,7 @@ class BacktestMixin:
             signal_cols=signal_cols,
         )
     
-    def _next(self, data: BaseData) -> torch.Tensor | np.ndarray:
+    def _next(self, data: BaseData) -> Tensor | ndarray:
         if not self._is_signal_df_required:
             new_pred = super()._next(data)
         else:

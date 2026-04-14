@@ -16,6 +16,15 @@ class BaseFeature(BaseModel):
         super().__init__(model, *args, **kwargs)
         self.set_signal_cols([self.name])
     
+    # TODO: generalize return type to dict[str, ndarray] for multi-output features.
+    # Today's single-ndarray contract forces a 1-feature-per-class shape, which
+    # doesn't fit transforms that naturally emit multiple named outputs together:
+    #   - HF tokenizers: {'input_ids', 'attention_mask', 'token_type_ids'}
+    #   - StandardScaler on N cols: one scaled col per input col
+    #   - OHLCV stat bundles: {'return', 'log_return', 'zscore'}
+    # Keep single-ndarray as valid shorthand (auto-wrap into {self.name: arr}) so
+    # simple cases stay simple; dict-return is opt-in for multi-output features.
+    # Downstream models then need a way to select specific named columns as input.
     @abstractmethod
     def transform(self, X: GenericFrame, *args, **kwargs) -> ndarray:
         """Extract features from the input data"""

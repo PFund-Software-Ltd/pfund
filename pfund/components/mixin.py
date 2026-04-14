@@ -1,13 +1,15 @@
-# pyright: reportUninitializedInstanceVariable=false, reportUnknownParameterType=false, reportUnknownMemberType=false, reportArgumentType=false
+# pyright: reportUninitializedInstanceVariable=false, reportUnknownParameterType=false, reportUnknownMemberType=false, reportArgumentType=false, reportAssignmentType=false, reportReturnType=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast, Literal, ClassVar
 if TYPE_CHECKING:
+    from sklearn.base import BaseEstimator
+    import torch.nn as nn
     from narwhals._native import NativeDataFrame
     from pfund.typing import (
-        ComponentT, 
-        ModelT, 
-        IndicatorT, 
-        FeatureT, 
+        ComponentT,
+        ModelT,
+        IndicatorT,
+        FeatureT,
         Component,
         ComponentName,
         ProductName,
@@ -61,13 +63,13 @@ class ComponentMixin:
         cls.load_params()
         
         self.name = self._get_default_name()
-        self.run_mode: RunMode | None = None
+        self._run_mode: RunMode | None = None
         self.df_form: Literal['wide', 'long'] = 'wide'
         self._resolution: Resolution | None = None
         
         self.logger: logging.Logger = logging.getLogger('pfund')
         self._context: EngineContext | None = None
-        self.databoy = DataBoy(self)  # pyright: ignore[reportArgumentType]
+        self.databoy = DataBoy(self)
 
         self.products: dict[ProductName, BaseProduct] = {}
         self.signals: dict[ComponentName, Any] = {}
@@ -87,6 +89,11 @@ class ComponentMixin:
     def env(self) -> Environment:
         assert self._context is not None, 'context is not set'
         return self._context.env
+    
+    @property
+    def run_mode(self) -> RunMode:
+        assert self._run_mode is not None, 'run_mode is not set'
+        return self._run_mode
     
     @property
     def context(self) -> EngineContext:
@@ -127,7 +134,7 @@ class ComponentMixin:
             engine_context (EngineContext): The engine context associated with this component. It is None if the component is running in a remote process.
         """
         self._context = engine_context
-        self.run_mode = run_mode
+        self._run_mode = run_mode
         self.df_form = df_form
         self._set_name(name)
         self._set_resolution(resolution)
@@ -475,10 +482,6 @@ class ComponentMixin:
         )
         return datas
     
-    # TODO
-    def add_custom_data(self):
-        raise NotImplementedError
-    
     def _add_component(
         self, 
         component: ComponentT | ActorProxy[ComponentT],
@@ -554,9 +557,34 @@ class ComponentMixin:
             return None
         return component
     
+    def _wrap_model(self, model: BaseEstimator | nn.Module | ModelT | ActorProxy[ModelT]) -> ModelT:
+        '''Wraps a sklearn/pytorch model into a pfund model'''
+        from pfund.components.models.model_base import BaseModel
+        if isinstance(model, (ActorProxy, BaseModel)):
+            return model
+        try:
+            from sklearn.base import BaseEstimator
+            if isinstance(model, BaseEstimator):
+                from pfund.components.models.sklearn_model import SklearnModel
+                pfund_model = SklearnModel(model)
+                pfund_model._set_name(type(model).__name__)
+                return pfund_model
+        except ImportError:
+            pass
+        try:
+            import torch.nn as nn
+            if isinstance(model, nn.Module):
+                from pfund.components.models.pytorch_model import PytorchModel
+                pfund_model = PytorchModel(model)
+                pfund_model._set_name(type(model).__name__)
+                return pfund_model
+        except ImportError:
+            pass
+        raise TypeError(f"Unsupported model type: {type(model).__name__}")
+    
     def add_model(
         self, 
-        model: ModelT | ActorProxy[ModelT],
+        model: ModelT | ActorProxy[ModelT] | BaseEstimator | nn.Module,
         resolution: str='',
         name: str='',
         df_form: Literal['wide', 'long'] = 'wide',
@@ -564,6 +592,7 @@ class ComponentMixin:
         ray_actor_options: dict[str, Any] | None=None,
         **ray_kwargs: Any
     ) -> ModelT | ActorProxy[ModelT] | None:
+        model = self._wrap_model(model)
         return self._add_component(
             component=model,
             resolution=resolution,

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from torch import Tensor
+    from sklearn.base import BaseEstimator
     from numpy import ndarray
     import torch.nn as nn
     from narwhals._native import NativeDataFrame
@@ -11,8 +12,7 @@ if TYPE_CHECKING:
     from pfund.datas.data_config import DataConfig
     from pfeed.storages.storage_config import StorageConfig
     from pfund.components.indicators.indicator_base import TalibFunction
-    from pfund.components.models.sklearn_model import SklearnPredictor
-    MachineLearningModel = nn.Module | SklearnPredictor | TalibFunction
+    MachineLearningModel = nn.Module | BaseEstimator | TalibFunction
     from pfund.datas.data_base import BaseData
 
 import os
@@ -39,6 +39,25 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
     @abstractmethod
     def predict(self, X: Any, *args: Any, **kwargs: Any) -> Any:
         pass
+
+    def __getattr__(self, name: str):
+        '''
+        __getattr__ only fires when the attribute isn't found via normal lookup,
+        so we only reach here for methods/attrs not defined on the wrapper.
+        '''
+        # Skip underscore names: 
+        # (1) dunders like __reduce__/__getstate__ have
+        # pickle-protocol meaning and must not silently resolve to self.model,
+        # (2) single-underscore names are pfund-internal state — delegating them
+        # risks silent collisions if the underlying model grows a same-named attr,
+        # (3) avoids recursion during __init__/unpickle when private attrs may be
+        # accessed before they're set on self.
+        if name.startswith('_'):
+            raise AttributeError(name)
+        model = self.__dict__.get('model')
+        if model is None:
+            raise AttributeError(name)
+        return getattr(model, name)
 
     def signalize(self, features_df: NativeDataFrame) -> NativeDataFrame:
         '''Creates signals_df (combined signals from other component)
