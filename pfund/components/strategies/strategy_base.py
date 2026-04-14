@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Literal, TYPE_CHECKING, overload, Any
 if TYPE_CHECKING:
+    from narwhals._native import NativeDataFrame
     from pfund.typing import (
         StrategyT,
         Component,
@@ -56,6 +57,15 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         # self.trades: dict[AccountName, list[BaseTrade]] = {}
         
         self.__mixin_post_init__(*args, **kwargs)  # calls ComponentMixin.__mixin_post_init__()
+    
+    @abstractmethod
+    def trade(self):
+        pass
+
+    # TODO:
+    def signalize(self, features_df: NativeDataFrame) -> NativeDataFrame:
+        X = nw.from_native(features_df)
+        
     
     def _set_top_strategy(self):
         self._is_top_strategy = True
@@ -139,6 +149,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     
     # FIXME: update, refer to or reuse _add_component() in component_mixin.py
     # TODO: _setup_logging, _set_engine etc.
+    # TODO: make sure sub-strategy's df_form is the same as the top strategy's df_form
     def add_strategy(self, strategy: StrategyT, name: str='') -> StrategyT:
         if strategy.is_top_strategy():
             raise ValueError(f"Top strategy '{self.name}' cannot be added as a sub-strategy")

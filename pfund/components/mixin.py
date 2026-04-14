@@ -255,7 +255,7 @@ class ComponentMixin:
             raise ValueError(f"Unknown component type: {self.__class__.__name__}")
     
     @property
-    def df(self) -> NativeDataFrame | None:
+    def df(self) -> NativeDataFrame:
         return self.databoy.get_df(kind='signals', to_native=True)
 
     @staticmethod
@@ -502,6 +502,8 @@ class ComponentMixin:
         '''
         from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 
+        assert df_form == self.df_form, f"{component.name} {df_form=} mismatches with {self.name}'s df_form={self.df_form}"
+
         Component = component.__class__
         ComponentName = Component.__name__
         if component.is_model():
@@ -642,48 +644,52 @@ class ComponentMixin:
         '''
         if self.df_form == 'wide':
             # REVIEW: this requires dynamic pivoting for EACH call, not efficient
-            pivoted_dfs = [
-                nw.from_native(
-                    self.databoy.pivot_data_df(data_category=category, data_df=df)
-                ) for category, df in data_dfs.items()
+            dfs = [
+                nw.from_native(self.databoy.pivot_data_df(data_category=category, data_df=df))
+                for category, df in data_dfs.items()
             ]
-            data_df = pivoted_dfs[0]
-            for df in pivoted_dfs[1:]:
-                if 'date' not in df.columns:
-                    raise ValueError("data_df does not contain 'date' column")
-                data_df = data_df.join(df, on='date', how='full')
+            cols_attr = 'INDEX_COLS'
         elif self.df_form == 'long':
-            long_dfs = {category: nw.from_native(df) for category, df in data_dfs.items()}
-
-            # Pass 1: find common columns and collect candidate key columns
-            common_cols: set[str] = set()
-            key_cols: set[str] = set()
-            for i, (category, df) in enumerate(long_dfs.items()):
-                data_store = self.databoy.get_data_store(category)
-                key_cols.update(data_store.INDEX_COLS + data_store.PIVOT_COLS)
-                if i == 0:
-                    common_cols = set(df.columns)
-                else:
-                    common_cols &= set(df.columns)
-            join_cols = [col for col in key_cols if col in common_cols]
-                                                                                                                                
-            # Pass 2: join all dfs
-            dfs = list(long_dfs.values())
-            data_df = dfs[0]
-            for df in dfs[1:]:
-                if not join_cols:
-                    raise ValueError(
-                        f"No common columns found in data_dfs in long form to join on for {self.name}. " +
-                        "Please define your own merge_data_dfs() to handle merging data_dfs manually."
-                    )
-                cprint(
-                    f"Auto-joining data_dfs in long form for {self.name} on columns={join_cols}. " +
-                    "If this is not ideal, please define a your own merge_data_dfs() to handle merging data_dfs manually.",
-                    style=TextStyle.BOLD + RichColor.YELLOW,
-                )
-                data_df = data_df.join(df, on=join_cols, how='full')
+            dfs = [nw.from_native(df) for df in data_dfs.values()]
+            cols_attr = 'KEY_COLS'
         else:
             raise ValueError(f'Invalid {self.df_form=}')
+        
+        data_df = dfs[0]
+        if len(dfs) == 1:
+            return data_df.to_native()
+
+        common_cols: set[str] | None = None
+        for df in dfs:
+            if common_cols is None:
+                common_cols = set(df.columns)
+            else:
+                common_cols &= set(df.columns)
+        if not common_cols:
+            raise ValueError(
+                f"No common columns found in data_dfs in {self.df_form} form for {self.name}. " +
+                "Please define your own merge_data_dfs() to handle merging data_dfs manually."
+            )
+        
+        join_cols = list(dict.fromkeys(
+            col
+            for category in data_dfs.keys()
+            for col in getattr(self.databoy.get_data_store(category), cols_attr)
+            if col in common_cols
+        ))
+        if not join_cols:
+            raise ValueError(
+                f"No common columns found in data_dfs in {self.df_form} form to join on for {self.name}. " +
+                "Please define your own merge_data_dfs() to handle merging data_dfs manually."
+            )
+
+        for df in dfs[1:]:
+            cprint(
+                f"Auto-joining data_dfs in {self.df_form} form for {self.name} on columns={join_cols}. " +
+                "If this is not ideal, please define your own merge_data_dfs() to handle merging data_dfs manually.",
+                style=TextStyle.BOLD + RichColor.YELLOW,
+            )
+            data_df = data_df.join(df, on=join_cols, how='full')
         return data_df.to_native()
     
     def featurize(self, data_df: NativeDataFrame) -> NativeDataFrame:
@@ -692,34 +698,20 @@ class ComponentMixin:
         Args:
             data_df: dataframe in {self.df_form} form
         '''
-        # for component in self.components:
-        #     signals_df = component.signalize()
-        #     assert 'date' in signals_df.columns, \
-        #         f"{component.name} signals_df generated by signalize() must contain 'date' column, but got {signals_df.columns}"
-        #     X = X.join(signals_df, on=['date'], how='full')
-        return features_df
-    
-    def signalize(self, data_df: NativeDataFrame) -> NativeDataFrame:
-        '''Creates signals_df (combined signals from other component)
-        Args:
-            data_df: dataframe in {self.df_form} form
-        '''
-        features_df: NativeDataFrame = self.featurize(data_df)
-        # if torch is not None and isinstance(pred_y, torch.Tensor):
-        #     pred_y = pred_y.detach().numpy() if pred_y.requires_grad else pred_y.numpy()
-        # X: NativeDataFrame = self.featurize(df.to_native())
-        # # FIXME: pred_y could have different shapes than X (n rows in, m rows out), need to handle this
-        # pred_y: torch.Tensor | np.ndarray = self.predict(X)
-        # signal_cols = self.get_signal_cols()
-        # pred_df = nw.DataFrame(pred_y, columns=signal_cols)
-        # signals_df = nw.concat([X, pred_df], how='horizontal')
-        return signals_df.to_native()
-    
+        features_df: nw.DataFrame[Any] | None = nw.from_native(data_df)
+        for component in self.components:
+            # NOTE: component's signals_df should be ready before featurize() is called
+            # i.e. The component tree is BOTTOM-UP
+            component_signals_df = nw.from_native(component.df)
+            features_df = nw.concat([features_df, component_signals_df], how='horizontal')
+        return features_df.to_native()
 
     def _gather(self):
         '''Sets up everything before start'''
         # NOTE: use is_gathered to avoid a component being gathered multiple times when it's a shared component
         if not self._is_gathered:
+            for component in self.components:
+                component._gather()
             self.add_datas()
             self.add_models()
             self.add_features()
@@ -729,8 +721,6 @@ class ComponentMixin:
             
             self.databoy._gather()
             self._is_gathered = True
-            for component in self.components:
-                component._gather()
             self.logger.info(f"'{self.name}' has gathered")
         else:
             self.logger.info(f"'{self.name}' has already gathered")

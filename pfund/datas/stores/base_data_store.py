@@ -28,6 +28,10 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
         self._logger: logging.Logger = logging.getLogger("pfund")
         self._databoy: DataBoy = databoy
         self._df: nw.DataFrame[Any] | None = None
+    
+    @property                                                                                                                 
+    def KEY_COLS(self) -> list[str]:
+        return self.INDEX_COLS + self.PIVOT_COLS
 
     @property
     def df(self) -> nw.DataFrame[Any]:

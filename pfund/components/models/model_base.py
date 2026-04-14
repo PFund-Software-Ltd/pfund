@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from torch import Tensor
     from numpy import ndarray
     import torch.nn as nn
+    from narwhals._native import NativeDataFrame
     from pfund.enums import TradingVenue
     from pfund.datas.data_market import MarketData
     from pfund.datas.data_config import DataConfig
@@ -16,6 +17,8 @@ if TYPE_CHECKING:
 
 import os
 from abc import ABC, abstractmethod
+
+import narwhals as nw
 
 from pfund_kit.logging.filters.trimmed_path_filter import TrimmedPathFilter
 from pfund.components.models.model_meta import MetaModel
@@ -36,6 +39,35 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
     @abstractmethod
     def predict(self, X: Any, *args: Any, **kwargs: Any) -> Any:
         pass
+
+    def signalize(self, features_df: NativeDataFrame) -> NativeDataFrame:
+        '''Creates signals_df (combined signals from other component)
+        Args:
+            data_df: dataframe in {self.df_form} form
+        '''
+        X = nw.from_native(features_df)
+        pred_y: Tensor | ndarray = self.predict(X)
+        is_from_pytorch = type(pred_y).__module__.startswith('torch')
+        if is_from_pytorch:
+            pred_y = pred_y.detach().cpu().numpy()  
+        signal_cols = self.get_signal_cols()
+        num_signal_cols = len(signal_cols)
+        df_backend = nw.get_native_namespace(features_df)
+        if pred_y.ndim == 1:
+            if num_signal_cols != 1:
+                raise ValueError(f"pred_y is 1D but {self.name} has {num_signal_cols} signal columns: {signal_cols}")
+            signals_dict = {signal_cols[0]: pred_y}
+        else:
+            # last dimension = signal columns, everything in between is packed into cells
+            if num_signal_cols != pred_y.shape[-1]:
+                raise ValueError(f"Expected {num_signal_cols} signal columns for {self.name}, but pred_y has shape {pred_y.shape}")
+            signals_dict = {}                                                                                                         
+            for i, col in enumerate(signal_cols):                                                                                     
+                values = pred_y[..., i]                                                                                               
+                # NOTE: list() converts 2D+ array into per-row sub-arrays, needed because pandas rejects >1D per-column arrays
+                signals_dict[col] = list(values) if values.ndim > 1 else values
+        signals_df = nw.DataFrame.from_dict(signals_dict, backend=df_backend)
+        return signals_df.to_native()
 
     def to_dict(self) -> dict[str, Any]:
         return {

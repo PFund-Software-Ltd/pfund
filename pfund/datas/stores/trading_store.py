@@ -49,7 +49,8 @@ class TradingStore:
             for category in self._databoy.data_stores.keys():
                 data_dfs[category] = self._databoy.get_df(kind='data', category=category)
             data_df = component.merge_data_dfs(data_dfs)
-            signals_df = component.signalize(data_df)
+            features_df = component.featurize(data_df)
+            signals_df = component.signalize(features_df)
             self._df = nw.from_native(signals_df)
         # NOTE: strategy's signals are event-driven, i.e. you can't compute them using signal columns from its components
         else:
