@@ -1,4 +1,4 @@
-# pyright: reportArgumentType=false, reportUnknownMemberType=false
+# pyright: reportArgumentType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false
 """This is an engine used to trade against multiple brokers and cryptocurrency exchanges.
 
 This engine is designed for algorithmic trading and contains all the major
@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
     from pfund.engines.engine_context import DataRangeDict
 
+import time
 import logging
 from threading import Thread
 
@@ -52,7 +53,12 @@ class TradeEngine(BaseEngine):
             import graphviz
         except ImportError:
             raise ImportError('graphviz is not installed, please install it using `pip install graphviz`')
-        raise NotImplementedError('show_zmq_graph is not implemented')
+        # TEMP
+        from pprint import pprint
+        print('engine.settings.zmq_urls:')
+        pprint(self.settings.zmq_urls.to_dict())
+        print('engine.settings.zmq_ports:')
+        pprint(self.settings.zmq_ports.to_dict())
     
     def _setup_data_engine(self):
         import pfeed as pe
@@ -84,7 +90,7 @@ class TradeEngine(BaseEngine):
         
         # data engine creates feeds and subscribes to market data to prepare for streaming
         for strategy in self.strategies.values():
-            datas = strategy._get_datas_in_use()
+            datas = strategy.get_datas()
             for data in datas:
                 if not isinstance(data, MarketData):
                     raise NotImplementedError(f"Unhandled data type: {type(data)}")
@@ -99,7 +105,7 @@ class TradeEngine(BaseEngine):
                     data_category=data.category,
                     num_workers=num_stream_workers,
                 )
-                feed.stream(  # pyright: ignore[reportAttributeAccessIssue]
+                feed.stream(
                     product=str(data.product.basis),
                     resolution=repr(data.resolution),
                     data_origin=data.origin,
@@ -120,7 +126,7 @@ class TradeEngine(BaseEngine):
             logger=self._logger,
             io_threads=2,
             sender_type=zmq.XPUB,  # publish order updates (from websocket), engine states, to components and external listeners
-            # receiver_type=zmq.XSUB,  # subscribe to component's logs (if using ray) etc.
+            receiver_type=zmq.SUB,  # subscribe to data engine, component's logs (if using ray) etc.
         )
         zmq_url = self.settings.zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL)
         zmq_port = self.settings.zmq_ports.get(self.name, None)
@@ -134,30 +140,30 @@ class TradeEngine(BaseEngine):
         self.settings.zmq_ports.update({ self.name: zmq_port })
         self._logger.debug(f"{self.name} zmq proxy binded to {zmq_url}:{zmq_port}")
 
-        # DEPRECATED: proxy does not receive anything
-        # proxy connects to data engine and component's ZMQPushHandler (if using ray)
-        # for zmq_name, zmq_port in self.settings.zmq_ports.items():
-        #     # currently proxy doesn't subscribe to data engine, component' data zmq does that instead
-        #     if zmq_name == 'data_engine':
-        #         zmq_url = self.settings.zmq_urls['data_engine']
-        #     else:
-        #         is_component_logger = zmq_name.endswith("_logger")
-        #         if is_component_logger:
-        #             component_name = zmq_name.replace("_logger", "")
-        #             zmq_url = self.settings.zmq_urls[component_name]
-        #         else:
-        #             continue
-        #     self._proxy.connect(
-        #         socket=self._proxy.receiver,
-        #         port=zmq_port,
-        #         url=zmq_url,
-        #     )
-        #     self._logger.debug(f"{self.name} zmq proxy connected to {zmq_name} at {zmq_url}:{zmq_port}")
+        # proxy connects to data engine and component's ZMQPubHandler (if using ray)
+        for zmq_name, zmq_port in self.settings.zmq_ports.items():
+            if zmq_name == 'data_engine':
+                zmq_url = self.settings.zmq_urls['data_engine']
+            else:
+                is_component_logger = zmq_name.endswith("_logger")
+                if is_component_logger:
+                    component_name = zmq_name.replace("_logger", "")
+                    zmq_url = self.settings.zmq_urls[component_name]
+                else:
+                    continue
+            self._proxy.connect(
+                socket=self._proxy.receiver,
+                port=zmq_port,
+                url=zmq_url,
+            )
+            self._logger.debug(f"{self.name} zmq proxy connected to {zmq_name} at {zmq_url}:{zmq_port}")
+        # subscribe XSUB to all topics from all connected upstream publishers
+        self._proxy.receiver.setsockopt(zmq.SUBSCRIBE, b"")
 
     def _setup_worker(self):
         import zmq
         from pfeed.streaming.zeromq import ZeroMQ
-        # pull from components, e.g. orders, logs (if using ray)
+        # pull from component orders
         self._worker = ZeroMQ(name=self.name+"_worker", logger=self._logger, receiver_type=zmq.PULL)
         for zmq_name, zmq_port in self.settings.zmq_ports.items():
             if zmq_name in [self.name, 'data_engine'] or zmq_name.endswith("_logger"):
@@ -182,36 +188,44 @@ class TradeEngine(BaseEngine):
         for strategy in self.strategies.values():
             if strategy.is_remote() or strategy._has_any_remote_component():
                 return True
-            for data in strategy._get_datas_in_use():
+            for data in strategy.get_datas():
                 if data.config.num_stream_workers is not None:
                     return True
         return False
     
-    def _gather(self):
-        if self.settings.auto_stream:
-            self._setup_data_engine()
-        super()._gather()
-        if self._is_using_zmq():
-            self._setup_proxy()
-            for strategy in self.strategies.values():
-                strategy._setup_messaging()
-            self._setup_worker()
-    
     def _run_zmq_loop(self):
+        self._setup_proxy()
+        for strategy in self.strategies.values():
+            strategy._setup_messaging()
+        self._setup_worker()
         assert self._proxy is not None, 'proxy is not set'
         assert self._worker is not None, 'worker is not set'
+
         while self.is_running():
             try:
-                # TODO: receive positions, balances, components orders etc.
-                if msg := self._worker.recv():
+                if msg := self._proxy.recv():
                     channel, topic, data, msg_ts = msg
+
+                    
                     if channel == PFundDataChannel.logging:
                         log_level: str = topic
                         log_level: int = logging._nameToLevel.get(log_level.upper(), logging.DEBUG)
                         self._logger.log(log_level, f'{data}')
                     else:
+                        
+                        # TEMP
+                        print('proxy recv:', channel, topic, data, msg_ts)
+                        
                         self._logger.debug(f'{channel} {topic} {data} {msg_ts}')
                     # TODO: broker._distribute_msgs(channel, topic, data)
+                    
+                # TODO: receive positions, balances, components orders etc.
+                if msg := self._worker.recv():
+                    channel, topic, data, msg_ts = msg
+                    
+                    # TEMP
+                    print('worker recv:', channel, topic, data, msg_ts)
+                    
                 # TODO: publish orders, positions, balances etc. to components
                 # self._proxy.send(...)
             except Exception:
@@ -221,17 +235,23 @@ class TradeEngine(BaseEngine):
                 break
         self._proxy.terminate()
         self._worker.terminate()
-        
+    
     def run(self):
         try:
+            if self.settings.auto_stream:
+                self._setup_data_engine()
+            if self._is_using_zmq():
+                self._zmq_thread = Thread(target=self._run_zmq_loop, daemon=True)
+                self._zmq_thread.start()
             super().run()
             if self._data_engine:
-                if self._is_using_zmq():
-                    self._zmq_thread = Thread(target=self._run_zmq_loop, daemon=True)
-                    self._zmq_thread.start()
                 self._data_engine.run()  # blocking call
             else:
-                self._run_zmq_loop()
+                if self._zmq_thread:
+                    self._zmq_thread.join()
+                else:
+                    while self.is_running():
+                        time.sleep(0.1)
         except KeyboardInterrupt:
             self._logger.warning(f'KeyboardInterrupt received, ending {self.name}')
         except Exception:

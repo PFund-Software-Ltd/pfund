@@ -1,4 +1,4 @@
-# pyright: reportUninitializedInstanceVariable=false, reportUnknownParameterType=false, reportUnknownMemberType=false, reportArgumentType=false, reportAssignmentType=false, reportReturnType=false
+# pyright: reportUninitializedInstanceVariable=false, reportUnknownParameterType=false, reportUnknownMemberType=false, reportArgumentType=false, reportAssignmentType=false, reportReturnType=false, reportAttributeAccessIssue=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast, Literal, ClassVar
 if TYPE_CHECKING:
@@ -149,7 +149,7 @@ class ComponentMixin:
     
     def _setup_logging(self):
         '''Sets up logging for component running in remote process, uses zmq's PUSHHandler to send logs to engine'''
-        from pfund.utils.zmq_push_handler import ZMQPushHandler
+        from pfund.utils.zmq_pub_handler import ZMQPubHandler
         from pfeed.streaming.zeromq import ZeroMQ
         from pfund_kit.logging.configurator import LoggingDictConfigurator
         from pfund_kit.utils import get_free_port
@@ -171,7 +171,7 @@ class ComponentMixin:
         # add zmq PushHandler
         zmq_url = self.settings.zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL)
         zmq_port = get_free_port()
-        zmq_handler = ZMQPushHandler(f'{zmq_url}:{zmq_port}')
+        zmq_handler = ZMQPubHandler(f'{zmq_url}:{zmq_port}')
         zmq_formatter = logging.Formatter(
             fmt='%(message)s | from:%(filename)s fn:%(funcName)s ln:%(lineno)d (sent@%(asctime)s.%(msecs)03d)',
             datefmt='%H:%M:%S'
@@ -185,7 +185,7 @@ class ComponentMixin:
             self.name + '_logger': zmq_port
         })
     
-    def _get_datas_in_use(self) -> list[BaseData]:
+    def get_datas(self) -> list[BaseData]:
         '''
         Gets all datas in use by this component, including the datas from its components.
         Since data objects are created by databoy, engine has no access to them.
@@ -193,7 +193,7 @@ class ComponentMixin:
         '''
         datas = self.databoy.get_datas()
         for component in self.components:
-            datas.extend(component._get_datas_in_use())
+            datas.extend(component.get_datas())
         return list(set(datas))
     
     @classmethod
@@ -763,11 +763,14 @@ class ComponentMixin:
     
     def start(self):
         if not self.is_running():
+            # set the ZMQPubHandler's receiver ready to flush the buffered log messages
+            if self.is_remote(direct_only=False):
+                self.logger.handlers[0].set_receiver_ready()
+            for component in self.components:
+                component.start()
             self._is_running = True
             self.on_start()
             self.databoy.start()
-            for component in self.components:
-                component.start()
             self.logger.info(f"'{self.name}' has started")
         else:
             self.logger.info(f"'{self.name}' has already started")
@@ -775,11 +778,11 @@ class ComponentMixin:
     def stop(self, reason: str=''):
         '''Stops the component, keep the internal states'''
         if self.is_running():
+            for component in self.components:
+                component.stop()
             self._is_running = False
             self.on_stop()
             self.databoy.stop()
-            for component in self.components:
-                component.stop()
             self.logger.info(f"'{self.name}' has stopped, ({reason=})")
         else:
             self.logger.info(f"'{self.name}' has already stopped")

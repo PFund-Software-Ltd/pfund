@@ -34,7 +34,7 @@ from pfeed.storages.storage_config import StorageConfig
 from pfeed.feeds.market_feed import MarketFeed
 from pfund.datas.data_config import DataConfig
 from pfund.datas.resolution import Resolution
-from pfund.enums import SourceType
+from pfund.enums import SourceType, Environment
 from pfund.datas.data_market import MarketData
 from pfund.datas.stores.base_data_store import BaseDataStore
 from pfund.datas import QuoteData, TickData, BarData
@@ -260,7 +260,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             cache_storage_config = self._create_cache_storage_config(storage_config)
             retrieve = partial(
                 feed.retrieve,
-                env=engine_context.env,
+                env=Environment.BACKTEST,
                 product=product,
                 resolution=data.resolution,
                 symbol=symbol,

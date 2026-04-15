@@ -279,14 +279,14 @@ class DataBoy:
         self._zmq.send(*zmq_msg, receiver='engine')
     
     def _gather(self):
+        datas = self.get_datas()
+        if not datas:
+            raise RuntimeError(f'{self.name} has no datas, did you forget to call add_data()?')
         for data_store in self.data_stores.values():
             data_store.materialize()
         self.trading_store.materialize()
 
     def start(self):
-        # set the ZMQPushHandler's receiver ready to flush the buffered log messages
-        if self.is_remote(direct_only=False):
-            self.logger.handlers[0].set_receiver_ready()
         if self._data_zmq or self._signals_zmq:
             self._zmq_thread = Thread(target=self._collect, daemon=True)
             self._zmq_thread.start()
@@ -332,7 +332,7 @@ class DataBoy:
                     channel, topic, msg, msg_ts = msg_tuple
                     
                     # TEMP
-                    print('databoy data_zmq recv:', channel, topic, msg, msg_ts)
+                    # print('databoy data_zmq recv:', channel, topic, msg, msg_ts)
                     
                     self._update_data_store(msg)
                 # TODO:

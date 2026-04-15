@@ -68,7 +68,7 @@ class BaseEngine:
         setup_logging(env=env, engine_name=name)
         self._logger: logging.Logger = logging.getLogger('pfund')
         self._context: EngineContext = EngineContext(env=env, name=name, data_range=data_range, settings=settings)
-        self._is_running: bool = False
+        self._is_running = False
         # TODO: write engine's states using engine_feed.load()
         self._feed: EngineFeed = pe.PFund().engine_feed
         # self.id = uuid.uuid4().hex[:8]
@@ -194,7 +194,7 @@ class BaseEngine:
             for account in accounts:
                 self._add_account(account)
             
-            datas: list[BaseData] = strategy._get_datas_in_use()
+            datas: list[BaseData] = strategy.get_datas()
             for data in datas:
                 if isinstance(data, MarketData):
                     self._add_product(data.product)
@@ -202,26 +202,20 @@ class BaseEngine:
                     raise NotImplementedError(f"Unhandled data type: {type(data)}")
     
     def run(self):
-        if not self.is_running():
-            self._logger.debug(f'Running {self.name}...')
-            self._is_running = True
-            self._gather()
-            for broker in self.brokers.values():
-                broker.start()
-            for strategy in self.strategies.values():
-                strategy.start()
-        else:
-            self._logger.debug(f'{self.name} is already running')
+        self._logger.debug(f'Running {self.name}...')
+        self._is_running = True
+        self._gather()
+        for broker in self.brokers.values():
+            broker.start()
+        for strategy in self.strategies.values():
+            strategy.start()
 
     def end(self):
         from pfeed.utils.ray import shutdown_ray
-        if self.is_running():
-            self._logger.debug(f'Ending {self.name}...')
-            self._is_running = False
-            for strategy in self.strategies.values():
-                strategy.stop()
-            for broker in self.brokers.values():
-                broker.stop()
-        else:
-            self._logger.debug(f'{self.name} is not running')
+        self._logger.debug(f'Ending {self.name}...')
+        for strategy in self.strategies.values():
+            strategy.stop()
+        for broker in self.brokers.values():
+            broker.stop()
+        self._is_running = False
         shutdown_ray()

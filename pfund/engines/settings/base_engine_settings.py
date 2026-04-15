@@ -66,7 +66,7 @@ class BaseEngineSettings(BaseModel):
         from pfund_kit.style import cprint, RichColor, TextStyle
         if v is None:
             cprint(
-                "WARNING: max_rows is not set, data will be unbounded",
+                "WARNING: max_rows is not set in Engine Settings, data will be unbounded",
                 style=TextStyle.BOLD + RichColor.YELLOW,
             )
         return v

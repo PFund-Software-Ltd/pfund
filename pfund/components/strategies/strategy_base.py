@@ -202,12 +202,15 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         pass
     
     def _gather(self):
-        # TODO: check if e.g. exchange balances and positions are ready, if backfilling is finished?
-        # TODO: top strategy must have an account
-        self.add_strategies()
-        self.add_accounts()
-        super()._gather()
-        
+        if not self._is_gathered:
+            # TODO: check if e.g. exchange balances and positions are ready, if backfilling is finished?
+            # TODO: top strategy must have an account
+            self.add_strategies()
+            self.add_accounts()
+            super()._gather()
+        else:
+            self.logger.debug(f"'{self.name}' has already gathered")
+    
     def create_order(
         self, 
         account: BaseAccount, 
