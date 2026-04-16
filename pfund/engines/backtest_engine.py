@@ -106,8 +106,6 @@ class BacktestEngine(BaseEngine):
         strategy: StrategyT, 
         resolution: str, 
         name: str='',
-        df_form: Literal['wide', 'long'] = 'long',
-        signal_cols: list[str] | None=None,
     ) -> StrategyT:
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
         from pfund.components.strategies.strategy_backtest import BacktestStrategy
@@ -124,8 +122,6 @@ class BacktestEngine(BaseEngine):
             strategy=strategy,
             resolution=resolution,
             name=name or Strategy.__name__,
-            df_form=df_form,
-            signal_cols=signal_cols,
         ))
 
     def _add_component(
@@ -133,8 +129,6 @@ class BacktestEngine(BaseEngine):
         component: ModelT | FeatureT | IndicatorT, 
         resolution: str,
         name: str='',
-        df_form: Literal['wide', 'long'] = 'wide',
-        signal_cols: list[str] | None=None,
     ) -> ModelT | FeatureT | IndicatorT:
         '''Add model without creating a strategy (using dummy strategy)'''
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
@@ -150,8 +144,6 @@ class BacktestEngine(BaseEngine):
             component,
             resolution,
             name=name,
-            df_form=df_form,
-            signal_cols=signal_cols,
         )
         return component
     add_feature = add_indicator = _add_component
@@ -161,8 +153,6 @@ class BacktestEngine(BaseEngine):
         model: ModelT | BaseEstimator | nn.Module,
         resolution: str,
         name: str='',
-        df_form: Literal['wide', 'long'] = 'wide',
-        signal_cols: list[str] | None=None,
     ) -> ModelT:
         from pfund.components.models.model_base import wrap_model
         model = cast("ModelT", wrap_model(model))
@@ -170,8 +160,6 @@ class BacktestEngine(BaseEngine):
             component=model,
             resolution=resolution,
             name=name,
-            df_form=df_form,
-            signal_cols=signal_cols,
         )
     
     def run(self, num_chunks: int=1, num_cpus: int | None=None) -> dict[str, Any]:
@@ -232,7 +220,6 @@ class BacktestEngine(BaseEngine):
         # FIXME: this should be features_df?
         # should we use long/wide form for multi-product dataframes?
         df: nw.DataFrame[Any] = backtestee.databoy.get_df(
-            kind='data',
             # category=DataCategory.MARKET_DATA,
             to_native=False,
         )

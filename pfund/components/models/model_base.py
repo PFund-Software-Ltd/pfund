@@ -1,6 +1,6 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false, reportArgumentType=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, cast, Literal
 if TYPE_CHECKING:
     from torch import Tensor
     from sklearn.base import BaseEstimator
@@ -59,10 +59,8 @@ def wrap_model(model: BaseEstimator | nn.Module | ModelT | ActorProxy[ModelT]) -
 
 class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
     def __init__(self, model: MachineLearningModel, *args: Any, **kwargs: Any):
-        from collections import defaultdict
         self.model = model  # user-defined machine learning model
-        self._num_data = defaultdict(int)  # {data: int}
-        
+        self._df_form: Literal['wide', 'long'] = 'wide'
         self.__mixin_post_init__(model, *args, **kwargs)  # calls ComponentMixin.__mixin_post_init__()
     
     @abstractmethod
@@ -91,16 +89,15 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
     def signalize(self, features_df: NativeDataFrame) -> NativeDataFrame:
         '''Creates signals_df (combined signals from other component)
         Args:
-            data_df: dataframe in {self.df_form} form
+            data_df: dataframe in {self._df_form} form
         '''
         X = nw.from_native(features_df)
         pred: Tensor | ndarray = self.predict(X)
         is_from_pytorch = type(pred).__module__.startswith('torch')
         if is_from_pytorch:
             pred = pred.detach().cpu().numpy()
-        signal_cols = self.get_signal_cols()
+        signal_cols = self._signal_cols
         num_signal_cols = len(signal_cols)
-        df_backend = nw.get_native_namespace(features_df)
         if pred.ndim == 1:
             if num_signal_cols != 1:
                 raise ValueError(f"prediction is 1D but {self.name} has {num_signal_cols} signal columns: {signal_cols}")
@@ -114,8 +111,17 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
                 values = pred[..., i]
                 # NOTE: list() converts 2D+ array into per-row sub-arrays, needed because pandas rejects >1D per-column arrays
                 signals_dict[col] = list(values) if values.ndim > 1 else values
-        signals_df = nw.DataFrame.from_dict(signals_dict, backend=df_backend)
-        return signals_df.to_native()
+        
+        # store signals_dict for convenience
+        self.signals[self.name] = signals_dict
+        
+        # build signals_df: join_cols from features_df + signal columns from signals_dict
+        df_backend = nw.get_native_namespace(features_df)
+        signals_df = nw.concat([
+            X.select(self.databoy._join_cols), 
+            nw.DataFrame.from_dict(signals_dict, backend=df_backend)
+        ], how='horizontal')
+        return signals_df
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -132,8 +138,6 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         product_name: str='',
         data_config: DataConfig | None=None,
         storage_config: StorageConfig | None=None,
-        warmup_period: int | None=None,
-        lookback_period: int | None=None,
         **product_specs: Any
     ) -> list[MarketData]:
         datas: list[MarketData] = super().add_data(
@@ -146,7 +150,6 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             storage_config=storage_config,
             **product_specs
         )
-        self.databoy.market_data_store.set_periods(warmup_period, lookback_period)
         return datas
 
     def _assert_functions_signatures(self):
@@ -164,13 +167,6 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         else:
             columns = [f'{self.name}-{i}' for i in range(num_cols)]
         return columns
-    
-    def is_ready(self, data: BaseData) -> bool:
-        if not self._is_ready[data]:
-            self._num_data[data] += 1
-            if self._num_data[data] >= self._min_data[data]:
-                self._is_ready[data] = True
-        return self._is_ready[data]
     
     def _get_file_path(self, extension='.joblib'):
         from pfund import get_config
@@ -211,93 +207,3 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         file_path = self._get_file_path()
         joblib.dump(obj, file_path, compress=True)
         self.logger.debug(f"dumped '{self.name}' to {trim_path(file_path)}")
-    
-    # FIXME: DEPRECATED?
-    def _convert_min_max_data_to_dict(self):
-        '''Converts min_data and max_data from int to dict[product, dict[resolution, int]]'''
-        from sys import maxsize
-        DEFAULT_MIN_DATA = 1
-        if not self._min_data:
-            self._min_data = {data: DEFAULT_MIN_DATA for data in self.list_datas()}
-        elif isinstance(self._min_data, int):
-            min_data = self._min_data
-            self._min_data = {data: min_data for data in self.list_datas()}
-            
-        if not self._max_data:
-            self._max_data = {data: self._min_data[data] for data in self.list_datas()}
-        elif isinstance(self._max_data, int):
-            max_data = self._max_data
-            self._max_data = {data: max_data for data in self.list_datas()}
-        
-        # check if set up correctly
-        for data in self.list_datas():
-            assert data in self._min_data, f"{data} not found in {self._min_data=}, make sure _set_min_data() is called correctly"
-            assert data in self._max_data, f"{data} not found in {self._max_data=}, make sure _set_max_data() is called correctly"
-    
-            min_data = self._min_data[data]
-            max_data = self._max_data[data]
-            # NOTE: -1 means include all data
-            if max_data == -1:
-                max_data = maxsize
-                
-            assert min_data >= 1, f'{min_data=} for {data} must be >= 1'
-            assert max_data >= min_data, f'{max_data=} for {data} must be >= {min_data=}'
-    
-    def _next(self, data: BaseData) -> Tensor | ndarray | None:
-        '''Returns the next prediction in event-driven manner.'''
-        from numpy import isnan
-        # FIXME
-        if data in self._last_signal_ts and self._last_signal_ts[data] == data.ts:
-            return self._signals[data]
-        
-        if not self.is_ready(data):
-            return None
-        
-        # if max_data = -1 (include all data), then start_idx = 0
-        # if max_data = +x, then start_idx = -x
-        start_idx = min(-self._max_data[data], 0)
-
-        if self._group_data:
-            product_filter = repr(data.product)
-            resolution_filter = data.resol
-        else:
-            product_filter = resolution_filter = None
-
-        # if group_data, X is per product and resolution -> X[-start_idx:];
-        # if not, X is the whole data -> X[-start_idx:]
-        X = self.get_df(
-            start_idx=start_idx,
-            product=product_filter,
-            resolution=resolution_filter,
-            copy=False
-        )
-
-        # FIXME: should add featurize() to get X, feature_df != data_df
-        
-        pred_y: Tensor | ndarray = self.predict(X)
-        new_pred: Tensor | ndarray = pred_y[-1]
-        if isnan(new_pred).all():
-            raise Exception(
-                f"model '{self.name}' was ready but predicted all NaNs for {data}, \n"
-                f"Setting: min_data={self._min_data[data]} (≈ warmup period), max_data={self._max_data[data]}, group_data={self._group_data}, "
-                "please make sure it is set up correctly."
-            )
-        
-        self._signals[data] = new_pred
-        self._last_signal_ts[data] = data.ts
-        
-        return new_pred
-            
-    def start(self):
-        super().start()
-        self._convert_min_max_data_to_dict()
-        self.load()
-        self.logger.info(
-            f"model '{self.name}' has started.\n"
-            f"min_data={self._min_data}\n"
-            f"max_data={self._max_data}\n"
-            f"group_data={self._group_data}"
-        )
-        
-    def stop(self, reason: str=''):
-        super().stop(reason=reason)

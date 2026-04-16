@@ -10,7 +10,6 @@ if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
 
 import sys
-import time
 
 from pfund.datas.resolution import Resolution
 from pfund.datas.data_market import MarketData

@@ -33,14 +33,6 @@ class BaseEngineSettings(BaseModel):
             - False: never cache, always process on the fly.
         """,
     )
-    max_rows: int | None = Field(
-        default=None,
-        description="""
-            Maximum number of data rows kept in memory.
-            Once exceeded, oldest rows are dropped (sliding window).
-            if None, all rows of data will be kept (unlimited).
-        """,
-    )
 
     def save(self, env: Environment):
         '''saves current settings to settings.toml'''
@@ -58,15 +50,4 @@ class BaseEngineSettings(BaseModel):
     def _normalize_cache_resampled_data(cls, v: Any) -> bool | str:
         if isinstance(v, str):
             return v.lower()
-        return v
-    
-    @field_validator('max_rows', mode='after')
-    @classmethod
-    def _warn_if_max_rows_is_not_set(cls, v: int | None) -> int | None:
-        from pfund_kit.style import cprint, RichColor, TextStyle
-        if v is None:
-            cprint(
-                "WARNING: max_rows is not set in engine settings, data will be unbounded",
-                style=TextStyle.BOLD + RichColor.YELLOW,
-            )
         return v

@@ -126,8 +126,6 @@ class BacktestMixin:
         component: ComponentT,
         resolution: str='',
         name: str='', 
-        df_form: Literal['wide', 'long'] = 'wide',
-        signal_cols: list[str] | None=None,
         # NOTE: non-backtesting kwargs are ignored, e.g. ray_actor_options, ray_kwargs, etc.
         **kwargs: Any,
     ) -> ComponentT | None:
@@ -138,8 +136,6 @@ class BacktestMixin:
             component=component,
             resolution=resolution,
             name=name or Component.__name__,
-            df_form=df_form,
-            signal_cols=signal_cols,
         )
         
     def _is_dummy_strategy(self) -> bool:

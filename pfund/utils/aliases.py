@@ -30,7 +30,7 @@ ALIASES = AliasRegistry({
     'eptype': 'external_product_type',
     'otype': 'order_type',
     'acc': 'account',
-    'mdl': 'model',
+    'mod': 'model',
     'feat': 'feature',
 
     'o': 'order',

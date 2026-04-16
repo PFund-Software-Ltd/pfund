@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from pfeed.streaming.zeromq import ZeroMQ
     from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.engine import DataEngine
+    from pfund.typing import Component
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.datas.resolution import Resolution
     from pfund.engines.engine_context import DataRangeDict
@@ -24,6 +25,7 @@ import time
 import logging
 from threading import Thread
 
+from pfeed.enums import DataCategory
 from pfund.engines.base_engine import BaseEngine
 from pfund.enums import Environment, PFundDataChannel
 
@@ -63,7 +65,6 @@ class TradeEngine(BaseEngine):
     def _setup_data_engine(self):
         import pfeed as pe
         from pfeed.streaming.zeromq import ZeroMQ
-        from pfund.datas.data_market import MarketData
         
         self._data_engine = pe.DataEngine()
         is_using_zmq = self._is_using_zmq()
@@ -89,33 +90,31 @@ class TradeEngine(BaseEngine):
             return msg
         
         # data engine creates feeds and subscribes to market data to prepare for streaming
-        for strategy in self.strategies.values():
-            datas = strategy.get_datas()
-            for data in datas:
-                if not isinstance(data, MarketData):
-                    raise NotImplementedError(f"Unhandled data type: {type(data)}")
-                if data.is_resamplee():
-                    continue
-                num_stream_workers = data.config.num_stream_workers
-                if is_using_zmq and num_stream_workers is None:
-                    num_stream_workers = 1
-                    self._logger.debug(f"'{strategy.name}' has remote components, defaulting {data} num_stream_workers to 1")
-                feed = self._data_engine.add_feed(
-                    data_source=data.source,
-                    data_category=data.category,
-                    num_workers=num_stream_workers,
-                )
-                feed.stream(
-                    product=str(data.product.basis),
-                    resolution=repr(data.resolution),
-                    data_origin=data.origin,
-                    env=self.env,
-                    storage_config=data.storage_config,
-                    **data.product.specs,
-                )
-                # if not using zmq, data will be sent via transform()
-                if not is_using_zmq:
-                    feed.transform(_collect_msg_if_not_using_ray)
+        for data in self._get_all_datas():
+            if data.category != DataCategory.MARKET_DATA:
+                raise NotImplementedError(f"Unhandled data type: {type(data)}")
+            if data.is_resamplee():
+                continue
+            num_stream_workers = data.config.num_stream_workers
+            if is_using_zmq and num_stream_workers is None:
+                num_stream_workers = 1
+                self._logger.debug(f"defaulting {data} num_stream_workers to 1")
+            feed = self._data_engine.add_feed(
+                data_source=data.source,
+                data_category=data.category,
+                num_workers=num_stream_workers,
+            )
+            feed.stream(
+                product=str(data.product.basis),
+                resolution=repr(data.resolution),
+                data_origin=data.origin,
+                env=self.env,
+                storage_config=data.storage_config,
+                **data.product.specs,
+            )
+            # if not using zmq, data will be sent via transform()
+            if not is_using_zmq:
+                feed.transform(_collect_msg_if_not_using_ray)
 
     def _setup_proxy(self):
         import zmq
@@ -185,8 +184,13 @@ class TradeEngine(BaseEngine):
         """Returns True if any strategy is remote or has any remote component or any data has num_stream_workers
         Conceptually it is equivalent to: if Ray is being used, then ZeroMQ is also being used.
         """
+        def _has_any_remote_component(component: Component) -> bool:
+            for _component in component.get_components():
+                if _component.is_remote() or _has_any_remote_component(_component):
+                    return True
+            return False
         for strategy in self.strategies.values():
-            if strategy.is_remote() or strategy._has_any_remote_component():
+            if strategy.is_remote() or _has_any_remote_component(strategy):
                 return True
             for data in strategy.get_datas():
                 if data.config.num_stream_workers is not None:

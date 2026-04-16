@@ -64,7 +64,7 @@ class PytorchModel(BaseModel):
             raise ValueError(f"Unsupported data type: {type(X)}")
         pred_y = self.model(X, *args, **kwargs)
 
-        if not self.signal_cols:
+        if not self._signal_cols:
             num_cols = pred_y.shape[-1]
             signal_cols = self._get_default_signal_cols(num_cols)
             self.set_signal_cols(signal_cols)

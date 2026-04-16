@@ -1,4 +1,4 @@
-# pyright: reportUnknownMemberType=false
+# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Any
 if TYPE_CHECKING:
@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 import logging
 import datetime
 
+from pfeed.enums import DataCategory
 from pfund_kit.style import cprint, RichColor, TextStyle
 from pfund.enums import (
     Environment,
@@ -108,8 +109,6 @@ class BaseEngine:
         strategy: StrategyT,
         resolution: str, 
         name: str='', 
-        df_form: Literal['wide', 'long'] = 'long',
-        signal_cols: list[str] | None=None,
         ray_actor_options: dict[str, Any] | None=None,
         **ray_kwargs: Any,
     ) -> StrategyT | ActorProxy[StrategyT]:
@@ -121,7 +120,6 @@ class BaseEngine:
         '''
         from pfund.components.actor_proxy import ActorProxy
         from pfund.components.strategies.strategy_base import BaseStrategy
-        from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
         
         Strategy = strategy.__class__
         StrategyName = Strategy.__name__
@@ -137,20 +135,16 @@ class BaseEngine:
                 strategy, 
                 name=strat,
                 resolution=resolution,
+                engine_context=self._context,
                 ray_actor_options=ray_actor_options, 
                 **ray_kwargs
             )
-            if isinstance(self.settings, TradeEngineSettings):
-                self.settings.zmq_urls.enable_ray()
-                self.settings.zmq_ports.enable_ray()
 
         strategy._hydrate(
             name=strat,
             run_mode=RunMode.REMOTE if ray_kwargs else RunMode.LOCAL,
             resolution=resolution,
             engine_context=self._context,
-            df_form=df_form,
-            signal_cols=signal_cols,
         )
         strategy._set_top_strategy()
 
@@ -182,9 +176,16 @@ class BaseEngine:
         broker: BaseBroker = self._add_broker(account.trading_venue)
         account = broker.add_account(**account.to_dict())
         self._logger.debug(f'added account {account}')
+
+    def _get_all_datas(self) -> set[BaseData]:
+        datas: list[BaseData] = []
+        for strategy in self.strategies.values():
+            datas.extend(strategy.get_datas())
+            for component in strategy.get_components():
+                datas.extend(component.get_datas())
+        return set(datas)
     
     def _gather(self):
-        from pfund.datas.data_market import MarketData
         for strategy in self.strategies.values():
             strategy: BaseStrategy | ActorProxy[BaseStrategy]
             strategy._gather()
@@ -193,12 +194,11 @@ class BaseEngine:
             for account in accounts:
                 self._add_account(account)
             
-            datas: list[BaseData] = strategy.get_datas()
-            for data in datas:
-                if isinstance(data, MarketData):
-                    self._add_product(data.product)
-                else:
-                    raise NotImplementedError(f"Unhandled data type: {type(data)}")
+        for data in self._get_all_datas():
+            if data.category == DataCategory.MARKET_DATA:
+                self._add_product(data.product)
+            else:
+                raise NotImplementedError(f"Unhandled data type: {type(data)}")
     
     def run(self):
         self._logger.debug(f'Running {self.name}...')

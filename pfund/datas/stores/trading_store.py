@@ -5,19 +5,15 @@ if TYPE_CHECKING:
     from narwhals._native import NativeDataFrame
     from pfeed.sources.pfund.component_feed import ComponentFeed
     from pfund.datas.databoy import DataBoy
-    from pfund.typing import ComponentName
 
 import logging
 
 import narwhals as nw
 
-from pfeed.enums import DataCategory, DataLayer, IOFormat, DataTool
+from pfeed.enums import DataLayer, IOFormat
 
 
 class TradingStore:
-    '''
-    A TradingStore is a store that contains all data used by a component (e.g. strategy) in trading, from market data, computed features, to model predictions etc.
-    '''
     def __init__(self, databoy: DataBoy):
         import pfeed as pe
         self._logger: logging.Logger = logging.getLogger('pfund')
@@ -34,45 +30,47 @@ class TradingStore:
         for io_format, io_options in pfund_config.io_options.items():
             self._feed.configure_io(io_format=io_format, io_options=io_options)
             
-    # FIXME: add columns
-    def _initialize_df(self) -> nw.DataFrame[Any]:
-        context = self._databoy._component.context
-        pfeed_config = context.pfeed_config
-        if pfeed_config.data_tool == DataTool.polars:
-            import polars as pl
-            return nw.from_native(pl.DataFrame())
-        elif pfeed_config.data_tool == DataTool.pandas:
-            import pandas as pd
-            return nw.from_native(pd.DataFrame())
+    def get_df(self, window_size: int | None = None, to_native: bool = False) -> nw.DataFrame[Any] | NativeDataFrame | None:
+        if self._df is None:
+            return None
+        df = self._df if window_size is None else self._df.tail(window_size)
+        return df.to_native() if to_native else df
+    
+    def update_df(self, signals_df: nw.DataFrame[Any]):
+        if self._df is None:
+            self._df = signals_df
         else:
-            raise ValueError(f"Unsupported data tool: {pfeed_config.data_tool}")
-    
-    @property
-    def df(self) -> nw.DataFrame[Any]:
-        assert self._df is not None, "df is not set"
-        return self._df
-    
-    # TODO: if df is not set, create an empty df
-    def append_to_df(self):
-        # self._initialize_df()
-        pass
+            self._df = nw.concat([self._df, signals_df], how='vertical')
+        # TODO: trim df if it's too large
+        # max_rows = self._databoy._component.config['max_rows']
+
+    def pivot_df(self, df: nw.DataFrame[Any]) -> nw.DataFrame[Any]:
+        '''Pivots signals dataframe from long form to wide form.
+        Args:
+            df: signals_df in long form
+        '''
+        component = self._databoy._component
+        pivot_cols = [col for col in component._pivot_cols if col in df.columns]
+        if not pivot_cols:
+            raise ValueError(
+                f"Cannot pivot component '{component.name}' signals_df to wide form: " +
+                f"none of {component.name}'s pivot_cols={component._pivot_cols} appear in signals_df columns={df.columns}. " +
+                "Please call set_pivot_cols() for your component to set the pivot columns properly."
+            )
+        index_cols = [col for col in component._index_cols if col in df.columns]
+        return (
+            df
+            .pivot(
+                on=pivot_cols,
+                index=index_cols,
+            )
+            .sort(index_cols)
+        )
     
     def materialize(self):
         component = self._databoy._component
-        # NOTE: component's signals_df (component.get_df()) should be ready before materialization, 
-        # i.e. The component tree is BOTTOM-UP
-        signals_dfs: dict[ComponentName, NativeDataFrame] = {
-            _component.name: _component.get_df()
-            for _component in component.get_components()
-        }
-        if not signals_dfs:
-            return
-        data_dfs: dict[DataCategory, NativeDataFrame] = {}
-        for category in self._databoy.data_stores.keys():
-            data_dfs[category] = self._databoy.get_df(kind='data', category=category)
-        data_df = component.merge_data_dfs(data_dfs)
-        features_df = component.featurize(data_df, signals_dfs)
-        signals_df = component.signalize(features_df)
+        # NOTE: lookback_period=None means run the pipeline on the whole dataset
+        signals_df = component.run_pipeline(lookback_period=None)
         self._df = nw.from_native(signals_df)
     
     def persist_to_lakehouse(self):

@@ -49,10 +49,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
     def __init__(self, databoy: DataBoy):
         super().__init__(databoy)
         self._datas: dict[ProductName, dict[ResolutionRepr, MarketData]] = defaultdict(dict)
-        # periods based on the component's resolution
-        self._warmup_period: int | None = None
-        self._lookback_period: int | None = None
-    
+        
     def get_data(self, product: ProductName, resolution: Resolution | ResolutionRepr) -> MarketData | None:
         if product not in self._datas:
             return None
@@ -116,14 +113,6 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                 storage_config=storage_config,
             )
         return data
-    
-    def set_periods(self, warmup_period: int, lookback_period: int):
-        if not warmup_period or warmup_period < 0:
-            raise ValueError(f'warmup_period must be a positive integer, got {warmup_period}')
-        if not lookback_period or lookback_period < 0:
-            raise ValueError(f'lookback_period must be a positive integer, got {lookback_period}')
-        self._warmup_period = warmup_period
-        self._lookback_period = lookback_period
     
     # TODO
     def update_quote(self, update: QuoteUpdate):
@@ -200,6 +189,10 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             for data_resamplee in data_resamplees:
                 resamplee_update['resolution'] = data_resamplee.resolution
                 self.update_bar(resamplee_update)
+    
+    # TODO
+    def update_df(self, data: MarketData):
+        pass
     
     def _should_cache_resampled(self, feed: MarketFeed) -> bool:
         '''Determine if the retrieved data should be cached to the CURATED layer.'''

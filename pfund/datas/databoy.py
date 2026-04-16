@@ -1,16 +1,13 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false, reportArgumentType=false, reportUnnecessaryComparison=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from logging import Logger
-    from narwhals._native import NativeDataFrame
     from pfeed.streaming.zeromq import ZeroMQ
-    from pfund.datas.stores.market_data_store import MarketDataStore
-    from pfund.datas.stores.trading_store import TradingStore
     from pfeed.streaming.streaming_message import StreamingMessage
     from pfund.datas.data_market import MarketData
+    from pfund.datas.stores.trading_store import TradingStore
     from pfund.datas.stores.base_data_store import BaseDataStore
-    from pfund.datas.data_base import BaseData
     from pfund.datas.data_bar import BarData
     from pfund.typing import (
         ComponentName,
@@ -27,11 +24,14 @@ from pfund.enums import PublicDataChannel, PrivateDataChannel
 
 class DataBoy:
     def __init__(self, component: Component):
+        from pfund.datas.stores.trading_store import TradingStore
+        
         self._component: Component = component
-        self._trading_store: TradingStore | None = None
+        self._trading_store: TradingStore = TradingStore(self)
         self._data_stores: dict[DataCategory, BaseDataStore] = {}
         self._data_zmq: ZeroMQ | None = None
         self._signals_zmq: ZeroMQ | None = None
+        self._join_cols: list[str] = []  # columns to join on when merging data_dfs
         # TODO: save data signatures properly, data_signatures should be a set
         # TODO: add data_config (dict form) to data_signatures
         self._data_signatures = []
@@ -49,108 +49,27 @@ class DataBoy:
         return self._component.name
     
     @property
-    def data_stores(self) -> dict[DataCategory, BaseDataStore]:
-        return self._data_stores
-    
-    @property
     def trading_store(self) -> TradingStore:
-        return self.get_trading_store()
+        return self._trading_store
     
-    @property
-    def market_data_store(self) -> MarketDataStore:
-        return self.get_data_store(DataCategory.MARKET_DATA)
-    
-    def is_remote(self, direct_only: bool=True) -> bool:
-        return self._component.is_remote(direct_only=direct_only)
-    
-    def _create_trading_store(self) -> TradingStore:
-        from pfund.datas.stores.trading_store import TradingStore
-        return TradingStore(self)
+    def is_using_zmq(self) -> bool:
+        return self._data_zmq is not None and self._signals_zmq is not None
 
-    def _create_data_store(self, category: DataCategory) -> MarketDataStore:
+    def _create_data_store(self, category: DataCategory) -> BaseDataStore:
         from pfund.datas.stores.market_data_store import MarketDataStore
         if category == DataCategory.MARKET_DATA:
             return MarketDataStore(self)
         else:
-            raise ValueError(f'{category} is not supported')
+            raise NotImplementedError(f'{category} is not supported')
     
-    def get_data_store(self, category: DataCategory | str) -> MarketDataStore:
+    def get_data_store(self, category: DataCategory | str) -> BaseDataStore:
         category = DataCategory[category.upper()]
-        if category in self.data_stores:
-            return self.data_stores[category]
+        if category in self._data_stores:
+            return self._data_stores[category]
         else:
             data_store = self._create_data_store(category)
-            self.data_stores[category] = data_store
+            self._data_stores[category] = data_store
             return data_store
-
-    def get_trading_store(self) -> TradingStore:
-        if self._trading_store is None:
-            self._trading_store = self._create_trading_store()
-        return self._trading_store
-    
-    def get_datas(self) -> list[BaseData]:
-        datas = []
-        for data_store in self.data_stores.values():
-            datas.extend(data_store.get_datas())
-        return datas
-    
-    def pivot_data_df(self, data_category: DataCategory, data_df: NativeDataFrame) -> NativeDataFrame:
-        '''Pivots data dataframe from long form to wide form.'''
-        df = nw.from_native(data_df)
-        data_store = self.get_data_store(data_category)
-        if data_category == DataCategory.MARKET_DATA:
-            df = (
-                df
-                .pivot(
-                    on=data_store.PIVOT_COLS,
-                    index=data_store.INDEX_COLS,
-                )
-                .sort(data_store.INDEX_COLS)
-            )
-        # TODO: handle other data categories e.g. news data
-        else:
-            if data_store.PIVOT_COLS:
-                raise ValueError(f'Unhandled pivot columns: {data_store.PIVOT_COLS} for {data_store}')
-        return df.to_native()
-    
-    def get_df(
-        self, 
-        kind: Literal['data', 'signals']='data',
-        *,
-        category: DataCategory | str=DataCategory.MARKET_DATA,
-        pivot_data: bool=False,
-        to_native: bool=True,
-    ) -> NativeDataFrame | nw.DataFrame[Any]:
-        """Returns one of the stored dataframes in either trading store or data stores.
-    
-        Args:
-            kind: Which frame to return.
-                - 'data': input dataframe from a data store (e.g. market data, news).
-                - 'signals': signals produced by this component.
-            category: For kind='data', which data category to return. 
-                Ignored when kind='signals'. 
-                Defaults to market data.
-            pivot_data: pivot dataframe (when kind='data') to wide form. 
-                Ignored when kind='signals'.
-                Defaults to False.
-            to_native: If True, return the underlying backend frame (polars/pandas) instead
-                of a Narwhals DataFrame. Defaults to True.
-        """
-        if kind == 'data':
-            category = DataCategory[category.upper()]
-            data_store = self.get_data_store(category)
-            df = data_store.df  # in long form
-        elif kind == 'signals':
-            df = self.trading_store.df  # in long/wide form, depends on the component's df_form setting
-        else:
-            raise ValueError(f'{kind=} is not supported')
-        
-        # pivot to wide form (only meaningful for data because data are stored in long form)
-        if kind == 'data' and pivot_data:
-            df = nw.from_native(
-                self.pivot_data_df(data_category=category, data_df=df.to_native())
-            )
-        return df.to_native() if to_native else df
     
     # FIXME: move to market_data_store
     def _flush_stale_bar(self, data: BarData):
@@ -251,7 +170,7 @@ class DataBoy:
                 self._data_zmq.receiver.setsockopt(zmq.SUBSCRIBE, zmq_channel.encode())
         
         # subscribe to data channels: quote, tick, bar, etc.
-        for data in self.get_datas():
+        for data in self._component.get_datas():
             if isinstance(data, MarketData):
                 zmq_channel = ZeroMQDataChannel.create_market_data_channel(
                     data_source=data.source,
@@ -277,14 +196,6 @@ class DataBoy:
         """Pongs back to Engine's ping to show that it is alive"""
         zmq_msg = (0, 0, (self.strat,))
         self._zmq.send(*zmq_msg, receiver='engine')
-    
-    def _gather(self):
-        datas = self.get_datas()
-        if not datas:
-            raise RuntimeError(f'{self.name} has no datas, did you forget to call add_data()?')
-        for data_store in self.data_stores.values():
-            data_store.materialize()
-        self.trading_store.materialize()
 
     def start(self):
         if self._data_zmq or self._signals_zmq:
@@ -315,6 +226,51 @@ class DataBoy:
         else:
             raise NotImplementedError(f'Unhandled data category: {msg.data_category}')
     
+    def _find_join_cols(self, data_dfs: dict[DataCategory, nw.DataFrame[Any]]) -> list[str]:
+        '''Finds the common columns to join on among all data dfs'''
+        if self._join_cols:  # already found, return it
+            return self._join_cols
+        df_form = self._component._df_form
+        if df_form == 'wide':
+            dfs = []
+            for category, df in data_dfs.items():
+                data_store = self.get_data_store(category)
+                # REVIEW: this requires dynamic pivoting for EACH call
+                pivoted_df = data_store.pivot_df(nw.from_native(df))
+                dfs.append(pivoted_df.to_native())
+            cols_attr = 'INDEX_COLS'
+        elif df_form == 'long':
+            dfs = [nw.from_native(df) for df in data_dfs.values()]
+            cols_attr = 'KEY_COLS'
+        else:
+            raise ValueError(f'Invalid {df_form=}')
+        
+        common_cols: set[str] | None = None
+        for df in dfs:
+            if common_cols is None:
+                common_cols = set(df.columns)
+            else:
+                common_cols &= set(df.columns)
+        if not common_cols:
+            raise ValueError(
+                f"No common columns found in data_dfs in {df_form} form for {self.name}. " +
+                "Please define your own merge_data_dfs() to handle merging data_dfs manually."
+            )
+        
+        join_cols = list(dict.fromkeys(
+            col
+            for category in data_dfs.keys()
+            for col in getattr(self.get_data_store(category), cols_attr)
+            if col in common_cols
+        ))
+        if not join_cols:
+            raise ValueError(
+                f"No common columns found in data_dfs in {df_form} form to join on for {self.name}. " +
+                "Please define your own merge_data_dfs() to handle merging data_dfs manually."
+            )
+        self._join_cols = join_cols
+        return join_cols
+    
     def _collect(self, msg: StreamingMessage | None=None):
         '''
         Args:
@@ -341,6 +297,7 @@ class DataBoy:
                 
                 # TODO: check if signals are ready, if yes, call back on trade(X)
     
+    # TODO: should receive both signals_dict and signals_df
     def _wait_for_children_signals(self, timeout: float = 10.0):
         '''Waits for all children's signals via signals_zmq before delivering data.
         Only used in ZMQ mode when the component has children.
@@ -365,18 +322,14 @@ class DataBoy:
 
     def _deliver(self, data: MarketData):
         '''Deliver data to the component'''
-        # if self._component.is_remote():
-        #     # TODO
-        #     self._send_signal(...)
-        # else:
-        # NOTE: In ZMQ mode, children receive data independently via their own data_zmq.
-        # We must wait for their signals before proceeding, since there's no ordering guarantee.
-        # In non-ZMQ mode, children already processed (bottom-up ordering in _collect).
-        if self._signals_zmq and self._component.get_components():
-            self._wait_for_children_signals()
-        if data.is_quote():
-            self._component._on_quote(data)
-        elif data.is_tick():
-            self._component._on_tick(data)
-        elif data.is_bar():
-            self._component._on_bar(data)
+        if data.category == DataCategory.MARKET_DATA:
+            if data.is_quote():
+                self._component._on_quote(data)
+            elif data.is_tick():
+                self._component._on_tick(data)
+            elif data.is_bar():
+                if data.is_closed():
+                    self._data_stores[data.category].update_df(data)
+                self._component._on_bar(data)
+        else:
+            raise NotImplementedError(f'Unhandled data type: {type(data)}')

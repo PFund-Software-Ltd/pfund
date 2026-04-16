@@ -38,6 +38,7 @@ from pfund.enums import TradingVenue, Broker
 
 class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):    
     def __init__(self, *args: Any, **kwargs: Any):       
+        self._df_form: Literal['wide', 'long'] = 'long'
         # TODO: also include sub-strategies' accounts
         self.accounts: dict[AccountName, BaseAccount] = {}
         self.strategies: dict[str, BaseStrategy] = {}
@@ -195,12 +196,6 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         self.trades[order.account].append(trade)
         self.on_trade(order.account, trade, type_)
         
-    # TODO
-    def _next(self, data: BaseData):
-        # NOTE: only sub-strategies have predict()
-        # pred_y = self.predict(X)
-        pass
-    
     def _gather(self):
         if not self._is_gathered:
             # TODO: check if e.g. exchange balances and positions are ready, if backfilling is finished?

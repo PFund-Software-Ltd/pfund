@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Generic, TypeVar, ClassVar
 
 if TYPE_CHECKING:
+    from narwhals._native import NativeDataFrame
     from pfund.datas.databoy import DataBoy
 
 import logging
@@ -33,13 +34,6 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
     def KEY_COLS(self) -> list[str]:
         return self.INDEX_COLS + self.PIVOT_COLS
 
-    @property
-    def df(self) -> nw.DataFrame[Any]:
-        if self._df is None:
-            self.materialize()
-        assert self._df is not None, "df is not set"
-        return self._df
-
     @abstractmethod
     def materialize(self, *args: Any, **kwargs: Any) -> None:
         pass
@@ -60,6 +54,10 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
     def get_datas(self) -> list[DataT]:
         pass
 
+    @abstractmethod
+    def update_df(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
     def _create_feed(self, data: DataT) -> FeedT:
         from pfeed.feeds import create_feed
         return create_feed(  # pyright: ignore[reportReturnType]
@@ -78,3 +76,23 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
             io_format=storage_config.io_format,
             compression=storage_config.compression,
         )
+
+    def pivot_df(self, df: nw.DataFrame[Any]) -> nw.DataFrame[Any]:
+        '''Pivots data dataframe from long form to wide form.
+        Args:
+            df: data_df in long form
+        '''
+        return (
+            df
+            .pivot(
+                on=self.PIVOT_COLS,
+                index=self.INDEX_COLS,
+            )
+            .sort(self.INDEX_COLS)
+        )
+    
+    def get_df(self, window_size: int | None = None, to_native: bool = False) -> nw.DataFrame[Any] | NativeDataFrame | None:
+        if self._df is None:
+            return None
+        df = self._df if window_size is None else self._df.tail(window_size)
+        return df.to_native() if to_native else df
