@@ -1,12 +1,14 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false, reportArgumentType=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from torch import Tensor
     from sklearn.base import BaseEstimator
     from numpy import ndarray
     import torch.nn as nn
     from narwhals._native import NativeDataFrame
+    from pfund.typing import ModelT
+    from pfund.components.actor_proxy import ActorProxy
     from pfund.enums import TradingVenue
     from pfund.datas.data_market import MarketData
     from pfund.datas.data_config import DataConfig
@@ -26,6 +28,33 @@ from pfund.components.mixin import ComponentMixin
 
 
 trim_path = TrimmedPathFilter.trim_path
+
+
+def wrap_model(model: BaseEstimator | nn.Module | ModelT | ActorProxy[ModelT]) -> ModelT | ActorProxy[ModelT]:
+    '''Wraps a sklearn/pytorch model into a pfund model'''
+    from pfund.components.actor_proxy import ActorProxy
+    from pfund.components.models.model_base import BaseModel
+    if isinstance(model, (ActorProxy, BaseModel)):
+        return model
+    try:
+        from sklearn.base import BaseEstimator
+        if isinstance(model, BaseEstimator):
+            from pfund.components.models.sklearn_model import SklearnModel
+            pfund_model = SklearnModel(model)
+            pfund_model._set_name(type(model).__name__)
+            return cast("ModelT", pfund_model)
+    except ImportError:
+        pass
+    try:
+        import torch.nn as nn
+        if isinstance(model, nn.Module):
+            from pfund.components.models.pytorch_model import PytorchModel
+            pfund_model = PytorchModel(model)
+            pfund_model._set_name(type(model).__name__)
+            return cast("ModelT", pfund_model)
+    except ImportError:
+        pass
+    raise TypeError(f"Unsupported model type: {type(model).__name__}")
 
 
 class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
@@ -65,24 +94,24 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             data_df: dataframe in {self.df_form} form
         '''
         X = nw.from_native(features_df)
-        pred_y: Tensor | ndarray = self.predict(X)
-        is_from_pytorch = type(pred_y).__module__.startswith('torch')
+        pred: Tensor | ndarray = self.predict(X)
+        is_from_pytorch = type(pred).__module__.startswith('torch')
         if is_from_pytorch:
-            pred_y = pred_y.detach().cpu().numpy()  
+            pred = pred.detach().cpu().numpy()
         signal_cols = self.get_signal_cols()
         num_signal_cols = len(signal_cols)
         df_backend = nw.get_native_namespace(features_df)
-        if pred_y.ndim == 1:
+        if pred.ndim == 1:
             if num_signal_cols != 1:
-                raise ValueError(f"pred_y is 1D but {self.name} has {num_signal_cols} signal columns: {signal_cols}")
-            signals_dict = {signal_cols[0]: pred_y}
+                raise ValueError(f"prediction is 1D but {self.name} has {num_signal_cols} signal columns: {signal_cols}")
+            signals_dict = {signal_cols[0]: pred}
         else:
             # last dimension = signal columns, everything in between is packed into cells
-            if num_signal_cols != pred_y.shape[-1]:
-                raise ValueError(f"Expected {num_signal_cols} signal columns for {self.name}, but pred_y has shape {pred_y.shape}")
-            signals_dict = {}                                                                                                         
-            for i, col in enumerate(signal_cols):                                                                                     
-                values = pred_y[..., i]                                                                                               
+            if num_signal_cols != pred.shape[-1]:
+                raise ValueError(f"Expected {num_signal_cols} signal columns for {self.name}, but prediction has shape {pred.shape}")
+            signals_dict = {}
+            for i, col in enumerate(signal_cols):
+                values = pred[..., i]
                 # NOTE: list() converts 2D+ array into per-row sub-arrays, needed because pandas rejects >1D per-column arrays
                 signals_dict[col] = list(values) if values.ndim > 1 else values
         signals_df = nw.DataFrame.from_dict(signals_dict, backend=df_backend)

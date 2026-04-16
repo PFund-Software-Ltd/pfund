@@ -71,7 +71,6 @@ class BaseEngine:
         self._is_running = False
         # TODO: write engine's states using engine_feed.load()
         self._feed: EngineFeed = pe.PFund().engine_feed
-        # self.id = uuid.uuid4().hex[:8]
         self.brokers: dict[Broker, BaseBroker] = {}
         self.strategies: dict[str, BaseStrategy | ActorProxy[BaseStrategy]] = {}
         self.results: dict[str, Any] | None = None

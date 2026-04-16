@@ -557,31 +557,6 @@ class ComponentMixin:
             return None
         return component
     
-    def _wrap_model(self, model: BaseEstimator | nn.Module | ModelT | ActorProxy[ModelT]) -> ModelT:
-        '''Wraps a sklearn/pytorch model into a pfund model'''
-        from pfund.components.models.model_base import BaseModel
-        if isinstance(model, (ActorProxy, BaseModel)):
-            return model
-        try:
-            from sklearn.base import BaseEstimator
-            if isinstance(model, BaseEstimator):
-                from pfund.components.models.sklearn_model import SklearnModel
-                pfund_model = SklearnModel(model)
-                pfund_model._set_name(type(model).__name__)
-                return pfund_model
-        except ImportError:
-            pass
-        try:
-            import torch.nn as nn
-            if isinstance(model, nn.Module):
-                from pfund.components.models.pytorch_model import PytorchModel
-                pfund_model = PytorchModel(model)
-                pfund_model._set_name(type(model).__name__)
-                return pfund_model
-        except ImportError:
-            pass
-        raise TypeError(f"Unsupported model type: {type(model).__name__}")
-    
     def add_model(
         self, 
         model: ModelT | ActorProxy[ModelT] | BaseEstimator | nn.Module,
@@ -592,7 +567,8 @@ class ComponentMixin:
         ray_actor_options: dict[str, Any] | None=None,
         **ray_kwargs: Any
     ) -> ModelT | ActorProxy[ModelT] | None:
-        model = self._wrap_model(model)
+        from pfund.components.models.model_base import wrap_model
+        model = wrap_model(model)
         return self._add_component(
             component=model,
             resolution=resolution,

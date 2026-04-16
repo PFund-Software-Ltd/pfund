@@ -2,14 +2,14 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Any, cast, TypeAlias
 if TYPE_CHECKING:
-    from narwhals.typing import Frame
+    import torch.nn as nn
+    from sklearn.base import BaseEstimator
     from sklearn.model_selection import TimeSeriesSplit
     from pfund.typing import StrategyT, ModelT, FeatureT, IndicatorT
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.components.models.model_base import BaseModel
     from pfund.datas.data_bar import BarData
     from pfund.utils.dataset_splitter import DatasetSplitsDict, CrossValidatorDatasetPeriods, DatasetPeriods
-    from pfund._backtest.backtest_mixin import BacktestMixin
     from pfund.engines.engine_context import DataRangeDict
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.engines.engine_context import EngineContext
@@ -101,12 +101,6 @@ class BacktestEngine(BaseEngine):
     def dataset_periods(self) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
         return self._context.backtest.dataset_splitter.dataset_periods
     
-    @property
-    def _dummy(self) -> str:
-        '''gets the name of the dummy strategy'''
-        from pfund.components.strategies._dummy_strategy import DummyStrategy
-        return DummyStrategy.name
-        
     def add_strategy(
         self, 
         strategy: StrategyT, 
@@ -115,15 +109,16 @@ class BacktestEngine(BaseEngine):
         df_form: Literal['wide', 'long'] = 'long',
         signal_cols: list[str] | None=None,
     ) -> StrategyT:
-        from pfund.components.strategies._dummy_strategy import DummyStrategy
+        from pfund.components.strategies._dummy_strategy import _DummyStrategy
         from pfund.components.strategies.strategy_backtest import BacktestStrategy
 
-        if self._dummy in self.strategies:
+        dummy_strategy_name = _DummyStrategy.__name__
+        if dummy_strategy_name in self.strategies:
             raise Exception('adding another strategy is not allowed during model backtesting (i.e. engine.add_model(...) has been called)')
         Strategy = type(strategy)
-        if Strategy is not DummyStrategy:
-            if name == self._dummy:
-                raise ValueError(f'strategy name "{self._dummy}" is reserved, please use another name')
+        if Strategy is not _DummyStrategy:
+            if name == dummy_strategy_name:
+                raise ValueError(f'strategy name "{dummy_strategy_name}" is reserved, please use another name')
         strategy: StrategyT = BacktestStrategy(Strategy, *strategy.__pfund_args__, **strategy.__pfund_kwargs__)
         return cast("StrategyT", super().add_strategy(
             strategy=strategy,
@@ -133,60 +128,48 @@ class BacktestEngine(BaseEngine):
             signal_cols=signal_cols,
         ))
 
-    def add_model(
+    def _add_component(
         self, 
-        model: ModelT, 
+        component: ModelT | FeatureT | IndicatorT, 
         resolution: str,
         name: str='',
         df_form: Literal['wide', 'long'] = 'wide',
         signal_cols: list[str] | None=None,
-    ) -> BacktestMixin | ModelT:
+    ) -> ModelT | FeatureT | IndicatorT:
         '''Add model without creating a strategy (using dummy strategy)'''
-        from pfund.components.strategies._dummy_strategy import DummyStrategy
-        only_dummy_strategy_exists = self._dummy in self.strategies and len(self.strategies) == 1
+        from pfund.components.strategies._dummy_strategy import _DummyStrategy
+        dummy_strategy_name = _DummyStrategy.__name__
+        only_dummy_strategy_exists = dummy_strategy_name in self.strategies and len(self.strategies) == 1
         assert not only_dummy_strategy_exists, 'Please use strategy.add_model(...) instead of engine.add_model(...) when a strategy is already created'
-        if not (strategy := self.get_strategy(self._dummy)):
-            strategy = self.add_strategy(DummyStrategy(), resolution, name=self._dummy)
-            strategy.set_flags(True)
+        if dummy_strategy_name not in self.strategies:
+            strategy = self.add_strategy(_DummyStrategy(), resolution, name=dummy_strategy_name)
+        else:
+            strategy = self.get_strategy(dummy_strategy_name)
         assert not strategy.models, 'Adding more than 1 model to dummy strategy in backtesting is not supported, you should train and dump your models one by one'
-        model = strategy.add_model(
-            model,
+        component = strategy._add_component(
+            component,
             resolution,
             name=name,
             df_form=df_form,
             signal_cols=signal_cols,
         )
-        model.set_flags(True)
-        return model
+        return component
+    add_feature = add_indicator = _add_component
     
-    def add_feature(
+    def add_model(
         self, 
-        feature: FeatureT, 
+        model: ModelT | BaseEstimator | nn.Module,
         resolution: str,
         name: str='',
         df_form: Literal['wide', 'long'] = 'wide',
         signal_cols: list[str] | None=None,
-    ) -> BacktestMixin | FeatureT:
-        return self.add_model(
-            feature, 
+    ) -> ModelT:
+        from pfund.components.models.model_base import wrap_model
+        model = cast("ModelT", wrap_model(model))
+        return self._add_component(
+            component=model,
             resolution=resolution,
-            name=name, 
-            df_form=df_form,
-            signal_cols=signal_cols,
-        )
-    
-    def add_indicator(
-        self, 
-        indicator: IndicatorT, 
-        resolution: str,
-        name: str='',
-        df_form: Literal['wide', 'long'] = 'wide',
-        signal_cols: list[str] | None=None,
-    ) -> BacktestMixin | IndicatorT:
-        return self.add_model(
-            indicator, 
-            resolution=resolution,
-            name=name, 
+            name=name,
             df_form=df_form,
             signal_cols=signal_cols,
         )
@@ -202,6 +185,8 @@ class BacktestEngine(BaseEngine):
             if None, defaults to os.cpu_count().
             This will be ignored if Ray is not used (i.e. num_chunks = 1).
         '''
+        from pfund.components.strategies._dummy_strategy import _DummyStrategy
+
         if num_chunks < 1:
             raise ValueError('num_chunks must be greater than 0')
         if num_cpus:
@@ -215,22 +200,15 @@ class BacktestEngine(BaseEngine):
 
         try:
             for strategy in self.strategies.values():
-                if strategy.name == self._dummy:
-                    # nothing to run when backtesting model in vectorized or hybrid mode
-                    if self.backtest_mode in [BacktestMode.VECTORIZED, BacktestMode.HYBRID]:
-                        continue
-                    elif self.backtest_mode == BacktestMode.EVENT_DRIVEN:
-                        # dummy strategy has exactly one model
-                        model: BaseModel = cast("BaseModel", list(strategy.models.values())[0])
-                        backtestee = model
-                        backtest_dfs = self._backtest(backtestee, num_chunks=num_chunks, num_cpus=num_cpus)
-                        backtest_results[backtestee.name] = backtest_dfs
-                    else:
-                        raise NotImplementedError(f'Backtesting mode {self.backtest_mode} is not supported for model backtesting')
+                is_model_backtesting = strategy.name == _DummyStrategy.__name__
+                if is_model_backtesting:
+                    # dummy strategy has exactly one model
+                    model: BaseModel = cast("BaseModel", list(strategy.models.values())[0])
+                    backtestee = model
                 else:
                     backtestee = strategy
-                    backtest_dfs = self._backtest(backtestee, num_chunks=num_chunks, num_cpus=num_cpus)
-                    backtest_results[backtestee.name] = backtest_dfs
+                backtest_dfs = self._backtest(backtestee, num_chunks=num_chunks, num_cpus=num_cpus)
+                backtest_results[backtestee.name] = backtest_dfs
 
         except Exception:
             self._logger.exception('Error in backtesting:')
@@ -251,13 +229,15 @@ class BacktestEngine(BaseEngine):
         is_using_ray = num_chunks > 1
         backtest_dfs: list[pf.BacktestDataFrame] = []
         
-        # FIXME: only support MarketData for now, but still need to handle cases with multiple products
+        # FIXME: this should be features_df?
         # should we use long/wide form for multi-product dataframes?
         df: nw.DataFrame[Any] = backtestee.databoy.get_df(
             kind='data',
             # category=DataCategory.MARKET_DATA,
             to_native=False,
         )
+        # TEMP
+        print(df)
 
         def _run_backtest(
             backtestee: BaseStrategy | BaseModel,
@@ -304,7 +284,7 @@ class BacktestEngine(BaseEngine):
         else:
             import ray
             from ray.util.queue import Queue
-            from pfeed.utils.ray import shutdown_ray, setup_ray, setup_logger_in_ray_task, ray_logging_context
+            from pfeed.utils.ray import setup_ray, setup_logger_in_ray_task, ray_logging_context
 
             @ray.remote
             def ray_task(
@@ -380,8 +360,6 @@ class BacktestEngine(BaseEngine):
                     self._logger.warning(f"KeyboardInterrupt received, stopping {backtestee.name} backtesting...")
                 except Exception:
                     logger.exception('Error in backtesting:')
-            self._logger.debug('shutting down ray...')
-            shutdown_ray()
 
         # ### Post-Backtest ###
         if backtestee.is_strategy():
