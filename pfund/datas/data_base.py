@@ -1,15 +1,13 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
     from pfeed.enums import DataSource, DataCategory
     from pfund.datas.data_config import DataConfig
     from pfeed.storages.storage_config import StorageConfig
 
-from abc import ABC, abstractmethod
 
-
-class BaseData(ABC):
-    category: DataCategory
+class BaseData:
+    category: ClassVar[DataCategory]
     
     def __init__(
         self, 
@@ -24,9 +22,13 @@ class BaseData(ABC):
         self.storage_config: StorageConfig = storage_config
         self.extra_data: dict[str, Any] = {}
         
-    @abstractmethod
     def to_dict(self) -> dict[str, Any]:
-        pass
+        return {
+            'source': self.source.value,
+            'origin': self.origin,
+            'config': self.config.model_dump(),
+            'storage_config': self.storage_config.model_dump(),
+        }
     
     def update_extra_data(self, extra_data: dict[str, Any]):
         self.extra_data = extra_data

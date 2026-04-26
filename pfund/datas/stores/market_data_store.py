@@ -43,7 +43,6 @@ from pfund.datas import QuoteData, TickData, BarData
 class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
     # Columns pinned to the left side of the materialized dataframe for readability
     LEFT_COLS = ['date', 'resolution', 'product', 'symbol', 'source_type']
-    INDEX_COLS = ['date']
     PIVOT_COLS = ['resolution', 'product']
 
     def __init__(self, databoy: DataBoy):
@@ -192,7 +191,8 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
     
     # TODO
     def update_df(self, data: MarketData):
-        pass
+        print('***update_df', data)
+        print('***update_df', self._df)
     
     def _should_cache_resampled(self, feed: MarketFeed) -> bool:
         '''Determine if the retrieved data should be cached to the CURATED layer.'''
@@ -327,4 +327,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         if isinstance(df, nw.LazyFrame):
             df = df.collect()
         self._df = df
+        cols = df.columns
+        assert self.INDEX_COL in cols, f"Index column {self.INDEX_COL} not found in {cols}"
+        assert self.PIVOT_COLS in cols, f"Pivot columns {self.PIVOT_COLS} not found in {cols}"
         return df

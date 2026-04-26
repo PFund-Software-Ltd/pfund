@@ -7,7 +7,6 @@ import narwhals as nw
 
 import pfund as pf
 from pfund._backtest.backtest_mixin import BacktestMixin
-from pfund.enums import BacktestMode
 
 
 def BacktestStrategy(Strategy: type[StrategyT], *args: Any, **kwargs: Any) -> StrategyT:
@@ -32,30 +31,7 @@ def BacktestStrategy(Strategy: type[StrategyT], *args: Any, **kwargs: Any) -> St
             trading_venues = set(product.trading_venue for product in self.products.values())
             for trading_venue in trading_venues:
                 self.add_account(trading_venue=trading_venue)
-        
-        def on_start(self):
-            # TODO
-            if self._is_signal_df_required and self._signal_df is None:
-                self.logger.warning(f"creating signal_df for '{self.name}' on the fly")
-                # signal_df: pd.DataFrame | pl.LazyFrame = self.flow()
-                # self._set_signal_df(signal_df)
-            super().on_start()
-        
-        def start(self):
-            # TODO:
-            if self.backtest_mode == BacktestMode.EVENT_DRIVEN:
-                super().start()
-            else:
-                pass
-        
-        # TODO
-        def load(self):
-            pass
-        
-        # TODO
-        def dump(self):
-            pass
-
+                
         @staticmethod
         def _postprocess_backtest_df(backtest_df: pf.BacktestDataFrame) -> pf.BacktestDataFrame:
             '''Postprocesses backtest DataFrame by merging internal debug columns into a

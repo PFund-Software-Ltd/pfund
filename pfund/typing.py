@@ -21,6 +21,7 @@ EngineName: TypeAlias = str
 ComponentName: TypeAlias = str
 ProductName: TypeAlias = str
 AccountName: TypeAlias = str
+ColumnName: TypeAlias = str
 Currency: TypeAlias = str
 # when user types in the full channel name, it is of type FullDataChannel
 FullDataChannel: TypeAlias = str

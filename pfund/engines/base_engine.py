@@ -26,6 +26,7 @@ from pfund.enums import (
     Broker,
     RunMode,
     TradingVenue,
+    ComponentType,
 )
 
 
@@ -135,6 +136,7 @@ class BaseEngine:
                 strategy, 
                 name=strat,
                 resolution=resolution,
+                component_type=ComponentType.strategy,
                 engine_context=self._context,
                 ray_actor_options=ray_actor_options, 
                 **ray_kwargs

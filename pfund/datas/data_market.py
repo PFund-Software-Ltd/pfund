@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
     from pfund.datas.data_config import DataConfig
     from pfeed.storages.storage_config import StorageConfig
@@ -13,7 +13,7 @@ from pfund.datas.data_time_based import TimeBasedData
 
 
 class MarketData(TimeBasedData):
-    category: DataCategory = DataCategory.MARKET_DATA
+    category: ClassVar[DataCategory] = DataCategory.MARKET_DATA
     
     def __init__(
         self,
@@ -130,18 +130,18 @@ class MarketData(TimeBasedData):
         self._remove_resampler(data_resampler)
         data_resampler._remove_resamplee(self)
     
-    # TODO: create MarketDataMetadata class (typed dict/dataclass/pydantic model)
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
-            'data_source': self.source.value,
-            'data_origin': self.origin,
-            'data_category': self.category.value,
-            'product': str(self.product),
+            **super().to_dict(),
+            'product_name': self.product.name,
+            'product_basis': str(self.product.basis),
+            'symbol': self.product.symbol,
             'resolution': repr(self.resolution),
+            'product_specs': self.product.specs,
         }
     
     def __eq__(self, other):
-        if not isinstance(other, TimeBasedData):
+        if not isinstance(other, MarketData):
             return NotImplemented
         return (self.product, self.resolution) == (other.product, other.resolution)
     

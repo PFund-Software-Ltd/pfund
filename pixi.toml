@@ -37,6 +37,7 @@ mtflow = { path = "../mtflow", editable = true }
 # pfolio = ">=0.0.3"
 # pfund-plot = {version = ">=0.0.1.dev3", extras = ["marimo"]}
 # mtflow = ">=0.0.1.dev2"
+joblib = ">=1.5.3"
 numba = ">=0.65.0"
 httpx = ">=0.28.1"
 websockets = ">=16.0.0"

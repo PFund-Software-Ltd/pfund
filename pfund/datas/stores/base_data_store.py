@@ -5,7 +5,6 @@ if TYPE_CHECKING:
     from narwhals._native import NativeDataFrame
     from pfund.datas.databoy import DataBoy
 
-import logging
 from abc import ABC, abstractmethod
 
 import narwhals as nw
@@ -22,17 +21,17 @@ FeedT = TypeVar('FeedT', bound=BaseFeed)
 
 class BaseDataStore(ABC, Generic[DataT, FeedT]):
     LEFT_COLS: ClassVar[list[str]]
-    INDEX_COLS: ClassVar[list[str]]
+    INDEX_COL: ClassVar[str] = 'date'
     PIVOT_COLS: ClassVar[list[str]]
 
     def __init__(self, databoy: DataBoy):
-        self._logger: logging.Logger = logging.getLogger("pfund")
         self._databoy: DataBoy = databoy
+        self._logger = databoy.logger
         self._df: nw.DataFrame[Any] | None = None
     
     @property                                                                                                                 
     def KEY_COLS(self) -> list[str]:
-        return self.INDEX_COLS + self.PIVOT_COLS
+        return [self.INDEX_COL] + self.PIVOT_COLS
 
     @abstractmethod
     def materialize(self, *args: Any, **kwargs: Any) -> None:
@@ -86,13 +85,15 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
             df
             .pivot(
                 on=self.PIVOT_COLS,
-                index=self.INDEX_COLS,
+                index=self.INDEX_COL,
             )
-            .sort(self.INDEX_COLS)
+            .sort(self.INDEX_COL)
         )
     
-    def get_df(self, window_size: int | None = None, to_native: bool = False) -> nw.DataFrame[Any] | NativeDataFrame | None:
+    def get_df(self, window_size: int | None = None, pivot: bool = False, to_native: bool = False) -> nw.DataFrame[Any] | NativeDataFrame | None:
         if self._df is None:
             return None
         df = self._df if window_size is None else self._df.tail(window_size)
+        if pivot:
+            df = self.pivot_df(df)
         return df.to_native() if to_native else df

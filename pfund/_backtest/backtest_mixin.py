@@ -1,15 +1,18 @@
-# pyright: reportUninitializedInstanceVariable=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false, reportArgumentType=false, reportUnusedParameter=false
+# pyright: reportUninitializedInstanceVariable=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false, reportArgumentType=false, reportUnusedParameter=false, reportUnknownParameterType=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, cast, Callable, Literal, Any
+from typing import TYPE_CHECKING, cast, Callable, Any
 if TYPE_CHECKING:
+    from narwhals._native import NativeDataFrame
     from pfeed.typing import GenericFrame
     from pfund._backtest.typing import BacktestDataFrame
-    from pfund.typing import ComponentT
+    from pfund.typing import ComponentT, ComponentName
     from pfund.entities.products.product_base import BaseProduct
     from pfund.components.mixin import ComponentMixin
     from pfund.engines.backtest_engine import BacktestEngineContext
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.utils.dataset_splitter import DatasetPeriods, CrossValidatorDatasetPeriods
+
+import narwhals as nw
 
 from pfund_kit.style import cprint, RichColor, TextStyle
 from pfund.datas.data_config import DataConfig
@@ -17,6 +20,10 @@ from pfund.enums import BacktestMode
 
 
 class BacktestMixin:
+    def __mixin_post_init__(self, *args: Any, **kwargs: Any):
+        super().__mixin_post_init__(*args, **kwargs)
+        self._features_df: nw.DataFrame[Any] | None = None
+        
     @staticmethod
     def _validate_backtest_signature(func: Callable[[BacktestDataFrame], BacktestDataFrame]):
         '''Validates the signature of the backtest() function.
@@ -72,34 +79,6 @@ class BacktestMixin:
     def dataset_periods(self) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
         return self.context.backtest.dataset_splitter.dataset_periods
     
-    # DEPRECATED: to be removed
-    # @cached_property
-    # def _is_signal_df_required(self) -> bool:
-    #     if self._is_dummy_strategy:
-    #         return False
-    #     elif self.backtest_mode == BacktestMode.VECTORIZED:
-    #         return True
-    #     elif self.backtest_mode == BacktestMode.EVENT_DRIVEN:
-    #         return self.settings.reuse_signals
-    #     # TODO: handle hybrid backtesting
-    #     else:
-    #         raise ValueError(f"{self.backtest_mode=} is not supported")
-    
-    # @cached_property
-    # def _is_append_to_df(self) -> bool:
-    #     if isinstance(self, BaseStrategy):
-    #         return not self._is_signal_df_required and not self._is_dummy_strategy
-    #     else:
-    #         return not self._is_signal_df_required
-    
-    # def _next(self, data: BaseData) -> Tensor | ndarray:
-    #     if not self._is_signal_df_required:
-    #         new_pred = super()._next(data)
-    #     else:
-    #         new_pred = self._signal_list[self._signal_list_num]
-    #         self._signal_list_num += 1
-    #     return new_pred
-    
     # TODO
     @property
     def train_set(self) -> GenericFrame:
@@ -141,28 +120,30 @@ class BacktestMixin:
     def _is_dummy_strategy(self) -> bool:
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
         return isinstance(self, _DummyStrategy)
-
+    
+    def _is_features_df_required(self) -> bool:
+        if self.backtest_mode in [BacktestMode.VECTORIZED, BacktestMode.HYBRID]:
+            return True
+        elif self.backtest_mode == BacktestMode.EVENT_DRIVEN:
+            return self.settings.reuse_signals
+        else:
+            return False
+    
+    def featurize(self, data_df: NativeDataFrame, signals_dfs: dict[ComponentName, NativeDataFrame]) -> NativeDataFrame:
+        features_df = cast("NativeDataFrame", super().featurize(data_df, signals_dfs))
+        if self._is_features_df_required():
+            self._features_df = nw.from_native(features_df)
+        return features_df
+    
     def _gather(self):
-        # skip gathering for dummy strategy
         if self._is_dummy_strategy():
+            for component in self.components:
+                component._gather()
             self._is_gathered = True
-            return
-        super()._gather()
-        
-    def start(self):
-        # skip starting for dummy strategy
-        if self._is_dummy_strategy():
-            self._is_running = True
-            return
-        super().start()
+        else:
+            return super()._gather()
     
-    def stop(self, reason: str=''):
-        # skip stopping for dummy strategy
-        if self._is_dummy_strategy():
-            self._is_running = False
-            return
-        super().stop(reason=reason)
-    
+    # FIXME: move into DataConfigResolver
     def _resolve_data_config(self, product: BaseProduct, data_config: DataConfig | None) -> DataConfig:
         data_config = cast("ComponentMixin", super())._resolve_data_config(product, data_config)
         # extra_resolutions are not always supported in backtesting, print out warnings
@@ -181,6 +162,7 @@ class BacktestMixin:
                     )
         return data_config
     
+    # FIXME: move into DataConfigResolver
     def _auto_resample_data_config(self, product: BaseProduct, data_config: DataConfig) -> DataConfig:
         '''Automatically configures resampling for backtesting.
 

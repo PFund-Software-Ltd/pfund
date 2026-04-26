@@ -12,3 +12,9 @@ class ComponentType(StrEnum):
     model = ModelComponentType.model
     indicator = ModelComponentType.indicator
     feature = ModelComponentType.feature
+
+    def to_plural(self) -> str:
+        if self == ComponentType.strategy:
+            return 'strategies'
+        else:
+            return self.value + 's'

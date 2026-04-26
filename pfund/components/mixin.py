@@ -1,4 +1,4 @@
-# pyright: reportUninitializedInstanceVariable=false, reportUnknownParameterType=false, reportUnknownMemberType=false, reportArgumentType=false, reportAssignmentType=false, reportReturnType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false, reportOptionalMemberAccess=false
+# pyright: reportUninitializedInstanceVariable=false, reportUnknownParameterType=false, reportUnknownMemberType=false, reportArgumentType=false, reportAssignmentType=false, reportReturnType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false, reportOptionalMemberAccess=false, reportUnknownArgumentType=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast, Literal, ClassVar
 if TYPE_CHECKING:
@@ -13,8 +13,8 @@ if TYPE_CHECKING:
         Component,
         ComponentName,
         ProductName,
+        ColumnName,
     )
-    from pfund.datas.stores.trading_store import TradingStore
     from pfund.datas.stores.base_data_store import BaseDataStore
     from pfund.engines.engine_context import EngineContext
     from pfund.datas.data_market import MarketData
@@ -43,13 +43,10 @@ from pfund.datas.data_config import DataConfig
 from pfund.components.actor_proxy import ActorProxy
 from pfund.enums import ComponentType, RunMode, Environment, Broker, TradingVenue
 from pfund.utils.decorators import ray_method
+from pfund.datas.stores.trading_store import TradingStore
+from pfund.datas.databoy import DataBoy
 
 
-class ComponentSignal(NamedTuple):
-    df: NativeDataFrame
-    updated_at: datetime.datetime
-
-    
 class ComponentMixin:
     config: ClassVar[dict[str, Any]] = {
         'max_rows': None,  # None means no limit, component will keep all data in memory
@@ -60,8 +57,6 @@ class ComponentMixin:
 
     # custom post init for-common attributes of strategy and model
     def __mixin_post_init__(self, *args: Any, **kwargs: Any):
-        from pfund.datas.databoy import DataBoy
-
         self.__pfund_args__ = args
         self.__pfund_kwargs__ = kwargs
         
@@ -72,17 +67,11 @@ class ComponentMixin:
         
         self.logger: logging.Logger = logging.getLogger('pfund')
         self.databoy = DataBoy(self)
+        self.store = TradingStore(self)
 
-        self._max_rows: int | None = None
         self._signal_cols: list[str] = []
-        # NOTE: index_cols and pivot_cols are only used for pivoting signals_df from long form to wide form (e.g. in featurize())
-        # since market data are very common in all components, use date and resolution/product as the default pivot columns
-        self._index_cols: list[str] = ['date']
-        self._pivot_cols: list[str] = ['resolution', 'product']
 
         self.products: dict[ProductName, BaseProduct] = {}
-        # current signals_df per component excluding this component itself
-        self.signals: dict[ComponentName, ComponentSignal] = {}
         self.models: dict[str, BaseModel | ActorProxy[BaseModel]] = {}
         self.features: dict[str, BaseFeature | ActorProxy[BaseFeature]] = {}
         self.indicators: dict[str, BaseIndicator | ActorProxy[BaseIndicator]] = {}
@@ -232,14 +221,10 @@ class ComponentMixin:
                 raise ValueError(f"Failed to load params from {file_path}")
             cls.params = params
     
-    def _check_everything(self):
+    def _check_before_start(self):
         # check data
         if not self.get_datas():
-            # NOTE: in some cases market data might not be needed, e.g. a Feature using funding rate data
-            cprint(
-                f"{self.name} has no market data, did you forget to call add_data()? Ignore this if you did it on purpose.",
-                style=TextStyle.BOLD + RichColor.RED,
-            )
+            raise ValueError(f"{self.name} has no market data, did you forget to call add_datas()?")
         # check config
         if 'max_rows' not in self.config:
             raise ValueError(f'max_rows is not set in {self.name} config')
@@ -252,12 +237,12 @@ class ComponentMixin:
         lookback_period = self.config['lookback_period']
         if max_rows is None:
             cprint(
-                f"'max_rows' is not set in {self.name} config, data will be unbounded",
+                f"'max_rows' is None. i.e. {self.name} data will be UNBOUNDED",
                 style=TextStyle.BOLD + RichColor.YELLOW,
             )
         if warmup_period is None:
             cprint(
-                f"'warmup_period' is None. i.e. {self.name} will be ready to compute signals immediately",
+                f"'warmup_period' is None. i.e. {self.name} will be ready to compute signals IMMEDIATELY",
                 style=TextStyle.BOLD + RichColor.YELLOW,
             )
             warmup_period = 0
@@ -272,17 +257,18 @@ class ComponentMixin:
             if lookback_period > warmup_period:
                 raise ValueError(f'{self.name} config: {lookback_period=} is greater than {warmup_period=}, please set lookback_period <= warmup_period')
     
-    # TODO: add versioning, run_id etc.
-    # TODO: create ComponentMetadata class (typeddataclass/pydantic model)
     def to_dict(self) -> dict[str, Any]:
         metadata = {
             'class': self.__class__.__name__,
             'env': self.env.value,
             'name': self.name,
+            'data_range': self.context.data_range,
+            'resolution': self.resolution.value,
             'component_type': self.component_type.value,
             'run_mode': self.run_mode.value,
             'config': self.config,
             'params': self.params,
+            'settings': self.settings.model_dump(),
             'datas': [data.to_dict() for data in self.databoy.get_datas()],
             'models': [model.to_dict() for model in self.models.values()],
             'features': [feature.to_dict() for feature in self.features.values()],
@@ -324,57 +310,89 @@ class ComponentMixin:
             raise ValueError(f"Unknown component type: {self.__class__.__name__}")
     
     @property
-    def trading_store(self) -> TradingStore:
-        return self.databoy._trading_store
-    store = trading_store
+    def df(self) -> NativeDataFrame | None:
+        return self.store.get_df(window_size=None, to_native=True)
     
     @property
-    def df(self) -> NativeDataFrame | None:
-        return self.get_df(to_native=True)
+    def data_df(self) -> NativeDataFrame | None:
+        return self.get_df(kind='data', data_category=None, window_size=None, to_native=True)
+    
+    @property
+    def signals_df(self) -> NativeDataFrame | None:
+        return self.get_df(kind='signals', window_size=None, to_native=True)
+    
+    @property
+    def features_df(self) -> NativeDataFrame | None:
+        return self.get_df(kind='features', window_size=None, to_native=True)
     
     def get_df(
         self, 
-        kind: Literal['data', 'signals'] = 'signals',
         *,
-        category: DataCategory | str=DataCategory.MARKET_DATA,
+        kind: Literal['data', 'signals', 'features'] = 'data',
+        data_category: DataCategory | str | None=DataCategory.MARKET_DATA,
         window_size: int | None = None, 
-        pivot: bool = False,
+        pivot_data: bool = False,
         to_native: bool = False
-    ) -> NativeDataFrame | None:
+    ) -> nw.DataFrame[Any] | NativeDataFrame | None:
         """Returns one of the stored dataframes in either trading store or data stores.
     
         Args:
             kind: Which frame to return.
                 - 'data': input dataframe from a data store (e.g. market data, news).
-                - 'signals': signals dataframe produced by this component stored in trading store.
-            category: For kind='data', which data category to return. 
-                Ignored when kind='signals'. 
+                - 'signals': signals dataframe used by this component.
+                - 'features': features_df = data_df (merged data dfs from different categories) + signals_df (signals from other components)
+            data_category: For kind='data', which data category to return. 
+                If None, return a merged data_df from all data categories.
+                Ignored when kind != 'data'. 
                 Defaults to market data.
             window_size: Number of most recent rows to return.
                 Defaults to None, i.e. return the whole dataframe.
-            pivot: pivot dataframe from long form to wide form. 
+            pivot_data: pivot data dataframe from long form to wide form. 
+                Ignored when kind != 'data'. 
                 Defaults to False.
             to_native: If True, return the underlying backend frame (polars/pandas) instead
                 of a Narwhals DataFrame. Defaults to True.
         """
-        if kind == 'signals':
-            store = self.trading_store
-        elif kind == 'data':
-            store = self.databoy.get_data_store(category)
+        if kind == 'data':
+            if data_category is not None:
+                store = self.databoy.get_data_store(data_category)
+                df = cast("NativeDataFrame | None", store.get_df(window_size=window_size, pivot=pivot_data, to_native=True))
+            else:
+                data_dfs: dict[DataCategory, NativeDataFrame | None] = {
+                    category: store.get_df(window_size=window_size, to_native=True)
+                    for category, store in self.data_stores.items()
+                }
+                if not all([df is not None for df in data_dfs.values()]):
+                    raise ValueError(f"Some data dfs are None for {self.name}, i.e. data are not ready, cannot get data_df")
+                df = self.merge_data_dfs(data_dfs)
+        elif kind == 'signals':
+            signals_dfs: dict[ComponentName, NativeDataFrame | None] = {
+                component.name: component.get_trading_store().get_df(window_size=window_size, to_native=True)
+                for component in self.components
+            }
+            # NOTE: the component's own signals_df is only added for handling the (long, wide) case in merge_signals_dfs()
+            # the returned df will NOT include the component's own signals_df
+            signals_dfs[self.name] = self.store.get_df(window_size=window_size, to_native=True)
+            if not all([df is not None for df in signals_dfs.values()]):
+                raise ValueError(f"Some signals dfs are None for {self.name}, i.e. signals are not ready, cannot get signals_df")
+            df = self.merge_signals_dfs(signals_dfs)
+        elif kind == 'features':
+            data_df = cast("NativeDataFrame", self.get_df(kind='data', data_category=None, window_size=window_size, to_native=True))
+            signals_df = cast("NativeDataFrame", self.get_df(kind='signals', window_size=window_size, to_native=True))
+            df = self.featurize(data_df, signals_df)
         else:
-            raise ValueError(f"Invalid {kind=}")
-        df = store.get_df(window_size=window_size, to_native=False)
+            raise ValueError(f"Invalid {kind=} for component {self.name}")
         if df is None:
             return None
-        if pivot:
-            if self._df_form == 'wide':
-                raise ValueError(f"Cannot pivot {kind=} dataframe from wide form to wide form")
-            df = store.pivot_df(df)
         return df.to_native() if to_native else df
     
     @ray_method
     def get_df_form(self) -> Literal['wide', 'long']:
         return self._df_form
+    
+    @ray_method
+    def get_trading_store(self) -> TradingStore:
+        return self.store
     
     def set_df_form(self, df_form: Literal['wide', 'long']):
         self._df_form = df_form
@@ -496,6 +514,7 @@ class ComponentMixin:
     def _get_default_name(self):
         return self.__class__.__name__
     
+    # FIXME: move into DataConfigResolver
     def _resolve_data_config(self, product: BaseProduct, data_config: DataConfig | None) -> DataConfig:
         '''Resolves and configures DataConfig with defaults and automatic settings.
 
@@ -528,6 +547,7 @@ class ComponentMixin:
         data_config = self._auto_shift_data_config(data_config)
         return data_config
     
+    # FIXME: move into DataConfigResolver
     def _auto_resample_data_config(self, product: BaseProduct, data_config: DataConfig) -> DataConfig:
         from pfund.utils import get_supported_resolutions
         supported_resolutions = get_supported_resolutions(product)
@@ -540,6 +560,7 @@ class ComponentMixin:
             )
         return data_config
     
+    # FIXME: move into DataConfigResolver
     # TODO: detect bar shift based on the returned data by e.g. Yahoo Finance, its hourly data starts from 9:30 to 10:30 etc.
     def _auto_shift_data_config(self, data_config: DataConfig) -> DataConfig:
         # data_config.auto_shift()
@@ -632,6 +653,7 @@ class ComponentMixin:
                     component, 
                     name=component_name,
                     resolution=resolution or self.resolution,
+                    component_type=component_type,
                     engine_context=self.context,
                     ray_actor_options=ray_actor_options, 
                     **ray_kwargs
@@ -713,23 +735,19 @@ class ComponentMixin:
     def _on_bar(self, data: BarData):
         if self.is_ready(data=data):
             lookback_period = self.config['lookback_period']
-            signals_df = self.run_pipeline(lookback_period=lookback_period)
-            self.trading_store.update_df(signals_df)
+            self.run_pipeline(lookback_period=lookback_period)
         self.on_bar(data)
     
     def set_signal_cols(self, signal_cols: list[str]):
         self._signal_cols = signal_cols
     
-    def set_index_cols(self, index_cols: list[str]):
-        self._index_cols = index_cols
-        
     def set_pivot_cols(self, pivot_cols: list[str]):
-        self._pivot_cols = pivot_cols
+        self.store._set_pivot_cols(pivot_cols)
     
     def is_ready(self, data: BaseData) -> bool:
         warmup_period = self.config['warmup_period']
         if data.category == DataCategory.MARKET_DATA:
-            df = self.get_df(kind='data', category=data.category, to_native=False)
+            df = self.get_df(kind='data', data_category=data.category, to_native=False)
             if df is None or len(df) < warmup_period:
                 return False
             if self._df_form == 'long':
@@ -750,93 +768,169 @@ class ComponentMixin:
         Args:
             data_dfs: dataframes per data category in long form
         '''
-        if self._df_form == 'wide':
-            dfs = []
-            for category, df in data_dfs.items():
-                data_store = self.databoy.get_data_store(category)
+        dfs: list[nw.DataFrame[Any]] = []
+        common_key_cols: set[str] | None = None
+        for category, df in data_dfs.items():
+            data_store = self.databoy.get_data_store(category)
+            if self._df_form == 'wide':
                 # REVIEW: this requires dynamic pivoting for EACH call
-                pivoted_df = data_store.pivot_df(nw.from_native(df))
-                dfs.append(pivoted_df.to_native())
-        elif self._df_form == 'long':
-            dfs = [nw.from_native(df) for df in data_dfs.values()]
-        else:
-            raise ValueError(f'Invalid {self._df_form=}')
+                nw_df = data_store.pivot_df(nw.from_native(df))
+            else:
+                nw_df = nw.from_native(df)
+            dfs.append(nw_df)
+            # KEY_COLS that actually survive on this df (pivot_df folds PIVOT_COLS into column names)
+            df_key_cols = set(col for col in data_store.KEY_COLS if col in nw_df.columns)
+            if common_key_cols is None:
+                common_key_cols = df_key_cols
+            else:
+                common_key_cols &= df_key_cols
+
         data_df = dfs[0]
         if len(dfs) == 1:
             return data_df.to_native()
-        join_cols = self.databoy._find_join_cols(data_dfs)
-        for df in dfs[1:]:
-            cprint(
-                f"Auto-joining data_dfs in {self._df_form} form for {self.name} on columns={join_cols}. " +
-                "If this is not ideal, please define your own merge_data_dfs() to handle merging data_dfs manually.",
-                style=TextStyle.BOLD + RichColor.YELLOW,
+        
+        if not common_key_cols:
+            raise ValueError(
+                f"No common key columns found in data_dfs in {self._df_form} form for {self.name}. " +
+                "Please define your own merge_data_dfs() to handle merging data_dfs manually."
             )
-            data_df = data_df.join(df, on=join_cols, how='full')
-        return data_df.to_native()
+            
+        for df in dfs[1:]:
+            data_df = data_df.join(df, on=list(common_key_cols), how='full')
+            for key in common_key_cols:
+                right_key = f'{key}_right'
+                data_df = data_df.with_columns(nw.coalesce(key, right_key).alias(key)).drop(right_key)
+        return data_df.sort(common_key_cols).to_native()
     
-    def featurize(self, data_df: NativeDataFrame, signals_dfs: dict[ComponentName, NativeDataFrame]) -> NativeDataFrame:
+    def merge_signals_dfs(self, signals_dfs: dict[ComponentName, NativeDataFrame]) -> NativeDataFrame:
+        '''Creates signals_df by merging signals_dfs (signals from components including the component itself)
+        Args:
+            signals_dfs: dict of signals_df per component name
+        Returns:
+            signals_df: signals_df in {self._df_form} form excluding the component's own signal columns
+        '''
+        dfs: list[nw.DataFrame[Any]] = []
+        # (self._df_form='long', component_df_form='wide') case: 
+        # cannot melt back to long, so merge them in afterwards by broadcasting on the index col only
+        special_dfs: list[nw.DataFrame[Any]] = []
+        common_index_col: str | None = None
+        common_key_cols: set[str] | None = None
+        for component_name, df in signals_dfs.items():
+            if component_name == self.name:
+                continue
+            component = self.get_component(component_name)
+            component_df_form = component.get_df_form()
+            trading_store = component.get_trading_store()
+            if common_index_col is None:
+                common_index_col = trading_store.INDEX_COL
+            else:
+                if common_index_col != trading_store.INDEX_COL:
+                    raise ValueError(f"Unhandled case: index column {common_index_col} is not the same as {trading_store.INDEX_COL} for {component_name}")
+            # special case, cannot unpivot 'wide' to 'long'
+            if self._df_form == 'long' and component_df_form == 'wide':
+                special_dfs.append(nw.from_native(df))
+                continue
+            elif self._df_form == 'wide' and component_df_form == 'long':
+                # REVIEW: this requires dynamic pivoting for EACH call
+                nw_df = trading_store.pivot_df(nw.from_native(df))
+            else:
+                nw_df = nw.from_native(df)
+            dfs.append(nw_df)
+            # KEY_COLS that actually survive on this df (pivot_df folds PIVOT_COLS into column names)
+            df_key_cols = set(col for col in trading_store.KEY_COLS if col in nw_df.columns)
+            if common_key_cols is None:
+                common_key_cols = df_key_cols
+            else:
+                common_key_cols &= df_key_cols
+        
+        if not dfs and not special_dfs:
+            raise ValueError(
+                f"Invalid input: {signals_dfs=} in merge_signals_dfs for {self.name}: no dataframe to merge"
+            )
+            
+        # REVIEW: this case is actually VERY COMMON, and needs to be handled properly!
+        # e.g. self is strategy in long form, components are models in wide form
+        if not dfs:
+            # special_dfs exist => signals_df is in self._df_form='long' form
+            signals_df = nw.from_native(signals_dfs[self.name])  # in long form
+            # component's own signals_df is only borrowed for the join(), its signal columns will be dropped
+            signals_df = signals_df.drop(self._signal_cols)
+            common_key_cols = set(col for col in self.store.KEY_COLS if col in signals_df.columns)
+        else:
+            signals_df = dfs[0]
+            if len(dfs) > 1:
+                if not common_key_cols:
+                    raise ValueError(
+                        f"No common key columns found in signals_dfs in {self._df_form} form for {self.name}. " +
+                        "Please define your own merge_signals_dfs() to handle merging signals_dfs manually."
+                    )
+                for df in dfs[1:]:
+                    signals_df = signals_df.join(df, on=list(common_key_cols), how='full')
+                    for key in common_key_cols:
+                        right_key = f'{key}_right'
+                        signals_df = signals_df.with_columns(nw.coalesce(key, right_key).alias(key)).drop(right_key)
+        
+        # broadcast (self._df_form='long', component_df_form='wide') specials on index col only
+        for df in special_dfs:
+            signals_df = signals_df.join(df, on=common_index_col, how='full')
+            right_key = f'{common_index_col}_right'
+            signals_df = signals_df.with_columns(nw.coalesce(common_index_col, right_key).alias(common_index_col)).drop(right_key)
+        
+        sort_keys = list(common_key_cols) if common_key_cols else [common_index_col]
+        return signals_df.sort(sort_keys).to_native()
+    
+    def featurize(self, data_df: NativeDataFrame, signals_df: NativeDataFrame) -> NativeDataFrame:
         '''Creates features_df = data_df + signals_df (combined signals from other components)
         In machine learning, features_df is the X in predict(X).
         Args:
             data_df: dataframe in {self._df_form} form
-            signals_dfs: signals_dfs from other components
+            signals_df: signals_df from other components
         '''
-        features_df = nw.from_native(data_df)
-        for component_name, df in signals_dfs.items():
-            component = self.get_component(component_name)
-            signals_df = nw.from_native(df)
-            # pivot signals_df from long form to wide form
-            if self._df_form == 'wide' and component.get_df_form() == 'long':
-                signals_df = self.trading_store.pivot_df(signals_df)
-            join_cols = [col for col in features_df.columns if col in signals_df.columns]
-            if not join_cols:
-                raise ValueError(
-                    f"No common columns between {self.name}'s features_df and " +
-                    f"component '{component_name}' signals_df"
-                )
-            features_df = features_df.join(signals_df, on=join_cols, how='left')
+        data = nw.from_native(data_df)
+        signals = nw.from_native(signals_df)
+        join_cols = [col for col in data.columns if col in signals.columns]
+        if not join_cols:
+            raise ValueError(
+                f"No common columns between {self.name}'s data_df {data.columns} and signals_df {signals.columns}"
+            )
+        features_df = data.join(signals, on=join_cols, how='left')
         return features_df.to_native()
     
-    def run_pipeline(self, lookback_period: int | None = None) -> NativeDataFrame:
+    def run_pipeline(self, lookback_period: int | None = None):
+        '''
+        Args:
+            lookback_period: Number of most recent rows to run the pipeline on.
+                Defaults to None, i.e. run the pipeline on the whole dataset.
+        '''
+        # TODO: wait for components' signals, somehow pass in lookback_period to the child components?
         if self.databoy.is_using_zmq():
-            # TODO: wait for components' signals, somehow pass in lookback_period to the child components?
-            self.signals = ...
-            # TODO: this should return each component's signals_df (window sized)
-            # self.signals = self.databoy._wait_for_children_signals()
+            pass
+        #     # TODO: this should return each component's signals_df (window sized)
+        #     # self.databoy._wait_for_children_signals()
         else:
             for component in self.components:
-                signals_df = component.run_pipeline(lookback_period=lookback_period)
-                self.signals[component.name] = ComponentSignal(
-                    df=signals_df, 
-                    updated_at=self.now()
-                )
-        data_dfs: dict[DataCategory, NativeDataFrame] = {
-            category: self.get_df(kind='data', category=category, window_size=lookback_period, to_native=True)
-            for category in self.data_stores.keys()
-        }
-        data_df = self.merge_data_dfs(data_dfs)
-        signals_dfs = {
-            component_name: signal.df
-            for component_name, signal in self.signals.items()
-        }
-        features_df = self.featurize(data_df, signals_dfs)
-        signals_df = cast("NativeDataFrame", self.signalize(features_df))
-        return signals_df
+                component.run_pipeline(lookback_period=lookback_period)
+        features_df = cast("NativeDataFrame", self.get_df(kind='features', window_size=lookback_period, to_native=True))
+        signals = cast("dict[ColumnName, Any]", self.signalize(features_df))
+        self.store.update_df(features_df, signals)
 
     def _gather(self):
         '''Sets up everything before start'''
         # NOTE: use is_gathered to avoid a component being gathered multiple times when it's a shared component
         if not self._is_gathered:
-            self._check_everything()
-            for component in self.components:
-                component._gather()
+            self._check_before_start()
             self.add_datas()
             self.add_models()
             self.add_features()
             self.add_indicators()
+            if not self._signal_cols:
+                self.set_signal_cols(self._get_default_signal_cols())
+            for component in self.components:
+                component._gather()
             for data_store in self.data_stores.values():
                 data_store.materialize()
-            self.trading_store.materialize()
+            self.store.materialize()
+            self.load()
             self._is_gathered = True
             self.logger.info(f"'{self.name}' has gathered")
         else:

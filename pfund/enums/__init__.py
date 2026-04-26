@@ -20,6 +20,7 @@ from pfund.enums.data_channel import (
 )
 from pfund.enums.database import Database
 from pfund.enums.source_type import SourceType
+from pfund.enums.artifact_type import ArtifactType
 
 
 __all__ = [
@@ -52,4 +53,5 @@ __all__ = [
     "PFundDataChannel",
     "Database",
     "SourceType",
+    "ArtifactType",
 ]

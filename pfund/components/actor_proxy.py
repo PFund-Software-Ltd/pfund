@@ -7,6 +7,7 @@ if TYPE_CHECKING:
 
 from pfund.typing import ComponentT
 from pfund.datas.resolution import Resolution
+from pfund.enums import ComponentType
 
 
 class ActorProxy(Generic[ComponentT]):
@@ -15,6 +16,7 @@ class ActorProxy(Generic[ComponentT]):
         component: ComponentT, 
         name: str, 
         resolution: Resolution | str,
+        component_type: ComponentType,
         engine_context: EngineContext,
         ray_actor_options: dict[str, Any] | None=None, 
         **ray_kwargs: Any
@@ -32,6 +34,7 @@ class ActorProxy(Generic[ComponentT]):
         self._actor: ActorHandle[ComponentT] = self._create_actor(component, ray_actor_options, **ray_kwargs)
         self.name: str = name
         self.resolution: Resolution = Resolution(resolution)
+        self.component_type: ComponentType = component_type
         self.context: EngineContext = engine_context
         if isinstance(self.context.settings, TradeEngineSettings):
             self.context.settings.zmq_urls.enable_ray()

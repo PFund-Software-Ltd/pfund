@@ -6,7 +6,6 @@ if TYPE_CHECKING:
     from pfeed.streaming.zeromq import ZeroMQ
     from pfeed.streaming.streaming_message import StreamingMessage
     from pfund.datas.data_market import MarketData
-    from pfund.datas.stores.trading_store import TradingStore
     from pfund.datas.stores.base_data_store import BaseDataStore
     from pfund.datas.data_bar import BarData
     from pfund.typing import (
@@ -24,14 +23,10 @@ from pfund.enums import PublicDataChannel, PrivateDataChannel
 
 class DataBoy:
     def __init__(self, component: Component):
-        from pfund.datas.stores.trading_store import TradingStore
-        
         self._component: Component = component
-        self._trading_store: TradingStore = TradingStore(self)
         self._data_stores: dict[DataCategory, BaseDataStore] = {}
         self._data_zmq: ZeroMQ | None = None
         self._signals_zmq: ZeroMQ | None = None
-        self._join_cols: list[str] = []  # columns to join on when merging data_dfs
         # TODO: save data signatures properly, data_signatures should be a set
         # TODO: add data_config (dict form) to data_signatures
         self._data_signatures = []
@@ -39,7 +34,7 @@ class DataBoy:
         # including even the local ones. if theres any performance issue, 
         # consider disabling using ZeroMQ for local components
         self._zmq_thread: Thread | None = None
-
+    
     @property
     def logger(self) -> Logger:
         return self._component.logger
@@ -47,10 +42,6 @@ class DataBoy:
     @property
     def name(self) -> ComponentName:
         return self._component.name
-    
-    @property
-    def trading_store(self) -> TradingStore:
-        return self._trading_store
     
     def is_using_zmq(self) -> bool:
         return self._data_zmq is not None and self._signals_zmq is not None
@@ -225,51 +216,6 @@ class DataBoy:
                 raise ValueError(f'Unhandled market data message: {msg}')
         else:
             raise NotImplementedError(f'Unhandled data category: {msg.data_category}')
-    
-    def _find_join_cols(self, data_dfs: dict[DataCategory, nw.DataFrame[Any]]) -> list[str]:
-        '''Finds the common columns to join on among all data dfs'''
-        if self._join_cols:  # already found, return it
-            return self._join_cols
-        df_form = self._component._df_form
-        if df_form == 'wide':
-            dfs = []
-            for category, df in data_dfs.items():
-                data_store = self.get_data_store(category)
-                # REVIEW: this requires dynamic pivoting for EACH call
-                pivoted_df = data_store.pivot_df(nw.from_native(df))
-                dfs.append(pivoted_df.to_native())
-            cols_attr = 'INDEX_COLS'
-        elif df_form == 'long':
-            dfs = [nw.from_native(df) for df in data_dfs.values()]
-            cols_attr = 'KEY_COLS'
-        else:
-            raise ValueError(f'Invalid {df_form=}')
-        
-        common_cols: set[str] | None = None
-        for df in dfs:
-            if common_cols is None:
-                common_cols = set(df.columns)
-            else:
-                common_cols &= set(df.columns)
-        if not common_cols:
-            raise ValueError(
-                f"No common columns found in data_dfs in {df_form} form for {self.name}. " +
-                "Please define your own merge_data_dfs() to handle merging data_dfs manually."
-            )
-        
-        join_cols = list(dict.fromkeys(
-            col
-            for category in data_dfs.keys()
-            for col in getattr(self.get_data_store(category), cols_attr)
-            if col in common_cols
-        ))
-        if not join_cols:
-            raise ValueError(
-                f"No common columns found in data_dfs in {df_form} form to join on for {self.name}. " +
-                "Please define your own merge_data_dfs() to handle merging data_dfs manually."
-            )
-        self._join_cols = join_cols
-        return join_cols
     
     def _collect(self, msg: StreamingMessage | None=None):
         '''

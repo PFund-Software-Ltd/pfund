@@ -1,10 +1,7 @@
+# pyright: reportUnknownVariableType=false, reportImplicitAbstractClass=false, reportAbstractUsage=false, reportReturnType=false, reportUnknownParameterType=false
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
-    import numpy as np
-    import pandas as pd
-    import polars as pl
-    import torch
     from pfund.components.models.model_base import MachineLearningModel
     from pfund.typing import ModelT
 
@@ -12,35 +9,11 @@ from pfund.components.features.feature_base import BaseFeature
 from pfund._backtest.backtest_mixin import BacktestMixin
 
 
-def BacktestModel(Model: type[ModelT], model: MachineLearningModel, *args, **kwargs) -> ModelT:
+def BacktestModel(Model: type[ModelT], model: MachineLearningModel, *args: Any, **kwargs: Any) -> ModelT:
     class _BacktestModel(BacktestMixin, Model):
-        def __getattr__(self, name):
-            if hasattr(super(), name):
-                return getattr(super(), name)
-            else:
-                class_name = Model.__name__
-                raise AttributeError(f"'{class_name}' object has no attribute '{name}'")
-        
-        def load(self) -> dict:
-            obj: dict = super().load()
-            if self._is_signal_df_required:
-                if signal_df := obj.get('signal_df', None):
-                    self.logger.info(f"{self.name}'s signal_df is loaded")
-                else:
-                    signal_df = self.flow()
-                self._set_signal_df(signal_df)
-            if self.is_model() and not self._is_dummy_strategy:
-                error_msg = (
-                    f"please make sure '{self.name}' was dumped "
-                    f"using '{self.component_type}.dump()' correctly.\n"
-                    # FIXME: correct the link
-                    "Please refer to the doc for more details: https://pfund.ai"  
-                )
-                assert self.model, f"{self.model=}, {error_msg}"
-            return obj
-
-        def dump(self, signal_df: pd.DataFrame | pl.LazyFrame):
-            super().dump({'signal_df': signal_df})
+        # TODO: catch exception, allow failure loading a model if it hasn't been dumped yet
+        def load(self):
+            return super().load()
         
     try:       
         if not issubclass(Model, BaseFeature):

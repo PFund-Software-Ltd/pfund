@@ -1,4 +1,4 @@
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false, reportArgumentType=false
+# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false, reportArgumentType=false, reportUnknownParameterType=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast, Literal
 if TYPE_CHECKING:
@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from numpy import ndarray
     import torch.nn as nn
     from narwhals._native import NativeDataFrame
-    from pfund.typing import ModelT
+    from pfund.typing import ModelT, ColumnName
     from pfund.components.actor_proxy import ActorProxy
     from pfund.enums import TradingVenue
     from pfund.datas.data_market import MarketData
@@ -15,19 +15,15 @@ if TYPE_CHECKING:
     from pfeed.storages.storage_config import StorageConfig
     from pfund.components.indicators.indicator_base import TalibFunction
     MachineLearningModel = nn.Module | BaseEstimator | TalibFunction
-    from pfund.datas.data_base import BaseData
 
 import os
 from abc import ABC, abstractmethod
 
 import narwhals as nw
 
-from pfund_kit.logging.filters.trimmed_path_filter import TrimmedPathFilter
 from pfund.components.models.model_meta import MetaModel
 from pfund.components.mixin import ComponentMixin
-
-
-trim_path = TrimmedPathFilter.trim_path
+from pfund.enums import ArtifactType
 
 
 def wrap_model(model: BaseEstimator | nn.Module | ModelT | ActorProxy[ModelT]) -> ModelT | ActorProxy[ModelT]:
@@ -83,10 +79,13 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             raise AttributeError(name)
         model = self.__dict__.get('model')
         if model is None:
-            raise AttributeError(name)
-        return getattr(model, name)
+            raise AttributeError(f"'{self.name}' has no attribute '{name}'")
+        try:
+            return getattr(model, name)
+        except AttributeError:
+            raise AttributeError(f"'{self.name}' and its underlying model '{self.model.__class__.__name__}' both have no attribute '{name}'")
 
-    def signalize(self, features_df: NativeDataFrame) -> NativeDataFrame:
+    def signalize(self, features_df: NativeDataFrame) -> dict[ColumnName, Any]:
         '''Creates signals_df (combined signals from other component)
         Args:
             data_df: dataframe in {self._df_form} form
@@ -111,17 +110,7 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
                 values = pred[..., i]
                 # NOTE: list() converts 2D+ array into per-row sub-arrays, needed because pandas rejects >1D per-column arrays
                 signals_dict[col] = list(values) if values.ndim > 1 else values
-        
-        # store signals_dict for convenience
-        self.signals[self.name] = signals_dict
-        
-        # build signals_df: join_cols from features_df + signal columns from signals_dict
-        df_backend = nw.get_native_namespace(features_df)
-        signals_df = nw.concat([
-            X.select(self.databoy._join_cols), 
-            nw.DataFrame.from_dict(signals_dict, backend=df_backend)
-        ], how='horizontal')
-        return signals_df
+        return signals_dict
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -168,15 +157,6 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             columns = [f'{self.name}-{i}' for i in range(num_cols)]
         return columns
     
-    def _get_file_path(self, extension='.joblib'):
-        from pfund import get_config
-        config = get_config()
-        path = f'{config.artifact_path}/{self.name}'
-        file_name = f'{self.name}{extension}'
-        if not os.path.exists(path):
-            os.makedirs(path)
-        return f"{path}/{file_name}"
-    
     def _assert_no_missing_datas(self, obj):
         loaded_datas = {data for product in obj['datas'] for data in obj['datas'][product].values()}
         added_datas = {data for product in self._datas for data in self._datas[product].values()}
@@ -185,6 +165,8 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             raise Exception(f"missing data {missing_datas} in model '{self.name}', please use add_data() to add them back")
     
     def load(self) -> dict:
+        from pfund_kit.logging.filters.trimmed_path_filter import TrimmedPathFilter
+        trim_path = TrimmedPathFilter.trim_path
         import joblib
         file_path = self._get_file_path()
         if os.path.exists(file_path):
@@ -195,15 +177,15 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             return obj
         return {}
     
-    def dump(self, obj: dict[str, Any] | None=None):
-        import joblib
-        if obj is None:
-            obj = {}
-        obj.update({
-            'model': self.model,
-            'datas': self._datas,
-            # TODO: dump dates as well
-        })
-        file_path = self._get_file_path()
-        joblib.dump(obj, file_path, compress=True)
-        self.logger.debug(f"dumped '{self.name}' to {trim_path(file_path)}")
+    def dump(self):
+        pfund_config = self.context.pfund_config
+        pfeed_config = self.context.pfeed_config
+        component_feed = self.store._feed
+        (
+            component_feed
+            .load(
+                artifact_type=ArtifactType.model,
+                storage=pfund_config.storage,
+                data_path=pfeed_config.data_path,
+            )
+        )

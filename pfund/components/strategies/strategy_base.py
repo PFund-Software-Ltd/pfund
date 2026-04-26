@@ -63,6 +63,14 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def trade(self):
         pass
 
+    # TODO: load strategy's signal_df from parquet
+    def load(self):
+        pass
+    
+    # TODO: dump strategy's signal_df to parquet
+    def dump(self):
+        pass
+
     # TODO:
     def signalize(self, features_df: NativeDataFrame) -> NativeDataFrame:
         X = nw.from_native(features_df)

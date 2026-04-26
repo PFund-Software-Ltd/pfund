@@ -1,12 +1,10 @@
-# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportAttributeAccessIssue=false, reportArgumentType=false, reportUnknownArgumentType=false
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportAttributeAccessIssue=false, reportArgumentType=false, reportUnknownArgumentType=false, reportOptionalMemberAccess=false, reportConstantRedefinition=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
     from narwhals._native import NativeDataFrame
     from pfeed.sources.pfund.component_feed import ComponentFeed
-    from pfund.datas.databoy import DataBoy
-
-import logging
+    from pfund.typing import ComponentName, Component, ColumnName
 
 import narwhals as nw
 
@@ -14,70 +12,105 @@ from pfeed.enums import DataLayer, IOFormat
 
 
 class TradingStore:
-    def __init__(self, databoy: DataBoy):
-        import pfeed as pe
-        self._logger: logging.Logger = logging.getLogger('pfund')
-        self._databoy: DataBoy = databoy
+    INDEX_COL: ClassVar[str] = 'date'
+    PIVOT_COLS: ClassVar[list[str]] = ['product', 'resolution']
+    
+    def __init__(self, component: Component):
+        self._component: Component = component
         self._df: nw.DataFrame[Any] | None = None  # component's signals_df
-        self._feed: ComponentFeed = pe.PFund().component_feed
-        self._setup_component_feed()
+        self._feed: ComponentFeed | None = None
+    
+    @property
+    def KEY_COLS(self) -> list[str]:
+        return [self.INDEX_COL] + self.PIVOT_COLS
+    
+    @property
+    def logger(self):
+        return self._component.logger
+    
+    @property
+    def name(self) -> ComponentName:
+        return self._component.name
+    
+    @property
+    def component_feed(self) -> ComponentFeed:
+        if self._feed is None:
+            import pfeed as pe
+            self._feed = pe.PFund().component_feed.with_component(self._component)
+            # setup feed's storage and io
+            context = self._component.context
+            pfund_config = context.pfund_config
+            for storage, storage_options in pfund_config.storage_options.items():
+                self._feed.configure_storage(storage=storage, storage_options=storage_options)
+            for io_format, io_options in pfund_config.io_options.items():
+                self._feed.configure_io(io_format=io_format, io_options=io_options)
+        return self._feed
         
-    def _setup_component_feed(self):
-        context = self._databoy._component.context
-        pfund_config = context.pfund_config
-        for storage, storage_options in pfund_config.storage_options.items():
-            self._feed.configure_storage(storage=storage, storage_options=storage_options)
-        for io_format, io_options in pfund_config.io_options.items():
-            self._feed.configure_io(io_format=io_format, io_options=io_options)
-            
-    def get_df(self, window_size: int | None = None, to_native: bool = False) -> nw.DataFrame[Any] | NativeDataFrame | None:
-        if self._df is None:
+    def _set_pivot_cols(self, pivot_cols: list[str]):
+        self.PIVOT_COLS = pivot_cols
+    
+    def get_df(
+        self,
+        window_size: int | None = None,
+        to_native: bool = False,
+    ) -> nw.DataFrame[Any] | NativeDataFrame | None:
+        '''
+        Args:
+            window_size: Number of most recent rows to return.
+            to_native: If True, return the underlying backend frame (polars/pandas) instead
+                of a Narwhals DataFrame. Defaults to True.
+        '''
+        df = self._df
+        if df is None:
             return None
-        df = self._df if window_size is None else self._df.tail(window_size)
+        if window_size is not None:
+            df = df.tail(window_size)
         return df.to_native() if to_native else df
     
-    def update_df(self, signals_df: nw.DataFrame[Any]):
+    def update_df(self, features_df: nw.DataFrame[Any], signals: dict[ColumnName, Any]):
+        '''
+        Args:
+            features_df: features used to compute signals in dataframe form
+            signals: computed signals
+        '''
+        df_backend = nw.get_native_namespace(features_df)
+        signals_df = nw.concat([
+            features_df.select(self.key_cols),
+            nw.DataFrame.from_dict(data=signals, backend=df_backend),
+        ], how='horizontal')
         if self._df is None:
             self._df = signals_df
         else:
             self._df = nw.concat([self._df, signals_df], how='vertical')
-        # TODO: trim df if it's too large
-        # max_rows = self._databoy._component.config['max_rows']
+        max_rows = self._component.config['max_rows']
+        if max_rows is not None and len(self._df) > max_rows:
+            self._df = self._df.tail(max_rows)
 
     def pivot_df(self, df: nw.DataFrame[Any]) -> nw.DataFrame[Any]:
         '''Pivots signals dataframe from long form to wide form.
         Args:
             df: signals_df in long form
         '''
-        component = self._databoy._component
-        pivot_cols = [col for col in component._pivot_cols if col in df.columns]
-        if not pivot_cols:
-            raise ValueError(
-                f"Cannot pivot component '{component.name}' signals_df to wide form: " +
-                f"none of {component.name}'s pivot_cols={component._pivot_cols} appear in signals_df columns={df.columns}. " +
-                "Please call set_pivot_cols() for your component to set the pivot columns properly."
-            )
-        index_cols = [col for col in component._index_cols if col in df.columns]
         return (
             df
             .pivot(
-                on=pivot_cols,
-                index=index_cols,
+                on=self.PIVOT_COLS,
+                index=self.INDEX_COL,
             )
-            .sort(index_cols)
+            .sort(self.INDEX_COL)
         )
     
+    # TODO: load {component_name}.parquet
     def materialize(self):
-        component = self._databoy._component
         # NOTE: lookback_period=None means run the pipeline on the whole dataset
-        signals_df = component.run_pipeline(lookback_period=None)
-        self._df = nw.from_native(signals_df)
+        self._component.run_pipeline(lookback_period=None)
     
+    # TODO
     def persist_to_lakehouse(self):
         '''Load pfund's component (strategy/model/feature/indicator) data, e.g. {strategy_name}.parquet, {model_name}.parquet, etc.
         from the online store (TradingStore) to the offline store (pfeed's data lakehouse).
         '''
-        context = self._databoy._component.context
+        context = self._component.context
         pfund_config = context.pfund_config
         pfeed_config = context.pfeed_config
         
@@ -85,7 +118,7 @@ class TradingStore:
         io_format = IOFormat.PARQUET
 
         # TODO: how to write updates? need to use deltalake
-        self._feed.load(  # pyright: ignore[reportCallIssue]
+        self.component_feed.load(
             data=self._df,
             storage=pfund_config.storage,
             data_path=pfeed_config.data_path,
@@ -100,7 +133,7 @@ class TradingStore:
         - theres missing data
         - EOD data is available, replace SourceType.STREAM (live data) with SourceType.BATCH (official EOD data)
         '''
-        self._feed.retrieve(...)
+        self.component_feed.retrieve(...)
     
     # TODO:
     def swap_live_for_eod(self):

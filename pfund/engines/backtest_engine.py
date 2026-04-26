@@ -28,7 +28,7 @@ import importlib
 from dataclasses import dataclass
 
 import narwhals as nw
-from pfeed.enums import DataTool
+from pfeed.enums import DataTool, DataCategory
 from pfund_kit.utils.progress_bar import track, ProgressBar
 from pfund_kit.style import cprint, RichColor, TextStyle
 import pfund as pf
@@ -41,6 +41,14 @@ from pfund.utils.dataset_splitter import DatasetSplitter
 class BacktestContext:
     backtest_mode: BacktestMode
     dataset_splitter: DatasetSplitter
+
+    def __post_init__(self):
+        if self.backtest_mode == BacktestMode.EVENT_DRIVEN and self.settings.reuse_signals:
+            cprint(
+                'Warning: Reusing pre-computed signals to speed up event-driven backtesting,\n' +
+                'i.e. computing signals on the fly will be skipped',
+                style=TextStyle.BOLD + RichColor.YELLOW,
+            )
 
 
 class BacktestEngine(BaseEngine):
@@ -78,16 +86,6 @@ class BacktestEngine(BaseEngine):
                 cv_test_ratio=cv_test_ratio
             )
         )
-        if self.backtest_mode == BacktestMode.EVENT_DRIVEN:
-            # REVIEW:
-            if self.settings.reuse_signals:
-                if self.settings.assert_signals:
-                    raise ValueError('reuse_signals must be False when assert_signals=True in event-driven backtesting')
-                cprint(
-                    'Warning: Reusing precomputed signals to speed up event-driven backtesting,\n' +
-                    'i.e. computing signals on the fly will be skipped',
-                    style='bold'
-                )
     
     @property
     def settings(self) -> BacktestEngineSettings:
@@ -217,14 +215,15 @@ class BacktestEngine(BaseEngine):
         is_using_ray = num_chunks > 1
         backtest_dfs: list[pf.BacktestDataFrame] = []
         
-        # FIXME: this should be features_df?
-        # should we use long/wide form for multi-product dataframes?
-        df: nw.DataFrame[Any] = backtestee.databoy.get_df(
-            # category=DataCategory.MARKET_DATA,
-            to_native=False,
-        )
-        # TEMP
-        print(df)
+        if backtestee._features_df is not None:
+            df = cast("nw.DataFrame[Any]", backtestee._features_df)
+        else:
+            data_df = cast("nw.DataFrame[Any]", backtestee.get_df(
+                kind='data', 
+                category=DataCategory.MARKET_DATA, 
+                to_native=False,
+            ))
+            df = data_df
 
         def _run_backtest(
             backtestee: BaseStrategy | BaseModel,
@@ -356,6 +355,8 @@ class BacktestEngine(BaseEngine):
             ]
         return backtest_dfs
 
+    # EXTEND: support non-bar data types:
+    # brainstorm: heapq.merge(market_data_df, news_data_df), with a dispatcher to create data updates for each data type
     @staticmethod
     def _event_driven_loop(
         backtestee: BaseStrategy | BaseModel,
