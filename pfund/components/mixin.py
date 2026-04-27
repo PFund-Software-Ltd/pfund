@@ -807,11 +807,14 @@ class ComponentMixin:
         common_key_cols: set[str] | None = None
         for category, df in data_dfs.items():
             data_store = self.databoy.get_data_store(category)
+            nw_df = nw.from_native(df)
+            # strip provenance metadata: the merged data_df feeds featurize, where metadata is not a feature
+            metadata_to_drop = [col for col in data_store.METADATA_COLS if col in nw_df.columns]
+            if metadata_to_drop:
+                nw_df = nw_df.drop(metadata_to_drop)
             if self._df_form == 'wide':
                 # REVIEW: this requires dynamic pivoting for EACH call
-                nw_df = data_store.pivot_df(nw.from_native(df))
-            else:
-                nw_df = nw.from_native(df)
+                nw_df = data_store.pivot_df(nw_df)
             dfs.append(nw_df)
             # KEY_COLS that actually survive on this df (pivot_df folds PIVOT_COLS into column names)
             df_key_cols = set(col for col in data_store.KEY_COLS if col in nw_df.columns)
