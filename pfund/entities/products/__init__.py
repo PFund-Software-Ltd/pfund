@@ -5,6 +5,7 @@ if TYPE_CHECKING:
 
 
 from pfeed.enums import DataSource
+from pfund.enums import TradingVenue
 
 
 def ProductFactory(source: DataSource | str, basis: str) -> type[BaseProduct]:
@@ -12,7 +13,10 @@ def ProductFactory(source: DataSource | str, basis: str) -> type[BaseProduct]:
     from pfund.enums import AllAssetType, AssetTypeModifier
     
     source = DataSource[source.upper()]
-    Product = source.product_class
+    if source.value in TradingVenue.__members__:
+        Product = TradingVenue[source.value].product_class
+    else:
+        Product = source.product_class
     asset_type = ProductBasis(basis=basis.upper()).asset_type
     Mixins = []
     for t in asset_type:
