@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from narwhals._native import NativeDataFrame
     from pfeed.typing import GenericFrame
     from pfund._backtest.typing import BacktestDataFrame
-    from pfund.typing import ComponentT, ComponentName
+    from pfund.typing import ComponentT
     from pfund.entities.products.product_base import BaseProduct
     from pfund.components.mixin import ComponentMixin
     from pfund.engines.backtest_engine import BacktestEngineContext
@@ -18,6 +18,10 @@ from pfund.enums import BacktestMode
 
 
 class BacktestMixin:
+    def __mixin_post_init__(self, *args: Any, **kwargs: Any):
+        super().__mixin_post_init__(*args, **kwargs)
+        self._cached_features_df: NativeDataFrame | None = None
+    
     @staticmethod
     def _validate_backtest_signature(func: Callable[[BacktestDataFrame], BacktestDataFrame]):
         '''Validates the signature of the backtest() function.
@@ -73,6 +77,21 @@ class BacktestMixin:
     def dataset_periods(self) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
         return self.context.backtest.dataset_splitter.dataset_periods
     
+    @property
+    def features_df(self) -> NativeDataFrame | None:
+        if self._cached_features_df is not None:
+            return self._cached_features_df
+        df = super().features_df
+        # when components' features are not yet computed, it is not useful to cache the features_df since features_df = data_df + (empty signals_df)
+        components_features_not_ready = (
+            self.backtest_mode == BacktestMode.EVENT_DRIVEN 
+            and not self.settings.reuse_signals
+        )
+        if self.settings.cache_features_df and not components_features_not_ready and df is not None:
+            self._cached_features_df = df
+        return df
+    df = features_df
+    
     # TODO
     @property
     def train_set(self) -> GenericFrame:
@@ -115,14 +134,16 @@ class BacktestMixin:
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
         return isinstance(self, _DummyStrategy)
     
-    def _materialize(self):
-        for data_store in self.data_stores.values():
-            data_store.materialize()
-        is_materialize_signals = (
+    def _is_signals_precomputed(self) -> bool:
+        return (
             (not self.is_top_component() and self.backtest_mode in [BacktestMode.VECTORIZED, BacktestMode.HYBRID])
             or (self.backtest_mode == BacktestMode.EVENT_DRIVEN and self.settings.reuse_signals)
         )
-        if is_materialize_signals:
+    
+    def _materialize(self):
+        for data_store in self.data_stores.values():
+            data_store.materialize()
+        if self._is_signals_precomputed():
             self.store.materialize()
     
     def _gather(self):

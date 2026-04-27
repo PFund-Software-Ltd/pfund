@@ -19,6 +19,13 @@ class BacktestEngineSettings(BaseEngineSettings):
         This will make event-driven backtesting a LOT faster but inconsistent with live trading.
         '''
     )
+    cache_features_df: bool = Field(
+        default=True,
+        description="""
+            If True, keep features_df in memory after it's built.
+            If False, recompute on every access. Trades memory for speed.
+        """,
+    )
 
     @field_validator('initial_balances', 'initial_positions', mode='before')
     @classmethod
