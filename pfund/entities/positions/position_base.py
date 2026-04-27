@@ -14,9 +14,9 @@ class BasePosition:
         self.logger = logging.getLogger('positions')
         self.account = account
         self.product = product
-        self.bkr = product.bkr
-        self.exch = product.exch
-        self.acc = account.acc
+        self.bkr = product.broker
+        self.exch = product.exchange
+        self.acc = account.name
         self.pdt = str(product)
         self.pair, self.ptype = product.pair, product.ptype
         self.bccy, self.qccy = product.bccy, product.qccy

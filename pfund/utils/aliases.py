@@ -77,6 +77,5 @@ ALIASES = AliasRegistry({
     'bg': 'background',
     'boa': 'bid_or_ask',
 
-    'tv': 'trading_venue',
     'dev_set': 'development_set',
 })

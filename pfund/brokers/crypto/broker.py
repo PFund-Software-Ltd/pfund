@@ -22,7 +22,7 @@ from pfund.enums import Environment, TradingVenue, Broker, CryptoExchange, Priva
 from pfund.brokers.broker_base import BaseBroker
 
 
-# TODO: convert all "exch" in functions to "trading_venue"
+# TODO: convert all "exch" in functions to "venue"
 # TODO: make BaseBroker generic (BaseBroker[Balance, Position]) so CryptoBroker(BaseBroker[CryptoBalance, CryptoPosition])
 # propagates types through portfolio_manager property (now self.pm is of type PortfolioManager[Any, Any]) without needing to redefine it here
 class CryptoBroker(BaseBroker):
@@ -69,12 +69,12 @@ class CryptoBroker(BaseBroker):
         exchange = self.get_exchange(exch)
         exchange.add_private_channel(channel)
         
-    def get_account(self, trading_venue: TradingVenue, name: AccountName) -> CryptoAccount:
-        exch = CryptoExchange[trading_venue.upper()]
+    def get_account(self, venue: TradingVenue, name: AccountName) -> CryptoAccount:
+        exch = CryptoExchange[venue.upper()]
         return self._accounts[exch][name]
     
-    def add_account(self, trading_venue: TradingVenue, name: AccountName='', key: str='', secret: str='') -> CryptoAccount:
-        exch = CryptoExchange[trading_venue.upper()]
+    def add_account(self, venue: TradingVenue, name: AccountName='', key: str='', secret: str='') -> CryptoAccount:
+        exch = CryptoExchange[venue.upper()]
         exchange = self.add_exchange(exch)
         if name not in self._accounts[exchange.name]:
             account = CryptoAccount(env=self._env, exchange=exch, name=name, key=key, secret=secret)
@@ -192,7 +192,7 @@ class CryptoBroker(BaseBroker):
 
     def get_balances(
         self, 
-        trading_venue: TradingVenue, 
+        venue: TradingVenue, 
         account_name: AccountName='', 
         currency: Currency='', 
         is_api_call: bool=False, 
@@ -204,10 +204,10 @@ class CryptoBroker(BaseBroker):
         | CryptoBalance
         | None
     ):
-        exch = CryptoExchange[trading_venue.upper()]
+        exch = CryptoExchange[venue.upper()]
         ccy = currency.upper()
         if not is_api_call:
-            return self._portfolio_manager.get_balances(tv=trading_venue, acc=account_name, ccy=currency)
+            return self._portfolio_manager.get_balances(tv=venue, acc=account_name, ccy=currency)
         else:
             exchange = self.get_exchange(exch)
             account = self.get_account(exch, acc)

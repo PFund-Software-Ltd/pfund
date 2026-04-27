@@ -5,17 +5,18 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
 
+from pfeed.enums import DataSource
 from pfund.entities.products.product_basis import ProductBasis, ProductAssetType
-from pfund.enums import Broker, CryptoExchange, TradingVenue
+from pfund.enums import Broker, CryptoExchange
 
 
 class BaseProduct(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(arbitrary_types_allowed=True, extra='forbid')
 
-    trading_venue: TradingVenue
-    broker: Broker
-    exchange: CryptoExchange | str = ''
-    basis: ProductBasis
+    source: DataSource
+    broker: Broker | None = None
+    exchange: CryptoExchange | str | None = None
+    basis: ProductBasis | str
     specs: dict[str, Any] = Field(default_factory=dict, description='specifications that make a product unique, e.g. for options, specs are strike_price, expiration_date, etc.')
     symbol: str = Field(
         default='', 
@@ -25,18 +26,29 @@ class BaseProduct(BaseModel):
             Note that the derived symbol might not be correct, it would be better to provide it manually when it is wrong.
         '''
     )
-    name: str = Field(default='', description='unique product name, if not provided, trading_venue + symbol will be used')
+    name: str = Field(default='', description='unique product name, if not provided, venue + symbol will be used')
     tick_size: Decimal | None=None
     lot_size: Decimal | None=None
     
     @field_validator('basis', mode='before')
     @classmethod
-    def _create_product_basis(cls, basis: str):
-        return ProductBasis(basis=basis.upper())
+    def _create_product_basis(cls, basis: ProductBasis | str):
+        if isinstance(basis, str):
+            basis = ProductBasis(basis=basis.upper())
+        return basis
+    
+    @model_validator(mode='after')
+    def _check_if_source_is_trading_venue(self):
+        from pfund.enums import TradingVenue
+        if self.source.value in TradingVenue.__members__:
+            assert self.broker is not None, f"broker must be provided for {self.source}"
+        return self
     
     @model_validator(mode='before')
     @classmethod
-    def _assert_required_fields(cls, data: dict[str, Any]) -> dict[str, Any]:
+    def _assert_required_fields(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data   # already a built model instance - nothing to assert
         required_specs: set[str] = cls.get_required_specs()
         missing_fields = []
         missing_fields_msg = f'"{data["basis"]}" is missing the following required fields:'
@@ -61,19 +73,7 @@ class BaseProduct(BaseModel):
         self.name = self.name or self._create_name()
     
     def _create_name(self) -> str:
-        return '_'.join([str(self.trading_venue), self.symbol])
-    
-    @property
-    def tv(self) -> TradingVenue:
-        return self.trading_venue
-    
-    @property
-    def bkr(self) -> Broker:
-        return self.broker
-    
-    @property
-    def exch(self) -> CryptoExchange | str:
-        return self.exchange
+        return '_'.join([str(self.source), self.symbol])
     
     @property
     def base_asset(self) -> str:
@@ -161,7 +161,7 @@ class BaseProduct(BaseModel):
     
     def __str__(self):
         return '|'.join([
-            f'trading_venue={self.trading_venue}',
+            f'source={self.source}',
             f'basis={self.basis}',
             *[f'{k}={v}' for k, v in sorted(self.specs.items())]
         ])
@@ -170,10 +170,10 @@ class BaseProduct(BaseModel):
         if not isinstance(other, BaseProduct):
             return NotImplemented  # Allow other types to define equality with BaseProduct
         return (
-            self.trading_venue == other.trading_venue 
+            self.source == other.source 
             and self.symbol == other.symbol
             and self.asset_type == other.asset_type
         )
         
     def __hash__(self) -> int:
-        return hash((self.trading_venue, self.symbol, self.asset_type))
+        return hash((self.source, self.symbol, self.asset_type))

@@ -5,7 +5,8 @@ from enum import StrEnum
 
 from pydantic import model_validator
 
-from pfund.enums import TradingVenue, CryptoExchange, CryptoAssetType, AssetTypeModifier
+from pfeed.enums import DataSource
+from pfund.enums import CryptoExchange, CryptoAssetType, AssetTypeModifier
 from pfund.entities.products.product_crypto import CryptoProduct
 
 
@@ -16,7 +17,7 @@ class BybitProduct(CryptoProduct):
         SPOT = 'SPOT'
         OPTION = 'OPTION'
         
-    trading_venue: TradingVenue = TradingVenue.BYBIT
+    source: DataSource = DataSource.BYBIT
     exchange: CryptoExchange = CryptoExchange.BYBIT
     category: ProductCategory | None = None
 
@@ -46,7 +47,7 @@ class BybitProduct(CryptoProduct):
     def _create_name(self) -> str:
         if self.is_spot() or self.is_perpetual():
             # NOTE: spots and perpetuals have duplicated symbols, e.g. BTCUSDT, use basis instead to make them unique
-            return '_'.join([str(self.trading_venue), str(self.basis)])
+            return '_'.join([str(self.source), str(self.basis)])
         else:
             return super()._create_name()
     

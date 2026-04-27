@@ -70,14 +70,14 @@ class InteractiveBrokersWrapper(EWrapper):
                 return
             if tickType == TickTypeEnum.BID_SIZE:
                 bids = ((px, size),)
-                zmq_msg = (1, 1, (self.bkr, product.exch, str(product), bids, (), None))
+                zmq_msg = (1, 1, (self.bkr, product.exchange, str(product), bids, (), None))
                 self._zmq.send(*zmq_msg)
             elif tickType == TickTypeEnum.ASK_SIZE:
                 asks = ((px, size),)
-                zmq_msg = (1, 1, (self.bkr, product.exch, str(product), (), asks, None))
+                zmq_msg = (1, 1, (self.bkr, product.exchange, str(product), (), asks, None))
                 self._zmq.send(*zmq_msg)
             elif tickType == TickTypeEnum.LAST_SIZE:
-                zmq_msg = (1, 2, (self.bkr, product.exch, str(product), px, size, None))
+                zmq_msg = (1, 2, (self.bkr, product.exchange, str(product), px, size, None))
                 self._zmq.send(*zmq_msg)
         else:
             # TEMP, this is normal, but wanna log it to confirm
@@ -90,7 +90,7 @@ class InteractiveBrokersWrapper(EWrapper):
         bids = ((Decimal(bidPrice), bidSize),)
         asks = ((Decimal(askPrice), askSize),)
         extra_data = {'tickAttribBidAsk': tickAttribBidAsk}
-        zmq_msg = (1, 1, (self.bkr, product.exch, str(product), bids, asks, time, extra_data))
+        zmq_msg = (1, 1, (self.bkr, product.exchange, str(product), bids, asks, time, extra_data))
         self._zmq.send(*zmq_msg)
         super().tickByTickBidAsk(reqId, time, bidPrice, askPrice, bidSize, askSize, tickAttribBidAsk)
 
@@ -110,7 +110,7 @@ class InteractiveBrokersWrapper(EWrapper):
             'exchange': exchange,
             'specialConditions': specialConditions
         }
-        zmq_msg = (1, 2, (self.bkr, product.exch, str(product), price, size, time, extra_data))
+        zmq_msg = (1, 2, (self.bkr, product.exchange, str(product), price, size, time, extra_data))
         self._zmq.send(*zmq_msg)
         super().tickByTickAllLast(reqId, tickType, time, price, size, tickAttribLast, exchange, specialConditions)
 
@@ -133,7 +133,7 @@ class InteractiveBrokersWrapper(EWrapper):
             'wap': wap,
             'count': count
         }
-        zmq_msg = (1, 3, (self.bkr, product.exch, str(product), resolution, o, h, l, c, v, ts, extra_data))
+        zmq_msg = (1, 3, (self.bkr, product.exchange, str(product), resolution, o, h, l, c, v, ts, extra_data))
         self._zmq.send(*zmq_msg)
         super().realtimeBar(reqId, time, open_, high, low, close, volume, wap, count)
 

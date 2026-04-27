@@ -19,7 +19,7 @@ def _get_data_file_path(data_source, pdt_or_symbol, resolution, rollback_period,
 def _write_dfs_to_parquets_if_not_exist(request, data_source):
     data_source = data_source.upper()
     product = request.param['product']
-    trading_venue, bccy, qccy, ptype = product.split('_')
+    venue, bccy, qccy, ptype = product.split('_')
     if data_source == 'YAHOO_FINANCE':
         pdt_or_symbol = bccy
     else:

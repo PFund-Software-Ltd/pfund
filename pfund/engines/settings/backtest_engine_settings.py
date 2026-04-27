@@ -24,8 +24,8 @@ class BacktestEngineSettings(BaseEngineSettings):
     @classmethod
     def _validate_initial_balances_and_positions(cls, v: dict[TradingVenue | str, dict[str, Decimal]]):
         return {
-            TradingVenue[trading_venue.upper()]: {
+            TradingVenue[venue.upper()]: {
                 ccy_or_pdt.upper(): Decimal(amount) for ccy_or_pdt, amount in bal_or_pos.items()
             }
-            for trading_venue, bal_or_pos in v.items()
+            for venue, bal_or_pos in v.items()
         }

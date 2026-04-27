@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     import torch.nn as nn
     from sklearn.base import BaseEstimator
     from sklearn.model_selection import TimeSeriesSplit
+    from pfeed.storages.storage_config import StorageConfig
     from pfund.typing import StrategyT, ModelT, FeatureT, IndicatorT
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.components.models.model_base import BaseModel
@@ -104,6 +105,7 @@ class BacktestEngine(BaseEngine):
         strategy: StrategyT, 
         resolution: str, 
         name: str='',
+        storage_config: StorageConfig | None=None,
     ) -> StrategyT:
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
         from pfund.components.strategies.strategy_backtest import BacktestStrategy
@@ -120,6 +122,7 @@ class BacktestEngine(BaseEngine):
             strategy=strategy,
             resolution=resolution,
             name=name or Strategy.__name__,
+            storage_config=storage_config,
         ))
 
     def _add_component(
@@ -127,6 +130,7 @@ class BacktestEngine(BaseEngine):
         component: ModelT | FeatureT | IndicatorT, 
         resolution: str,
         name: str='',
+        storage_config: StorageConfig | None=None,
     ) -> ModelT | FeatureT | IndicatorT:
         '''Add model without creating a strategy (using dummy strategy)'''
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
@@ -142,6 +146,8 @@ class BacktestEngine(BaseEngine):
             component,
             resolution,
             name=name,
+            storage_config=storage_config,
+            is_top_component=True,
         )
         return component
     add_feature = add_indicator = _add_component
@@ -151,6 +157,7 @@ class BacktestEngine(BaseEngine):
         model: ModelT | BaseEstimator | nn.Module,
         resolution: str,
         name: str='',
+        storage_config: StorageConfig | None=None,
     ) -> ModelT:
         from pfund.components.models.model_base import wrap_model
         model = cast("ModelT", wrap_model(model))
@@ -158,6 +165,7 @@ class BacktestEngine(BaseEngine):
             component=model,
             resolution=resolution,
             name=name,
+            storage_config=storage_config,
         )
     
     def run(self, num_chunks: int=1, num_cpus: int | None=None) -> dict[str, Any]:
@@ -215,15 +223,10 @@ class BacktestEngine(BaseEngine):
         is_using_ray = num_chunks > 1
         backtest_dfs: list[pf.BacktestDataFrame] = []
         
-        if backtestee._features_df is not None:
-            df = cast("nw.DataFrame[Any]", backtestee._features_df)
-        else:
-            data_df = cast("nw.DataFrame[Any]", backtestee.get_df(
-                kind='data', 
-                category=DataCategory.MARKET_DATA, 
-                to_native=False,
-            ))
-            df = data_df
+        features_df = backtestee.features_df
+        if features_df is None:
+            raise ValueError(f'{backtestee.name} features_df is None')
+        df = nw.from_native(features_df)
 
         def _run_backtest(
             backtestee: BaseStrategy | BaseModel,
@@ -376,7 +379,7 @@ class BacktestEngine(BaseEngine):
             description=description,
             bar_style=RichColor.BRIGHT_YELLOW,
         ):
-            ts, resolution, product_name, symbol, source_type, o, h, l, c, v = row  # pyright: ignore[reportGeneralTypeIssues, reportUnusedVariable]  # noqa: E741
+            ts, resolution, product_name, source_type, o, h, l, c, v = row  # pyright: ignore[reportGeneralTypeIssues, reportUnusedVariable]  # noqa: E741
             databoy = backtestee.databoy
             data = cast("BarData", backtestee.get_data(product_name, resolution))
             update: BarUpdate = {

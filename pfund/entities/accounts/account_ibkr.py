@@ -18,28 +18,28 @@ class IBKRAccount(BaseAccount):
         Args:
             name: account code, e.g. DU123456 for paper trading, U123456 for live trading
         '''
-        super().__init__(env=env, trading_venue='IB', name=name)
+        super().__init__(env=env, venue='IB', name=name)
         # remove the added "_account" suffix
         if self.name.endswith('_account'):
             self.name = self.name.rsplit('_account', 1)[0]
-        self._host = host or os.getenv(f'{self.tv}_HOST', '127.0.0.1')
-        self._port = port or os.getenv(f'{self.tv}_PORT', None)
+        self._host = host or os.getenv(f'{self.venue}_HOST', '127.0.0.1')
+        self._port = port or os.getenv(f'{self.venue}_PORT', None)
         if self._port:
             self._port = int(self._port)
-        self._client_id = client_id or os.getenv(f'{self.tv}_CLIENT_ID', self._next_default_client_id())
+        self._client_id = client_id or os.getenv(f'{self.venue}_CLIENT_ID', self._next_default_client_id())
         if self._client_id:
             self._client_id = int(self._client_id)
         if self._env in [Environment.SANDBOX, Environment.PAPER, Environment.LIVE]:
-            assert self._host, f'{self.tv} host must be provided, please set `{self.tv}_HOST` in .env.{self._env.lower()} file, or in add_account(..., host=...).'
+            assert self._host, f'{self.venue} host must be provided, please set `{self.venue}_HOST` in .env.{self._env.lower()} file, or in add_account(..., host=...).'
             assert self._port, f'''\033[93m
-                {self.tv} port must be provided for, please set `{self.tv}_PORT` in .env.{self._env.lower()} file, or in add_account(..., port=...).
+                {self.venue} port must be provided for, please set `{self.venue}_PORT` in .env.{self._env.lower()} file, or in add_account(..., port=...).
                 You can find your default socket port in Trader Workstation (TWS):
                 ⚙️ icon on the top right corner -> API -> Settings -> Socket port
                 or
                 You can find your default socket port in IB Gateway:
                 Configure -> Settings -> API -> Settings -> Socket port\033[0m
             '''
-            assert self._client_id, f'{self.tv} client id must be provided, please set `{self.tv}_CLIENT_ID` in .env.{self._env.lower()} file, or in add_account(..., client_id=...).'
+            assert self._client_id, f'{self.venue} client id must be provided, please set `{self.venue}_CLIENT_ID` in .env.{self._env.lower()} file, or in add_account(..., client_id=...).'
 
     @property
     def host(self):

@@ -45,19 +45,12 @@ class MarketData(TimeBasedData):
         self._resamplees = []  # opposite of resampler
     
     @property
-    def trading_venue(self) -> TradingVenue | None:
-        return self.product.trading_venue
-    tv = trading_venue
-    
-    @property
     def broker(self) -> Broker | None:
         return self.product.broker
-    bkr = broker
     
     @property
-    def exchange(self) -> CryptoExchange | None:
+    def exchange(self) -> CryptoExchange | str | None:
         return self.product.exchange
-    exch = exchange
 
     def is_quote_l1(self):
         return self.is_quote() and self.resolution.orderbook_level == 1

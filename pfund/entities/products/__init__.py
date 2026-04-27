@@ -1,18 +1,18 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.typing import tTradingVenue
     from pfund.entities.products.product_base import BaseProduct
 
 
-from pfund.enums import TradingVenue
+from pfeed.enums import DataSource
 
 
-def ProductFactory(trading_venue: TradingVenue | tTradingVenue, basis: str) -> type[BaseProduct]:
+def ProductFactory(source: DataSource | str, basis: str) -> type[BaseProduct]:
     from pfund.entities.products.product_basis import ProductBasis
     from pfund.enums import AllAssetType, AssetTypeModifier
-    trading_venue = TradingVenue[trading_venue.upper()]
-    Product = trading_venue.product_class
+    
+    source = DataSource[source.upper()]
+    Product = source.product_class
     asset_type = ProductBasis(basis=basis.upper()).asset_type
     Mixins = []
     for t in asset_type:

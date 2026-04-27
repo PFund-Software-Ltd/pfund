@@ -8,8 +8,8 @@ from pfund.enums import TradingVenue
 class Adapter:
     FILENAME = 'adapter.yml'
     
-    def __init__(self, trading_venue: TradingVenue):
-        self._trading_venue = TradingVenue[trading_venue.upper()]
+    def __init__(self, venue: TradingVenue):
+        self._trading_venue = TradingVenue[venue.upper()]
         self._adapter = {}
         self._load_config(self.get_file_path())
     

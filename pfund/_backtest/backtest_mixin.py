@@ -12,18 +12,12 @@ if TYPE_CHECKING:
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.utils.dataset_splitter import DatasetPeriods, CrossValidatorDatasetPeriods
 
-import narwhals as nw
-
 from pfund_kit.style import cprint, RichColor, TextStyle
 from pfund.datas.data_config import DataConfig
 from pfund.enums import BacktestMode
 
 
 class BacktestMixin:
-    def __mixin_post_init__(self, *args: Any, **kwargs: Any):
-        super().__mixin_post_init__(*args, **kwargs)
-        self._features_df: nw.DataFrame[Any] | None = None
-        
     @staticmethod
     def _validate_backtest_signature(func: Callable[[BacktestDataFrame], BacktestDataFrame]):
         '''Validates the signature of the backtest() function.
@@ -121,19 +115,15 @@ class BacktestMixin:
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
         return isinstance(self, _DummyStrategy)
     
-    def _is_features_df_required(self) -> bool:
-        if self.backtest_mode in [BacktestMode.VECTORIZED, BacktestMode.HYBRID]:
-            return True
-        elif self.backtest_mode == BacktestMode.EVENT_DRIVEN:
-            return self.settings.reuse_signals
-        else:
-            return False
-    
-    def featurize(self, data_df: NativeDataFrame, signals_dfs: dict[ComponentName, NativeDataFrame]) -> NativeDataFrame:
-        features_df = cast("NativeDataFrame", super().featurize(data_df, signals_dfs))
-        if self._is_features_df_required():
-            self._features_df = nw.from_native(features_df)
-        return features_df
+    def _materialize(self):
+        for data_store in self.data_stores.values():
+            data_store.materialize()
+        is_materialize_signals = (
+            (not self.is_top_component() and self.backtest_mode in [BacktestMode.VECTORIZED, BacktestMode.HYBRID])
+            or (self.backtest_mode == BacktestMode.EVENT_DRIVEN and self.settings.reuse_signals)
+        )
+        if is_materialize_signals:
+            self.store.materialize()
     
     def _gather(self):
         if self._is_dummy_strategy():

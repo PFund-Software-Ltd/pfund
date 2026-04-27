@@ -42,7 +42,7 @@ from pfund.datas import QuoteData, TickData, BarData
 
 class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
     # Columns pinned to the left side of the materialized dataframe for readability
-    LEFT_COLS = ['date', 'resolution', 'product', 'symbol', 'source_type']
+    LEFT_COLS = ['date', 'resolution', 'product', 'source_type']
     PIVOT_COLS = ['resolution', 'product']
 
     def __init__(self, databoy: DataBoy):
@@ -230,8 +230,8 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                     source_type=nw.lit(SourceType.BATCH).cast(nw.String)
                 )
             )
-            # re-order columns
             cols = nwdf.collect_schema().names()
+            # re-order columns
             target_cols = self.LEFT_COLS + [col for col in cols if col not in self.LEFT_COLS]
             nwdf = nwdf.select(target_cols)
             return nwdf
@@ -329,5 +329,5 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         self._df = df
         cols = df.columns
         assert self.INDEX_COL in cols, f"Index column {self.INDEX_COL} not found in {cols}"
-        assert self.PIVOT_COLS in cols, f"Pivot columns {self.PIVOT_COLS} not found in {cols}"
+        assert all(col in cols for col in self.PIVOT_COLS), f"Pivot columns {self.PIVOT_COLS} not found in {cols}"
         return df

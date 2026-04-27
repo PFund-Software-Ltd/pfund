@@ -46,7 +46,6 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         # self._portfolio: Portfolio = ...
         # TODO: aggregate sub-strategies' portfolios
         # self._aggregated_portfolio: Portfolio = ...
-        self._is_top_strategy: bool = False
         
         # FIXME: move positions, balances, orders, all to account object!
         # TODO: if its a sub-strategy, it should not have positions, balances, orders, etc.
@@ -76,17 +75,8 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         X = nw.from_native(features_df)
         
     # TODO: {product.name}_signal
-    def _get_default_signal_cols(self) -> list[str]:
+    def _get_default_signal_cols(self, num_cols: int) -> list[str]:
         pass
-    
-    def _set_top_strategy(self):
-        self._is_top_strategy = True
-    
-    def is_top_strategy(self) -> bool:
-        return self._is_top_strategy
-    
-    def is_sub_strategy(self) -> bool:
-        return not self._is_top_strategy
     
     def get_component(self, name: ComponentName) -> Component | ActorProxy[Component] | None:
         return self.strategies.get(name, None) or super().get_component(name)
@@ -115,7 +105,6 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def to_dict(self) -> dict:
         return {
             **super().to_dict(),
-            'is_sub_strategy': self.is_sub_strategy(),
             'accounts': [repr(account) for account in self.accounts.values()],
             'strategies': [strategy.to_dict() for strategy in self.strategies.values()],
         }
@@ -126,7 +115,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     @overload
     def add_account(
         self, 
-        trading_venue: CryptoExchange | str, 
+        venue: CryptoExchange | str, 
         name: str='', 
         key: str='', 
         secret: str='', 
@@ -135,22 +124,22 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     @overload
     def add_account(
         self,
-        trading_venue: Literal[Broker.IBKR, 'IBKR', 'ibkr'],
+        venue: Literal[Broker.IBKR, 'IBKR', 'ibkr'],
         name: str='',
         host: str='',
         port: int | None=None,
         client_id: int | None=None,
     ) -> IBKRAccount: ...
     
-    def add_account(self, trading_venue: TradingVenue | str, name: str='', **kwargs: Any) -> BaseAccount:  # pyright: ignore[reportInconsistentOverload]
+    def add_account(self, venue: TradingVenue | str, name: str='', **kwargs: Any) -> BaseAccount:  # pyright: ignore[reportInconsistentOverload]
         from pfund.brokers import create_broker
         
-        trading_venue = TradingVenue[trading_venue.upper()]
+        venue = TradingVenue[venue.upper()]
         # NOTE: broker is only used to create account but does nothing else
-        broker: BaseBroker = create_broker(env=self.env, bkr=trading_venue.broker, settings=self.settings)
-        account: BaseAccount =  broker.add_account(trading_venue=trading_venue, name=name or self.name, **kwargs)
+        broker: BaseBroker = create_broker(env=self.env, bkr=venue.broker, settings=self.settings)
+        account: BaseAccount =  broker.add_account(venue=venue, name=name or self.name, **kwargs)
 
-        if self.is_sub_strategy():
+        if not self.is_top_component():
             raise ValueError(f"Sub-strategy '{self.name}' cannot add accounts")
 
         self.accounts[account.name] = account
@@ -159,14 +148,14 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         self.orders[account.name] = []
         # TODO make maxlen a variable in config
         # self.trades[account.name] = deque(maxlen=10)
-        self.logger.debug(f'added {trading_venue} account "{account.name}"')
+        self.logger.debug(f'added {venue} account "{account.name}"')
         return account
     
     # FIXME: update, refer to or reuse _add_component() in component_mixin.py
     # TODO: _setup_logging, _set_engine etc.
     # TODO: make sure sub-strategy's df_form is the same as the top strategy's df_form
     def add_strategy(self, strategy: StrategyT, name: str='') -> StrategyT:
-        if strategy.is_top_strategy():
+        if strategy.is_top_component():
             raise ValueError(f"Top strategy '{self.name}' cannot be added as a sub-strategy")
         assert isinstance(strategy, BaseStrategy), \
             f"strategy '{strategy.__class__.__name__}' is not an instance of BaseStrategy. Please create your strategy using 'class {strategy.__class__.__name__}(pf.Strategy)'"

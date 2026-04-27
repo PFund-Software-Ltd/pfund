@@ -30,7 +30,7 @@ class SimulatedBroker:
     # NOTE: host, port, client_id are required for using PAPER/LIVE trading data feeds in SANDBOX trading
     WHITELISTED_ACCOUNT_FIELDS: ClassVar[list[str]] = [
         '_env', 
-        'trading_venue', 
+        'venue', 
         'name', 
         '_host',
         '_port',

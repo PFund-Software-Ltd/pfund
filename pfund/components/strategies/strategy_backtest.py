@@ -28,9 +28,9 @@ def BacktestStrategy(Strategy: type[StrategyT], *args: Any, **kwargs: Any) -> St
             if self.accounts:
                 return
             # add account to each trading venue if no accounts are added
-            trading_venues = set(product.trading_venue for product in self.products.values())
-            for trading_venue in trading_venues:
-                self.add_account(trading_venue=trading_venue)
+            trading_venues = set(product.source for product in self.products.values())
+            for venue in trading_venues:
+                self.add_account(venue=venue)
                 
         @staticmethod
         def _postprocess_backtest_df(backtest_df: pf.BacktestDataFrame) -> pf.BacktestDataFrame:

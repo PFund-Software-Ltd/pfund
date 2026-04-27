@@ -276,7 +276,7 @@ class BarData(MarketData):
     
     def __str__(self):
         is_closed = self.bar._is_closed
-        header = f"[BarData {'●' if is_closed else '○'}] {self.product.trading_venue} | {self.product.name} | {self.resolution}"
+        header = f"[BarData {'●' if is_closed else '○'}] {self.product.source} | {self.product.name} | {self.resolution}"
         if not self.bar.start_ts or self.bar.is_empty():
             return header
         ohlcv = f"  {self.bar.open} / {self.bar.high} / {self.bar.low} / {self.bar.close} | volume={self.bar.volume}"

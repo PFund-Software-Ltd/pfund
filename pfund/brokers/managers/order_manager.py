@@ -33,7 +33,7 @@ class OrderManager:
     def __init__(self, broker: BaseBroker):
         self._broker = broker
         self._logger = broker._logger
-        # { trading_venue: { acc: OrderedDict(order_id: OrderObject) } }
+        # { venue: { acc: OrderedDict(order_id: OrderObject) } }
         # TODO: remove OrderedDict, just use dict
         self.submitted_orders = defaultdict(lambda: defaultdict(OrderedDict))
         self.opened_orders = defaultdict(lambda: defaultdict(OrderedDict))
@@ -44,11 +44,11 @@ class OrderManager:
         self._recon_nums = defaultdict(int)
         self._cxl_rej_nums = defaultdict(int)
 
-    def get_order(self, trading_venue, acc, oid='', eoid=''):
+    def get_order(self, venue, acc, oid='', eoid=''):
         assert oid or eoid, 'At least one of oid or eoid should be provided'
-        submitted_orders = self.submitted_orders[trading_venue][acc]
-        opened_orders = self.opened_orders[trading_venue][acc]
-        closed_orders = self.closed_orders[trading_venue][acc]
+        submitted_orders = self.submitted_orders[venue][acc]
+        opened_orders = self.opened_orders[venue][acc]
+        closed_orders = self.closed_orders[venue][acc]
         if oid:
             if oid in submitted_orders:
                 return submitted_orders[oid]
@@ -63,13 +63,13 @@ class OrderManager:
                     if eoid == order.eoid:
                         return order
 
-    def get_orders(self, trading_venue, acc, pdt='', oid='', eoid='', is_opened_only=False):
+    def get_orders(self, venue, acc, pdt='', oid='', eoid='', is_opened_only=False):
         if oid or eoid:
-            return self.get_order(trading_venue, acc, oid=oid, eoid=eoid)
+            return self.get_order(venue, acc, oid=oid, eoid=eoid)
         else:
-            orders = list(self.opened_orders[trading_venue][acc].values())
+            orders = list(self.opened_orders[venue][acc].values())
             if not is_opened_only:
-                orders += list(self.submitted_orders[trading_venue][acc].values())
+                orders += list(self.submitted_orders[venue][acc].values())
             return orders if not pdt else [order for order in orders if order.pdt == pdt]
 
     # FIXME
@@ -77,17 +77,17 @@ class OrderManager:
         scheduler.add_job(self.clear_cached_closed_orders, 'interval', seconds=10)
         scheduler.add_job(self.check_missed_opened_orders, 'interval', seconds=10)
 
-    def reconcile(self, trading_venue, acc, data: dict):
+    def reconcile(self, venue, acc, data: dict):
         '''
         Remove orders that exist only internally but not externally
         '''
         for pdt, updates in data.items():
             official_eoids = [ update['eoid'] for update in updates if update['eoid'] ]
-            opened_orders = self.get_orders(trading_venue, acc, pdt=pdt, is_opened_only=True)
+            opened_orders = self.get_orders(venue, acc, pdt=pdt, is_opened_only=True)
             for o in opened_orders:
                 if o.eoid and o.eoid not in official_eoids:
                     self._recon_nums[o.oid] += 1
-                    self._logger.debug(f'{trading_venue} {acc=} {o.oid=} {o.eoid=} add recon_num to {self._recon_nums[o.oid]}')
+                    self._logger.debug(f'{venue} {acc=} {o.oid=} {o.eoid=} add recon_num to {self._recon_nums[o.oid]}')
                     if self._recon_nums[o.oid] >= self._MAX_RECON_NUM:
                         self._logger.warning(f'cancel order {o.oid} due to reconciliation')
                         self._broker.cancel_orders(o.account, o.product, [o])
@@ -122,21 +122,21 @@ class OrderManager:
     def handle_msgs(self, topic, info):
         if topic == 1:
             bkr, exch, acc, orders = info
-            trading_venue = exch if bkr == 'CRYPTO' else bkr
-            self.update_orders(trading_venue, acc, orders)
+            venue = exch if bkr == 'CRYPTO' else bkr
+            self.update_orders(venue, acc, orders)
     
 
     '''
     Order Cycle
     '''
-    def update_orders(self, trading_venue, acc, orders: dict):
+    def update_orders(self, venue, acc, orders: dict):
         ts = orders['ts']
         data = orders['data']
         source: OrderUpdateSource = orders['source']
         for pdt, updates in data.items():
             for update in updates:
-                if not (order := self.get_order(trading_venue, acc, oid=update['oid'], eoid=update['eoid'])) and source == OrderUpdateSource.GOO:
-                    order = self._broker.create_order(trading_venue, acc, pdt, **update)
+                if not (order := self.get_order(venue, acc, oid=update['oid'], eoid=update['eoid'])) and source == OrderUpdateSource.GOO:
+                    order = self._broker.create_order(venue, acc, pdt, **update)
                 else:
                     # orders from trade history could be closed already, 
                     # if they are still open, GTH can correct the trade details,
@@ -144,7 +144,7 @@ class OrderManager:
                     if source == OrderUpdateSource.GTH:
                         pass
                     else:
-                        self._logger.error(f'Cannot find order {trading_venue=} {acc=} {pdt} {update=}')
+                        self._logger.error(f'Cannot find order {venue=} {acc=} {pdt} {update=}')
                     return
 
                 # NOTE: add/remove_order and on_update logic, analogous to add_position and position/balance.on_update() in portfolio_manager
@@ -180,32 +180,32 @@ class OrderManager:
                     self._on_amend_rejected(order, ts=ts, reason=source)
 
         if source == OrderUpdateSource.GOO:
-            self.reconcile(trading_venue, acc, data)
+            self.reconcile(venue, acc, data)
 
     # main order status updates
     def on_submitted(self, order, ts=None, reason=''):
         if is_updated := order.on_status_update(status=MainOrderStatus.SUBMITTED, ts=ts, reason=reason):
-            self.submitted_orders[order.tv][order.acc][order.oid] = order
+            self.submitted_orders[order.venue][order.acc][order.oid] = order
 
     def _on_opened(self, order, ts=None, reason=''):
-        if order.oid in self.closed_orders[order.tv][order.acc]:
+        if order.oid in self.closed_orders[order.venue][order.acc]:
             self._logger.warning(f'closed order {order} is trying to be re-opened, probably due to a delayed update')
             return
         if is_updated := order.on_status_update(status=MainOrderStatus.OPENED, ts=ts, reason=reason):
-            self.opened_orders[order.tv][order.acc][order.oid] = order
-        if order.oid in self.submitted_orders[order.tv][order.acc]:
-            del self.submitted_orders[order.tv][order.acc][order.oid]
+            self.opened_orders[order.venue][order.acc][order.oid] = order
+        if order.oid in self.submitted_orders[order.venue][order.acc]:
+            del self.submitted_orders[order.venue][order.acc][order.oid]
 
     def _on_closed(self, order, ts=None, reason: OrderClosedReason | str=''):
         # open the order before closing it to complete the order cycle, except reason = rejected
-        if order.oid not in self.opened_orders[order.tv][order.acc] and reason != MainOrderStatus.REJECTED:
+        if order.oid not in self.opened_orders[order.venue][order.acc] and reason != MainOrderStatus.REJECTED:
             self._on_opened(order, ts=ts, reason='open to be closed')
         if is_updated := order.on_status_update(status=MainOrderStatus.CLOSED, ts=ts, reason=reason):
-            self.closed_orders[order.tv][order.acc][order.oid] = order
-        if order.oid in self.submitted_orders[order.tv][order.acc]:
-            del self.submitted_orders[order.tv][order.acc][order.oid]
-        if order.oid in self.opened_orders[order.tv][order.acc]:
-            del self.opened_orders[order.tv][order.acc][order.oid]
+            self.closed_orders[order.venue][order.acc][order.oid] = order
+        if order.oid in self.submitted_orders[order.venue][order.acc]:
+            del self.submitted_orders[order.venue][order.acc][order.oid]
+        if order.oid in self.opened_orders[order.venue][order.acc]:
+            del self.opened_orders[order.venue][order.acc][order.oid]
 
     def _on_rejected(self, order, ts=None, reason=''):
         if is_updated := order.on_status_update(status=MainOrderStatus.REJECTED, ts=ts, reason=reason):

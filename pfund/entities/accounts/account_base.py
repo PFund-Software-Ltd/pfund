@@ -14,37 +14,33 @@ class BaseAccount:
     def _get_default_name(self):
         return f"{self.__class__.__name__}-{self._next_account_id()}"
     
-    def __init__(self, env: Environment | str, trading_venue: TradingVenue | str, name: str=''):
+    def __init__(self, env: Environment | str, venue: TradingVenue | str, name: str=''):
         self._env = Environment[env.upper()]
-        self.trading_venue = TradingVenue[trading_venue.upper()]
+        self.venue = TradingVenue[venue.upper()]
         self.name: str = name or self._get_default_name()
         if 'account' not in self.name.lower():
             self.name += "_account"
     
     def to_dict(self):
         return {
-            'trading_venue': self.trading_venue,
+            'venue': self.venue,
             'name': self.name,
         }
         
-    @property
-    def tv(self) -> TradingVenue:
-        return self.trading_venue
-    
     def __str__(self):
-        return f'TradingVenue={self.trading_venue}|Account={self.name}'
+        return f'TradingVenue={self.venue}|Account={self.name}'
 
     def __repr__(self):
-        return f'{self.trading_venue}:{self.name}'
+        return f'{self.venue}:{self.name}'
 
     def __eq__(self, other: Any):
         if not isinstance(other, BaseAccount):
             return NotImplemented  # Allow other types to define equality with BaseProduct
         return (
             self._env == other._env
-            and self.trading_venue == other.trading_venue
+            and self.venue == other.venue
             and self.name == other.name
         )
         
     def __hash__(self):
-        return hash((self._env, self.trading_venue, self.name))
+        return hash((self._env, self.venue, self.name))

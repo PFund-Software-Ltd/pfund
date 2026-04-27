@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
     from narwhals._native import NativeDataFrame
     from pfeed.sources.pfund.component_feed import ComponentFeed
+    from pfeed.storages.storage_config import StorageConfig
     from pfund.typing import ComponentName, Component, ColumnName
 
 import narwhals as nw
@@ -16,9 +17,11 @@ class TradingStore:
     PIVOT_COLS: ClassVar[list[str]] = ['product', 'resolution']
     
     def __init__(self, component: Component):
+        import pfeed as pe
         self._component: Component = component
         self._df: nw.DataFrame[Any] | None = None  # component's signals_df
-        self._feed: ComponentFeed | None = None
+        self._feed = pe.PFund().component_feed.with_component(self._component)
+        self._storage_config: StorageConfig | None = None
     
     @property
     def KEY_COLS(self) -> list[str]:
@@ -34,20 +37,13 @@ class TradingStore:
     
     @property
     def component_feed(self) -> ComponentFeed:
-        if self._feed is None:
-            import pfeed as pe
-            self._feed = pe.PFund().component_feed.with_component(self._component)
-            # setup feed's storage and io
-            context = self._component.context
-            pfund_config = context.pfund_config
-            for storage, storage_options in pfund_config.storage_options.items():
-                self._feed.configure_storage(storage=storage, storage_options=storage_options)
-            for io_format, io_options in pfund_config.io_options.items():
-                self._feed.configure_io(io_format=io_format, io_options=io_options)
         return self._feed
         
     def _set_pivot_cols(self, pivot_cols: list[str]):
         self.PIVOT_COLS = pivot_cols
+    
+    def _set_storage_config(self, storage_config: StorageConfig):
+        self._storage_config = storage_config
     
     def get_df(
         self,
@@ -103,7 +99,9 @@ class TradingStore:
     # TODO: load {component_name}.parquet
     def materialize(self):
         # NOTE: lookback_period=None means run the pipeline on the whole dataset
-        self._component.run_pipeline(lookback_period=None)
+        # self._component.run_pipeline(lookback_period=None)
+        # self._component.load() ???
+        pass
     
     # TODO
     def persist_to_lakehouse(self):
@@ -112,7 +110,6 @@ class TradingStore:
         '''
         context = self._component.context
         pfund_config = context.pfund_config
-        pfeed_config = context.pfeed_config
         
         data_layer = DataLayer.CURATED
         io_format = IOFormat.PARQUET
@@ -120,8 +117,8 @@ class TradingStore:
         # TODO: how to write updates? need to use deltalake
         self.component_feed.load(
             data=self._df,
-            storage=pfund_config.storage,
-            data_path=pfeed_config.data_path,
+            storage=self._storage_config.storage,
+            data_path=pfund_config.data_path,
             data_layer=data_layer,
             io_format=io_format,
         )

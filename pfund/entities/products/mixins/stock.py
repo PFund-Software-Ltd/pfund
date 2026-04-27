@@ -5,6 +5,6 @@ if TYPE_CHECKING:
 
 
 class StockMixin:
-    def _create_symbol(self: BaseProduct) -> str:
+    def _create_symbol(self: StockMixin | BaseProduct) -> str:
         return self.base_asset
     

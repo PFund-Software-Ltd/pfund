@@ -49,10 +49,10 @@ class BaseBroker(ABC):
         from pfund.entities.products import ProductFactory
         if cls.name == Broker.CRYPTO:
             assert exch in CryptoExchange.__members__, f'{exch} is not a valid crypto exchange'
-            trading_venue = CryptoExchange[exch.upper()]
+            venue = CryptoExchange[exch.upper()]
         else:
-            trading_venue = cls.name
-        Product = ProductFactory(trading_venue=trading_venue, basis=basis)
+            venue = cls.name
+        Product = ProductFactory(venue=venue, basis=basis)
         return Product(basis=basis, exchange=exch, name=name, symbol=symbol, specs=specs)
 
     @abstractmethod

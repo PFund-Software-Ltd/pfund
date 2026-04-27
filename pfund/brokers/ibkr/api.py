@@ -217,7 +217,7 @@ class InteractiveBrokersAPI(IBClient, IBWrapper):
             else:
                 bids, asks = self._bids[pdt], None
                 _update(bids)
-            zmq_msg = (1, 1, (self._bkr, product.exch, str(product), bids, asks, None, kwargs))
+            zmq_msg = (1, 1, (self._bkr, product.exchange, str(product), bids, asks, None, kwargs))
             self._zmq.send(*zmq_msg, receiver='engine')
         except:
             self._logger.exception(f'_update_orderbook exception ({position=} {operation=} {side=} {px=} {qty=} {kwargs=}):')

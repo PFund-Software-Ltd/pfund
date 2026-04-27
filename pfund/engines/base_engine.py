@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Any
 if TYPE_CHECKING:
     from pfeed.sources.pfund.engine_feed import EngineFeed
+    from pfeed.storages.storage_config import StorageConfig
     from pfund.datas.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
     from pfund.entities.accounts.account_base import BaseAccount
@@ -110,6 +111,7 @@ class BaseEngine:
         strategy: StrategyT,
         resolution: str, 
         name: str='', 
+        storage_config: StorageConfig | None=None,
         ray_actor_options: dict[str, Any] | None=None,
         **ray_kwargs: Any,
     ) -> StrategyT | ActorProxy[StrategyT]:
@@ -147,8 +149,9 @@ class BaseEngine:
             run_mode=RunMode.REMOTE if ray_kwargs else RunMode.LOCAL,
             resolution=resolution,
             engine_context=self._context,
+            storage_config=storage_config,
+            is_top_component=True,
         )
-        strategy._set_top_strategy()
 
         self.strategies[strat] = strategy  # pyright: ignore[reportArgumentType]
         self._logger.debug(f"added '{strat}'")
@@ -157,9 +160,9 @@ class BaseEngine:
     def get_strategy(self, name: str) -> BaseStrategy | ActorProxy[BaseStrategy]:
         return self.strategies[name]
     
-    def _add_broker(self, trading_venue: TradingVenue) -> BaseBroker:
+    def _add_broker(self, venue: TradingVenue) -> BaseBroker:
         from pfund.brokers import create_broker
-        bkr: Broker = TradingVenue[trading_venue.upper()].broker
+        bkr: Broker = TradingVenue[venue.upper()].broker
         if bkr not in self.brokers:
             broker = create_broker(env=self.env, bkr=bkr, settings=self.settings)
             self.brokers[bkr] = broker
@@ -170,12 +173,12 @@ class BaseEngine:
         return self.brokers[Broker[bkr.upper()]]
     
     def _add_product(self, product: BaseProduct):
-        broker: BaseBroker = self._add_broker(product.trading_venue)
-        broker.add_product(exch=product.exch, basis=str(product.basis), name=product.name, symbol=product.symbol, **product.specs)
+        broker: BaseBroker = self._add_broker(product.source)
+        broker.add_product(exch=product.exchange, basis=str(product.basis), name=product.name, symbol=product.symbol, **product.specs)
         self._logger.debug(f'added product {product.symbol}')
     
     def _add_account(self, account: BaseAccount):
-        broker: BaseBroker = self._add_broker(account.trading_venue)
+        broker: BaseBroker = self._add_broker(account.venue)
         account = broker.add_account(**account.to_dict())
         self._logger.debug(f'added account {account}')
 

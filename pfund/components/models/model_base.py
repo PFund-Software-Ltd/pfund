@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from pfund.components.indicators.indicator_base import TalibFunction
     MachineLearningModel = nn.Module | BaseEstimator | TalibFunction
 
-import os
 from abc import ABC, abstractmethod
 
 import narwhals as nw
@@ -120,7 +119,7 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
     
     def add_data(
         self, 
-        trading_venue: TradingVenue | str,
+        venue: TradingVenue | str,
         product: str,
         exchange: str='',
         symbol: str='',
@@ -130,7 +129,7 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         **product_specs: Any
     ) -> list[MarketData]:
         datas: list[MarketData] = super().add_data(
-            trading_venue=trading_venue,
+            venue=venue,
             product=product,
             exchange=exchange,
             symbol=symbol,
@@ -164,28 +163,25 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             missing_datas = loaded_datas - added_datas
             raise Exception(f"missing data {missing_datas} in model '{self.name}', please use add_data() to add them back")
     
-    def load(self) -> dict:
-        from pfund_kit.logging.filters.trimmed_path_filter import TrimmedPathFilter
-        trim_path = TrimmedPathFilter.trim_path
-        import joblib
-        file_path = self._get_file_path()
-        if os.path.exists(file_path):
-            obj: dict = joblib.load(file_path)
-            self.model = obj['model']
-            self._assert_no_missing_datas(obj)
-            self.logger.debug(f"loaded '{self.name}' from {trim_path(file_path)}")
-            return obj
-        return {}
+    def load(self):
+        # TEMP
+        # from pfund_kit.logging.filters.trimmed_path_filter import TrimmedPathFilter
+        # trim_path = TrimmedPathFilter.trim_path
+        # TODO:
+        # self.store.component_feed.retrieve(
+        #     artifact_type=ArtifactType.model,
+        #     storage=self.storage_config.storage,
+        #     data_path=self.context.pfund_config.data_path,
+        # )
+        # TEMP
+        # obj: dict = joblib.load(file_path)
+        # self.model = obj['model']
+        # self._assert_no_missing_datas(obj)
+        return
     
     def dump(self):
-        pfund_config = self.context.pfund_config
-        pfeed_config = self.context.pfeed_config
-        component_feed = self.store._feed
-        (
-            component_feed
-            .load(
-                artifact_type=ArtifactType.model,
-                storage=pfund_config.storage,
-                data_path=pfeed_config.data_path,
-            )
+        self.store.component_feed.load(
+            artifact_type=ArtifactType.model,
+            storage=self.storage_config.storage,
+            data_path=self.context.pfund_config.data_path,
         )

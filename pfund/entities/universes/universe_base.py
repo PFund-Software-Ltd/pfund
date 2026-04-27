@@ -33,23 +33,23 @@ class BaseUniverse:
             
     def add(self, product: BaseProduct):
         assets: dict = self._get_assets(product.ptype)
-        assets[product.exch][str(product)] = product
+        assets[product.exchange][str(product)] = product
     
     def update(self, product: BaseProduct):
         assets: dict = self._get_assets(product.ptype)
         if self.has(product):
-            assets[product.exch][str(product)] = product
+            assets[product.exchange][str(product)] = product
         else:
             raise ValueError(f'{product} not in {assets}')
      
     def has(self, product: BaseProduct) -> bool:
         assets: dict = self._get_assets(product.ptype)
-        return product.exch in assets and str(product) in assets[product.exch]
+        return product.exchange in assets and str(product) in assets[product.exchange]
     
     def remove(self, product: BaseProduct):
         assets: dict = self._get_assets(product.ptype)
         if self.has(product):
-            del assets[product.exch][str(product)]
+            del assets[product.exchange][str(product)]
         else:
             raise ValueError(f'{product} not in {assets}')
     

@@ -157,7 +157,7 @@ class BaseExchange(ABC):
     @classmethod
     def create_product(cls, basis: str, name: str='', symbol: str='', **specs: Any) -> CryptoProduct:
         from pfund.entities.products import ProductFactory
-        Product = ProductFactory(trading_venue=cls.name, basis=basis)
+        Product = ProductFactory(venue=cls.name, basis=basis)
         return Product(basis=basis, name=name, symbol=symbol, specs=specs)
 
     def get_product(self, name: str) -> CryptoProduct:

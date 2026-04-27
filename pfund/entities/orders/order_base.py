@@ -89,19 +89,16 @@ class BaseOrder(BaseModel):
         return uuid4()
     
     @property
-    def trading_venue(self) -> TradingVenue:
-        return self.product.trading_venue
-    tv = trading_venue
+    def venue(self) -> TradingVenue:
+        return self.product.source
     
     @property
     def broker(self) -> Broker:
         return self.product.broker
-    bkr = broker
     
     @property
     def exchange(self) -> CryptoExchange | str:
         return self.product.exchange
-    exch = exchange
 
     @property
     def adapter(self):
@@ -308,7 +305,7 @@ class BaseOrder(BaseModel):
         last_traded_size = self.ltq * self.side
         amend_size = self.amend_qty * self.side
         status_abbrev = self.get_status()
-        return f'{self.creator}|{self.tv}|{self.acc}|{self.pdt}|{self.oid}|{self.eoid}|' \
+        return f'{self.creator}|{self.venue}|{self.acc}|{self.pdt}|{self.oid}|{self.eoid}|' \
                f'{self.type}|{self.tif}|{status_abbrev}|{self.size}@{self.price}|' \
                f'filled={filled_size}@{self.avg_px}|' \
                f'last={last_traded_size}@{self.ltp}|' \

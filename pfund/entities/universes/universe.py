@@ -22,8 +22,8 @@ class Universe(AllAssetsMixin, BaseUniverse):
         self.setup_assets()
         
     def initialize(self, products: list[BaseProduct]):
-        for bkr in {product.bkr for product in products}:
-            products_per_bkr = [product for product in products if product.bkr == bkr]
+        for bkr in {product.broker for product in products}:
+            products_per_bkr = [product for product in products if product.broker == bkr]
             universe: BaseUniverse = self._add_sub_universe(bkr, products_per_bkr)
             # e.g. allows using 'universe.crypto' to access CeFiUniverse
             setattr(self, bkr.lower(), universe)

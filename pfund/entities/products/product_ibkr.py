@@ -3,7 +3,8 @@ from typing import Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from ibapi.contract import Contract
 
-from pfund.enums import TradingVenue, Broker, TraditionalAssetType
+from pfeed.enums import DataSource
+from pfund.enums import Broker, TraditionalAssetType
 from pfund.entities.products.product_base import BaseProduct
 
 
@@ -27,7 +28,7 @@ DEFAULT_EXCHANGES = {
 
 
 class IBKRProduct(BaseProduct):
-    trading_venue: TradingVenue = TradingVenue.IBKR
+    source: DataSource = DataSource.IBKR
     broker: Broker = Broker.IBKR
     exchange: str=''
 
