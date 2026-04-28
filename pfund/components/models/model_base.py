@@ -180,8 +180,14 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         return
     
     def dump(self):
+        from pfeed.enums.data_storage import FileBasedDataStorage
+        if self.storage_config is not None:
+            storage = self.storage_config.storage
+        else:
+            default_storage = FileBasedDataStorage.LOCAL
+            storage = default_storage.value
         self.store.component_feed.load(
             artifact_type=ArtifactType.model,
-            storage=self.storage_config.storage,
+            storage=storage,
             data_path=self.context.pfund_config.data_path,
         )

@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     )
     from pfund.datas.stores.base_data_store import BaseDataStore
     from pfund.engines.engine_context import EngineContext
+    from pfund.datas.timeframe import Timeframe
     from pfund.datas.data_market import MarketData
     from pfund.datas.data_base import BaseData
     from pfund.datas.stores.market_data_store import MarketDataStore
@@ -35,7 +36,7 @@ import narwhals as nw
 
 from pfund_kit.utils import toml
 from pfund_kit.style import cprint, RichColor, TextStyle
-from pfeed.enums import DataCategory, DataSource
+from pfeed.enums import DataCategory
 from pfeed.storages.storage_config import StorageConfig
 from pfund.datas.resolution import Resolution
 from pfund.datas.data_config import DataConfig
@@ -112,7 +113,7 @@ class ComponentMixin:
         return self.databoy._data_stores
     
     @property
-    def setorage_config(self) -> StorageConfig:
+    def storage_config(self) -> StorageConfig | None:
         return self.store._storage_config
     
     # TODO: also check on_bar, on_tick, on_quote etc.
@@ -272,21 +273,22 @@ class ComponentMixin:
     def to_dict(self) -> dict[str, Any]:
         metadata = {
             'class': self.__class__.__name__,
+            'signature': (self.__pfund_args__, self.__pfund_kwargs__),
             'env': self.env.value,
-            'name': self.name,
-            'data_range': self.context.data_range,
-            'resolution': self.resolution.value,
-            'component_type': self.component_type.value,
             'run_mode': self.run_mode.value,
+            'name': self.name,
+            'data_range': (self.context.data_start, self.context.data_end),
+            'resolution': repr(self.resolution),
+            'df_form': self._df_form,
+            'component_type': self.component_type.value,
             'config': self.config,
             'params': self.params,
             'settings': self.settings.model_dump(),
-            'datas': [data.to_dict() for data in self.databoy.get_datas()],
+            'products': [product.to_dict() for product in self.products.values()],
+            'datas': [data.to_dict() for data in self.get_datas()],
             'models': [model.to_dict() for model in self.models.values()],
             'features': [feature.to_dict() for feature in self.features.values()],
             'indicators': [indicator.to_dict() for indicator in self.indicators.values()],
-            'signature': (self.__pfund_args__, self.__pfund_kwargs__),
-            'data_signatures': self.databoy._data_signatures,
         }
         return metadata
     
@@ -429,6 +431,21 @@ class ComponentMixin:
         for data_store in self.data_stores.values():
             datas.extend(data_store.get_datas())
         return datas
+    
+    def get_supported_resolutions(self, product: BaseProduct) -> dict[Timeframe, list[int]]:
+        import importlib
+
+        supported_resolutions: dict[Timeframe, list[int]]
+        broker = product.broker
+        if broker == Broker.CRYPTO:
+            Exchange = getattr(importlib.import_module(f'pfund.brokers.crypto.exchanges.{product.exchange.lower()}.exchange'), 'Exchange')
+            supported_resolutions = Exchange.get_supported_resolutions(product)
+        elif broker == Broker.IBKR:
+            InteractiveBrokersAPI = getattr(importlib.import_module('pfund.brokers.ibkr.api'), 'InteractiveBrokersAPI')
+            supported_resolutions = InteractiveBrokersAPI.SUPPORTED_RESOLUTIONS
+        else:
+            raise NotImplementedError(f'broker {broker} is not supported')
+        return supported_resolutions
 
     @staticmethod
     def dt(ts: float, tz: datetime.tzinfo = datetime.timezone.utc) -> datetime.datetime:
@@ -508,7 +525,7 @@ class ComponentMixin:
     
     def _add_product(
         self,
-        tv: TradingVenue | str,
+        venue: TradingVenue | str,
         basis: str,
         exch: str='',
         symbol: str='',
@@ -517,9 +534,9 @@ class ComponentMixin:
     ) -> BaseProduct:
         from pfund.brokers import create_broker
         # NOTE: broker is only used to create product but nothing else
-        broker: BaseBroker = create_broker(env=self.env, bkr=TradingVenue[tv.upper()].broker, settings=self.settings)
+        broker: BaseBroker = create_broker(env=self.env, bkr=TradingVenue[venue.upper()].broker, settings=self.settings)
         if broker.name == Broker.CRYPTO:
-            exch = tv
+            exch = venue
             product: BaseProduct = broker.add_product(exch=exch, basis=basis, name=name, symbol=symbol, **specs)
         elif broker.name == Broker.IBKR:
             product: BaseProduct = broker.add_product(exch=exch, basis=basis, name=name, symbol=symbol, **specs)
@@ -541,62 +558,11 @@ class ComponentMixin:
     def _get_default_name(self):
         return self.__class__.__name__
     
-    # FIXME: move into DataConfigResolver
-    def _resolve_data_config(self, product: BaseProduct, data_config: DataConfig | None) -> DataConfig:
-        '''Resolves and configures DataConfig with defaults and automatic settings.
-
-        Sets primary resolution from component resolution, derives data source from
-        product's trading venue, and configures resampling for extra resolutions.
-
-        Args:
-            product: The product to configure data for
-            data_config: Optional data configuration (creates default if None)
-
-        Returns:
-            Fully configured DataConfig ready for data subscription
-
-        Raises:
-            AssertionError: If component resolution is not set
-            ValueError: If data_source cannot be derived from product's trading venue
-        '''
-        data_config = data_config or DataConfig()
-        # set data config's primary resolution to be the component's resolution
-        assert self.resolution is not None, 'component resolution is not set'
-        data_config.primary_resolution = self.resolution
-        # derive data_source from venue if not provided
-        if data_config.data_source is None:
-            if product.source in DataSource.__members__:
-                data_config.data_source = DataSource[product.source]
-            else:
-                raise ValueError("data_source must be provided")
-        data_config = self._auto_resample_data_config(product, data_config)
-        # TODO: auto shift data config
-        data_config = self._auto_shift_data_config(data_config)
-        return data_config
-    
-    # FIXME: move into DataConfigResolver
-    def _auto_resample_data_config(self, product: BaseProduct, data_config: DataConfig) -> DataConfig:
-        from pfund.utils import get_supported_resolutions
-        supported_resolutions = get_supported_resolutions(product)
-        original_resample = data_config.resample.copy()
-        is_auto_resampled = data_config.auto_resample(supported_resolutions)
-        if is_auto_resampled:
-            self.logger.warning(
-                f'{product.name} resolution={repr(data_config.primary_resolution)} extra_resolutions={data_config.extra_resolutions} ' +
-                f' data is auto-resampled from {original_resample} to {data_config.resample}'
-            )
-        return data_config
-    
-    # FIXME: move into DataConfigResolver
-    # TODO: detect bar shift based on the returned data by e.g. Yahoo Finance, its hourly data starts from 9:30 to 10:30 etc.
-    def _auto_shift_data_config(self, data_config: DataConfig) -> DataConfig:
-        # data_config.auto_shift()
-        return data_config
-    
     def add_data(
         self, 
         venue: TradingVenue | str,
         product: str,
+        resolutions: list[Resolution | str] | None=None,
         exchange: str='',
         symbol: str='',
         product_name: str='',
@@ -609,6 +575,7 @@ class ComponentMixin:
             exchange: useful for TradFi brokers (e.g. IB), to specify the exchange (e.g. 'NASDAQ')
             symbol: useful for TradFi brokers (e.g. IB), to specify the symbol (e.g. 'AAPL')
             product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
+            resolutions: data resolutions in use, e.g. "1t" for tick data, "1q" for quote data
             product_name: A user-defined identifier for the product.
                 If not provided, the default product symbol (e.g. 'BTC_USDT_PERP', 'TSLA241213C00075000') will be used.
                 This is useful when you need to distinguish between similar instruments, such as options 
@@ -620,7 +587,7 @@ class ComponentMixin:
             product_specs: product specifications, e.g. expiration, strike_price etc.
         '''
         product: BaseProduct = self._add_product(
-            tv=venue,
+            venue=venue,
             basis=product,
             exch=exchange,
             symbol=symbol,
@@ -629,8 +596,9 @@ class ComponentMixin:
         )
         datas: list[MarketData] = self.market_data_store.add_data(
             product=product, 
-            storage_config=storage_config or StorageConfig(),
-            data_config=self._resolve_data_config(product, data_config)
+            resolutions=resolutions,
+            data_config=data_config,
+            storage_config=storage_config,
         )
         return datas
     

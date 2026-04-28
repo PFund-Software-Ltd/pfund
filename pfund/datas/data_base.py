@@ -1,9 +1,9 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, ClassVar
-if TYPE_CHECKING:
-    from pfeed.enums import DataSource, DataCategory
-    from pfund.datas.data_config import DataConfig
-    from pfeed.storages.storage_config import StorageConfig
+from typing import Any, ClassVar
+    
+from pfeed.enums import DataLayer, DataSource, DataCategory
+from pfeed.storages.storage_config import StorageConfig
+from pfund.datas.data_config import DataConfig
 
 
 class BaseData:
@@ -11,22 +11,27 @@ class BaseData:
     
     def __init__(
         self, 
-        data_source: DataSource, 
-        data_origin: str, 
-        data_config: DataConfig,
-        storage_config: StorageConfig,
+        data_config: DataConfig | None=None, 
+        storage_config: StorageConfig | None=None,
     ):
-        self.source: DataSource = data_source
-        self.origin: str = data_origin
-        self.config: DataConfig = data_config
-        self.storage_config: StorageConfig = storage_config
+        self.config: DataConfig = data_config or DataConfig()
+        self.storage_config: StorageConfig = storage_config or StorageConfig()
+        if self.storage_config.data_layer == DataLayer.RAW:
+            raise ValueError('data from RAW data layer is not supported, pfund can only deal with cleaned data')
         self.extra_data: dict[str, Any] = {}
+    
+    @property
+    def source(self) -> DataSource:
+        assert self.config.data_source is not None
+        return DataSource[self.config.data_source.upper()]
+    
+    @property
+    def origin(self) -> str:
+        return self.config.data_origin
         
     def to_dict(self) -> dict[str, Any]:
         return {
-            'source': self.source.value,
-            'origin': self.origin,
-            'config': self.config.model_dump(),
+            'data_config': self.config.model_dump(),
             'storage_config': self.storage_config.model_dump(),
         }
     

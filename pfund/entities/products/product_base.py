@@ -102,10 +102,10 @@ class BaseProduct(BaseModel):
             if field.is_required() and field_name not in BaseProduct.model_fields
         }
         
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return self.model_dump()
 
-    def _create_specs(self) -> dict:
+    def _create_specs(self) -> dict[str, Any]:
         '''Create specifications that make a product unique'''
         from pfund.entities.products.product_crypto import CryptoProduct
         # TODO: add DeFiProduct

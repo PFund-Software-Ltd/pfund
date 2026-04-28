@@ -17,16 +17,12 @@ Size: TypeAlias = float
 class QuoteData(MarketData):
     def __init__(
         self,
-        data_source: DataSource,
-        data_origin: str,
         product: BaseProduct,
         resolution: Resolution,
-        data_config: DataConfig,
-        storage_config: StorageConfig,
+        data_config: DataConfig | None=None,
+        storage_config: StorageConfig | None=None,
     ):
         super().__init__(
-            data_source=data_source, 
-            data_origin=data_origin,
             product=product,
             resolution=resolution,
             data_config=data_config,

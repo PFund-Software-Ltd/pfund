@@ -125,13 +125,13 @@ class CryptoBroker(BaseBroker):
             exchange: BaseExchange = self.get_exchange(exch)
         return exchange
     
-    def add_balance(self, tv: TradingVenue, acc: AccountName, ccy: Currency) -> CryptoBalance:
-        exch = CryptoExchange[tv.upper()]
+    def add_balance(self, veune: TradingVenue, acc: AccountName, ccy: Currency) -> CryptoBalance:
+        exch = CryptoExchange[veune.upper()]
         ccy = ccy.upper()
         if not (balance := self.get_balances(exch, acc=acc, ccy=ccy)):
             self.add_exchange(exch)
             balance = CryptoBalance(ccy=ccy)
-            self._portfolio_manager.add_balance(tv, acc, balance)
+            self._portfolio_manager.add_balance(veune, acc, balance)
             self._logger.debug(f'added {balance}')
         return balance
 
@@ -207,7 +207,7 @@ class CryptoBroker(BaseBroker):
         exch = CryptoExchange[venue.upper()]
         ccy = currency.upper()
         if not is_api_call:
-            return self._portfolio_manager.get_balances(tv=venue, acc=account_name, ccy=currency)
+            return self._portfolio_manager.get_balances(venue=venue, acc=account_name, ccy=currency)
         else:
             exchange = self.get_exchange(exch)
             account = self.get_account(exch, acc)

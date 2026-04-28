@@ -1,14 +1,13 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false, reportArgumentType=false, reportUnnecessaryComparison=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, TypedDict, Any, TypeAlias
-from functools import partial
-
+from typing import TYPE_CHECKING, TypedDict, Any, TypeAlias, cast
 if TYPE_CHECKING:
     from narwhals._native import NativeDataFrame
     from pfund.typing import ProductName
     from pfund.entities.products.product_base import BaseProduct
     from pfund.datas.data_config import DataConfig
     from pfund.datas.databoy import DataBoy
+    from pfund.datas.resolution import Resolution
     ResolutionRepr: TypeAlias = str
     class BarUpdate(TypedDict, total=True):
         product: ProductName
@@ -25,6 +24,7 @@ if TYPE_CHECKING:
 
 import time
 from collections import defaultdict
+from functools import partial
 
 import narwhals as nw
 
@@ -62,55 +62,99 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             for data in data_per_resolution.values()
         ))
     
-    def add_data(self, product: BaseProduct, data_config: DataConfig, storage_config: StorageConfig) -> list[MarketData]:
-        datas: list[MarketData] = []
-        for resolution in data_config.resolutions:
-            data = self.get_data(product.name, resolution)
-            if data is None:
-                if storage_config.data_layer == DataLayer.RAW:
-                    raise ValueError('Loading data from RAW data layer is not supported, pfund can only deal with cleaned data')
-                data = self.create_data(product=product, resolution=resolution, data_config=data_config, storage_config=storage_config)
-                self._datas[product.name][repr(resolution)] = data
-            datas.append(data)
-        
+    def _add_data(
+        self, 
+        product: BaseProduct, 
+        resolution: Resolution, 
+        data_config: DataConfig | None, 
+        storage_config: StorageConfig | None,
+    ) -> MarketData:
+        data = self.get_data(product.name, resolution)
+        if data is not None:
+            return data
+        data = self.create_data(
+            product=product, 
+            resolution=resolution, 
+            data_config=data_config, 
+            storage_config=storage_config,
+        )
+        self._datas[product.name][repr(resolution)] = data
+        return data
+    
+    def _resolve_data_config(
+        self, 
+        product: BaseProduct,
+        resolutions: list[Resolution | str],
+        data_config: DataConfig
+    ) -> DataConfig:
+        primary_resolution = self._databoy._component.resolution
+        extra_resolutions = [Resolution(r) for r in resolutions]
+        data_config.data_resolutions = [primary_resolution] + extra_resolutions
+        resolved_data_config = (
+            data_config
+            .auto_shift()
+            .auto_resample(
+                self._databoy._component.get_supported_resolutions(product)
+            )
+            .auto_skip_first_bar()
+            .auto_set_stale_bar_timeout()
+        )
+        if resolved_data_config.resample != data_config.resample:
+            self._logger.warning(
+                f'{product.name} {primary_resolution=!r} {extra_resolutions=!r} ' +
+                f'is auto-resampled from {data_config.resample} to {resolved_data_config.resample}'
+            )
+        return resolved_data_config
+    
+    def add_data(
+        self, 
+        product: BaseProduct, 
+        resolutions: list[Resolution | str] | None=None,
+        data_config: DataConfig | None=None, 
+        storage_config: StorageConfig | None=None,
+    ) -> list[MarketData]:
+        data_config = self._resolve_data_config(
+            product=product,
+            resolutions=resolutions or [],
+            data_config=data_config or DataConfig()
+        )
+
+        # TODO: add resolution in data_config.shift?
+
         # mutually bind data_resampler and data_resamplee
         for resamplee_resolution, resampler_resolution in data_config.resample.items():
-            data_resamplee = self.get_data(product.name, resamplee_resolution)
-            data_resampler = self.get_data(product.name, resampler_resolution)
+            data_resamplee = self._add_data(product, resamplee_resolution, data_config, storage_config)
+            data_resampler = self._add_data(product, resampler_resolution, data_config, storage_config)
             data_resamplee.bind_resampler(data_resampler)
-            self._logger.debug(f'{product.name} resolution={resampler_resolution} (resampler) added listener resolution={resamplee_resolution} (resamplee) data')
+            self._logger.debug(f'{product.name} resolution={resampler_resolution} is used to resample {resamplee_resolution} data')
         
+        datas: list[MarketData] = [
+            self._add_data(product, resolution, data_config, storage_config)
+            for resolution in data_config.data_resolutions
+        ]
         return datas
     
-    def create_data(self, product: BaseProduct, resolution: Resolution, data_config: DataConfig, storage_config: StorageConfig) -> MarketData:
+    def create_data(
+        self, 
+        product: BaseProduct, 
+        resolution: Resolution, 
+        data_config: DataConfig | None=None, 
+        storage_config: StorageConfig | None=None,
+    ) -> MarketData:
         if resolution.is_quote():
-            data = QuoteData(
-                data_source=data_config.data_source, 
-                data_origin=data_config.data_origin, 
-                product=product, 
-                resolution=resolution,
-                data_config=data_config,
-                storage_config=storage_config
-            )
+            DataClass = QuoteData
         elif resolution.is_tick():
-            data = TickData(
-                data_source=data_config.data_source, 
-                data_origin=data_config.data_origin, 
-                product=product, 
-                resolution=resolution,
-                data_config=data_config,
-                storage_config=storage_config
-            )
+            DataClass = TickData
+        elif resolution.is_bar():
+            DataClass = BarData
         else:
-            data = BarData(
-                data_source=data_config.data_source, 
-                data_origin=data_config.data_origin, 
-                product=product, 
-                resolution=resolution, 
-                data_config=data_config,
-                storage_config=storage_config,
-            )
-        return data
+            raise ValueError(f'Unsupported resolution: {resolution}')
+        return DataClass(
+            product=product, 
+            resolution=resolution, 
+            data_config=data_config, 
+            storage_config=storage_config,
+        )
     
     # TODO
     def update_quote(self, update: QuoteUpdate):
@@ -226,7 +270,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
 
         for data in self.get_datas():
             # pfund only supports bar data as the main resolution
-            if not data.is_bar():
+            if not data.is_bar() or data.is_resamplee():
                 continue
             feed = self._create_feed(data)
             self._logger.debug(f'Materializing market data {data.product.name} {data.resolution}...')

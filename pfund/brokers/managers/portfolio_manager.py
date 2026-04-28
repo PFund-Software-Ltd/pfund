@@ -25,7 +25,7 @@ class PortfolioManager(Generic[Balance, Position]):
         self._positions = {}
 
     def get_balances(
-        self, tv: TradingVenue, acc: AccountName = "", ccy: Currency = ""
+        self, venue: TradingVenue, acc: AccountName = "", ccy: Currency = ""
     ) -> (
         dict[AccountName, dict[Currency, Balance]]
         | list[Balance]
@@ -35,7 +35,7 @@ class PortfolioManager(Generic[Balance, Position]):
     ):
         try:
             if not acc:
-                balances_per_venue = self._balances[tv]
+                balances_per_venue = self._balances[venue]
                 if not ccy:
                     return balances_per_venue
                 else:
@@ -47,7 +47,7 @@ class PortfolioManager(Generic[Balance, Position]):
                     ]
                     return balances_per_ccy
             else:
-                balances_per_account = self._balances[tv][acc]
+                balances_per_account = self._balances[venue][acc]
                 if not ccy:
                     return balances_per_account
                 else:
@@ -108,7 +108,7 @@ class PortfolioManager(Generic[Balance, Position]):
 
     def update_balances(self, tv: TradingVenue, acc: AccountName, update: BalanceUpdate):
         for ccy, data in update.data.items():
-            balance: Balance = cast(Balance, self.get_balances(tv=tv, acc=acc, ccy=ccy))
+            balance: Balance = cast(Balance, self.get_balances(venue=tv, acc=acc, ccy=ccy))
             balance.on_update(data, ts=update.ts)
             # TODO: detect balance changes and log them, do NOT log the whole snapshot
 

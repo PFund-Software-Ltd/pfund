@@ -23,7 +23,7 @@ class EngineContext:
     def __init__(
         self, 
         env: Environment, 
-        name: str, 
+        name: str,
         data_range: str | Resolution | DataRangeDict | Literal['ytd'],
         settings: TradeEngineSettings | SandboxEngineSettings | BacktestEngineSettings | None=None,
     ):

@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from datetime import datetime
     from pfeed.storages.storage_config import StorageConfig
-    from pfeed.enums import DataSource
     from pfund.datas.data_config import DataConfig
     from pfund.datas.resolution import Resolution
     from pfund.datas.timeframe import Timeframe
@@ -183,24 +182,20 @@ class Bar:
 class BarData(MarketData):
     def __init__(
         self,
-        data_source: DataSource,
-        data_origin: str,
-        product: BaseProduct, 
-        resolution: Resolution, 
-        data_config: DataConfig,
-        storage_config: StorageConfig,
+        product: BaseProduct,
+        resolution: Resolution,
+        data_config: DataConfig | None=None,
+        storage_config: StorageConfig | None=None,
     ):
         super().__init__(
-            data_source=data_source,
-            data_origin=data_origin,
-            product=product,
-            resolution=resolution,
-            data_config=data_config,
+            product=product, 
+            resolution=resolution, 
+            data_config=data_config, 
             storage_config=storage_config,
         )
-        self._bar = Bar(resolution, shift=data_config.shift.get(resolution, 0))
-        self._stale_bar_timeout = data_config.stale_bar_timeout[resolution]
-        self._skip_first_bar = data_config.skip_first_bar[resolution]
+        self._bar = Bar(resolution, shift=self.config.shift.get(resolution, 0))
+        self._stale_bar_timeout = self.config.stale_bar_timeout[resolution]
+        self._skip_first_bar = self.config.skip_first_bar[resolution]
 
     def __getattr__(self, attr):
         if '_bar' in self.__dict__:

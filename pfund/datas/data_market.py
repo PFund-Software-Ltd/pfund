@@ -6,9 +6,9 @@ if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
     from pfund.datas.resolution import Resolution
     from pfund.datas.timeframe import Timeframe
-    from pfund.enums import TradingVenue, Broker, CryptoExchange
+    from pfund.enums import Broker, CryptoExchange
     
-from pfeed.enums import DataCategory, DataSource
+from pfeed.enums import DataCategory
 from pfund.datas.data_time_based import TimeBasedData
 
 
@@ -17,26 +17,14 @@ class MarketData(TimeBasedData):
     
     def __init__(
         self,
-        data_source: DataSource,
-        data_origin: str,
         product: BaseProduct,
         resolution: Resolution,
-        data_config: DataConfig,
-        storage_config: StorageConfig,
+        data_config: DataConfig | None=None,
+        storage_config: StorageConfig | None=None,
     ):
-        '''
-        Args:
-            ts: is the timestamp of the last updated data, e.g. timestamp of a candlestick
-            msg_ts: is the timestamp of the data sent by the trading venue
-        '''
-        super().__init__(
-            data_source=data_source,
-            data_origin=data_origin,
-            data_config=data_config,
-            storage_config=storage_config,
-        )
-        self._ts = 0.0
-        self._msg_ts = 0.0
+        super().__init__(data_config=data_config, storage_config=storage_config)
+        if self.config.data_source is None:
+            self.config.data_source = product.source
         self.product: BaseProduct = product
         self.resolution: Resolution = resolution
         self.period: int = resolution.period
@@ -126,14 +114,11 @@ class MarketData(TimeBasedData):
     def to_dict(self) -> dict[str, Any]:
         return {
             **super().to_dict(),
-            'product_name': self.product.name,
-            'product_basis': str(self.product.basis),
-            'symbol': self.product.symbol,
+            'product': self.product.to_dict(),
             'resolution': repr(self.resolution),
-            'product_specs': self.product.specs,
         }
     
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         if not isinstance(other, MarketData):
             return NotImplemented
         return (self.product, self.resolution) == (other.product, other.resolution)

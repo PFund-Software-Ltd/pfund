@@ -27,9 +27,6 @@ class DataBoy:
         self._data_stores: dict[DataCategory, BaseDataStore] = {}
         self._data_zmq: ZeroMQ | None = None
         self._signals_zmq: ZeroMQ | None = None
-        # TODO: save data signatures properly, data_signatures should be a set
-        # TODO: add data_config (dict form) to data_signatures
-        self._data_signatures = []
         # REVIEW: currently all components use ZeroMQ and a thread to run _collect()
         # including even the local ones. if theres any performance issue, 
         # consider disabling using ZeroMQ for local components
