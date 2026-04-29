@@ -131,8 +131,11 @@ class DataConfig(BaseModel):
         data_resolutions = cast(
             list[Resolution], 
             list(set(
-                # NOTE: automatically include resampler resolutions
-                resolutions + list(self.resample.values())
+                # NOTE: automatically include resamplee, resampler, shift resolutions
+                resolutions + 
+                list(self.resample.keys()) + 
+                list(self.resample.values()) +
+                list(self.shift.keys())
             ))
         )
         # validate the data resolutions
@@ -150,7 +153,7 @@ class DataConfig(BaseModel):
                 tick_resolution_exists = True
             # REVIEW: support week, month, year?
             elif resolution.is_week() or resolution.is_month() or resolution.is_year():
-                raise ValueError(f'{resolution=} is not supported')
+                raise ValueError(f'{resolution=} is not supported, resolution is at least daily')
         self._data_resolutions = data_resolutions
     
     def resolve_resolution(

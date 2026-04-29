@@ -119,8 +119,6 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             data_config=data_config or DataConfig()
         )
 
-        # TODO: add resolution in data_config.shift?
-
         # mutually bind data_resampler and data_resamplee
         for resamplee_resolution, resampler_resolution in data_config.resample.items():
             data_resamplee = self._add_data(product, resamplee_resolution, data_config, storage_config)
