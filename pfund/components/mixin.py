@@ -271,8 +271,8 @@ class ComponentMixin:
                 raise ValueError(f'{self.name} config: {lookback_period=} is greater than {warmup_period=}, please set lookback_period <= warmup_period')
     
     def to_dict(self) -> dict[str, Any]:
-        metadata = {
-            'class': self.__class__.__name__,
+        return {
+            'class_name': self.__class__.__name__,
             'signature': (self.__pfund_args__, self.__pfund_kwargs__),
             'env': self.env.value,
             'run_mode': self.run_mode.value,
@@ -281,16 +281,15 @@ class ComponentMixin:
             'resolution': repr(self.resolution),
             'df_form': self._df_form,
             'component_type': self.component_type.value,
+            'signal_cols': self._signal_cols,
             'config': self.config,
             'params': self.params,
             'settings': self.settings.model_dump(),
-            'products': [product.to_dict() for product in self.products.values()],
             'datas': [data.to_dict() for data in self.get_datas()],
             'models': [model.to_dict() for model in self.models.values()],
             'features': [feature.to_dict() for feature in self.features.values()],
             'indicators': [indicator.to_dict() for indicator in self.indicators.values()],
         }
-        return metadata
     
     @property
     def components(self) -> list[Component | ActorProxy[Component]]:

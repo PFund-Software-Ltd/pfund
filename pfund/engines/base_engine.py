@@ -43,10 +43,21 @@ ENV_COLORS = {
 
 
 class BaseEngine:
+    _is_initialized: bool = False
+
+    def __new__(cls, *args: Any, **kwargs: Any) -> BaseEngine:
+        if BaseEngine._is_initialized:
+            raise RuntimeError(
+                "an engine has already been initiated in this process; " +
+                "only one engine may be created per Python process"
+            )
+        BaseEngine._is_initialized = True
+        return super().__new__(cls)
+
     def __init__(
-        self, 
+        self,
         *,
-        env: Environment, 
+        env: Environment,
         name: str,
         data_range: str | Resolution | DataRangeDict | Literal['ytd'],
         settings: TradeEngineSettings | BacktestEngineSettings | SandboxEngineSettings | None=None,
@@ -59,16 +70,17 @@ class BaseEngine:
                     e.g. {'start_date': '2024-01-01', 'end_date': '2024-12-31'}
         '''
         import pfeed as pe
-        from pfund.config import setup_logging
+        from pfund.config import setup_logging, get_config
         from pfund.engines.engine_context import EngineContext
-        
+
         env = Environment[env.upper()]
-        
+
         # FIXME: do NOT allow LIVE env for now
         if env == Environment.LIVE:
             raise ValueError(f"{env=} is not allowed for now")
-        
-        setup_logging(env=env, engine_name=name)
+
+        get_config(engine_name=name)
+        setup_logging(env=env)
         self._logger: logging.Logger = logging.getLogger('pfund')
         self._context: EngineContext = EngineContext(env=env, name=name, data_range=data_range, settings=settings)
         self._is_running = False
