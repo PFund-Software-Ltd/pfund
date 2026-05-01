@@ -8,10 +8,10 @@ if TYPE_CHECKING:
     from pfund.enums import CryptoExchange
     from pfund.datas.data_time_based import TimeBasedData
     from pfund.datas.timeframe import Timeframe
-    from pfund.typing import tEnvironment, ProductName, AccountName, FullDataChannel
+    from pfund.typing import ProductName, AccountName, FullDataChannel
     from pfund.entities.products.product_crypto import CryptoProduct
     from pfund.entities.accounts.account_crypto import CryptoAccount
-    from pfund.engines.trade_engine_settings import TradeEngineSettings
+    from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 
 import os
 import datetime
@@ -35,13 +35,12 @@ class BaseExchange(ABC):
     
     MARKET_CONFIGS_FILENAME: ClassVar[str] = 'market_configs.yml'
             
-    def __init__(self, env: Environment | tEnvironment):
-        from pfund.engines.trade_engine import TradeEngine
+    def __init__(self, env: Environment | str):
         self._env: Environment = Environment[env.upper()]
         self._logger: logging.Logger = logging.getLogger(f'pfund.{self.name.lower()}')
         self._products: dict[ProductName, CryptoProduct] = {}
         self._accounts: dict[AccountName, CryptoAccount] = {}
-        self._settings: TradeEngineSettings | None = getattr(TradeEngine, "_settings", None)
+        self._settings: TradeEngineSettings | None = None
 
         # APIs
         exchange_path = f'pfund.brokers.crypto.exchanges.{self.name.lower()}'
@@ -49,9 +48,6 @@ class BaseExchange(ABC):
         self._rest_api: BaseRESTfulAPI = RESTfulAPI(self._env)
         WebSocketAPI: type[BaseWebSocketAPI] = getattr(importlib.import_module(f'{exchange_path}.ws_api'), 'WebSocketAPI')
         self._ws_api: BaseWebSocketAPI = WebSocketAPI(self._env)
-
-        if self._settings:
-            self._check_if_refetch_market_configs()
     
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -91,6 +87,30 @@ class BaseExchange(ABC):
         else:
             print(f'{filename} not found')
             return None
+    
+    def set_engine_settings(self, settings: TradeEngineSettings):
+        self._settings = settings
+    
+    def start(self):
+        # FIXME: move the get_balances/positions/orders logic from broker to here
+        # for acc in self._accounts:
+        #     balances = self.get_balances(acc, is_api_call=True)
+        #     positions = self.get_positions(acc, is_api_call=True)
+        #     orders = self.get_orders(acc, is_api_call=True)
+        if self._settings:
+            self._check_if_refetch_market_configs()
+        for product in self._products.values():
+            market_configs = self.load_market_configs()
+            if product.symbol not in market_configs[product.category]:
+                raise ValueError(
+                    f"The symbol '{product.symbol}' is not found in the market configurations. " +
+                    "It might be delisted, or your market configurations could be outdated. " +
+                    "Please set 'refetch_market_configs=True' in TradeEngine's settings to refetch the latest market configurations."
+                )
+    
+    # TODO
+    def stop(self):
+        pass
     
     def load_market_configs(self):
         from pfund_kit.utils.yaml import load
@@ -171,13 +191,6 @@ class BaseExchange(ABC):
 
     def add_product(self, product: CryptoProduct) -> CryptoProduct:
         if product.name not in self._products:
-            market_configs = self.load_market_configs()
-            if product.symbol not in market_configs[product.category]:
-                raise ValueError(
-                    f"The symbol '{product.symbol}' is not found in the market configurations. "
-                    f"It might be delisted, or your market configurations could be outdated. "
-                    f"Please set 'refetch_market_configs=True' in TradeEngine's settings to refetch the latest market configurations."
-                )
             self._products[product.name] = product
             self._ws_api.add_product(product)
             self.adapter.add_mapping(str(product.type), product.name, product.symbol)

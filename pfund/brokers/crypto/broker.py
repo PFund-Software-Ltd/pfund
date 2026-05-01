@@ -30,8 +30,8 @@ class CryptoBroker(BaseBroker):
 
     _portfolio_manager: PortfolioManager[CryptoBalance, CryptoPosition]  # pyright: ignore[reportIncompatibleVariableOverride]
 
-    def __init__(self, env: Environment | str=Environment.SANDBOX, settings: TradeEngineSettings | None=None):
-        super().__init__(env=env, settings=settings)
+    def __init__(self, env: Environment | str=Environment.SANDBOX):
+        super().__init__(env=env)
         self._exchanges: dict[CryptoExchange, BaseExchange] = {}
 
     @property
@@ -39,17 +39,20 @@ class CryptoBroker(BaseBroker):
         return self._exchanges
     
     def start(self):
-        for exch in self._accounts:
-            for acc in self._accounts[exch]:
-                balances = self.get_balances(exch, acc=acc, is_api_call=True)
-                self._portfolio_manager.update_balances(exch, acc, balances)
+        # FIXME: to be moved to exchange.start()
+        # for exch in self._accounts:
+        #     for acc in self._accounts[exch]:
+        #         balances = self.get_balances(exch, acc=acc, is_api_call=True)
+        #         self._portfolio_manager.update_balances(exch, acc, balances)
                 
-                positions = self.get_positions(exch, acc=acc, is_api_call=True)
-                self._portfolio_manager.update_positions(exch, acc, positions)
+        #         positions = self.get_positions(exch, acc=acc, is_api_call=True)
+        #         self._portfolio_manager.update_positions(exch, acc, positions)
 
-                orders = self.get_orders(exch, acc, is_api_call=True)
-                self._order_manager.update_orders(exch, acc, orders)
+        #         orders = self.get_orders(exch, acc, is_api_call=True)
+        #         self._order_manager.update_orders(exch, acc, orders)
         super().start()
+        for exchange in self.exchanges.values():
+            exchange.start()
 
     def stop(self):
         super().stop()
@@ -119,6 +122,8 @@ class CryptoBroker(BaseBroker):
         if exch not in self.exchanges:
             Exchange: type[BaseExchange] = exch.exchange_class
             exchange: BaseExchange = Exchange(env=self._env)
+            if self._settings:
+                exchange.set_engine_settings(self._settings)
             self.exchanges[exch] = exchange
             self._logger.debug(f'added {exch}')
         else:

@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from pfund.brokers.ibkr.broker import InteractiveBrokers
     from pfund.brokers.broker_simulated import SimulatedBroker
     from pfund.datas.stores.market_data_store import BarUpdate
+    from pfund.utils.dataset_splitter import DatasetSplitter
     class SimulatedCryptoBroker(SimulatedBroker, CryptoBroker): ...
     class SimulatedInteractiveBrokers(SimulatedBroker, InteractiveBrokers): ...
     class BacktestEngineContext(EngineContext):
@@ -29,13 +30,12 @@ import importlib
 from dataclasses import dataclass
 
 import narwhals as nw
-from pfeed.enums import DataTool, DataCategory
+from pfeed.enums import DataTool
 from pfund_kit.utils.progress_bar import track, ProgressBar
 from pfund_kit.style import cprint, RichColor, TextStyle
 import pfund as pf
-from pfund.enums import BacktestMode, Environment
+from pfund.enums import BacktestMode, Environment, RunStage
 from pfund.engines.base_engine import BaseEngine
-from pfund.utils.dataset_splitter import DatasetSplitter
 
 
 @dataclass(frozen=True)
@@ -58,12 +58,13 @@ class BacktestEngine(BaseEngine):
 
     def __init__(
         self,
+        *,
         name: str='engine',
         data_range: str | DataRangeDict | Literal['ytd']='1mo',
+        settings: BacktestEngineSettings | None=None,
         mode: BacktestMode | Literal['vectorized', 'hybrid', 'event_driven']=BacktestMode.VECTORIZED,
         dataset_splits: int | DatasetSplitsDict | TimeSeriesSplit=721,
         cv_test_ratio: float=0.1,
-        settings: BacktestEngineSettings | None=None,
         # TODO: add profiling option for event-driven backtesting?
         # profiling: bool=False,
     ):
@@ -168,18 +169,28 @@ class BacktestEngine(BaseEngine):
             storage_config=storage_config,
         )
     
-    def run(self, num_chunks: int=1, num_cpus: int | None=None) -> dict[str, Any]:
+    def run(
+        self, 
+        stage: Literal[RunStage.EXPERIMENT, RunStage.REFINEMENT] | str=RunStage.EXPERIMENT,
+        num_chunks: int=1,
+        num_cpus: int | None=None,
+    ) -> dict[str, Any]:
         '''
-        num_chunks:
-            Number of chunks to split the dataset into.
-            if = 1, process the whole dataset all at once.
-            if > 1, use Ray for parallel processing.
-        num_cpus:
-            Maximum number of CPUs (Ray workers) to use per batch, i.e. how many chunks run in parallel at once.
-            if None, defaults to os.cpu_count().
-            This will be ignored if Ray is not used (i.e. num_chunks = 1).
+        Args:
+            stage:
+                defines which stage of the run this is, either EXPERIMENT or REFINEMENT
+            num_chunks:
+                Number of chunks to split the dataset into.
+                if = 1, process the whole dataset all at once.
+                if > 1, use Ray for parallel processing.
+            num_cpus:
+                Maximum number of CPUs (Ray workers) to use per batch, i.e. how many chunks run in parallel at once.
+                if None, defaults to os.cpu_count().
+                This will be ignored if Ray is not used (i.e. num_chunks = 1).
         '''
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
+
+        self._context.set_run_stage(stage)
 
         if num_chunks < 1:
             raise ValueError('num_chunks must be greater than 0')

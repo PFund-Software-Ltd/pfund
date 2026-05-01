@@ -6,7 +6,6 @@ if TYPE_CHECKING:
 
 import os
 
-import torch
 import pandas as pd
 import polars as pl
 
@@ -19,6 +18,7 @@ trim_path = TrimmedPathFilter.trim_path
 
 class PytorchModel(BaseModel):
     def load(self) -> dict:
+        import torch
         file_path = self._get_file_path(extension='.pt')
         if os.path.exists(file_path):
             obj = torch.load(file_path)
@@ -56,6 +56,8 @@ class PytorchModel(BaseModel):
         *args, 
         **kwargs
     ) -> Tensor:
+        import torch
+
         if isinstance(X, (pd.DataFrame, pl.DataFrame)):
             X = torch.tensor( X.to_numpy(), dtype=torch.float32 )
         elif isinstance(X, pl.LazyFrame):

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
     from pfund.engines.engine_context import DataRangeDict
@@ -22,3 +22,8 @@ class SandboxEngine(TradeEngine):
             data_range=data_range, 
             settings=settings,
         )
+    
+    @property
+    def settings(self) -> SandboxEngineSettings:
+        return cast("SandboxEngineSettings", self._context.settings)
+    

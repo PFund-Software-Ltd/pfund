@@ -113,7 +113,7 @@ class ComponentMixin:
         return self.databoy._data_stores
     
     @property
-    def storage_config(self) -> StorageConfig | None:
+    def storage_config(self) -> StorageConfig:
         return self.store._storage_config
     
     # TODO: also check on_bar, on_tick, on_quote etc.
@@ -153,7 +153,8 @@ class ComponentMixin:
         self._set_name(name)
         self._set_resolution(resolution)
         self.set_logger(self.logger)
-        self.store._set_storage_config(storage_config)
+        if storage_config is not None:
+            self.store.set_storage_config(storage_config)
         self._is_top_component = is_top_component
         
     def _setup_messaging(self):
@@ -431,7 +432,8 @@ class ComponentMixin:
             datas.extend(data_store.get_datas())
         return datas
     
-    def get_supported_resolutions(self, product: BaseProduct) -> dict[Timeframe, list[int]]:
+    @staticmethod
+    def get_supported_resolutions(product: BaseProduct) -> dict[Timeframe, list[int]]:
         import importlib
 
         supported_resolutions: dict[Timeframe, list[int]]
@@ -744,7 +746,7 @@ class ComponentMixin:
         self._signal_cols = signal_cols
     
     def set_pivot_cols(self, pivot_cols: list[str]):
-        self.store._set_pivot_cols(pivot_cols)
+        self.store.set_pivot_cols(pivot_cols)
     
     def is_ready(self, data: BaseData) -> bool:
         warmup_period = self.config['warmup_period']

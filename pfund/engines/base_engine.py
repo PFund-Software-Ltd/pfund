@@ -1,6 +1,6 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, Any
+from typing import TYPE_CHECKING, Literal, Any, Self
 if TYPE_CHECKING:
     from pfeed.sources.pfund.engine_feed import EngineFeed
     from pfeed.storages.storage_config import StorageConfig
@@ -45,7 +45,7 @@ ENV_COLORS = {
 class BaseEngine:
     _is_initialized: bool = False
 
-    def __new__(cls, *args: Any, **kwargs: Any) -> BaseEngine:
+    def __new__(cls, *args: Any, **kwargs: Any) -> Self:
         if BaseEngine._is_initialized:
             raise RuntimeError(
                 "an engine has already been initiated in this process; " +
@@ -177,6 +177,7 @@ class BaseEngine:
         bkr: Broker = TradingVenue[venue.upper()].broker
         if bkr not in self.brokers:
             broker = create_broker(env=self.env, bkr=bkr, settings=self.settings)
+            broker.set_engine_settings(self.settings)
             self.brokers[bkr] = broker
             self._logger.debug(f'added broker {bkr}')
         return self.brokers[bkr]

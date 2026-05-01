@@ -266,9 +266,15 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         settings = engine_context.settings
         start_date, end_date = engine_context.data_start, engine_context.data_end
 
-        for data in self.get_datas():
+        component = self._databoy._component
+        primary_resolution = component.resolution
+        for product in component.products.values():
+            # REVIEW: only materialize data with primary resolution?
+            data = self.get_data(product.name, primary_resolution)
+            if data is None:
+                raise Exception(f'{product.name} {primary_resolution} data has not been added')
             # pfund only supports bar data as the main resolution
-            if not data.is_bar() or data.is_resamplee():
+            if not data.is_bar():
                 continue
             feed = self._create_feed(data)
             self._logger.debug(f'Materializing market data {data.product.name} {data.resolution}...')

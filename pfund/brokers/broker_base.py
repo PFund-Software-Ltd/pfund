@@ -23,10 +23,10 @@ from pfund.enums import Environment, Broker, TradingVenue, CryptoExchange
 class BaseBroker(ABC):
     name: ClassVar[Broker]
 
-    def __init__(self, env: Environment | str, settings: TradeEngineSettings | None=None):
+    def __init__(self, env: Environment | str):
         self._env: Environment = Environment[env.upper()]
         self._logger: logging.Logger = logging.getLogger('pfund')
-        self._settings: TradeEngineSettings = settings or TradeEngineSettings()
+        self._settings: TradeEngineSettings | None = None
 
         self._products: defaultdict[CryptoExchange, dict[ProductName, BaseProduct]] = defaultdict(dict)
         self._accounts: defaultdict[TradingVenue, dict[AccountName, BaseAccount]] = defaultdict(dict)
@@ -80,6 +80,9 @@ class BaseBroker(ABC):
     @property
     def positions(self) -> dict[TradingVenue, dict[AccountName, dict[ProductName, BasePosition]]]:
         return self._portfolio_manager._positions
+    
+    def set_engine_settings(self, settings: TradeEngineSettings):
+        self._settings = settings
 
     def opened_orders(self):
         return self._order_manager.opened_orders

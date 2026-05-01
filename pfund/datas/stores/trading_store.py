@@ -4,12 +4,13 @@ from typing import TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
     from narwhals._native import NativeDataFrame
     from pfeed.sources.pfund.component_feed import ComponentFeed
-    from pfeed.storages.storage_config import StorageConfig
     from pfund.typing import ComponentName, Component, ColumnName
 
 import narwhals as nw
 
+from pfeed.storages.storage_config import StorageConfig
 from pfeed.enums import DataLayer, IOFormat
+from pfund.enums import RunStage
 
 
 class TradingStore:
@@ -20,8 +21,18 @@ class TradingStore:
         import pfeed as pe
         self._component: Component = component
         self._df: nw.DataFrame[Any] | None = None  # component's signals_df
-        self._feed = pe.PFund().component_feed.with_component(self._component)
-        self._storage_config: StorageConfig | None = None
+        self._feed = pe.PFund().component_feed(self._component)
+        context = component.context
+        self._storage_config = StorageConfig(
+            data_path=context.pfund_config.data_path,
+            # REVIEW: data_layer, data_domain are NOT in use.
+            data_layer={
+                RunStage.EXPERIMENT: DataLayer.RAW,
+                RunStage.REFINEMENT: DataLayer.CLEANED,
+                RunStage.DEPLOYMENT: DataLayer.CURATED,
+            }[context.run_stage],
+            data_domain='PFUND_DATA',
+        )
     
     @property
     def KEY_COLS(self) -> list[str]:
@@ -32,17 +43,13 @@ class TradingStore:
         return self._component.logger
     
     @property
-    def name(self) -> ComponentName:
-        return self._component.name
-    
-    @property
     def component_feed(self) -> ComponentFeed:
         return self._feed
         
-    def _set_pivot_cols(self, pivot_cols: list[str]):
+    def set_pivot_cols(self, pivot_cols: list[str]):
         self.PIVOT_COLS = pivot_cols
     
-    def _set_storage_config(self, storage_config: StorageConfig):
+    def set_storage_config(self, storage_config: StorageConfig):
         self._storage_config = storage_config
     
     def get_df(

@@ -27,7 +27,7 @@ from threading import Thread
 
 from pfeed.enums import DataCategory
 from pfund.engines.base_engine import BaseEngine
-from pfund.enums import Environment, PFundDataChannel
+from pfund.enums import Environment, PFundDataChannel, RunStage
 
 
 class TradeEngine(BaseEngine):

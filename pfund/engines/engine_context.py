@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from pfund.config import PFundConfig
 
 from pfeed.enums import DataTool
-from pfund.enums import Environment, RunMode
+from pfund.enums import Environment, RunMode, RunStage
 from pfund.datas.resolution import Resolution
 from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 from pfund.engines.settings.sandbox_engine_settings import SandboxEngineSettings
@@ -33,6 +33,7 @@ class EngineContext:
         self._env_var_prefix = f'PFUND_{env.upper()}_'
         self._env_vars = self._load_env_vars()
         self.run_mode = self._detect_run_mode()
+        self.run_stage = RunStage.EXPERIMENT if self.env == Environment.BACKTEST else RunStage.DEPLOYMENT
         self.data_start, self.data_end = self._parse_data_range(data_range)
         self.settings = settings or self._load_settings()
         if settings and settings.persist:
@@ -53,6 +54,14 @@ class EngineContext:
             return RunMode.WASM
         else:
             return RunMode.LOCAL
+    
+    def set_run_stage(self, stage: RunStage | str) -> None:
+        stage = RunStage[stage.upper()]
+        if self.env == Environment.BACKTEST:
+            assert stage in [RunStage.EXPERIMENT, RunStage.REFINEMENT], 'Run stage can only be set to EXPERIMENT or REFINEMENT in backtesting'
+        else:
+            assert stage == RunStage.DEPLOYMENT, 'Run stage can only be set to DEPLOYMENT in trading'
+        self.run_stage = stage
     
     def _load_env_vars(self) -> dict[str, str]:
         from dotenv import find_dotenv, dotenv_values
