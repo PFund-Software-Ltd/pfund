@@ -27,7 +27,7 @@ from threading import Thread
 
 from pfeed.enums import DataCategory
 from pfund.engines.base_engine import BaseEngine
-from pfund.enums import Environment, PFundDataChannel, RunStage
+from pfund.enums import Environment, PFundDataChannel
 
 
 class TradeEngine(BaseEngine):
@@ -240,14 +240,21 @@ class TradeEngine(BaseEngine):
         self._proxy.terminate()
         self._worker.terminate()
     
-    def run(self):
+    def run(self, project: str='default'):
+        '''
+        Args:
+            project: project name under the stage. Defaults to "default".
+                it will be used as a folder name that groups all runs of this stage together.
+                Path layout: {stage}s/{project}/your_runs
+                e.g. experiments/momentum_v2/
+        '''
         try:
             if self.settings.auto_stream:
                 self._setup_data_engine()
             if self._is_using_zmq():
                 self._zmq_thread = Thread(target=self._run_zmq_loop, daemon=True)
                 self._zmq_thread.start()
-            super().run()
+            super().run(project=project)
             if self._data_engine:
                 self._data_engine.run()  # blocking call
             else:

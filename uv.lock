@@ -3339,23 +3339,35 @@ version = "0.0.2"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
-    { name = "joblib" },
     { name = "numba", marker = "sys_platform != 'emscripten'" },
-    { name = "pfeed", extra = ["duckdb"] },
-    { name = "pfolio" },
     { name = "pfund-kit" },
-    { name = "pfund-plot", extra = ["marimo"] },
     { name = "websockets", marker = "sys_platform != 'emscripten'" },
 ]
 
 [package.optional-dependencies]
+core = [
+    { name = "mtflow", marker = "sys_platform != 'emscripten'" },
+    { name = "pfeed", extra = ["duckdb"] },
+    { name = "pfolio" },
+    { name = "pfund-plot", extra = ["marimo"] },
+]
 ibkr = [
     { name = "pfund-ibapi", marker = "sys_platform != 'emscripten'" },
 ]
 mtflow = [
     { name = "mtflow", marker = "sys_platform != 'emscripten'" },
 ]
+pfeed = [
+    { name = "pfeed", extra = ["duckdb"] },
+]
+pfolio = [
+    { name = "pfolio" },
+]
+pfund-plot = [
+    { name = "pfund-plot", extra = ["marimo"] },
+]
 sklean = [
+    { name = "joblib" },
     { name = "scikit-learn" },
 ]
 ta-lib = [
@@ -3374,20 +3386,24 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "joblib", specifier = ">=1.5.3" },
+    { name = "joblib", marker = "extra == 'sklean'", specifier = ">=1.5.3" },
+    { name = "mtflow", marker = "sys_platform != 'emscripten' and extra == 'core'", editable = "../mtflow" },
     { name = "mtflow", marker = "sys_platform != 'emscripten' and extra == 'mtflow'", editable = "../mtflow" },
     { name = "numba", marker = "sys_platform != 'emscripten'", specifier = ">=0.65.0" },
-    { name = "pfeed", extras = ["duckdb"], editable = "../pfeed" },
-    { name = "pfolio", editable = "../pfolio" },
+    { name = "pfeed", extras = ["duckdb"], marker = "extra == 'core'", editable = "../pfeed" },
+    { name = "pfeed", extras = ["duckdb"], marker = "extra == 'pfeed'", editable = "../pfeed" },
+    { name = "pfolio", marker = "extra == 'core'", editable = "../pfolio" },
+    { name = "pfolio", marker = "extra == 'pfolio'", editable = "../pfolio" },
     { name = "pfund-ibapi", marker = "sys_platform != 'emscripten' and extra == 'ibkr'", specifier = ">=10.42.1" },
     { name = "pfund-kit", editable = "../pfund-kit" },
-    { name = "pfund-plot", extras = ["marimo"], editable = "../pfund-plot" },
+    { name = "pfund-plot", extras = ["marimo"], marker = "extra == 'core'", editable = "../pfund-plot" },
+    { name = "pfund-plot", extras = ["marimo"], marker = "extra == 'pfund-plot'", editable = "../pfund-plot" },
     { name = "scikit-learn", marker = "extra == 'sklean'", specifier = ">=1.8.0" },
     { name = "ta-lib", marker = "sys_platform != 'emscripten' and extra == 'ta-lib'", specifier = ">=0.6.4" },
     { name = "torch", marker = "sys_platform != 'emscripten' and extra == 'torch'", specifier = ">=2.11.0" },
     { name = "websockets", marker = "sys_platform != 'emscripten'", specifier = ">=16.0.0" },
 ]
-provides-extras = ["mtflow", "ibkr", "sklean", "torch", "ta-lib"]
+provides-extras = ["core", "pfeed", "pfolio", "pfund-plot", "mtflow", "ibkr", "sklean", "torch", "ta-lib"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -3451,7 +3467,6 @@ dependencies = [
     { name = "hvplot" },
     { name = "ipywidgets-bokeh" },
     { name = "panel" },
-    { name = "pfeed" },
     { name = "pywebview", marker = "sys_platform != 'emscripten'" },
 ]
 
@@ -3473,12 +3488,12 @@ requires-dist = [
     { name = "notebook", marker = "extra == 'jupyter'", specifier = ">=7.5.5" },
     { name = "panel", specifier = ">=1.8.10" },
     { name = "papermill", marker = "extra == 'jupyter'", specifier = ">=2.7.0" },
-    { name = "pfeed", editable = "../pfeed" },
+    { name = "pfeed", marker = "extra == 'pfeed'", editable = "../pfeed" },
     { name = "plotly", marker = "extra == 'plotly'", specifier = ">=6.7.0" },
     { name = "pywebview", marker = "sys_platform != 'emscripten'", specifier = ">=6.1" },
     { name = "voila", marker = "extra == 'jupyter'", specifier = ">=0.5.12" },
 ]
-provides-extras = ["marimo", "jupyter", "matplotlib", "plotly", "altair"]
+provides-extras = ["pfeed", "marimo", "jupyter", "matplotlib", "plotly", "altair"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "afterpython", specifier = ">=0.2.1" }]

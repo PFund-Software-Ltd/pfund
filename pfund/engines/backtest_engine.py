@@ -172,6 +172,7 @@ class BacktestEngine(BaseEngine):
     def run(
         self, 
         stage: Literal[RunStage.EXPERIMENT, RunStage.REFINEMENT] | str=RunStage.EXPERIMENT,
+        project: str='default',
         num_chunks: int=1,
         num_cpus: int | None=None,
     ) -> dict[str, Any]:
@@ -179,6 +180,10 @@ class BacktestEngine(BaseEngine):
         Args:
             stage:
                 defines which stage of the run this is, either EXPERIMENT or REFINEMENT
+            project: project name under the stage. Defaults to "default".
+                it will be used as a folder name that groups all runs of this stage together.
+                Path layout: {stage}s/{project}/your_runs
+                e.g. experiments/momentum_v2/
             num_chunks:
                 Number of chunks to split the dataset into.
                 if = 1, process the whole dataset all at once.
@@ -199,7 +204,7 @@ class BacktestEngine(BaseEngine):
             if num_cpus < 1:
                 raise ValueError('num_cpus must be greater than 0')
 
-        super().run()
+        super().run(project=project)
 
         backtest_results: dict[BacktesteeName, list[pf.BacktestDataFrame]] = {}
 

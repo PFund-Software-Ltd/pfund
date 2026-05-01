@@ -9134,18 +9134,22 @@ packages:
 - pypi: ./
   name: pfund
   version: 0.0.2
-  sha256: 8acd0c479e5da6a896a217f678764734367a19f1c75b3ee1bb766c58a27e9320
+  sha256: a127aa09b10b4ddd24979bed6035e207f4588e7f1cf8e96e8f8b5453074d5959
   requires_dist:
-  - pfeed[duckdb] @ file:///Users/stephenyau/pfund.ai/pfeed
-  - pfolio @ file:///Users/stephenyau/pfund.ai/pfolio
-  - pfund-plot[marimo] @ file:///Users/stephenyau/pfund.ai/pfund-plot
   - pfund-kit @ file:///Users/stephenyau/pfund.ai/pfund-kit
   - httpx>=0.28.1
   - websockets>=16.0.0 ; sys_platform != 'emscripten'
   - numba>=0.65.0 ; sys_platform != 'emscripten'
-  - joblib>=1.5.3
+  - pfeed[duckdb] @ file:///Users/stephenyau/pfund.ai/pfeed ; extra == 'core'
+  - pfolio @ file:///Users/stephenyau/pfund.ai/pfolio ; extra == 'core'
+  - pfund-plot[marimo] @ file:///Users/stephenyau/pfund.ai/pfund-plot ; extra == 'core'
+  - mtflow @ file:///Users/stephenyau/pfund.ai/mtflow ; sys_platform != 'emscripten' and extra == 'core'
+  - pfeed[duckdb] @ file:///Users/stephenyau/pfund.ai/pfeed ; extra == 'pfeed'
+  - pfolio @ file:///Users/stephenyau/pfund.ai/pfolio ; extra == 'pfolio'
+  - pfund-plot[marimo] @ file:///Users/stephenyau/pfund.ai/pfund-plot ; extra == 'pfund-plot'
   - mtflow @ file:///Users/stephenyau/pfund.ai/mtflow ; sys_platform != 'emscripten' and extra == 'mtflow'
   - pfund-ibapi>=10.42.1 ; sys_platform != 'emscripten' and extra == 'ibkr'
+  - joblib>=1.5.3 ; extra == 'sklean'
   - scikit-learn>=1.8.0 ; extra == 'sklean'
   - torch>=2.11.0 ; sys_platform != 'emscripten' and extra == 'torch'
   - ta-lib>=0.6.4 ; sys_platform != 'emscripten' and extra == 'ta-lib'
@@ -9176,15 +9180,15 @@ packages:
 - pypi: ../pfund-plot
   name: pfund-plot
   version: 0.0.1.dev3
-  sha256: 4ae0883f34c9686246a983c6242d503c55f9e319e53107ab7fc5b4a405d7a7c4
+  sha256: ed371af9eee6d648b54a965d5aae72974639206d7903970add0d465039d6be1c
   requires_dist:
-  - pfeed @ file:///Users/stephenyau/pfund.ai/pfeed
   - panel>=1.8.10
   - hvplot>=0.12.2
   - anywidget>=0.10.0
   - ipywidgets-bokeh>=1.7.0
   - pywebview>=6.1 ; sys_platform != 'emscripten'
   - datashader>=0.19.0 ; sys_platform != 'emscripten'
+  - pfeed @ file:///Users/stephenyau/pfund.ai/pfeed ; extra == 'pfeed'
   - marimo[recommended,lsp]>=0.23.4 ; extra == 'marimo'
   - jupyter-bokeh>=4.0.5 ; extra == 'jupyter'
   - notebook>=7.5.5 ; extra == 'jupyter'

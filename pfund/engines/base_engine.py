@@ -218,7 +218,15 @@ class BaseEngine:
             else:
                 raise NotImplementedError(f"Unhandled data type: {type(data)}")
     
-    def run(self):
+    def run(self, project: str='default'):
+        '''
+        Args:
+            project: project name under the stage. Defaults to "default".
+                it will be used as a folder name that groups all runs of this stage together.
+                Path layout: {stage}s/{project}/your_runs
+                e.g. experiments/momentum_v2/
+        '''
+        self._context.set_project_name(project)
         self._logger.debug(f'Running {self.name}...')
         self._is_running = True
         self._gather()

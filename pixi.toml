@@ -4,7 +4,7 @@ channels = ["conda-forge"]
 name = "pfund"
 platforms = ["osx-arm64", "linux-64"]
 # updating this needs to also update the version in the ci.yml and templates/ci-workflow-template.yml files
-requires-pixi = ">=0.66.0"  # command: pixi workspace requires-pixi set ">=0.66.0"
+requires-pixi = ">=0.67.2"  # command: pixi workspace requires-pixi set ">=0.67.2"
 
 [tasks]
 
@@ -29,23 +29,23 @@ gh = ">=2.87.2"
 
 [pypi-dependencies]
 # TEMP
-pfeed = { path = "../pfeed", editable = true, extras = ["duckdb"] }
-pfolio = { path = "../pfolio", editable = true }
-pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo"] }
 pfund-kit = { path = "../pfund-kit", editable = true }
-# pfeed = { version = ">=0.0.5", extras = ["duckdb"] }
-# pfolio = ">=0.0.3"
-# pfund-plot = {version = ">=0.0.1.dev3", extras = ["marimo"]}
-joblib = ">=1.5.3"
 numba = ">=0.65.0"
 httpx = ">=0.28.1"
 websockets = ">=16.0.0"
 
 [feature.optional.pypi-dependencies]
 # TEMP
+pfeed = { path = "../pfeed", editable = true, extras = ["duckdb"] }
+pfolio = { path = "../pfolio", editable = true }
+pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo"] }
 mtflow = { path = "../mtflow", editable = true }
+# pfeed = { version = ">=0.0.5", extras = ["duckdb"] }
+# pfolio = ">=0.0.3"
+# pfund-plot = {version = ">=0.0.1.dev3", extras = ["marimo"]}
 # mtflow = ">=0.0.1.dev2"
 pfund-ibapi = ">=10.42.1"
+joblib = ">=1.5.3"
 scikit-learn = ">=1.8.0"
 torch = ">=2.11.0"
 [feature.optional.dependencies]

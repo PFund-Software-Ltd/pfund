@@ -34,6 +34,7 @@ class EngineContext:
         self._env_vars = self._load_env_vars()
         self.run_mode = self._detect_run_mode()
         self.run_stage = RunStage.EXPERIMENT if self.env == Environment.BACKTEST else RunStage.DEPLOYMENT
+        self.project_name = 'default'
         self.data_start, self.data_end = self._parse_data_range(data_range)
         self.settings = settings or self._load_settings()
         if settings and settings.persist:
@@ -62,6 +63,9 @@ class EngineContext:
         else:
             assert stage == RunStage.DEPLOYMENT, 'Run stage can only be set to DEPLOYMENT in trading'
         self.run_stage = stage
+    
+    def set_project_name(self, project_name: str) -> None:
+        self.project_name = project_name
     
     def _load_env_vars(self) -> dict[str, str]:
         from dotenv import find_dotenv, dotenv_values
