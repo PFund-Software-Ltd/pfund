@@ -158,7 +158,7 @@ class PFundConfig(Configuration):
 
     @property
     def log_path(self) -> Path:
-        base = super().log_path
+        base = self._log_path
         return base / self._engine_name if self._engine_name else base
     
     @log_path.setter
@@ -167,7 +167,7 @@ class PFundConfig(Configuration):
 
     @property
     def data_path(self) -> Path:
-        base = super().data_path
+        base = self._data_path
         return base / self._engine_name if self._engine_name else base
     
     @data_path.setter
@@ -176,7 +176,7 @@ class PFundConfig(Configuration):
 
     @property
     def cache_path(self) -> Path:
-        base = super().cache_path
+        base = self._cache_path
         return base / self._engine_name if self._engine_name else base
 
     @cache_path.setter

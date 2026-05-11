@@ -25,32 +25,26 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = [
     "pfund-kit>=0.1.4",
+    'pfeed[duckdb]>=0.0.5',
     "httpx>=0.28.1",
     "websockets>=16.0.0 ; sys_platform != 'emscripten'",
-    "numba>=0.65.0 ; sys_platform != 'emscripten'",
 ]
 
 [project.optional-dependencies]
 core = [
-    'pfeed[duckdb]>=0.0.5',
+    "numba>=0.65.0 ; sys_platform != 'emscripten'",
     'pfolio>=0.0.3',
     'pfund-plot[marimo]>=0.0.1.dev3',
     'mtflow>=0.0.1.dev2 ; sys_platform != "emscripten"',
 ]
-pfeed = ["pfeed[duckdb]>=0.0.5"]
 pfolio = ["pfolio>=0.0.3"]
 pfund-plot = ["pfund-plot[marimo]>=0.0.1.dev3"]
 mtflow = ["mtflow>=0.0.1.dev2 ; sys_platform != 'emscripten'"]
 ibkr = ["pfund-ibapi>=10.42.1 ; sys_platform != 'emscripten'"]
 sklean = ["joblib>=1.5.3", "scikit-learn>=1.8.0"]
-torch = ["torch>=2.11.0 ; sys_platform != 'emscripten'"]
+torch = ["torch>=2.11.0 ; sys_platform != 'emscripten'", "safetensors>=0.7.0 ; sys_platform != 'emscripten'"]
+jax = ["jax>=0.10.0 ; sys_platform != 'emscripten'"]
 ta-lib = ["ta-lib>=0.6.4 ; sys_platform != 'emscripten'"]
-
-[dependency-groups]
-dev = [
-    "afterpython>=0.2.1",
-    "graphviz>=0.21",
-]
 
 [project.scripts]
 pfund = "pfund.__main__:run_cli"

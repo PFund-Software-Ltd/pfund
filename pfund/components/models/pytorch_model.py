@@ -46,6 +46,11 @@ class PytorchModel(BaseModel):
             # }
         })
         file_path = self._get_file_path(extension='.pt')
+        # TODO: use safetensors to save model if available
+        try:
+            import safetensors
+        except ImportError:
+            pass
         # TODO: need to dump datasets (parquet.gz) as well?
         torch.save(obj, file_path)
         self.logger.debug(f"dumped trained '{self.name}' to {trim_path(file_path)}")
