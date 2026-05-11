@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing_extensions import override
 from typing import TYPE_CHECKING, cast, Callable, Any
 if TYPE_CHECKING:
-    from narwhals._native import NativeDataFrame
+    from narwhals.typing import IntoDataFrame
     from pfeed.typing import GenericFrame
     from pfund._backtest.typing import BacktestDataFrame
     from pfund.typing import ComponentT
@@ -19,7 +19,7 @@ from pfund.enums import BacktestMode
 class BacktestMixin:
     def __mixin_post_init__(self, *args: Any, **kwargs: Any):
         super().__mixin_post_init__(*args, **kwargs)
-        self._cached_features_df: NativeDataFrame | None = None
+        self._cached_features_df: IntoDataFrame | None = None
     
     @staticmethod
     def _validate_backtest_signature(func: Callable[[BacktestDataFrame], BacktestDataFrame]):
@@ -77,7 +77,7 @@ class BacktestMixin:
         return self.context.backtest.dataset_splitter.dataset_periods
     
     @property
-    def features_df(self) -> NativeDataFrame | None:
+    def features_df(self) -> IntoDataFrame | None:
         if self._cached_features_df is not None:
             return self._cached_features_df
         df = super().features_df

@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from sklearn.base import BaseEstimator
     from numpy import ndarray
     import torch.nn as nn
-    from narwhals._native import NativeDataFrame
+    from narwhals.typing import IntoDataFrame
     from pfund.typing import ModelT, ColumnName
     from pfund.components.actor_proxy import ActorProxy
     from pfund.enums import TradingVenue
@@ -84,7 +84,7 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         except AttributeError:
             raise AttributeError(f"'{self.name}' and its underlying model '{self.model.__class__.__name__}' both have no attribute '{name}'")
 
-    def signalize(self, features_df: NativeDataFrame) -> dict[ColumnName, Any]:
+    def signalize(self, features_df: IntoDataFrame) -> dict[ColumnName, Any]:
         '''Creates signals_df (combined signals from other component)
         Args:
             data_df: dataframe in {self._df_form} form

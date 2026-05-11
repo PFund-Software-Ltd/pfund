@@ -78,7 +78,7 @@ class EngineContext:
         return {f'{self._env_var_prefix}{k}': v for k, v in raw_env_vars.items()}
     
     def _parse_data_range(self, data_range: str | Resolution | DataRangeDict | Literal['ytd']) -> tuple[datetime.date, datetime.date]:
-        from pfeed.utils import parse_date_range
+        from pfeed.utils.temporal import parse_date_range
         is_data_range_dict = isinstance(data_range, dict)
         return parse_date_range(
             start_date=data_range['start_date'] if is_data_range_dict else '',

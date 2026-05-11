@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, TypedDict, Any, TypeAlias, cast
 if TYPE_CHECKING:
-    from narwhals._native import NativeDataFrame
+    from narwhals.typing import IntoDataFrame
     from pfund.typing import ProductName
     from pfund.entities.products.product_base import BaseProduct
     from pfund.datas.data_config import DataConfig
@@ -297,7 +297,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
 
             # check cache first for previously resampled data
             if settings.cache_materialized_data is not False:
-                _df: NativeDataFrame | None = (
+                _df: IntoDataFrame | None = (
                     retrieve(storage_config=cache_storage_config)
                     .run()
                 )
@@ -307,7 +307,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                     continue
 
             # cache miss or caching disabled, retrieve from original storage
-            _df: NativeDataFrame | None = (
+            _df: IntoDataFrame | None = (
                 retrieve(storage_config=storage_config)
                 .load(
                     storage=DataStorage.CACHE if self._should_cache_resampled(feed) else None,
@@ -330,7 +330,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                     self._logger.warning(
                         f'No data found for {data.product.name} {data.resolution}, auto-downloading data...'
                     )
-                    _df: NativeDataFrame | None = (
+                    _df: IntoDataFrame | None = (
                         feed
                         .download(
                             product=product,

@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from torch import Tensor
-    from narwhals._native import NativeDataFrame
+    from narwhals.typing import IntoDataFrame
 
 import os
 
@@ -57,7 +57,7 @@ class PytorchModel(BaseModel):
         
     def predict(
         self, 
-        X: Tensor | NativeDataFrame,
+        X: Tensor | IntoDataFrame,
         *args, 
         **kwargs
     ) -> Tensor:

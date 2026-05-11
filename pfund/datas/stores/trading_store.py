@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
-    from narwhals._native import NativeDataFrame
+    from narwhals.typing import IntoDataFrame
     from pfeed.sources.pfund.component_feed import ComponentFeed
     from pfund.typing import ComponentName, Component, ColumnName
 
@@ -56,7 +56,7 @@ class TradingStore:
         self,
         window_size: int | None = None,
         to_native: bool = False,
-    ) -> nw.DataFrame[Any] | NativeDataFrame | None:
+    ) -> nw.DataFrame[Any] | IntoDataFrame | None:
         '''
         Args:
             window_size: Number of most recent rows to return.

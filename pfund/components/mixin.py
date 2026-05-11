@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, cast, Literal, ClassVar
 if TYPE_CHECKING:
     from sklearn.base import BaseEstimator
     import torch.nn as nn
-    from narwhals._native import NativeDataFrame
+    from narwhals.typing import IntoDataFrame
     from pfund.typing import (
         ComponentT,
         ModelT,
@@ -324,19 +324,19 @@ class ComponentMixin:
             raise ValueError(f"Unknown component type: {self.__class__.__name__}")
     
     @property
-    def output_df(self) -> NativeDataFrame | None:
+    def output_df(self) -> IntoDataFrame | None:
         return self.get_df(kind='output', window_size=None, to_native=True)
     
     @property
-    def data_df(self) -> NativeDataFrame | None:
+    def data_df(self) -> IntoDataFrame | None:
         return self.get_df(kind='data', data_category=None, window_size=None, to_native=True)
     
     @property
-    def signals_df(self) -> NativeDataFrame | None:
+    def signals_df(self) -> IntoDataFrame | None:
         return self.get_df(kind='signals', window_size=None, to_native=True)
     
     @property
-    def features_df(self) -> NativeDataFrame | None:
+    def features_df(self) -> IntoDataFrame | None:
         return self.get_df(kind='features', window_size=None, to_native=True)
     df = features_df
     
@@ -348,7 +348,7 @@ class ComponentMixin:
         window_size: int | None = None, 
         pivot_data: bool = False,
         to_native: bool = False
-    ) -> nw.DataFrame[Any] | NativeDataFrame | None:
+    ) -> nw.DataFrame[Any] | IntoDataFrame | None:
         """Returns one of the stored dataframes in either trading store or data stores.
     
         Args:
@@ -369,16 +369,16 @@ class ComponentMixin:
             to_native: If True, return the underlying backend frame (polars/pandas) instead
                 of a Narwhals DataFrame. Defaults to True.
         """
-        def _get_data_dfs() -> dict[DataCategory, NativeDataFrame | None]:
-            data_dfs: dict[DataCategory, NativeDataFrame | None] = {
+        def _get_data_dfs() -> dict[DataCategory, IntoDataFrame | None]:
+            data_dfs: dict[DataCategory, IntoDataFrame | None] = {
                 category: store.get_df(window_size=window_size, to_native=True)
                 for category, store in self.data_stores.items()
             }
             if not all([df is not None for df in data_dfs.values()]):
                 raise ValueError(f"Some data dfs are None for {self.name}, i.e. data are not ready, cannot get data_df")
             return data_dfs
-        def _get_signals_dfs() -> dict[ComponentName, NativeDataFrame | None]:
-            signals_dfs: dict[ComponentName, NativeDataFrame | None] = {
+        def _get_signals_dfs() -> dict[ComponentName, IntoDataFrame | None]:
+            signals_dfs: dict[ComponentName, IntoDataFrame | None] = {
                 component.name: component.get_trading_store().get_df(window_size=window_size, to_native=True)
                 for component in self.components
             }
@@ -391,7 +391,7 @@ class ComponentMixin:
         elif kind == 'data':
             if data_category is not None:
                 store = self.databoy.get_data_store(data_category)
-                df = cast("NativeDataFrame | None", store.get_df(window_size=window_size, pivot=pivot_data, to_native=True))
+                df = cast("IntoDataFrame | None", store.get_df(window_size=window_size, pivot=pivot_data, to_native=True))
             else:
                 data_dfs = _get_data_dfs()
                 df = self.merge_data_dfs(data_dfs)
@@ -767,7 +767,7 @@ class ComponentMixin:
         else:
             raise NotImplementedError(f'is_ready() is not implemented for {data.category=}')
     
-    def merge_data_dfs(self, data_dfs: dict[DataCategory, NativeDataFrame]) -> NativeDataFrame:
+    def merge_data_dfs(self, data_dfs: dict[DataCategory, IntoDataFrame]) -> IntoDataFrame:
         '''Creates data_df by merging data_dfs per data category in long form
         Args:
             data_dfs: dataframes per data category in long form
@@ -809,7 +809,7 @@ class ComponentMixin:
                 data_df = data_df.with_columns(nw.coalesce(key, right_key).alias(key)).drop(right_key)
         return data_df.sort(common_key_cols).to_native()
     
-    def merge_signals_dfs(self, data_df: NativeDataFrame, signals_dfs: dict[ComponentName, NativeDataFrame]) -> NativeDataFrame:
+    def merge_signals_dfs(self, data_df: IntoDataFrame, signals_dfs: dict[ComponentName, IntoDataFrame]) -> IntoDataFrame:
         '''Creates signals_df by merging signals_dfs (signals from other components)
         Args:
             data_df: data_df in {self._df_form} form
@@ -882,7 +882,7 @@ class ComponentMixin:
         sort_keys = list(common_key_cols) if common_key_cols else [common_index_col]
         return signals_df.sort(sort_keys).to_native()
     
-    def featurize(self, data_df: NativeDataFrame, signals_df: NativeDataFrame | None) -> NativeDataFrame:
+    def featurize(self, data_df: IntoDataFrame, signals_df: IntoDataFrame | None) -> IntoDataFrame:
         '''Creates features_df = data_df + signals_df (combined signals from other components)
         In machine learning, features_df is the X in predict(X).
         Args:
@@ -916,7 +916,7 @@ class ComponentMixin:
         else:
             for component in self.components:
                 component.run_pipeline(lookback_period=lookback_period)
-        features_df = cast("NativeDataFrame", self.get_df(kind='features', window_size=lookback_period, to_native=True))
+        features_df = cast("IntoDataFrame", self.get_df(kind='features', window_size=lookback_period, to_native=True))
         signals = cast("dict[ColumnName, Any]", self.signalize(features_df))
         self.store.update_df(features_df, signals)
         

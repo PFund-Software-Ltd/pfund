@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Literal, TYPE_CHECKING, overload, Any
 if TYPE_CHECKING:
-    from narwhals._native import NativeDataFrame
+    from narwhals.typing import IntoDataFrame
     from pfund.typing import (
         StrategyT,
         Component,
@@ -71,7 +71,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         pass
 
     # TODO:
-    def signalize(self, features_df: NativeDataFrame) -> NativeDataFrame:
+    def signalize(self, features_df: IntoDataFrame) -> IntoDataFrame:
         X = nw.from_native(features_df)
         
     # TODO: {product.name}_signal

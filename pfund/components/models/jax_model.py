@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from jax import Array
-    from narwhals._native import NativeDataFrame
+    from narwhals.typing import IntoDataFrame
 
 import os
 import pickle
@@ -57,7 +57,7 @@ class JaxModel(BaseModel):
 
     def predict(
         self,
-        X: Array | NativeDataFrame,
+        X: Array | IntoDataFrame,
         *args,
         **kwargs
     ) -> Array:

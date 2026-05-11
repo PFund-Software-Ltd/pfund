@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Generic, TypeVar, ClassVar
 
 if TYPE_CHECKING:
-    from narwhals._native import NativeDataFrame
+    from narwhals.typing import IntoDataFrame
     from pfund.datas.databoy import DataBoy
 
 from abc import ABC, abstractmethod
@@ -77,7 +77,7 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
             compression=storage_config.compression,
         )
     
-    def _standardize_df(self, df: NativeDataFrame) -> nw.DataFrame[Any]:
+    def _standardize_df(self, df: IntoDataFrame) -> nw.DataFrame[Any]:
         '''Adds metadata columns to the dataframe'''
         from pfund.enums import SourceType
         metadata = {
@@ -114,7 +114,7 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
             .sort(self.INDEX_COL)
         )
     
-    def get_df(self, window_size: int | None = None, pivot: bool = False, to_native: bool = False) -> nw.DataFrame[Any] | NativeDataFrame | None:
+    def get_df(self, window_size: int | None = None, pivot: bool = False, to_native: bool = False) -> nw.DataFrame[Any] | IntoDataFrame | None:
         if self._df is None:
             return None
         df = self._df if window_size is None else self._df.tail(window_size)
