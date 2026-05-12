@@ -7,7 +7,7 @@ from pfund.datas.timeframe import Timeframe
 
 
 class LinearWebSocketAPI(BybitWebSocketAPI):
-    CATEGORY: ClassVar[BybitProduct.ProductCategory] = BybitProduct.ProductCategory.LINEAR
+    CATEGORY: ClassVar[BybitProduct.Category] = BybitProduct.Category.LINEAR
     VERSION: ClassVar[str] = BybitWebSocketAPI.VERSION
     URLS: ClassVar[dict[Environment, dict[DataChannelType, str]]] = {
         Environment.PAPER: {

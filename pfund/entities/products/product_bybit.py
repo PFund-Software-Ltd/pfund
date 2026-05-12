@@ -11,7 +11,7 @@ from pfund.entities.products.product_crypto import CryptoProduct
 
 
 class BybitProduct(CryptoProduct):
-    class ProductCategory(StrEnum):
+    class Category(StrEnum):
         LINEAR = 'LINEAR'
         INVERSE = 'INVERSE'
         SPOT = 'SPOT'
@@ -19,17 +19,17 @@ class BybitProduct(CryptoProduct):
         
     source: DataSource = DataSource.BYBIT
     exchange: CryptoExchange = CryptoExchange.BYBIT
-    category: ProductCategory | None = None
+    category: Category | None = None
 
     def _derive_product_category(self):
         if self.asset_type == CryptoAssetType.CRYPTO:
-            category = self.ProductCategory.SPOT
+            category = self.Category.SPOT
         elif self.is_inverse():
-            category = self.ProductCategory.INVERSE
+            category = self.Category.INVERSE
         elif self.asset_type == CryptoAssetType.OPT:
-            category = self.ProductCategory.OPTION
+            category = self.Category.OPTION
         else:
-            category = self.ProductCategory.LINEAR
+            category = self.Category.LINEAR
         return category
     
     def model_post_init(self, __context: Any):

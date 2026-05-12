@@ -6,7 +6,8 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
 
 from pfeed.enums import DataSource
-from pfund.entities.products.product_basis import ProductBasis, ProductAssetType
+from pfund.entities.products.product_basis import ProductBasis
+from pfund.entities.products.asset_type import AssetType
 from pfund.enums import Broker, CryptoExchange
 
 
@@ -86,7 +87,7 @@ class BaseProduct(BaseModel):
     quote = quote_asset
     
     @property
-    def asset_type(self) -> ProductAssetType:
+    def asset_type(self) -> AssetType:
         return self.basis.asset_type
     type = asset_type
     
@@ -168,7 +169,7 @@ class BaseProduct(BaseModel):
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, BaseProduct):
-            return NotImplemented  # Allow other types to define equality with BaseProduct
+            return False
         return (
             self.source == other.source 
             and self.symbol == other.symbol

@@ -21,7 +21,7 @@ from pfund.enums import Environment, Broker, TradingVenue, CryptoExchange
 
 
 class BaseBroker(ABC):
-    name: ClassVar[Broker]
+    NAME: ClassVar[Broker]
 
     def __init__(self, env: Environment | str):
         self._env: Environment = Environment[env.upper()]
@@ -34,6 +34,10 @@ class BaseBroker(ABC):
         self._order_manager = OrderManager(self)
         self._portfolio_manager: PortfolioManager[BaseBalance, BasePosition] = PortfolioManager()
 
+    @property
+    def name(self):
+        return self.NAME
+    
     @property
     def portfolio_manager(self):
         return self._portfolio_manager

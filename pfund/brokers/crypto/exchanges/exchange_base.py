@@ -30,7 +30,7 @@ ProductCategory: TypeAlias = str
 
 
 class BaseExchange(ABC):
-    name: ClassVar[CryptoExchange]
+    NAME: ClassVar[CryptoExchange]
     adapter: ClassVar[Adapter]
     
     MARKET_CONFIGS_FILENAME: ClassVar[str] = 'market_configs.yml'
@@ -51,7 +51,11 @@ class BaseExchange(ABC):
     
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        cls.adapter = Adapter(cls.name)
+        cls.adapter = Adapter(cls.NAME)
+    
+    @property
+    def name(self):
+        return self.NAME
     
     @property
     def broker(self) -> Broker:

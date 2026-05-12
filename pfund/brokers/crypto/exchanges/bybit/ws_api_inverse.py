@@ -7,7 +7,7 @@ from pfund.datas.timeframe import Timeframe
 
 
 class InverseWebSocketAPI(BybitWebSocketAPI):
-    CATEGORY: ClassVar[BybitProduct.ProductCategory] = BybitProduct.ProductCategory.INVERSE
+    CATEGORY: ClassVar[BybitProduct.Category] = BybitProduct.Category.INVERSE
     VERSION: ClassVar[str] = BybitWebSocketAPI.VERSION
     URLS: ClassVar[dict[Environment, dict[DataChannelType, str]]] = {
         Environment.PAPER: {

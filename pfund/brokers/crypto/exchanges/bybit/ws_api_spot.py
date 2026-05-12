@@ -7,7 +7,7 @@ from pfund.datas.timeframe import Timeframe
 
 
 class SpotWebSocketAPI(BybitWebSocketAPI):
-    CATEGORY: ClassVar[BybitProduct.ProductCategory] = BybitProduct.ProductCategory.SPOT
+    CATEGORY: ClassVar[BybitProduct.Category] = BybitProduct.Category.SPOT
     VERSION: ClassVar[str] = BybitWebSocketAPI.VERSION
     URLS: ClassVar[dict[Environment, dict[DataChannelType, str]]] = {
         Environment.PAPER: {

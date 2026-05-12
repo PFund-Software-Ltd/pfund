@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
-    from pfund.typing import ParsedMessage
+    from pfeed.typing import ParsedMessage
     from pfund.enums import Environment
     from pfund.brokers.crypto.exchanges.ws_api_base import Message, WebSocketName
     from pfund.datas.resolution import Resolution
@@ -23,7 +23,7 @@ from pfund.entities.products.product_bybit import BybitProduct
 from pfund.datas.timeframe import Timeframe
 
 
-ProductCategory = BybitProduct.ProductCategory
+ProductCategory = BybitProduct.Category
 
 
 def _convert_mts_to_ts(ms: int) -> float:
@@ -33,7 +33,7 @@ def _convert_mts_to_ts(ms: int) -> float:
 
 class BybitWebSocketAPI(BaseWebSocketAPI):
     EXCHANGE: ClassVar[CryptoExchange] = CryptoExchange.BYBIT
-    CATEGORY: ClassVar[BybitProduct.ProductCategory]
+    CATEGORY: ClassVar[BybitProduct.Category]
     VERSION: ClassVar[str] = 'v5'
     URLS: ClassVar[dict[Environment, dict[DataChannelType, str]]] = {}
     # it defines the maximum number of arguments allowed in the 'args' list of a WebSocket message: {'op': '...', 'args': [...]}

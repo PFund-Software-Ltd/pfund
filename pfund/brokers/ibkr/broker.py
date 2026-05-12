@@ -19,7 +19,7 @@ from pfund.enums import PublicDataChannel, PrivateDataChannel, Environment, Brok
 
 
 class InteractiveBrokers(BaseBroker):
-    name: ClassVar[Broker] = Broker.IBKR
+    NAME: ClassVar[Broker] = Broker.IBKR
     adapter = Adapter(TradingVenue[name])
 
     def __init__(self, env: Environment | str=Environment.SANDBOX):

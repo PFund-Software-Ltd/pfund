@@ -19,12 +19,12 @@ from pfund.entities.accounts.account_crypto import CryptoAccount
 from pfund.entities.orders.order_crypto import CryptoOrder
 
 
-ProductCategory = BybitProduct.ProductCategory
+ProductCategory = BybitProduct.Category
 tProductCategory = Literal['LINEAR', 'INVERSE', 'SPOT', 'OPTION']
     
     
 class Exchange(BaseExchange):
-    name: ClassVar[CryptoExchange] = CryptoExchange.BYBIT
+    NAME: ClassVar[CryptoExchange] = CryptoExchange.BYBIT
     # REVIEW
     SUPPORTED_ASSET_TYPES: list[CryptoAssetType | str] = [
         CryptoAssetType.FUTURE,

@@ -17,7 +17,7 @@ class BacktestEngineSettings(BaseEngineSettings):
         description='''
         if True, reuses signals from dumped signal_df in _next() instead of recalculating the signals.
         This will make event-driven backtesting a LOT faster but inconsistent with live trading.
-        '''
+        ''' 
     )
     cache_features_df: bool = Field(
         default=True,

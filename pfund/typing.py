@@ -27,12 +27,6 @@ Currency: TypeAlias = str
 FullDataChannel: TypeAlias = str
 
 
-class ParsedMessage(TypedDict):
-    ts: float
-    channel: str
-    data: dict[str, Any]
-    
-
 # since Literal doesn't support variables as inputs, define variables in common.py here with prefix 't'
 # DEPRECATED: to be removed
 tEnvironment = Literal['BACKTEST', 'SANDBOX', 'PAPER', 'LIVE']

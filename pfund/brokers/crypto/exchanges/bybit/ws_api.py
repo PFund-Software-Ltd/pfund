@@ -15,7 +15,7 @@ from pfund.enums import CryptoExchange
 from pfund.entities.products.product_bybit import BybitProduct
 from pfund.brokers.crypto.exchanges.ws_api_base import BaseWebSocketAPI
 
-ProductCategory = BybitProduct.ProductCategory
+ProductCategory = BybitProduct.Category
 
 
 class WebSocketAPI(BaseWebSocketAPI):

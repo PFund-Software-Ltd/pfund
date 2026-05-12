@@ -26,7 +26,7 @@ from pfund.brokers.broker_base import BaseBroker
 # TODO: make BaseBroker generic (BaseBroker[Balance, Position]) so CryptoBroker(BaseBroker[CryptoBalance, CryptoPosition])
 # propagates types through portfolio_manager property (now self.pm is of type PortfolioManager[Any, Any]) without needing to redefine it here
 class CryptoBroker(BaseBroker):
-    name: ClassVar[Broker] = Broker.CRYPTO
+    NAME: ClassVar[Broker] = Broker.CRYPTO
 
     _portfolio_manager: PortfolioManager[CryptoBalance, CryptoPosition]  # pyright: ignore[reportIncompatibleVariableOverride]
 
