@@ -52,12 +52,12 @@ orbax-checkpoint = ">=0.11.39"
 ta-lib = ">=0.6.4"
 
 # TEMP
-# [pypi-options.dependency-overrides]
-# pfund = { path = ".", editable = true }
-# pfeed = { path = "../pfeed", editable = true, extras = ["duckdb", "yfinance", "hf"] }
-# pfolio = { path = "../pfolio", editable = true }
-# pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo", "jupyter", "matplotlib", "plotly", "altair"] }
-# mtflow = { path = "../mtflow", editable = true }
+[pypi-options.dependency-overrides]
+pfund = { path = ".", editable = true }
+pfeed = { path = "../pfeed", editable = true, extras = ["duckdb", "yfinance", "hf"] }
+pfolio = { path = "../pfolio", editable = true }
+pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo", "jupyter", "matplotlib", "plotly", "altair"] }
+mtflow = { path = "../mtflow", editable = true }
 
 [feature.dev.pypi-dependencies]
 pfund = { path = ".", editable = true }

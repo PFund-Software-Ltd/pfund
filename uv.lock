@@ -862,12 +862,14 @@ version = "0.0.5"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
-    { name = "numba", marker = "sys_platform != 'emscripten'" },
     { name = "pfund-kit" },
     { name = "websockets", marker = "sys_platform != 'emscripten'" },
 ]
 
 [package.optional-dependencies]
+core = [
+    { name = "numba", marker = "sys_platform != 'emscripten'" },
+]
 ibkr = [
     { name = "pfund-ibapi", marker = "sys_platform != 'emscripten'" },
 ]
@@ -892,7 +894,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "jax", marker = "sys_platform != 'emscripten' and extra == 'jax'", specifier = ">=0.10.0" },
     { name = "joblib", marker = "extra == 'sklean'", specifier = ">=1.5.3" },
-    { name = "numba", marker = "sys_platform != 'emscripten'", specifier = ">=0.65.1" },
+    { name = "numba", marker = "sys_platform != 'emscripten' and extra == 'core'", specifier = ">=0.65.1" },
     { name = "orbax-checkpoint", marker = "sys_platform != 'emscripten' and extra == 'jax'", specifier = ">=0.11.39" },
     { name = "pfund-ibapi", marker = "sys_platform != 'emscripten' and extra == 'ibkr'", specifier = ">=10.42.1" },
     { name = "pfund-kit", specifier = ">=0.1.6" },

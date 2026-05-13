@@ -6899,9 +6899,9 @@ packages:
 - pypi: ../pfeed
   name: pfeed
   version: 0.0.5
-  sha256: ebfa6ab236331e6d0f6d6dcce81c3f38cf6492c4590725291c4e0e192cf3b7bf
+  sha256: c2bf5266c72b894ab5f045d2ba7056ffee1ebf1e2495c577805757c07e307ba7
   requires_dist:
-  - pfund>=0.0.4
+  - pfund>=0.0.5
   - polars>=1.40.1
   - pyarrow>=23.0.1
   - pandera>=0.31.1
@@ -6937,12 +6937,12 @@ packages:
 - pypi: ./
   name: pfund
   version: 0.0.5
-  sha256: 1ffba1bb2bbe925a9c86568387e4df7973c5ca9eb49f4c7c83277133f1f24038
+  sha256: 2c880f40b367e26299374935e4fa1a1a4be26f56284f9faee4003cbf5d23e17b
   requires_dist:
   - pfund-kit>=0.1.6
   - httpx>=0.28.1
   - websockets>=16.0 ; sys_platform != 'emscripten'
-  - numba>=0.65.1 ; sys_platform != 'emscripten'
+  - numba>=0.65.1 ; sys_platform != 'emscripten' and extra == 'core'
   - pfund-ibapi>=10.42.1 ; sys_platform != 'emscripten' and extra == 'ibkr'
   - ta-lib>=0.6.4 ; sys_platform != 'emscripten' and extra == 'ta-lib'
   - joblib>=1.5.3 ; extra == 'sklean'
