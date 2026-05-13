@@ -1,9 +1,9 @@
 [company]
-name = ""
-url = ""
+name = "PFund.ai"
+url = "https://pfund.ai"
 
 [website]
-url = ""
+url = "https://pfund.pfund.ai"
 favicon = "favicon.ico"
 logo = "logo.svg"
 logo_dark = "logo.svg"

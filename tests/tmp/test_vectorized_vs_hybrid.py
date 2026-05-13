@@ -11,21 +11,24 @@ Key rule for close conditions (SL/TP/TW):
 
 Trailing stop is NOT tested here — it's hybrid-only and has its own test file.
 """
+
 import numpy as np
 import pandas as pd
 import polars as pl
 import pytest
 
-from pfund.enums import BacktestMode
 from pfund._backtest.pandas import BacktestDataFrame as PandasBTDF
 from pfund._backtest.polars import BacktestDataFrame as PolarsBTDF
-
+from pfund.enums import BacktestMode
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_pandas_df(n: int, *, close: np.ndarray | None = None, seed: int = 42) -> pd.DataFrame:
+
+def _make_pandas_df(
+    n: int, *, close: np.ndarray | None = None, seed: int = 42
+) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     if close is None:
         close = 100.0 + np.cumsum(rng.normal(0, 0.1, n))
@@ -34,29 +37,55 @@ def _make_pandas_df(n: int, *, close: np.ndarray | None = None, seed: int = 42) 
     high = np.maximum(open_, close) + rng.uniform(0, 0.5, n)
     low = np.minimum(open_, close) - rng.uniform(0, 0.5, n)
     volume = rng.uniform(100, 1000, n)
-    return pd.DataFrame({'open': open_, 'high': high, 'low': low, 'close': close, 'volume': volume})
+    return pd.DataFrame(
+        {"open": open_, "high": high, "low": low, "close": close, "volume": volume}
+    )
 
 
-def _make_polars_df(n: int, *, close: np.ndarray | None = None, seed: int = 42) -> pl.DataFrame:
+def _make_polars_df(
+    n: int, *, close: np.ndarray | None = None, seed: int = 42
+) -> pl.DataFrame:
     pdf = _make_pandas_df(n, close=close, seed=seed)
     return pl.from_pandas(pdf)
 
 
-def _run_pandas_vectorized(base_df: pd.DataFrame, signal: np.ndarray, **kwargs) -> pd.DataFrame:
+def _run_pandas_vectorized(
+    base_df: pd.DataFrame, signal: np.ndarray, **kwargs
+) -> pd.DataFrame:
     df = PandasBTDF(base_df.copy(), backtest_mode=BacktestMode.VECTORIZED)
     df = df.create_signal(signal=pd.Series(signal, index=df.index))
-    open_kw = {k: v for k, v in kwargs.items() if k in ('order_price', 'order_quantity', 'first_only', 'long_only', 'short_only')}
-    close_kw = {k: v for k, v in kwargs.items() if k in ('take_profit', 'stop_loss', 'time_window')}
+    open_kw = {
+        k: v
+        for k, v in kwargs.items()
+        if k
+        in ("order_price", "order_quantity", "first_only", "long_only", "short_only")
+    }
+    close_kw = {
+        k: v
+        for k, v in kwargs.items()
+        if k in ("take_profit", "stop_loss", "time_window")
+    }
     df = df.open_position(**open_kw)
     df = df.close_position(**close_kw)
     return pd.DataFrame(df)
 
 
-def _run_pandas_hybrid(base_df: pd.DataFrame, signal: np.ndarray, **kwargs) -> pd.DataFrame:
+def _run_pandas_hybrid(
+    base_df: pd.DataFrame, signal: np.ndarray, **kwargs
+) -> pd.DataFrame:
     df = PandasBTDF(base_df.copy(), backtest_mode=BacktestMode.HYBRID)
     df = df.create_signal(signal=pd.Series(signal, index=df.index))
-    open_kw = {k: v for k, v in kwargs.items() if k in ('order_price', 'order_quantity', 'first_only', 'long_only', 'short_only')}
-    close_kw = {k: v for k, v in kwargs.items() if k in ('take_profit', 'stop_loss', 'time_window')}
+    open_kw = {
+        k: v
+        for k, v in kwargs.items()
+        if k
+        in ("order_price", "order_quantity", "first_only", "long_only", "short_only")
+    }
+    close_kw = {
+        k: v
+        for k, v in kwargs.items()
+        if k in ("take_profit", "stop_loss", "time_window")
+    }
     df = df.open_position(**open_kw)
     df = df.close_position(**close_kw)
     df = df.backtest_loop()
@@ -66,44 +95,86 @@ def _run_pandas_hybrid(base_df: pd.DataFrame, signal: np.ndarray, **kwargs) -> p
 def _np_signal_to_polars(signal: np.ndarray) -> pl.Series:
     """Convert numpy signal array to polars Series, mapping NaN → null."""
     values = [None if np.isnan(v) else v for v in signal]
-    return pl.Series('signal', values, dtype=pl.Float64)
+    return pl.Series("signal", values, dtype=pl.Float64)
 
 
-def _run_polars_vectorized(base_df: pl.DataFrame, signal: np.ndarray, **kwargs) -> pd.DataFrame:
+def _run_polars_vectorized(
+    base_df: pl.DataFrame, signal: np.ndarray, **kwargs
+) -> pd.DataFrame:
     df = PolarsBTDF(base_df.clone(), backtest_mode=BacktestMode.VECTORIZED)
     sig = _np_signal_to_polars(signal)
     df = df.create_signal(signal=sig)
-    open_kw = {k: v for k, v in kwargs.items() if k in ('order_price', 'order_quantity', 'first_only', 'long_only', 'short_only')}
-    close_kw = {k: v for k, v in kwargs.items() if k in ('take_profit', 'stop_loss', 'time_window')}
+    open_kw = {
+        k: v
+        for k, v in kwargs.items()
+        if k
+        in ("order_price", "order_quantity", "first_only", "long_only", "short_only")
+    }
+    close_kw = {
+        k: v
+        for k, v in kwargs.items()
+        if k in ("take_profit", "stop_loss", "time_window")
+    }
     df = df.open_position(**open_kw)
     df = df.close_position(**close_kw)
     return df.to_pandas()
 
 
-def _run_polars_hybrid(base_df: pl.DataFrame, signal: np.ndarray, **kwargs) -> pd.DataFrame:
+def _run_polars_hybrid(
+    base_df: pl.DataFrame, signal: np.ndarray, **kwargs
+) -> pd.DataFrame:
     df = PolarsBTDF(base_df.clone(), backtest_mode=BacktestMode.HYBRID)
     sig = _np_signal_to_polars(signal)
     df = df.create_signal(signal=sig)
-    open_kw = {k: v for k, v in kwargs.items() if k in ('order_price', 'order_quantity', 'first_only', 'long_only', 'short_only')}
-    close_kw = {k: v for k, v in kwargs.items() if k in ('take_profit', 'stop_loss', 'time_window')}
+    open_kw = {
+        k: v
+        for k, v in kwargs.items()
+        if k
+        in ("order_price", "order_quantity", "first_only", "long_only", "short_only")
+    }
+    close_kw = {
+        k: v
+        for k, v in kwargs.items()
+        if k in ("take_profit", "stop_loss", "time_window")
+    }
     df = df.open_position(**open_kw)
     df = df.close_position(**close_kw)
     df = df.backtest_loop()
     return df.to_pandas()
 
 
-COMPARE_COLS = ['order_price', 'order_size', 'trade_price', 'trade_size', 'position', 'avg_price']
+COMPARE_COLS = [
+    "order_price",
+    "order_size",
+    "trade_price",
+    "trade_size",
+    "position",
+    "avg_price",
+]
 
 
-def _assert_frames_match(vec_df: pd.DataFrame, hyb_df: pd.DataFrame, cols: list[str] | None = None, rtol: float = 1e-9):
+def _assert_frames_match(
+    vec_df: pd.DataFrame,
+    hyb_df: pd.DataFrame,
+    cols: list[str] | None = None,
+    rtol: float = 1e-9,
+):
     """Assert that two dataframes match on the given columns."""
     if cols is None:
         cols = COMPARE_COLS
     for col in cols:
         if col not in vec_df.columns and col not in hyb_df.columns:
             continue
-        v = vec_df[col].values.astype(float) if col in vec_df.columns else np.full(len(vec_df), np.nan)
-        h = hyb_df[col].values.astype(float) if col in hyb_df.columns else np.full(len(hyb_df), np.nan)
+        v = (
+            vec_df[col].values.astype(float)
+            if col in vec_df.columns
+            else np.full(len(vec_df), np.nan)
+        )
+        h = (
+            hyb_df[col].values.astype(float)
+            if col in hyb_df.columns
+            else np.full(len(hyb_df), np.nan)
+        )
         both_nan = np.isnan(v) & np.isnan(h)
         mismatch_nan = np.isnan(v) != np.isnan(h)
         if mismatch_nan.any():
@@ -115,7 +186,9 @@ def _assert_frames_match(vec_df: pd.DataFrame, hyb_df: pd.DataFrame, cols: list[
             )
         both_finite = ~np.isnan(v) & ~np.isnan(h)
         if both_finite.any():
-            if not np.allclose(v[both_finite], h[both_finite], rtol=rtol, equal_nan=True):
+            if not np.allclose(
+                v[both_finite], h[both_finite], rtol=rtol, equal_nan=True
+            ):
                 diff_mask = ~np.isclose(v, h, rtol=rtol, equal_nan=True) & both_finite
                 idx = np.where(diff_mask)[0]
                 raise AssertionError(
@@ -125,14 +198,24 @@ def _assert_frames_match(vec_df: pd.DataFrame, hyb_df: pd.DataFrame, cols: list[
                 )
 
 
-def _assert_stop_price_match(vec_df: pd.DataFrame, hyb_df: pd.DataFrame, rtol: float = 1e-9):
+def _assert_stop_price_match(
+    vec_df: pd.DataFrame, hyb_df: pd.DataFrame, rtol: float = 1e-9
+):
     """Assert stop_price columns match (both may or may not exist)."""
-    vec_has = 'stop_price' in vec_df.columns
-    hyb_has = 'stop_price' in hyb_df.columns
+    vec_has = "stop_price" in vec_df.columns
+    hyb_has = "stop_price" in hyb_df.columns
     if not vec_has and not hyb_has:
         return
-    v = vec_df['stop_price'].values.astype(float) if vec_has else np.full(len(vec_df), np.nan)
-    h = hyb_df['stop_price'].values.astype(float) if hyb_has else np.full(len(hyb_df), np.nan)
+    v = (
+        vec_df["stop_price"].values.astype(float)
+        if vec_has
+        else np.full(len(vec_df), np.nan)
+    )
+    h = (
+        hyb_df["stop_price"].values.astype(float)
+        if hyb_has
+        else np.full(len(hyb_df), np.nan)
+    )
     both_nan = np.isnan(v) & np.isnan(h)
     both_finite = ~np.isnan(v) & ~np.isnan(h)
     mismatch_nan = np.isnan(v) != np.isnan(h)
@@ -157,6 +240,7 @@ def _assert_stop_price_match(vec_df: pd.DataFrame, hyb_df: pd.DataFrame, rtol: f
 # ===========================================================================
 # NO CLOSE CONDITIONS — both modes should match without first_only
 # ===========================================================================
+
 
 class TestNoCloseConditions:
     """Without SL/TP/TW there's no path dependency, so both modes match."""
@@ -197,7 +281,7 @@ class TestNoCloseConditions:
     def test_first_only_with_streaks(self, backend):
         """Streaks of same signal with first_only — only first trade per streak."""
         n = 20
-        signal = np.array([1]*5 + [-1]*5 + [1]*5 + [-1]*5, dtype=float)
+        signal = np.array([1] * 5 + [-1] * 5 + [1] * 5 + [-1] * 5, dtype=float)
         if backend == "pandas":
             base = _make_pandas_df(n)
             vec = _run_pandas_vectorized(base, signal, first_only=True)
@@ -254,7 +338,7 @@ class TestNoCloseConditions:
     def test_streaks_no_first_only_no_close(self, backend):
         """Repeated same-direction signals grow position. No close conditions → no path dependency."""
         n = 20
-        signal = np.array([1]*5 + [-1]*5 + [1]*5 + [-1]*5, dtype=float)
+        signal = np.array([1] * 5 + [-1] * 5 + [1] * 5 + [-1] * 5, dtype=float)
         if backend == "pandas":
             base = _make_pandas_df(n)
             vec = _run_pandas_vectorized(base, signal)
@@ -272,6 +356,7 @@ class TestNoCloseConditions:
 # first_only=True makes hybrid also block re-entry via has_traded_in_streak.
 # ===========================================================================
 
+
 class TestWithCloseConditionsFirstOnly:
     """With close conditions and first_only=True, both modes should be equivalent."""
 
@@ -280,15 +365,42 @@ class TestWithCloseConditionsFirstOnly:
         """SL triggers during buy streak, signal changes to sell, SL triggers again.
         first_only=True ensures one trade per streak in both modes."""
         n = 30
-        close = np.array([
-            100, 101, 102, 103, 104,      # 0-4:  up (buy streak)
-            100, 98, 96, 94, 92,           # 5-9:  sharp drop triggers SL
-            90, 89, 88, 87, 86,            # 10-14: continued down (sell streak)
-            90, 92, 94, 96, 98,            # 15-19: recovery triggers SL on short
-            100, 101, 102, 103, 104,       # 20-24: up (buy streak)
-            100, 98, 96, 94, 92,           # 25-29: drop triggers SL
-        ], dtype=float)
-        signal = np.array([1]*10 + [-1]*10 + [1]*10, dtype=float)
+        close = np.array(
+            [
+                100,
+                101,
+                102,
+                103,
+                104,  # 0-4:  up (buy streak)
+                100,
+                98,
+                96,
+                94,
+                92,  # 5-9:  sharp drop triggers SL
+                90,
+                89,
+                88,
+                87,
+                86,  # 10-14: continued down (sell streak)
+                90,
+                92,
+                94,
+                96,
+                98,  # 15-19: recovery triggers SL on short
+                100,
+                101,
+                102,
+                103,
+                104,  # 20-24: up (buy streak)
+                100,
+                98,
+                96,
+                94,
+                92,  # 25-29: drop triggers SL
+            ],
+            dtype=float,
+        )
+        signal = np.array([1] * 10 + [-1] * 10 + [1] * 10, dtype=float)
         kwargs = dict(first_only=True, stop_loss=0.03)
         if backend == "pandas":
             base = _make_pandas_df(n, close=close)
@@ -305,13 +417,32 @@ class TestWithCloseConditionsFirstOnly:
     def test_take_profit_alternating_streaks(self, backend):
         """TP triggers during uptrend buy streak, then signal changes."""
         n = 20
-        close = np.array([
-            100, 101, 102, 103, 104,       # 0-4:  up → TP triggers
-            105, 106, 107, 108, 109,        # 5-9:  continued up
-            108, 107, 106, 105, 104,        # 10-14: down (sell streak)
-            100, 98, 96, 94, 92,            # 15-19: sharp drop → TP on short
-        ], dtype=float)
-        signal = np.array([1]*10 + [-1]*10, dtype=float)
+        close = np.array(
+            [
+                100,
+                101,
+                102,
+                103,
+                104,  # 0-4:  up → TP triggers
+                105,
+                106,
+                107,
+                108,
+                109,  # 5-9:  continued up
+                108,
+                107,
+                106,
+                105,
+                104,  # 10-14: down (sell streak)
+                100,
+                98,
+                96,
+                94,
+                92,  # 15-19: sharp drop → TP on short
+            ],
+            dtype=float,
+        )
+        signal = np.array([1] * 10 + [-1] * 10, dtype=float)
         kwargs = dict(first_only=True, take_profit=0.02)
         if backend == "pandas":
             base = _make_pandas_df(n, close=close)
@@ -330,7 +461,7 @@ class TestWithCloseConditionsFirstOnly:
         NOTE: stop_price not compared — vectorized reuses it for TW cleanup, hybrid doesn't."""
         n = 20
         close = 100.0 + np.arange(n, dtype=float) * 0.1
-        signal = np.array([1]*10 + [-1]*10, dtype=float)
+        signal = np.array([1] * 10 + [-1] * 10, dtype=float)
         kwargs = dict(first_only=True, time_window=3)
         if backend == "pandas":
             base = _make_pandas_df(n, close=close)
@@ -346,15 +477,42 @@ class TestWithCloseConditionsFirstOnly:
     def test_stop_loss_and_take_profit_combined(self, backend):
         """Both SL and TP set. SL has priority when both could trigger."""
         n = 30
-        close = np.array([
-            100, 101, 102, 103, 104,       # 0-4: up
-            100, 97, 95, 93, 91,           # 5-9: drop → SL triggers
-            90, 89, 88, 87, 86,            # 10-14: sell streak
-            85, 84, 83, 82, 81,            # 15-19: down → TP on short
-            80, 82, 84, 86, 88,            # 20-24: recovery
-            90, 92, 94, 96, 98,            # 25-29: up → SL on short
-        ], dtype=float)
-        signal = np.array([1]*10 + [-1]*20, dtype=float)
+        close = np.array(
+            [
+                100,
+                101,
+                102,
+                103,
+                104,  # 0-4: up
+                100,
+                97,
+                95,
+                93,
+                91,  # 5-9: drop → SL triggers
+                90,
+                89,
+                88,
+                87,
+                86,  # 10-14: sell streak
+                85,
+                84,
+                83,
+                82,
+                81,  # 15-19: down → TP on short
+                80,
+                82,
+                84,
+                86,
+                88,  # 20-24: recovery
+                90,
+                92,
+                94,
+                96,
+                98,  # 25-29: up → SL on short
+            ],
+            dtype=float,
+        )
+        signal = np.array([1] * 10 + [-1] * 20, dtype=float)
         kwargs = dict(first_only=True, stop_loss=0.05, take_profit=0.03)
         if backend == "pandas":
             base = _make_pandas_df(n, close=close)
@@ -371,13 +529,32 @@ class TestWithCloseConditionsFirstOnly:
     def test_stop_loss_with_quantity(self, backend):
         """SL with order_quantity > 1 and first_only."""
         n = 20
-        close = np.array([
-            100, 101, 102, 103, 104,
-            100, 97, 95, 93, 91,
-            90, 92, 94, 96, 98,
-            100, 98, 96, 94, 92,
-        ], dtype=float)
-        signal = np.array([1]*10 + [-1]*10, dtype=float)
+        close = np.array(
+            [
+                100,
+                101,
+                102,
+                103,
+                104,
+                100,
+                97,
+                95,
+                93,
+                91,
+                90,
+                92,
+                94,
+                96,
+                98,
+                100,
+                98,
+                96,
+                94,
+                92,
+            ],
+            dtype=float,
+        )
+        signal = np.array([1] * 10 + [-1] * 10, dtype=float)
         kwargs = dict(first_only=True, stop_loss=0.05, order_quantity=2)
         if backend == "pandas":
             base = _make_pandas_df(n, close=close)
@@ -393,13 +570,32 @@ class TestWithCloseConditionsFirstOnly:
     def test_long_only_with_stop_loss(self, backend):
         """long_only + first_only + SL. Signal=1 opens long, signal=-1 closes it."""
         n = 20
-        close = np.array([
-            100, 101, 102, 103, 104,
-            100, 97, 95, 93, 91,
-            90, 92, 94, 96, 98,
-            100, 101, 102, 103, 104,
-        ], dtype=float)
-        signal = np.array([1]*5 + [-1]*5 + [1]*5 + [-1]*5, dtype=float)
+        close = np.array(
+            [
+                100,
+                101,
+                102,
+                103,
+                104,
+                100,
+                97,
+                95,
+                93,
+                91,
+                90,
+                92,
+                94,
+                96,
+                98,
+                100,
+                101,
+                102,
+                103,
+                104,
+            ],
+            dtype=float,
+        )
+        signal = np.array([1] * 5 + [-1] * 5 + [1] * 5 + [-1] * 5, dtype=float)
         kwargs = dict(first_only=True, long_only=True, stop_loss=0.05)
         if backend == "pandas":
             base = _make_pandas_df(n, close=close)
@@ -415,13 +611,32 @@ class TestWithCloseConditionsFirstOnly:
     def test_short_only_with_stop_loss(self, backend):
         """short_only + first_only + SL."""
         n = 20
-        close = np.array([
-            100, 99, 98, 97, 96,
-            100, 103, 105, 107, 109,
-            110, 108, 106, 104, 102,
-            100, 99, 98, 97, 96,
-        ], dtype=float)
-        signal = np.array([-1]*5 + [1]*5 + [-1]*5 + [1]*5, dtype=float)
+        close = np.array(
+            [
+                100,
+                99,
+                98,
+                97,
+                96,
+                100,
+                103,
+                105,
+                107,
+                109,
+                110,
+                108,
+                106,
+                104,
+                102,
+                100,
+                99,
+                98,
+                97,
+                96,
+            ],
+            dtype=float,
+        )
+        signal = np.array([-1] * 5 + [1] * 5 + [-1] * 5 + [1] * 5, dtype=float)
         kwargs = dict(first_only=True, short_only=True, stop_loss=0.05)
         if backend == "pandas":
             base = _make_pandas_df(n, close=close)
@@ -437,7 +652,9 @@ class TestWithCloseConditionsFirstOnly:
     def test_time_window_short_streaks(self, backend):
         """Short alternating streaks where TW doesn't trigger because streak is too short."""
         n = 20
-        signal = np.array([1]*3 + [-1]*3 + [1]*3 + [-1]*3 + [1]*4 + [-1]*4, dtype=float)
+        signal = np.array(
+            [1] * 3 + [-1] * 3 + [1] * 3 + [-1] * 3 + [1] * 4 + [-1] * 4, dtype=float
+        )
         close = 100.0 + np.arange(n, dtype=float) * 0.05
         kwargs = dict(first_only=True, time_window=5)
         if backend == "pandas":
@@ -455,13 +672,15 @@ class TestWithCloseConditionsFirstOnly:
         """All close conditions combined with first_only.
         NOTE: stop_price not compared — vectorized reuses it for TW cleanup, hybrid doesn't."""
         n = 40
-        close = np.concatenate([
-            100 + np.arange(10) * 0.5,     # gentle up
-            105 - np.arange(10) * 1.5,      # sharp down
-            90 + np.arange(10) * 0.3,        # gentle up
-            93 - np.arange(10) * 0.8,        # moderate down
-        ])
-        signal = np.array([1]*10 + [-1]*10 + [1]*10 + [-1]*10, dtype=float)
+        close = np.concatenate(
+            [
+                100 + np.arange(10) * 0.5,  # gentle up
+                105 - np.arange(10) * 1.5,  # sharp down
+                90 + np.arange(10) * 0.3,  # gentle up
+                93 - np.arange(10) * 0.8,  # moderate down
+            ]
+        )
+        signal = np.array([1] * 10 + [-1] * 10 + [1] * 10 + [-1] * 10, dtype=float)
         kwargs = dict(first_only=True, stop_loss=0.05, take_profit=0.03, time_window=5)
         if backend == "pandas":
             base = _make_pandas_df(n, close=close)
@@ -477,6 +696,7 @@ class TestWithCloseConditionsFirstOnly:
 # ===========================================================================
 # ALTERNATING SIGNALS WITH first_only — every bar is a new streak
 # ===========================================================================
+
 
 class TestFirstOnlyAlternating:
     """With alternating [1,-1,1,-1,...] and first_only=True, every bar is a new streak.
@@ -519,6 +739,7 @@ class TestFirstOnlyAlternating:
 # HYBRID KERNEL SANITY — basic behavioral checks
 # ===========================================================================
 
+
 class TestHybridKernelSanity:
     """Direct behavioral checks on the hybrid kernel."""
 
@@ -527,8 +748,8 @@ class TestHybridKernelSanity:
         base = _make_pandas_df(n)
         signal = np.ones(n)
         hyb = _run_pandas_hybrid(base, signal)
-        assert np.isnan(hyb['trade_price'].iloc[0])
-        assert np.isnan(hyb['trade_size'].iloc[0])
+        assert np.isnan(hyb["trade_price"].iloc[0])
+        assert np.isnan(hyb["trade_size"].iloc[0])
 
     def test_order_placed_on_signal_bar(self):
         n = 10
@@ -536,9 +757,9 @@ class TestHybridKernelSanity:
         signal = np.full(n, np.nan)
         signal[3] = 1.0
         hyb = _run_pandas_hybrid(base, signal)
-        assert not np.isnan(hyb['order_price'].iloc[3])
-        assert not np.isnan(hyb['order_size'].iloc[3])
-        assert hyb['order_size'].iloc[3] > 0
+        assert not np.isnan(hyb["order_price"].iloc[3])
+        assert not np.isnan(hyb["order_size"].iloc[3])
+        assert hyb["order_size"].iloc[3] > 0
 
     def test_market_order_fills_at_next_bar_close(self):
         """Default fill_price='close' means market fills at prev_close (= order bar's close)."""
@@ -547,8 +768,8 @@ class TestHybridKernelSanity:
         signal = np.full(n, np.nan)
         signal[2] = 1.0
         hyb = _run_pandas_hybrid(base, signal)
-        if not np.isnan(hyb['trade_price'].iloc[3]):
-            assert hyb['trade_price'].iloc[3] == base['close'].iloc[2]
+        if not np.isnan(hyb["trade_price"].iloc[3]):
+            assert hyb["trade_price"].iloc[3] == base["close"].iloc[2]
 
     def test_position_tracks_correctly(self):
         n = 10
@@ -557,10 +778,10 @@ class TestHybridKernelSanity:
         signal[1] = 1.0
         signal[5] = -1.0
         hyb = _run_pandas_hybrid(base, signal)
-        pos = hyb['position'].values.astype(float)
+        pos = hyb["position"].values.astype(float)
         assert pos[0] == 0
         assert pos[1] == 0
-        if not np.isnan(hyb['trade_price'].iloc[2]):
+        if not np.isnan(hyb["trade_price"].iloc[2]):
             assert pos[2] == 1.0
 
     def test_precondition_errors(self):
@@ -586,6 +807,7 @@ class TestHybridKernelSanity:
 # EDGE CASES
 # ===========================================================================
 
+
 class TestEdgeCases:
     """Boundary conditions that might trip up one mode but not the other."""
 
@@ -604,7 +826,7 @@ class TestEdgeCases:
             hyb = _run_polars_hybrid(base, signal)
         _assert_frames_match(vec, hyb)
         # Verify no trades happened
-        assert np.all(np.isnan(hyb['trade_price'].values.astype(float)))
+        assert np.all(np.isnan(hyb["trade_price"].values.astype(float)))
 
     @pytest.mark.parametrize("backend", ["pandas", "polars"])
     def test_single_buy_signal_at_start(self, backend):
@@ -638,7 +860,7 @@ class TestEdgeCases:
             hyb = _run_polars_hybrid(base, signal)
         _assert_frames_match(vec, hyb)
         # Last bar order should exist but no trade
-        pos = hyb['position'].values.astype(float)
+        pos = hyb["position"].values.astype(float)
         assert pos[-1] == 0.0 or np.isnan(pos[-1])
 
     @pytest.mark.parametrize("backend", ["pandas", "polars"])
@@ -739,7 +961,10 @@ class TestEdgeCases:
 # RANDOMIZED FUZZ TESTS — stress both modes with random signals/prices
 # ===========================================================================
 
-def _random_signal(n: int, rng: np.random.Generator, nan_prob: float = 0.3) -> np.ndarray:
+
+def _random_signal(
+    n: int, rng: np.random.Generator, nan_prob: float = 0.3
+) -> np.ndarray:
     """Generate a random signal array: 1, -1, or NaN."""
     choices = np.array([1.0, -1.0, np.nan])
     probs = np.array([(1 - nan_prob) / 2, (1 - nan_prob) / 2, nan_prob])
@@ -842,6 +1067,7 @@ class TestRandomizedWithCloseConditions:
 # PANDAS vs POLARS CROSS-VALIDATION — same mode, different backend
 # ===========================================================================
 
+
 class TestPandasPolarsConsistency:
     """Ensure pandas and polars backends produce identical results for the same mode."""
 
@@ -852,8 +1078,12 @@ class TestPandasPolarsConsistency:
         signal = _random_signal(n, rng)
         pd_base = _make_pandas_df(n, seed=seed)
         pl_base = _make_polars_df(n, seed=seed)
-        pd_vec = _run_pandas_vectorized(pd_base, signal, first_only=True, stop_loss=0.03)
-        pl_vec = _run_polars_vectorized(pl_base, signal, first_only=True, stop_loss=0.03)
+        pd_vec = _run_pandas_vectorized(
+            pd_base, signal, first_only=True, stop_loss=0.03
+        )
+        pl_vec = _run_polars_vectorized(
+            pl_base, signal, first_only=True, stop_loss=0.03
+        )
         _assert_frames_match(pd_vec, pl_vec)
 
     @pytest.mark.parametrize("seed", range(5))
@@ -901,5 +1131,5 @@ class TestPandasPolarsConsistency:
         _assert_frames_match(pd_vec, pl_vec)
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=long'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=long"])

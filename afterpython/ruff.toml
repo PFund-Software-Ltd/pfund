@@ -3,6 +3,7 @@
 
 line-length = 88
 target-version = "py311"
+extend-exclude = ["templates"]
 
 [lint]
 # ruff default rules:

@@ -1,0 +1,258 @@
+from __future__ import annotations
+
+import re
+from typing import Any, ClassVar
+
+from pfund.datas.timeframe import Timeframe
+
+
+class Resolution:
+    DEFAULT_ORDERBOOK_LEVEL: ClassVar[int] = 1
+
+    def __init__(self, resolution: Resolution | str):
+        """
+        Args:
+            resolution: e.g. '1m', '1minute', '1quote_L1'
+            If the input is a data_type (e.g. 'minute', 'daily'),
+            it will be converted to resolution by adding '1' to the beginning.
+            e.g. 'minute' -> '1m', 'daily' -> '1d'
+        """
+        if isinstance(resolution, Resolution):
+            # Copy all attributes from the resolution object
+            self.__dict__.update(resolution.__dict__)
+            return
+
+        if not resolution:
+            raise ValueError(f"{resolution=} is not a valid resolution")
+
+        period, timeframe_str, orderbook_level = self._parse(resolution)
+        self.period: int = int(period)
+        self.timeframe: Timeframe = Timeframe(timeframe_str)
+        self.orderbook_level: int | None = self._resolve_orderbook_level(
+            orderbook_level
+        )
+
+    def _parse(self, resolution: str) -> tuple[str, str, str | None]:
+        """Parse resolution string and extract period, timeframe, and orderbook level.
+        Returns:
+            tuple[str, str, str | None]: period string, timeframe string, orderbook level string
+        """
+        # Reject invalid characters before transformation
+        assert not resolution.strip().startswith("-"), (
+            f"Invalid {resolution=}, period cannot be negative"
+        )
+
+        # Add "1" if the resolution doesn't start with a number
+        if not re.match(r"^\d", resolution):
+            resolution = "1" + resolution
+
+        # Only remove hyphens and underscores after the initial numbers
+        resolution = re.sub(r"^(\d+)[-_]", r"\1", resolution)
+
+        # validate resolution pattern
+        assert re.match(
+            rf"^[1-9]\d*({Timeframe.pattern()})(?:_L[1-3])?$", resolution, re.IGNORECASE
+        ), (
+            f"Invalid {resolution=}, pattern should be e.g. '1d', '2m', '3h', '1quote_L1' etc."
+        )
+
+        # extract orderbook level if it exists
+        resolution, *orderbook_level = resolution.strip().split("_")
+        if not orderbook_level:
+            orderbook_level = None
+        else:
+            orderbook_level = orderbook_level[0]
+
+        # extract period and timeframe
+        period, timeframe = re.split(r"(\d+)", resolution.strip())[1:]
+        return period, timeframe, orderbook_level
+
+    def _resolve_orderbook_level(self, orderbook_level: str | None) -> int | None:
+        if self.is_quote():
+            if orderbook_level:
+                resolved_orderbook_level = int(orderbook_level.upper().lstrip("L"))
+            else:
+                resolved_orderbook_level = self.DEFAULT_ORDERBOOK_LEVEL
+        else:
+            resolved_orderbook_level = None
+        return resolved_orderbook_level
+
+    def to_seconds(self) -> int:
+        assert self.is_bar(), f"{self!r} is not a bar resolution"
+        return self.period * self.timeframe.value
+
+    def _comparable(self) -> tuple[int, int, int]:
+        """Lower tuple = higher resolution. Uses tuple comparison to avoid
+        collisions between different timeframe units (e.g. quote vs tick)."""
+        return (self.timeframe.value, self.period, -(self.orderbook_level or 1))
+
+    def is_quote_l1(self):
+        return self.is_quote() and self.orderbook_level == 1
+
+    def is_quote_l2(self):
+        return self.is_quote() and self.orderbook_level == 2
+
+    def is_quote_l3(self):
+        return self.is_quote() and self.orderbook_level == 3
+
+    def is_quote(self):
+        return self.timeframe.is_quote()
+
+    def is_tick(self):
+        return self.timeframe.is_tick()
+
+    def is_bar(self) -> bool:
+        return self.is_second() or self.is_minute() or self.is_hour() or self.is_day()
+
+    def is_second(self):
+        return self.timeframe.is_second()
+
+    def is_minute(self):
+        return self.timeframe.is_minute()
+
+    def is_hour(self):
+        return self.timeframe.is_hour()
+
+    def is_day(self):
+        return self.timeframe.is_day()
+
+    def is_week(self):
+        return self.timeframe.is_week()
+
+    def is_month(self):
+        return self.timeframe.is_month()
+
+    def is_year(self):
+        return self.timeframe.is_year()
+
+    def higher(self) -> Resolution:
+        """Rotate to the next higher resolution. e.g. 1m > 1h, higher resolution = lower timeframe"""
+        if self.is_quote():
+            if self.orderbook_level is not None and self.orderbook_level < 3:
+                return Resolution(
+                    "1" + repr(self.timeframe) + "_L" + str(self.orderbook_level + 1)
+                )
+            else:
+                return self
+        else:
+            return Resolution("1" + repr(self.timeframe.lower()))
+
+    def lower(self) -> Resolution:
+        """Rotate to the next lower resolution. e.g. 1h < 1m, lower resolution = higher timeframe"""
+        if (
+            self.is_quote()
+            and self.orderbook_level is not None
+            and self.orderbook_level > 1
+        ):
+            return Resolution(
+                "1" + repr(self.timeframe) + "_L" + str(self.orderbook_level - 1)
+            )
+        else:
+            return Resolution("1" + repr(self.timeframe.higher()))
+
+    def to_unit(self) -> Resolution:
+        """Convert to unit resolution. e.g. 5m -> 1m"""
+        timeframe = repr(self.timeframe)
+        if self.is_quote():
+            return Resolution("1" + timeframe + "_L" + str(self.orderbook_level))
+        else:
+            return Resolution("1" + timeframe)
+
+    def get_higher_resolutions(
+        self, ignore_period: bool = False, exclude_quote: bool = False
+    ) -> list[Resolution]:
+        """Get all resolutions with higher granularity (finer time intervals) than this one.
+
+        Args:
+            ignore_period: If False and this resolution has a period > 1 (e.g., 5m),
+                the unit resolution (e.g., 1m) is included as a higher resolution.
+                If True, only resolutions of different time units are considered.
+            exclude_quote: If True, stop before including quote/tick resolution.
+
+        Returns:
+            List of resolutions with higher granularity, ordered from closest to finest.
+        """
+        higher_resolutions: list[Resolution] = []
+        resolution = self
+        unit_resolution = self.to_unit()
+        if not ignore_period and resolution != unit_resolution:
+            higher_resolutions.append(unit_resolution)
+        while (higher_resolution := unit_resolution.higher()) != unit_resolution:
+            unit_resolution = higher_resolution
+            if higher_resolution.is_quote() and exclude_quote:
+                break
+            higher_resolutions.append(higher_resolution)
+        return higher_resolutions
+
+    def get_lower_resolutions(self, exclude_quote: bool = False) -> list[Resolution]:
+        """Get all resolutions with lower granularity (coarser time intervals) than this one.
+
+        Args:
+            exclude_quote: If True, skip quote/tick resolutions in the result
+                (they are still traversed but not included).
+
+        Returns:
+            List of resolutions with lower granularity, ordered from closest to coarsest.
+        """
+        lower_resolutions: list[Resolution] = []
+        resolution = self
+        while (lower_resolution := resolution.lower()) != resolution:
+            resolution = lower_resolution
+            if lower_resolution.is_quote() and exclude_quote:
+                continue
+            lower_resolutions.append(lower_resolution)
+        return lower_resolutions
+
+    def __str__(self):
+        resolution = f"{self.period}_{self.timeframe.name}"
+        if self.orderbook_level:
+            resolution += f"_L{self.orderbook_level}"
+        return resolution
+
+    def __repr__(self):
+        resolution = f"{self.period}{self.timeframe.canonical}"
+        if self.orderbook_level:
+            resolution += f"_L{self.orderbook_level}"
+        return resolution
+
+    def __hash__(self):
+        return hash(self._comparable())
+
+    def is_strict_equal(self, other: Any) -> bool:
+        """1h = 60m when using __eq__ to compare resolutions, but in strict_equal, 1h != 60m"""
+        return (
+            self._comparable() == other._comparable()
+            and self.timeframe == other.timeframe
+        )
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, Resolution):
+            return NotImplemented
+        return self._comparable() == other._comparable()
+
+    def __ne__(self, other: Any) -> bool:
+        if not isinstance(other, Resolution):
+            return NotImplemented
+        return not self == other
+
+    # NOTE: lower tuple = higher resolution
+    # e.g. 1m (60, 1, -1) > 1h (3600, 1, -1) because (60,1,-1) < (3600,1,-1)
+    def __lt__(self, other: Any) -> bool:
+        if not isinstance(other, Resolution):
+            return NotImplemented
+        return self._comparable() > other._comparable()
+
+    def __le__(self, other: Any) -> bool:
+        if not isinstance(other, Resolution):
+            return NotImplemented
+        return self._comparable() >= other._comparable()
+
+    def __gt__(self, other: Any) -> bool:
+        if not isinstance(other, Resolution):
+            return NotImplemented
+        return self._comparable() < other._comparable()
+
+    def __ge__(self, other: Any) -> bool:
+        if not isinstance(other, Resolution):
+            return NotImplemented
+        return self._comparable() <= other._comparable()

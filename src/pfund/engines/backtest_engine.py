@@ -1,0 +1,484 @@
+# pyright: reportUninitializedInstanceVariable=false, reportUnsafeMultipleInheritance=false, reportIncompatibleVariableOverride=false, reportAssignmentType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast
+
+if TYPE_CHECKING:
+    import torch.nn as nn
+    from pfeed.storages.storage_config import StorageConfig
+    from sklearn.base import BaseEstimator
+    from sklearn.model_selection import TimeSeriesSplit
+
+    from pfund.brokers.broker_simulated import SimulatedBroker
+    from pfund.brokers.crypto.broker import CryptoBroker
+    from pfund.brokers.ibkr.broker import InteractiveBrokers
+    from pfund.components.models.model_base import BaseModel
+    from pfund.components.strategies.strategy_base import BaseStrategy
+    from pfund.datas.data_bar import BarData
+    from pfund.datas.stores.market_data_store import BarUpdate
+    from pfund.engines.engine_context import DataRangeDict, EngineContext
+    from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
+    from pfund.typing import FeatureT, IndicatorT, ModelT, StrategyT
+    from pfund.utils.dataset_splitter import (
+        CrossValidatorDatasetPeriods,
+        DatasetPeriods,
+        DatasetSplitsDict,
+        DatasetSplitter,
+    )
+
+    class SimulatedCryptoBroker(SimulatedBroker, CryptoBroker): ...
+
+    class SimulatedInteractiveBrokers(SimulatedBroker, InteractiveBrokers): ...
+
+    class BacktestEngineContext(EngineContext):
+        backtest: BacktestContext
+
+    BacktesteeName: TypeAlias = str
+
+import importlib
+import os
+from dataclasses import dataclass
+
+import narwhals as nw
+from pfeed.enums import DataTool
+from pfund_kit.style import RichColor, TextStyle, cprint
+from pfund_kit.utils.progress_bar import ProgressBar, track
+
+import pfund as pf
+from pfund.engines.base_engine import BaseEngine
+from pfund.enums import BacktestMode, Environment, RunStage
+
+
+@dataclass(frozen=True)
+class BacktestContext:
+    backtest_mode: BacktestMode
+    dataset_splitter: DatasetSplitter
+
+    def __post_init__(self):
+        if (
+            self.backtest_mode == BacktestMode.EVENT_DRIVEN
+            and self.settings.reuse_signals
+        ):
+            cprint(
+                "Warning: Reusing pre-computed signals to speed up event-driven backtesting,\n"
+                + "i.e. computing signals on the fly will be skipped",
+                style=TextStyle.BOLD + RichColor.YELLOW,
+            )
+
+
+class BacktestEngine(BaseEngine):
+    _context: BacktestEngineContext
+    strategies: dict[str, BaseStrategy]
+
+    def __init__(
+        self,
+        *,
+        name: str = "engine",
+        data_range: str | DataRangeDict | Literal["ytd"] = "1mo",
+        settings: BacktestEngineSettings | None = None,
+        mode: BacktestMode
+        | Literal["vectorized", "hybrid", "event_driven"] = BacktestMode.VECTORIZED,
+        dataset_splits: int | DatasetSplitsDict | TimeSeriesSplit = 721,
+        cv_test_ratio: float = 0.1,
+        # TODO: add profiling option for event-driven backtesting?
+        # profiling: bool=False,
+    ):
+        """
+        Args:
+            cv_test_ratio:
+                if passing in a cross-validator in dataset_splits,
+                this is the ratio of the entire dataset to be reserved as a final hold-out test set.
+            settings:
+                if not provided, settings.toml will be used.
+                if provided, will override the settings in settings.toml.
+        """
+        from pfund.utils.dataset_splitter import DatasetSplitter
+
+        super().__init__(
+            env=Environment.BACKTEST,
+            name=name,
+            data_range=data_range,
+            settings=settings,
+        )
+        self._context.backtest = BacktestContext(
+            backtest_mode=BacktestMode[mode.upper()],
+            dataset_splitter=DatasetSplitter(
+                dataset_start=self.data_start,
+                dataset_end=self.data_end,
+                dataset_splits=dataset_splits,
+                cv_test_ratio=cv_test_ratio,
+            ),
+        )
+
+    @property
+    def settings(self) -> BacktestEngineSettings:
+        return cast("BacktestEngineSettings", self._context.settings)
+
+    @property
+    def backtest_mode(self) -> BacktestMode:
+        return self._context.backtest.backtest_mode
+
+    @property
+    def dataset_periods(self) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
+        return self._context.backtest.dataset_splitter.dataset_periods
+
+    def add_strategy(
+        self,
+        strategy: StrategyT,
+        resolution: str,
+        name: str = "",
+        storage_config: StorageConfig | None = None,
+    ) -> StrategyT:
+        from pfund.components.strategies._dummy_strategy import _DummyStrategy
+        from pfund.components.strategies.strategy_backtest import BacktestStrategy
+
+        dummy_strategy_name = _DummyStrategy.__name__
+        if dummy_strategy_name in self.strategies:
+            raise Exception(
+                "adding another strategy is not allowed during model backtesting (i.e. engine.add_model(...) has been called)"
+            )
+        Strategy = type(strategy)
+        if Strategy is not _DummyStrategy:
+            if name == dummy_strategy_name:
+                raise ValueError(
+                    f'strategy name "{dummy_strategy_name}" is reserved, please use another name'
+                )
+        strategy: StrategyT = BacktestStrategy(
+            Strategy, *strategy.__pfund_args__, **strategy.__pfund_kwargs__
+        )
+        return cast(
+            "StrategyT",
+            super().add_strategy(
+                strategy=strategy,
+                resolution=resolution,
+                name=name or Strategy.__name__,
+                storage_config=storage_config,
+            ),
+        )
+
+    def _add_component(
+        self,
+        component: ModelT | FeatureT | IndicatorT,
+        resolution: str,
+        name: str = "",
+        storage_config: StorageConfig | None = None,
+    ) -> ModelT | FeatureT | IndicatorT:
+        """Add model without creating a strategy (using dummy strategy)"""
+        from pfund.components.strategies._dummy_strategy import _DummyStrategy
+
+        dummy_strategy_name = _DummyStrategy.__name__
+        only_dummy_strategy_exists = (
+            dummy_strategy_name in self.strategies and len(self.strategies) == 1
+        )
+        assert not only_dummy_strategy_exists, (
+            "Please use strategy.add_model(...) instead of engine.add_model(...) when a strategy is already created"
+        )
+        if dummy_strategy_name not in self.strategies:
+            strategy = self.add_strategy(
+                _DummyStrategy(), resolution, name=dummy_strategy_name
+            )
+        else:
+            strategy = self.get_strategy(dummy_strategy_name)
+        assert not strategy.models, (
+            "Adding more than 1 model to dummy strategy in backtesting is not supported, you should train and dump your models one by one"
+        )
+        component = strategy._add_component(
+            component,
+            resolution,
+            name=name,
+            storage_config=storage_config,
+            is_top_component=True,
+        )
+        return component
+
+    add_feature = add_indicator = _add_component
+
+    def add_model(
+        self,
+        model: ModelT | BaseEstimator | nn.Module,
+        resolution: str,
+        name: str = "",
+        storage_config: StorageConfig | None = None,
+    ) -> ModelT:
+        from pfund.components.models.model_base import wrap_model
+
+        model = cast("ModelT", wrap_model(model))
+        return self._add_component(
+            component=model,
+            resolution=resolution,
+            name=name,
+            storage_config=storage_config,
+        )
+
+    def run(
+        self,
+        stage: Literal[RunStage.EXPERIMENT, RunStage.REFINEMENT]
+        | str = RunStage.EXPERIMENT,
+        project: str = "default",
+        num_chunks: int = 1,
+        num_cpus: int | None = None,
+    ) -> dict[str, Any]:
+        """
+        Args:
+            stage:
+                defines which stage of the run this is, either EXPERIMENT or REFINEMENT
+            project: project name under the stage. Defaults to "default".
+                it will be used as a folder name that groups all runs of this stage together.
+                Path layout: {stage}s/{project}/your_runs
+                e.g. experiments/momentum_v2/
+            num_chunks:
+                Number of chunks to split the dataset into.
+                if = 1, process the whole dataset all at once.
+                if > 1, use Ray for parallel processing.
+            num_cpus:
+                Maximum number of CPUs (Ray workers) to use per batch, i.e. how many chunks run in parallel at once.
+                if None, defaults to os.cpu_count().
+                This will be ignored if Ray is not used (i.e. num_chunks = 1).
+        """
+        from pfund.components.strategies._dummy_strategy import _DummyStrategy
+
+        self._context.set_run_stage(stage)
+
+        if num_chunks < 1:
+            raise ValueError("num_chunks must be greater than 0")
+        if num_cpus:
+            num_cpus = min(num_cpus, cast(int, os.cpu_count()))
+            if num_cpus < 1:
+                raise ValueError("num_cpus must be greater than 0")
+
+        super().run(project=project)
+
+        backtest_results: dict[BacktesteeName, list[pf.BacktestDataFrame]] = {}
+
+        try:
+            for strategy in self.strategies.values():
+                is_model_backtesting = strategy.name == _DummyStrategy.__name__
+                if is_model_backtesting:
+                    # dummy strategy has exactly one model
+                    model: BaseModel = cast(
+                        "BaseModel", list(strategy.models.values())[0]
+                    )
+                    backtestee = model
+                else:
+                    backtestee = strategy
+                backtest_dfs = self._backtest(
+                    backtestee, num_chunks=num_chunks, num_cpus=num_cpus
+                )
+                backtest_results[backtestee.name] = backtest_dfs
+
+        except Exception:
+            self._logger.exception("Error in backtesting:")
+        finally:
+            self.end()
+
+        self.results = backtest_results
+        return backtest_results
+
+    def _backtest(
+        self,
+        backtestee: BaseStrategy | BaseModel,
+        num_chunks: int = 1,
+        num_cpus: int | None = None,
+    ) -> list[pf.BacktestDataFrame]:
+        ### Pre-Backtest ###
+        data_tool: DataTool = self._context.pfeed_config.data_tool
+        is_using_ray = num_chunks > 1
+        backtest_dfs: list[pf.BacktestDataFrame] = []
+
+        features_df = backtestee.features_df
+        if features_df is None:
+            raise ValueError(f"{backtestee.name} features_df is None")
+        df = nw.from_native(features_df)
+
+        def _run_backtest(
+            backtestee: BaseStrategy | BaseModel,
+            df_chunk: nw.DataFrame[Any],
+            backtest_mode: BacktestMode,
+            data_tool: DataTool,
+            chunk_num: int | None = None,
+            batch_num: int | None = None,
+        ) -> pf.BacktestDataFrame:
+            if backtest_mode in [BacktestMode.VECTORIZED, BacktestMode.HYBRID]:
+                BacktestDataFrame = importlib.import_module(
+                    f"pfund._backtest.{data_tool.lower()}"
+                ).BacktestDataFrame
+                backtest_df_original = BacktestDataFrame(
+                    df_chunk.to_native(), backtest_mode=backtest_mode
+                )
+                backtest_df = backtestee.backtest(backtest_df_original)
+                if backtestee.is_strategy() and backtest_df is backtest_df_original:
+                    cprint(
+                        f"WARNING: {backtestee.name} backtest() returned the same df unchanged.\n"
+                        + "This is fine if you only used native e.g. Polars/Pandas operations on the original df.\n"
+                        + "However, [italic]this is an ERROR[/italic] if you called BacktestDataFrame methods like "
+                        + "create_signal(), open_position(), or close_position() —\n"
+                        + "these return a new df, so you must reassign: df = df.create_signal(...) and return the new df",
+                        style=TextStyle.BOLD + RichColor.RED,
+                    )
+            elif backtest_mode == BacktestMode.EVENT_DRIVEN:
+                backtest_df = BacktestEngine._event_driven_loop(
+                    backtestee=backtestee,
+                    df_chunk=df_chunk,
+                    chunk_num=chunk_num,
+                    batch_num=batch_num,
+                )
+            else:
+                raise ValueError(f"{backtest_mode} is not supported")
+            return backtest_df
+
+        ### Backtest ###
+        if not is_using_ray:
+            backtest_df: pf.BacktestDataFrame = _run_backtest(
+                backtestee=backtestee,
+                df_chunk=df,
+                backtest_mode=self.backtest_mode,
+                data_tool=data_tool,
+            )
+            backtest_dfs.append(backtest_df)
+        else:
+            import ray
+            from pfeed.utils.ray import (
+                ray_logging_context,
+                setup_logger_in_ray_task,
+                setup_ray,
+            )
+            from ray.util.queue import Queue
+
+            @ray.remote
+            def ray_task(
+                log_queue: Queue,
+                backtestee_ref: ray.ObjectRef[BaseStrategy | BaseModel],
+                df_chunk: nw.DataFrame[Any],
+                backtest_mode: BacktestMode,
+                data_tool: DataTool,
+                chunk_num: int,
+                batch_num: int,
+            ):
+                backtestee = ray.get(backtestee_ref)
+                logger = setup_logger_in_ray_task(backtestee.logger.name, log_queue)
+                try:
+                    backtest_df: pf.BacktestDataFrame = _run_backtest(
+                        backtestee=backtestee,
+                        df_chunk=df_chunk,
+                        backtest_mode=backtest_mode,
+                        data_tool=data_tool,
+                        chunk_num=chunk_num,
+                        batch_num=batch_num,
+                    )
+                    return backtest_df
+                except Exception:
+                    logger.exception(
+                        f"Error in Backtest-Chunk{chunk_num}-Batch{batch_num}:"
+                    )
+                    return None
+
+            df_chunks: list[tuple[nw.DataFrame[Any], int]] = []
+            total_rows = df.shape[0]
+            chunk_size: int = total_rows // num_chunks
+            for chunk_num, row_offset in enumerate(range(0, total_rows, chunk_size)):
+                df_chunk: nw.DataFrame[Any] = df[row_offset : row_offset + chunk_size]
+                df_chunks.append((df_chunk, chunk_num))
+
+            logger = backtestee.logger
+            self._logger.debug("setting up ray...")
+            setup_ray()
+            backtestee_ref: ray.ObjectRef[BaseStrategy | BaseModel] = ray.put(
+                backtestee
+            )
+            with ray_logging_context(logger) as log_queue:
+                try:
+                    num_cpus = num_cpus or os.cpu_count()
+                    if num_cpus is None:
+                        raise ValueError("num_cpus must be set when using Ray")
+                    batch_size: int = min(num_cpus, num_chunks)
+                    batches = [
+                        df_chunks[i : i + batch_size]
+                        for i in range(0, len(df_chunks), batch_size)
+                    ]
+                    with ProgressBar(
+                        total=len(batches),
+                        description=f"Backtesting {backtestee.name} ({batch_size} chunks per batch)",
+                    ) as pbar:
+                        for batch_num, batch in enumerate(batches):
+                            futures = [
+                                ray_task.remote(
+                                    log_queue=log_queue,  # pyright: ignore[reportCallIssue]
+                                    backtestee_ref=backtestee_ref,
+                                    df_chunk=df_chunk,
+                                    backtest_mode=self.backtest_mode,
+                                    data_tool=data_tool,
+                                    chunk_num=chunk_num,
+                                    batch_num=batch_num,
+                                )
+                                for df_chunk, chunk_num in batch
+                            ]
+                            backtest_dfs_in_batch: list[pf.BacktestDataFrame | None] = (
+                                ray.get(futures)
+                            )
+                            backtest_dfs_in_batch_not_none: list[
+                                pf.BacktestDataFrame
+                            ] = [
+                                backtest_df
+                                for backtest_df in backtest_dfs_in_batch
+                                if backtest_df is not None
+                            ]
+                            backtest_dfs.extend(backtest_dfs_in_batch_not_none)
+                            if len(backtest_dfs_in_batch_not_none) != len(batch):
+                                logger.warning(
+                                    f"Some backtesting tasks in batch-{batch_num} failed, check {logger.name}.log for details"
+                                )
+                            pbar.advance(1)
+                except KeyboardInterrupt:
+                    self._logger.warning(
+                        f"KeyboardInterrupt received, stopping {backtestee.name} backtesting..."
+                    )
+                except Exception:
+                    logger.exception("Error in backtesting:")
+
+        # ### Post-Backtest ###
+        if backtestee.is_strategy():
+            backtest_dfs: list[pf.BacktestDataFrame] = [
+                backtestee._postprocess_backtest_df(backtest_df)
+                for backtest_df in backtest_dfs
+            ]
+        return backtest_dfs
+
+    # EXTEND: support non-bar data types:
+    # brainstorm: heapq.merge(market_data_df, news_data_df), with a dispatcher to create data updates for each data type
+    @staticmethod
+    def _event_driven_loop(
+        backtestee: BaseStrategy | BaseModel,
+        df_chunk: nw.DataFrame[Any],
+        chunk_num: int | None = None,
+        batch_num: int | None = None,
+    ) -> pf.BacktestDataFrame:
+        if chunk_num is not None and batch_num is not None:
+            description = f"Backtest-Chunk{chunk_num}-Batch{batch_num}"
+        else:
+            description = ""
+
+        # OPTIMIZE: critical loop
+        for row in track(
+            df_chunk.iter_rows(named=False),
+            total=df_chunk.shape[0],
+            description=description,
+            bar_style=RichColor.BRIGHT_YELLOW,
+        ):
+            ts, resolution, product_name, source_type, o, h, l, c, v = row  # pyright: ignore[reportGeneralTypeIssues, reportUnusedVariable]  # noqa: E741
+            databoy = backtestee.databoy
+            data = cast("BarData", backtestee.get_data(product_name, resolution))
+            update: BarUpdate = {
+                "ts": ts,
+                "open": o,
+                "high": h,
+                "low": l,
+                "close": c,
+                "volume": v,
+                "is_incremental": False,
+                "msg_ts": None,
+                "extra_data": {},
+            }
+            databoy._update_bar(data, update)
+
+        # TODO: return the backtested dataframe, how?
+        # return ...

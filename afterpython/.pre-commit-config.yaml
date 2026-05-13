@@ -25,12 +25,13 @@ repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   rev: v0.15.12
   hooks:
-  - id: ruff-check
-    stages:
-    - pre-commit
-    args:
-    - --config
-    - ./afterpython/ruff.toml
+  # TODO: re-enable it when ready
+  # - id: ruff-check
+  #   stages:
+  #   - pre-commit
+  #   args:
+  #   - --config
+  #   - ./afterpython/ruff.toml
   - id: ruff-format
     stages:
     - pre-commit

@@ -1,0 +1,98 @@
+from __future__ import annotations
+
+from enum import StrEnum
+from typing import Any
+
+from pfeed.enums import DataSource
+from pydantic import model_validator
+
+from pfund.entities.products.product_crypto import CryptoProduct
+from pfund.enums import AssetTypeModifier, CryptoAssetType, CryptoExchange
+
+
+class BybitProduct(CryptoProduct):
+    class Category(StrEnum):
+        LINEAR = "LINEAR"
+        INVERSE = "INVERSE"
+        SPOT = "SPOT"
+        OPTION = "OPTION"
+
+    source: DataSource = DataSource.BYBIT
+    exchange: CryptoExchange = CryptoExchange.BYBIT
+    category: Category | None = None
+
+    def _derive_product_category(self):
+        if self.asset_type == CryptoAssetType.CRYPTO:
+            category = self.Category.SPOT
+        elif self.is_inverse():
+            category = self.Category.INVERSE
+        elif self.asset_type == CryptoAssetType.OPT:
+            category = self.Category.OPTION
+        else:
+            category = self.Category.LINEAR
+        return category
+
+    def model_post_init(self, __context: Any):
+        self.category = self._derive_product_category()
+        super().model_post_init(__context)
+
+    # TODO: move to BaseProduct and add back SUPPORTED_ASSET_TYPES to BaseExchange?
+    @model_validator(mode="after")
+    def _validate_asset_type(self):
+        from pfund.brokers.crypto.exchanges import Bybit
+
+        if str(self.asset_type) not in Bybit.SUPPORTED_ASSET_TYPES:
+            raise ValueError(f"Invalid asset type: {self.asset_type}")
+        return self
+
+    def _create_name(self) -> str:
+        if self.is_spot() or self.is_perpetual():
+            # NOTE: spots and perpetuals have duplicated symbols, e.g. BTCUSDT, use basis instead to make them unique
+            return "_".join([str(self.source), str(self.basis)])
+        else:
+            return super()._create_name()
+
+    def _create_symbol(self):
+        from pfund.brokers.crypto.exchanges import Bybit
+
+        ebase_asset = Bybit.adapter(self.base_asset, group="asset")
+        equote_asset = Bybit.adapter(self.quote_asset, group="asset")
+        if self.asset_type == CryptoAssetType.PERP:
+            if equote_asset == "USDC":
+                symbol = ebase_asset + "PERP"
+            else:
+                symbol = ebase_asset + equote_asset
+        elif self.asset_type == AssetTypeModifier.INV + "-" + CryptoAssetType.PERP:
+            assert equote_asset == "USD", (
+                f"Only USD-denominated inverse perpetual contracts are supported. Did you mean {self.base_asset}_USD_{self.asset_type}?"
+            )
+            symbol = ebase_asset + equote_asset
+        elif self.asset_type == CryptoAssetType.CRYPTO:
+            symbol = ebase_asset + equote_asset
+        elif self.asset_type == CryptoAssetType.FUT:
+            # symbol = e.g. BTC-13DEC24
+            if equote_asset == "USDC":
+                expiration = self.expiration.strftime("%d%b%y").upper()
+                symbol = "-".join([ebase_asset, expiration])
+            # symbol = e.g. BTCUSDT-22AUG25
+            elif equote_asset == "USDT":
+                expiration = self.expiration.strftime("%d%b%y").upper()
+                symbol = "-".join([ebase_asset + equote_asset, expiration])
+            else:
+                raise ValueError(
+                    f"Only USDC and USDT are supported, not {equote_asset}"
+                )
+        elif self.asset_type == AssetTypeModifier.INV + "-" + CryptoAssetType.FUT:
+            # symbol = e.g. BTCUSDH25
+            assert equote_asset == "USD", (
+                f"Only USD-denominated inverse futures are supported. Did you mean {self.base_asset}_USD_{self.asset_type}?"
+            )
+            symbol = ebase_asset + equote_asset + self.contract_code
+        elif self.asset_type == CryptoAssetType.OPT:
+            expiration = self.expiration.strftime("%d%b%y")
+            option_type = self.option_type[0]
+            strike_price = str(self.strike_price)
+            symbol = "-".join([ebase_asset, expiration, strike_price, option_type])
+        else:
+            raise ValueError(f"Invalid asset type: {self.asset_type}")
+        return symbol
