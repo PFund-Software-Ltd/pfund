@@ -3454,7 +3454,7 @@ wheels = [
 
 [[package]]
 name = "pfund-kit"
-version = "0.1.5"
+version = "0.1.6"
 source = { editable = "../pfund-kit" }
 dependencies = [
     { name = "click" },
@@ -3493,6 +3493,7 @@ dependencies = [
     { name = "hvplot" },
     { name = "ipywidgets-bokeh" },
     { name = "panel" },
+    { name = "pfund-kit" },
     { name = "pywebview", marker = "sys_platform != 'emscripten'" },
 ]
 
@@ -3515,14 +3516,12 @@ requires-dist = [
     { name = "panel", specifier = ">=1.8.10" },
     { name = "papermill", marker = "extra == 'jupyter'", specifier = ">=2.7.0" },
     { name = "pfeed", marker = "extra == 'pfeed'", editable = "../pfeed" },
+    { name = "pfund-kit", editable = "../pfund-kit" },
     { name = "plotly", marker = "extra == 'plotly'", specifier = ">=6.7.0" },
     { name = "pywebview", marker = "sys_platform != 'emscripten'", specifier = ">=6.1" },
     { name = "voila", marker = "extra == 'jupyter'", specifier = ">=0.5.12" },
 ]
 provides-extras = ["pfeed", "marimo", "jupyter", "matplotlib", "plotly", "altair"]
-
-[package.metadata.requires-dev]
-dev = [{ name = "afterpython", specifier = ">=0.2.1" }]
 
 [[package]]
 name = "pillow"
