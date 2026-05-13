@@ -52,11 +52,11 @@ class BaseBroker(ABC):
     def create_product(cls, basis: str, exch: str='', name: str='', symbol: str='', **specs) -> BaseProduct:
         from pfeed.enums import DataSource
         from pfund.entities.products import ProductFactory
-        if cls.name == Broker.CRYPTO:
+        if cls.NAME == Broker.CRYPTO:
             assert exch in CryptoExchange.__members__, f'{exch} is not a valid crypto exchange'
             venue = CryptoExchange[exch.upper()]
         else:
-            venue = cls.name
+            venue = cls.NAME
         source = DataSource[venue.upper()]
         Product = ProductFactory(source=source, basis=basis)
         return Product(basis=basis, exchange=exch, name=name, symbol=symbol, specs=specs)

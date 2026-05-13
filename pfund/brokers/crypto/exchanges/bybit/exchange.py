@@ -45,7 +45,7 @@ class Exchange(BaseExchange):
     def get_supported_resolutions(cls, product: BybitProduct) -> dict[Timeframe, list[int]]:
         import importlib
         from pfund_kit.utils.text import to_camel_case
-        name = cls.name.lower()
+        name = cls.NAME.lower()
         assert product.category is not None, 'product category is not set'
         Category = to_camel_case(product.category)
         WebSocketAPI: type[BaseWebSocketAPI] = getattr(importlib.import_module(f'pfund.brokers.crypto.exchanges.{name}.ws_api_{Category.lower()}'), f'{Category}WebSocketAPI')

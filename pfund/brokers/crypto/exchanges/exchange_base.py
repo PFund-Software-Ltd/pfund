@@ -84,7 +84,7 @@ class BaseExchange(ABC):
         from pfund.config import get_config
         config = get_config()
         file_paths = {
-            cls.MARKET_CONFIGS_FILENAME: config.cache_path / cls.name
+            cls.MARKET_CONFIGS_FILENAME: config.cache_path / cls.NAME
         }
         if filename in file_paths:
             return file_paths[filename] / filename
@@ -182,7 +182,7 @@ class BaseExchange(ABC):
     def create_product(cls, basis: str, name: str='', symbol: str='', **specs: Any) -> CryptoProduct:
         from pfeed.enums import DataSource
         from pfund.entities.products import ProductFactory
-        source = DataSource[cls.name.upper()]
+        source = DataSource[cls.NAME.upper()]
         Product = ProductFactory(source=source, basis=basis)
         return Product(basis=basis, name=name, symbol=symbol, specs=specs)
 
