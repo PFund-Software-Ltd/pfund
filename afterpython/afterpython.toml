@@ -1,0 +1,13 @@
+[company]
+name = ""
+url = ""
+
+[website]
+url = ""
+favicon = "favicon.ico"
+logo = "logo.svg"
+logo_dark = "logo.svg"
+thumbnail = "thumbnail.png"
+announcement = ""
+readme_py = "wasm"
+api_reference = false

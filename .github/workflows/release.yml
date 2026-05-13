@@ -1,0 +1,56 @@
+name: Release to PyPI and GitHub
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on all version tags (v0.1.0, v0.1.0rc1, v0.1.0.dev4, etc.)
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required for creating GitHub releases
+      id-token: write  # Required for PyPI trusted publishing
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Build package
+        run: uv build
+
+      - name: Publish to PyPI
+        run: uv publish
+
+      - name: Determine if pre-release
+        id: check_prerelease
+        run: |
+          # Extract version from tag (remove 'v' prefix)
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          # Check if this is a pre-release or dev version
+          # Matches: dev, rc, alpha, beta, a1, b2 (but not 'stable-version')
+          if [[ "$VERSION" =~ (dev|rc|alpha|beta|a[0-9]+|b[0-9]+) ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: false
+          prerelease: ${{ steps.check_prerelease.outputs.prerelease }}
+          files: dist/*  # Attach built packages (wheel + sdist)

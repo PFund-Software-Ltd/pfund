@@ -1,0 +1,49 @@
+default_install_hook_types:
+- pre-commit
+- commit-msg
+- pre-push
+exclude: ^afterpython/_website/
+repos:
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v6.0.0
+  hooks:
+  - id: trailing-whitespace
+    stages:
+    - pre-commit
+  - id: end-of-file-fixer
+    stages:
+    - pre-commit
+  - id: check-yaml
+    stages:
+    - pre-commit
+  - id: check-toml
+    stages:
+    - pre-commit
+  - id: check-added-large-files
+    stages:
+    - pre-commit
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.15.12
+  hooks:
+  - id: ruff-check
+    stages:
+    - pre-commit
+    args:
+    - --config
+    - ./afterpython/ruff.toml
+  - id: ruff-format
+    stages:
+    - pre-commit
+    args:
+    - --config
+    - ./afterpython/ruff.toml
+# NOTE: buggy commitizen, skip it, not useful anyways
+# - repo: https://github.com/commitizen-tools/commitizen
+#   rev: v4.16.0
+#   hooks:
+#   - id: commitizen
+#     stages:
+#     - commit-msg
+#   - id: commitizen-branch
+#     stages:
+#     - pre-push

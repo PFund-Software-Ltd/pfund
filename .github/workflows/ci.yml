@@ -1,0 +1,220 @@
+name: CI
+
+# Trigger CI on pushes to main and all pull requests
+# This ensures every code change is validated before merging
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    # Run on all PRs regardless of target branch
+    branches:
+      - '**'
+
+jobs:
+  # Job 1: Lint and Format Check
+  # Runs ruff to check code quality and formatting
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Install ruff
+        run: uv pip install --system ruff
+
+      - name: Run ruff check
+        run: ruff check --config ./afterpython/ruff.toml .
+
+      - name: Run ruff format check
+        # --check flag ensures it only validates, doesn't reformat
+        run: ruff format --check --config ./afterpython/ruff.toml .
+
+  # Job 2: Detect Test Strategy
+  # Determines whether to use pixi or uv based on pixi.toml presence
+  detect-test-strategy:
+    runs-on: ubuntu-latest
+    outputs:
+      use_pixi: ${{ steps.check.outputs.use_pixi }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Check for pixi.toml
+        id: check
+        run: |
+          if [ -f "pixi.toml" ]; then
+            echo "use_pixi=true" >> $GITHUB_OUTPUT
+          else
+            echo "use_pixi=false" >> $GITHUB_OUTPUT
+          fi
+
+  # Job 3.1: Test Suite - UV Workflow
+  # Traditional Python testing with uv for projects without pixi
+  test-uv:
+    needs: detect-test-strategy
+    if: needs.detect-test-strategy.outputs.use_pixi == 'false'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+      # TODO: support python 3.14
+        python-version: ['3.11', '3.12', '3.13']
+      fail-fast: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Install dependencies
+        run: |
+          # Install package, main dependencies, and test dependencies
+          # If no [dependency-groups] test exists, only the package and main dependencies are installed
+          uv pip install --system . --group test || uv pip install --system .
+
+      - name: Run tests with pytest
+        # Tolerant by design: if pytest isn't installed, the project has no
+        # [dependency-groups] test (the install step fell back to `uv pip
+        # install --system .`). Treat that the same as "no tests yet" and
+        # pass green — matches the install step's tolerance.
+        # When pytest does run, exit code 5 (no tests collected) is success.
+        # We capture pytest's exit code before any other command clobbers $?.
+        run: |
+          if ! command -v pytest >/dev/null 2>&1; then
+            echo "pytest not installed (no [dependency-groups] test); skipping."
+            exit 0
+          fi
+          pytest -v
+          code=$?
+          if [ $code -eq 5 ]; then exit 0; else exit $code; fi
+
+  # Job 3.2: Test Suite - Pixi Workflow
+  # Pixi-based testing for projects using pixi.toml
+  test-pixi:
+    needs: detect-test-strategy
+    if: needs.detect-test-strategy.outputs.use_pixi == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+      # TODO: support python 3.14
+        environment: ['py311', 'py312', 'py313']
+      fail-fast: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0.9.5
+        with:
+          pixi-version: v0.67.2
+          cache: true
+          # Optional: Uncomment if you need prefix.dev authentication
+          # auth-host: prefix.dev
+          # auth-token: ${{ secrets.PREFIX_DEV_TOKEN }}
+
+      - name: Run tests with pixi
+        # Runs test in specific Python environment (py311, py312, py313)
+        # Assumes you have environments defined in pixi.toml with a "test" task
+        # Example pixi.toml:
+        #   [environments]
+        #   py311 = ["py311", "test"]
+        #   [feature.test.tasks]
+        #   test = "pytest -v"
+        # Note: Exit code 5 (no tests collected) is treated as success
+        run: |
+          pixi run -e ${{ matrix.environment }} test || if [ $? -eq 5 ]; then exit 0; else exit $?; fi
+
+  # Job 3.3: Test Suite - Complete
+  # Unified test status for branch protection
+  test:
+    if: always()
+    needs: [detect-test-strategy, test-uv, test-pixi]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check test results
+        run: |
+          uv_result="${{ needs.test-uv.result }}"
+          pixi_result="${{ needs.test-pixi.result }}"
+          # Invariant: exactly one track runs (use_pixi gate) and must succeed;
+          # the other is skipped. Any other combination — both skipped (detect
+          # job died), both succeeded (broken gating), or anything failing —
+          # is red. The "no tests yet" case is handled inside the running track
+          # (pytest step exits 0), so it reports success here, not skipped.
+          if [ "$uv_result" == "success" ] && [ "$pixi_result" == "skipped" ]; then
+            echo "All tests passed (uv track)."
+            exit 0
+          elif [ "$pixi_result" == "success" ] && [ "$uv_result" == "skipped" ]; then
+            echo "All tests passed (pixi track)."
+            exit 0
+          else
+            echo "Tests did not pass cleanly: uv=$uv_result, pixi=$pixi_result"
+            exit 1
+          fi
+
+  # Job 4: Build Verification
+  # Ensures the package can be built successfully
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Build package
+        run: uv build
+
+      - name: List build artifacts
+        # Show what was built (wheel + sdist)
+        # Useful for debugging build issues
+        run: ls -lh dist/
+
+      - name: Install built package
+        # Test that the built wheel can be installed
+        # This catches packaging issues like missing files
+        run: uv pip install --system dist/*.whl
+
+      - name: Verify installation
+        # Generic verification: assume project.name maps to import name
+        # by replacing '-' with '_'. If a project breaks this rule, CI fails.
+        run: |
+          PROJECT_NAME="$(python - <<'PY'
+          import tomllib
+          with open("pyproject.toml", "rb") as f:
+              data = tomllib.load(f)
+          print(data["project"]["name"])
+          PY
+          )"
+          IMPORT_NAME="${PROJECT_NAME//-/_}"
+          python -c "import ${IMPORT_NAME}"
+
+  # Job 5: Type Check
+  # typecheck:

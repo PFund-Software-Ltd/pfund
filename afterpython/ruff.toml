@@ -1,0 +1,32 @@
+# Ruff configuration
+# See More: https://docs.astral.sh/ruff/configuration/
+
+line-length = 88
+target-version = "py311"
+
+[lint]
+# ruff default rules:
+select = [
+    "E4",  # import-related errors (e.g., undefined names in imports)
+    "E7",  # statement errors (e.g., multiple statements on one line)
+    "E9",  # runtime errors (e.g., syntax errors, indentation issues)
+    "F",   # Pyflakes - logical errors (e.g., unused imports, undefined variables)
+]
+# ignored rules:
+ignore = [
+    "E501",  # line too long
+]
+# extended rules:
+extend-select = [
+    "I",     # isort - import sorting
+    "UP",    # pyupgrade - upgrade syntax for newer Python
+    "B",     # flake8-bugbear - find likely bugs
+    "SIM",   # flake8-simplify - simplify code
+    # "C90",   # mccabe - complexity checking
+    "N",     # pep8-naming - enforce naming conventions
+    "RUF",   # ruff-specific rules
+]
+
+[format]
+quote-style = "double"  # double quotes for strings
+indent-style = "space"  # indent with spaces, rather than tabs.

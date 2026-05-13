@@ -200,3 +200,8 @@ tests/data/
 
 # Ignore dynaconf secret files
 .secrets.*
+
+# AfterPython website rules
+**/_build/
+!afterpython/_website/src/lib/
+afterpython/_website.backup/

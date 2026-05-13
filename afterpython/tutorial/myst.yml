@@ -1,0 +1,52 @@
+# See docs at: https://mystmd.org/guide/frontmatter
+version: 1
+project:
+  id: 2c12fb0d-4dd3-4a38-9ea4-c060a0d1dd54
+  # title:
+  # description:
+  # keywords: []
+  # authors: []
+  github: https://github.com/PFund-Software-Ltd/pfund
+  # To autogenerate a Table of Contents, run "myst init --write-toc"
+  license: CC-BY-4.0
+  subject: Tutorial
+  authors:
+  - stephen_yau
+  venue:
+    title: ''
+    url: ''
+  copyright: © pfund 2026. All rights reserved.
+  title: ''
+  description: A Complete Algo-Trading Framework for Machine Learning, enabling trading across TradFi, CeFi and DeFi. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading
+  keywords:
+  - trading
+  - algo-trading
+  - stocks
+  - cryptos
+  - cryptocurrencies
+  - TradFi
+  - CeFi
+  - DeFi
+  - portfolio management
+  - investment
+  - backtesting
+  - machine learning
+  thumbnail: ../static/thumbnail.png
+site:
+  template: book-theme
+  # options:
+  #   favicon: favicon.ico
+  #   logo: site_logo.png
+# See options at: https://mystmd.org/guide/website-templates#site-options
+  options:
+    analytics_google: '{{ GOOGLE_ANALYTICS_ID }}'
+    favicon: ../static/favicon.ico
+    logo: ../static/logo.svg
+    logo_dark: ../static/logo.svg
+    logo_text: pfund
+    logo_url: ''
+  title: pfund's Tutorial
+  actions:
+  - title: ⭐ Star
+    url: https://github.com/PFund-Software-Ltd/pfund
+extends: ../authors.yml
