@@ -76,7 +76,7 @@ reportUnnecessaryIsInstance = false
 
 [tool.uv.build-backend]
 module-name = "pfund"
-module-root = ""
+module-root = "src"
 
 [tool.pytest.ini_options]
 markers = [

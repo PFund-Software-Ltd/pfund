@@ -8289,7 +8289,7 @@ packages:
 - pypi: ./
   name: pfund
   version: 0.0.2
-  sha256: e31a447870eea5ef87aaacf0afe0f351f367b07aeaa3a2bc89f8eed871b17a2c
+  sha256: b56b33cafe8b6d3439f030250a21ddff519b66c2a5550e98a3a33428b3b39a57
   requires_dist:
   - pfund-kit>=0.1.6
   - httpx>=0.28.1
