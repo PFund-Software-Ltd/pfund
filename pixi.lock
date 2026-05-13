@@ -8288,8 +8288,8 @@ packages:
   requires_python: '>=3.11'
 - pypi: ./
   name: pfund
-  version: 0.0.2
-  sha256: b56b33cafe8b6d3439f030250a21ddff519b66c2a5550e98a3a33428b3b39a57
+  version: 0.0.3
+  sha256: 67e7b86c322481f966e6286f386f8abfc839addaf3bf85617a66ed596ec0ba6a
   requires_dist:
   - pfund-kit>=0.1.6
   - httpx>=0.28.1
