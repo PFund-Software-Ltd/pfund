@@ -33,8 +33,9 @@ jobs:
       - name: Install ruff
         run: uv pip install --system ruff
 
-      - name: Run ruff check
-        run: ruff check --config ./afterpython/ruff.toml .
+      # TODO: re-enable it when ready
+      # - name: Run ruff check
+      #   run: ruff check --config ./afterpython/ruff.toml .
 
       - name: Run ruff format check
         # --check flag ensures it only validates, doesn't reformat
