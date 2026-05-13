@@ -30,14 +30,15 @@ gh = ">=2.92.0"
 
 [pypi-dependencies]
 pfund-kit = ">=0.1.6"
-pfeed = { version = ">=0.0.5", extras = ["duckdb"] }
+# TODO: enable when ready
+# pfeed = { version = ">=0.0.5", extras = ["duckdb"] }
 httpx = ">=0.28.1"
 websockets = ">=16.0.0"
 numba = ">=0.65.1"
 
 [feature.optional.pypi-dependencies]
-pfolio = ">=0.0.3"
 # TODO: enable when ready
+# pfolio = ">=0.0.3"
 # pfund-plot = {version = ">=0.0.1.dev3", extras = ["marimo"]}
 # mtflow = ">=0.0.1.dev2"
 pfund-ibapi = ">=10.42.1"
@@ -64,7 +65,7 @@ pfeed = { path = "../pfeed", editable = true, extras = ["duckdb", "yfinance", "h
 pfolio = { path = "../pfolio", editable = true }
 pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo", "jupyter", "matplotlib", "plotly", "altair"] }
 mtflow = { path = "../mtflow", editable = true }
-afterpython = ">=0.3.4"
+afterpython = ">=0.3.5"
 graphviz = ">=0.21"
 basedpyright = ">=1.39.4"
 # pfund-plot = {version = ">=0.0.1.dev3", extras = ["marimo", "jupyter"]}

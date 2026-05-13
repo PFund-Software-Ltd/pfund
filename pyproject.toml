@@ -25,6 +25,7 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = [
     "pfund-kit>=0.1.6",
+    # TODO: enable when ready
     # 'pfeed[duckdb]>=0.0.5',
     "httpx>=0.28.1",
     "websockets>=16.0 ; sys_platform != 'emscripten'",
@@ -33,8 +34,8 @@ dependencies = [
 
 [project.optional-dependencies]
 core = [
-    # 'pfolio>=0.0.3',
     # TODO: enable when ready
+    # 'pfolio>=0.0.3',
     # 'pfund-plot[marimo]>=0.0.1.dev3',
     # 'mtflow>=0.0.1.dev2 ; sys_platform != "emscripten"',
 ]
