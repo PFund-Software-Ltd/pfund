@@ -65,7 +65,7 @@ mtflow = { path = "../mtflow", editable = true }
 
 [feature.dev.pypi-dependencies]
 pfund = { path = ".", editable = true }
-afterpython = ">=0.2.1"
+afterpython = ">=0.3.2"
 graphviz = ">=0.21"
 basedpyright = ">=1.39.3"
 # TEMP

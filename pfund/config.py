@@ -5,6 +5,7 @@ from typing import Any
 from pathlib import Path
 
 from pfund.enums import Environment
+from pfund_kit import logging as kit_logging
 from pfund_kit.config import Configuration
 
 
@@ -18,34 +19,11 @@ __all__ = [
 
 project_name = 'pfund'
 _config: PFundConfig | None = None
-_logging_config: dict[str, Any] | None = None
 
 
-def setup_logging(env: Environment, reset: bool=False):
-    from pfund_kit.logging import clear_logging_handlers, setup_exception_logging
-    from pfund_kit.logging.configurator import LoggingDictConfigurator
-
+def setup_logging(env: Environment, reset: bool = False) -> None:
     env = Environment[env.upper()]
-
-    if reset:
-        clear_logging_handlers()
-
-    config: PFundConfig = get_config()
-    logging_config: dict[str, Any] = get_logging_config()
-
-    log_path = config.log_path / env
-    log_path.mkdir(parents=True, exist_ok=True)
-
-    # ≈ logging.config.dictConfig(logging_config) with a custom configurator
-    logging_configurator: LoggingDictConfigurator = LoggingDictConfigurator.create(
-        log_path=log_path,
-        logging_config=logging_config,
-        lazy=True,
-        use_colored_logger=True,
-    )
-    logging_configurator.configure()
-    
-    setup_exception_logging(logger_name=project_name)
+    kit_logging.setup_logging(get_config(), env=env, reset=reset)
 
 
 def get_config(engine_name: str | None = None) -> PFundConfig:
@@ -62,10 +40,7 @@ def get_config(engine_name: str | None = None) -> PFundConfig:
 
 
 def get_logging_config() -> dict[str, Any]:
-    global _logging_config
-    if _logging_config is None:
-        _logging_config = configure_logging()
-    return _logging_config
+    return kit_logging.get_logging_config(get_config())
 
 
 def configure(
@@ -88,7 +63,7 @@ def configure(
     config = get_config(engine_name=engine_name)
     config_dict = config.to_dict()
     config_dict.pop('__version__')
-    
+
     # Apply updates for non-None values
     for k in config_dict:
         v = locals().get(k)
@@ -96,48 +71,18 @@ def configure(
             if '_path' in k:
                 v = Path(v)
             setattr(config, k, v)
-    
+
     config.ensure_dirs()
-    
+
     if persist:
         config.save()
-        
+
     return config
 
 
-def configure_logging(logging_config: dict[str, Any] | None=None, debug: bool=False) -> dict[str, Any]:
-    '''
-    Loads logging config from YAML file and merges with optional user overrides.
+def configure_logging(logging_config: dict[str, Any] | None = None, debug: bool = False) -> dict[str, Any]:
+    return kit_logging.configure_logging(get_config(), overrides=logging_config, debug=debug)
 
-    Args:
-        logging_config: Optional dict to override/extend the base YAML config.
-        debug: If True, sets all loggers and handlers to DEBUG level.
-               This overrides any level settings from the YAML file and logging_config.
-
-    Returns:
-        Merged logging config dict.
-
-    Raises:
-        FileNotFoundError: If the logging config YAML file is not found.
-    '''
-    from pfund_kit.utils import deep_merge
-    from pfund_kit.logging import enable_debug_logging
-    from pfund_kit.utils.yaml import load
-
-    global _logging_config
-
-    config = get_config()
-
-    # load logging.yml file
-    logging_config_from_yml: dict | None = load(config.logging_config_file_path)
-    if logging_config_from_yml is None:
-        raise FileNotFoundError(f"Logging config file {config.logging_config_file_path} not found")
-    
-    _logging_config = deep_merge(logging_config_from_yml, logging_config or {})
-    if debug:
-        _logging_config = enable_debug_logging(_logging_config)
-    return _logging_config
-    
 
 class PFundConfig(Configuration):
     SETTINGS_FILENAME = 'settings.toml'  # engine's settings toml file
