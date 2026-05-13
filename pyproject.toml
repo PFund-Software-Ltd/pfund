@@ -99,3 +99,11 @@ pfund-kit = { path = "../pfund-kit", editable = true }
 # [tool.hatch.build.targets.wheel]
 # TODO: also include templates/
 # include = ['/pfund', 'logging.yml', 'docker-compose.yml']
+
+[tool.pytest.ini_options]
+markers = [
+    "smoke: Run the most important tests",
+]
+addopts = [
+    "--strict-markers",
+]
