@@ -53,9 +53,9 @@ pfund = "pfund.__main__:run_cli"
 pfund = "pfund.cli:pfund_group"
 
 [project.urls]
-homepage = "https://pfund.ai"
+homepage = "https://pfund.pfund.ai"
 repository = "https://github.com/PFund-Software-Ltd/pfund"
-documentation = "https://pfund-docs.pfund.ai"
+documentation = "https://pfund.pfund.ai/doc"
 
 [build-system]
 requires = ["uv_build>=0.11.14,<0.12.0"]

@@ -12,8 +12,6 @@ if TYPE_CHECKING:
     from pfund.datas.timeframe import Timeframe
     from pfund.entities.products.product_base import BaseProduct
 
-import sys
-
 from pfund_kit.utils.temporal import convert_ts_to_dt
 
 from pfund.datas.data_market import MarketData
@@ -33,10 +31,10 @@ class Bar:
         self.clear()
 
     def clear(self):
-        self._open = 0.0
-        self._high = 0.0
-        self._low = sys.float_info.max
-        self._close = 0.0
+        self._open: float | None = None
+        self._high: float | None = None
+        self._low: float | None = None
+        self._close: float | None = None
         self._volume = 0.0
         self._start_ts = self._end_ts = self._ts = 0.0
         self._is_closed = False
@@ -47,18 +45,22 @@ class Bar:
 
     @property
     def open(self) -> float:
+        assert self._open is not None, "bar is empty; check is_empty() first"
         return self._open
 
     @property
     def high(self) -> float:
+        assert self._high is not None, "bar is empty; check is_empty() first"
         return self._high
 
     @property
     def low(self) -> float:
+        assert self._low is not None, "bar is empty; check is_empty() first"
         return self._low
 
     @property
     def close(self) -> float:
+        assert self._close is not None, "bar is empty; check is_empty() first"
         return self._close
 
     @property
@@ -93,7 +95,7 @@ class Bar:
         self._is_closed = True
 
     def is_empty(self):
-        return not self.open
+        return self._open is None
 
     def is_closed(self, now: float | None = None) -> bool:
         # check if the bar is closed
@@ -142,11 +144,11 @@ class Bar:
         if is_incremental:
             if self.is_closed(now=ts):
                 self.clear()
-            if not self._open:
+            if self._open is None:
                 self._open = o
-            if h > self._high:
+            if self._high is None or h > self._high:
                 self._high = h
-            if l < self._low:
+            if self._low is None or l < self._low:
                 self._low = l
             self._close = c
             if is_snapshot:
@@ -180,9 +182,11 @@ class Bar:
             return _start_ts + self._resolution_in_seconds - 0.001
 
         def _compute_start_ts_from_end_ts(_end_ts: float) -> float:
-            from math import ceil
-
-            return ceil(_end_ts + 0.001) - self._resolution_in_seconds
+            # end_ts conventions vary across exchanges: inclusive last ms
+            # (e.g. 10:59:59.999) or exclusive next-bar start (e.g. 11:00:00.000).
+            # Rounding to the nearest second normalises both to the next-bar
+            # boundary, after which we step back one period.
+            return round(_end_ts) - self._resolution_in_seconds
 
         if ts:
             self._ts = ts
@@ -195,16 +199,24 @@ class Bar:
             self._end_ts = end_ts
             self._start_ts = _compute_start_ts_from_end_ts(end_ts)
         elif ts:
+            # Subtract shift before flooring so a ts in the early portion of a
+            # shifted bar (e.g. 11:25 in a shift=30min hourly bar [10:30, 11:30))
+            # buckets into the correct bar instead of jumping forward one period.
+            shifted_ts = ts - self._shift_in_seconds
             if is_incremental:
                 # ts is within the current bar, safe to derive both
                 self._start_ts = (
-                    ts // self._resolution_in_seconds * self._resolution_in_seconds
+                    shifted_ts
+                    // self._resolution_in_seconds
+                    * self._resolution_in_seconds
                     + self._shift_in_seconds
                 )
             else:
                 # ts is past the bar (confirmation timestamp), shift back one period
                 self._start_ts = (
-                    ts // self._resolution_in_seconds * self._resolution_in_seconds
+                    shifted_ts
+                    // self._resolution_in_seconds
+                    * self._resolution_in_seconds
                     - self._resolution_in_seconds
                     + self._shift_in_seconds
                 )
