@@ -35,6 +35,7 @@ dependencies = [
 core = [
     "numba>=0.65.1 ; sys_platform != 'emscripten'",
     # TODO: enable when ready
+    # 'pfeed[duckdb,core]>=0.0.5',
     # 'pfolio>=0.0.3',
     # 'pfund-plot[marimo]>=0.0.1.dev3',
     # 'mtflow>=0.0.1.dev2 ; sys_platform != "emscripten"',

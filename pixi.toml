@@ -38,6 +38,7 @@ numba = ">=0.65.1"
 
 [feature.optional.pypi-dependencies]
 # TODO: enable when ready
+# pfeed = { version = ">=0.0.5", extras = ["duckdb", "core"] }
 # pfolio = ">=0.0.3"
 # pfund-plot = {version = ">=0.0.1.dev3", extras = ["marimo"]}
 # mtflow = ">=0.0.1.dev2"
@@ -54,18 +55,18 @@ ta-lib = ">=0.6.4"
 # TEMP
 [pypi-options.dependency-overrides]
 pfund = { path = ".", editable = true }
-pfeed = { path = "../pfeed", editable = true, extras = ["duckdb", "yfinance", "hf"] }
+pfeed = { path = "../pfeed", editable = true, extras = ["core", "duckdb", "yfinance", "hf"] }
 pfolio = { path = "../pfolio", editable = true }
 pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo", "jupyter", "matplotlib", "plotly", "altair"] }
 mtflow = { path = "../mtflow", editable = true }
 
 [feature.dev.pypi-dependencies]
 pfund = { path = ".", editable = true }
-pfeed = { path = "../pfeed", editable = true, extras = ["duckdb", "yfinance", "hf"] }
+pfeed = { path = "../pfeed", editable = true, extras = ["core", "duckdb", "yfinance", "hf"] }
 pfolio = { path = "../pfolio", editable = true }
 pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo", "jupyter", "matplotlib", "plotly", "altair"] }
 mtflow = { path = "../mtflow", editable = true }
-afterpython = ">=0.3.5"
+afterpython = ">=0.3.6"
 graphviz = ">=0.21"
 basedpyright = ">=1.39.4"
 memray = ">=1.19.3"

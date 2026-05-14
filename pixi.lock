@@ -6899,9 +6899,9 @@ packages:
 - pypi: ../pfeed
   name: pfeed
   version: 0.0.5
-  sha256: c2bf5266c72b894ab5f045d2ba7056ffee1ebf1e2495c577805757c07e307ba7
+  sha256: 11a80145849985eb361e503fc0104592e1d6466a49d5265ba9d760d1d3cc31f7
   requires_dist:
-  - pfund>=0.0.5
+  - pfund>=0.0.6
   - polars>=1.40.1
   - pyarrow>=23.0.1
   - pandera>=0.31.1
@@ -6911,9 +6911,9 @@ packages:
   - zstandard>=0.25.0
   - beautifulsoup4>=4.14.3
   - cloudpathlib[s3,gs,azure]>=0.23.0
-  - ray[default]>=2.55.1 ; sys_platform != 'emscripten'
-  - pyzmq>=27.1.0 ; sys_platform != 'emscripten'
-  - deltalake>=1.5.1 ; sys_platform != 'emscripten'
+  - ray[default]>=2.55.1 ; sys_platform != 'emscripten' and extra == 'core'
+  - pyzmq>=27.1.0 ; sys_platform != 'emscripten' and extra == 'core'
+  - deltalake>=1.5.1 ; sys_platform != 'emscripten' and extra == 'core'
   - prefect>=3.6.28 ; extra == 'prefect'
   - yfinance>=1.3.0 ; extra == 'yfinance'
   - huggingface-hub>=1.12.0 ; extra == 'hf'
@@ -6937,7 +6937,7 @@ packages:
 - pypi: ./
   name: pfund
   version: 0.0.6
-  sha256: aca1bd3b2d747d32c1dacf4405b7d6eac638668400a7cda0acdfa26f93245574
+  sha256: 36c115dd49abec3b80e7e57a7dbcc1295f0af416611806c44fa96efd0e44e7b7
   requires_dist:
   - pfund-kit>=0.1.6
   - httpx>=0.28.1
