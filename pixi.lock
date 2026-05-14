@@ -6936,8 +6936,8 @@ packages:
   requires_python: '>=3.11'
 - pypi: ./
   name: pfund
-  version: 0.0.7
-  sha256: fddacfed9b519ffa94d6acb63d63d4a4160f104ef13f8459f15f522800cfb673
+  version: 0.0.8
+  sha256: fd8a44801d34eeeb401954d1292df2af95db5e77c7309f83fd94d02dfab39ec3
   requires_dist:
   - pfund-kit>=0.1.7
   - httpx>=0.28.1
