@@ -56,24 +56,33 @@ class BaseProduct(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _assert_required_fields(cls, data: Any) -> Any:
+    def _validate_specs(cls, data: Any) -> Any:
         if not isinstance(data, dict):
             return data  # already a built model instance - nothing to assert
+        allowed_specs: set[str] = cls.get_allowed_specs()
         required_specs: set[str] = cls.get_required_specs()
-        missing_fields = []
-        missing_fields_msg = (
-            f'"{data["basis"]}" is missing the following required fields:'
-        )
-        for field_name in required_specs:
-            if field_name not in data["specs"]:
-                missing_fields.append(field_name)
-                missing_fields_msg += f'\n- "{field_name}"'
-            else:
-                # bring fields such as "expiration" to the top level
-                data[field_name] = data["specs"][field_name]
-        missing_fields_msg += f"\nplease add them as kwargs, e.g. {'=..., '.join(missing_fields) + '=...'} \n"
+        provided_specs: dict[str, Any] = data.get("specs") or {}
+
+        unknown_specs = sorted(set(provided_specs) - allowed_specs)
+        if unknown_specs:
+            raise ValueError(
+                f'"{data["basis"]}" got unexpected specs: {unknown_specs}.\n'
+                + f"Allowed specs for {cls.__name__}: {sorted(allowed_specs) or 'none'}"
+            )
+
+        missing_fields = sorted(required_specs - set(provided_specs))
         if missing_fields:
-            raise ValueError("\n\033[1m" + missing_fields_msg + "\033[0m")
+            missing_fields_msg = (
+                f'"{data["basis"]}" is missing the following required fields:'
+            )
+            for field_name in missing_fields:
+                missing_fields_msg += f'\n- "{field_name}"'
+            missing_fields_msg += f"\nplease add them as kwargs, e.g. {'=..., '.join(missing_fields) + '=...'}"
+            raise ValueError(missing_fields_msg)
+
+        # bring fields such as "expiration" to the top level so pydantic validates them
+        for field_name in allowed_specs & set(provided_specs):
+            data[field_name] = provided_specs[field_name]
         return data
 
     def model_post_init(self, __context: Any):
@@ -116,6 +125,16 @@ class BaseProduct(BaseModel):
             field_name
             for field_name, field in cls.model_fields.items()
             if field.is_required() and field_name not in BaseProduct.model_fields
+        }
+
+    @classmethod
+    def get_allowed_specs(cls) -> set[str]:
+        """Gets all specification field names (required + optional) contributed by subclasses/mixins."""
+        from pfund.entities.products.product_crypto import CryptoProduct
+
+        excluded = set(BaseProduct.model_fields) | set(CryptoProduct.model_fields)
+        return {
+            field_name for field_name in cls.model_fields if field_name not in excluded
         }
 
     def to_dict(self) -> dict[str, Any]:
