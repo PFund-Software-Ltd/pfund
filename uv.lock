@@ -897,7 +897,7 @@ requires-dist = [
     { name = "numba", marker = "sys_platform != 'emscripten' and extra == 'core'", specifier = ">=0.65.1" },
     { name = "orbax-checkpoint", marker = "sys_platform != 'emscripten' and extra == 'jax'", specifier = ">=0.11.39" },
     { name = "pfund-ibapi", marker = "sys_platform != 'emscripten' and extra == 'ibkr'", specifier = ">=10.42.1" },
-    { name = "pfund-kit", specifier = ">=0.1.7" },
+    { name = "pfund-kit", specifier = ">=0.1.8" },
     { name = "safetensors", marker = "sys_platform != 'emscripten' and extra == 'torch'", specifier = ">=0.7.0" },
     { name = "scikit-learn", marker = "extra == 'sklean'", specifier = ">=1.8.0" },
     { name = "ta-lib", marker = "sys_platform != 'emscripten' and extra == 'ta-lib'", specifier = ">=0.6.4" },
@@ -920,7 +920,7 @@ wheels = [
 
 [[package]]
 name = "pfund-kit"
-version = "0.1.7"
+version = "0.1.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -934,9 +934,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "trogon", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/78/eb/f7aeb90744951d28601f078aad7f66408b413181d41cb75c7f24ae969b1d/pfund_kit-0.1.7.tar.gz", hash = "sha256:74122d19c9d7a83c2ca82f951db5a8b856f14a4702df129e731f1b8758ff7554", size = 41890, upload-time = "2026-05-14T00:11:21.056Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f8/00/25504434bea3cd718d3ace08dbb0dc62669d7583e8d73dd2197bbc45b37b/pfund_kit-0.1.8.tar.gz", hash = "sha256:ac1bdf8c7ceaa6ed7f04d9e9ee7bb762354512310ac71f98b904d45d001b09a3", size = 41898, upload-time = "2026-05-17T02:37:52.648Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e7/10/8fe2ec675c02355a1b585c5bda8bde3ca05cd150d8eb5394d5453cf8d33b/pfund_kit-0.1.7-py3-none-any.whl", hash = "sha256:45dc1c637611b022893f5bcb30821c046ae4f976de5fe475c4204cdbe4c8ad7d", size = 57759, upload-time = "2026-05-14T00:11:22.08Z" },
+    { url = "https://files.pythonhosted.org/packages/a6/f9/f1c40b404199acf5e46a21a26229a9f9e7d84bea055da9864bf53ee1bb57/pfund_kit-0.1.8-py3-none-any.whl", hash = "sha256:adf16443159ac48dfa1fb76995ee331156ea23d4d70f2e286cfa0c6e99c9e538", size = 57762, upload-time = "2026-05-17T02:37:53.716Z" },
 ]
 
 [[package]]

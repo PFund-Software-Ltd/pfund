@@ -29,14 +29,14 @@ uv = ">=0.11.14"
 gh = ">=2.92.0"
 
 [pypi-dependencies]
-pfund-kit = ">=0.1.7"
+pfund-kit = ">=0.1.8"
 # TODO: enable when ready
-# pfeed = { version = ">=0.0.5", extras = ["duckdb"] }
+# pfeed = ">=0.0.5"
 httpx = ">=0.28.1"
 websockets = ">=16.0.0"
-numba = ">=0.65.1"
 
 [feature.optional.pypi-dependencies]
+numba = ">=0.65.1"
 # TODO: enable when ready
 # pfeed = { version = ">=0.0.5", extras = ["duckdb", "core"] }
 # pfolio = ">=0.0.3"

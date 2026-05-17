@@ -24,9 +24,9 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "pfund-kit>=0.1.7",
+    "pfund-kit>=0.1.8",
     # TODO: enable when ready
-    # 'pfeed[duckdb]>=0.0.5',
+    # 'pfeed>=0.0.5',
     "httpx>=0.28.1",
     "websockets>=16.0 ; sys_platform != 'emscripten'",
 ]
