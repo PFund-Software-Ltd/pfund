@@ -7,7 +7,6 @@ if TYPE_CHECKING:
     import pfund_plot as plot
 
     from pfund._backtest.typing import BacktestDataFrame
-    from pfund.brokers.broker_defi import DeFiBroker
     from pfund.brokers.crypto.broker import CryptoBroker
     from pfund.brokers.crypto.exchanges import Bybit
     from pfund.brokers.ibkr.broker import (
@@ -31,14 +30,17 @@ if TYPE_CHECKING:
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.engines.trade_engine import TradeEngine
     from pfund.utils.aliases import ALIASES as alias
-
-from importlib.metadata import version
+    # from pfund.brokers.broker_defi import DeFiBroker
 
 from pfund.config import configure, configure_logging, get_config
 
 
 def __getattr__(name: str):
-    if name == "alias":
+    if name == "__version__":
+        from importlib.metadata import version
+
+        return version("pfund")
+    elif name == "alias":
         from pfund.utils.aliases import ALIASES
 
         return ALIASES
@@ -130,28 +132,26 @@ def __getattr__(name: str):
         from pfund.brokers.ibkr.broker import InteractiveBrokers
 
         return InteractiveBrokers
-    elif name == "DeFiBroker":
-        from pfund.brokers.broker_defi import DeFiBroker
+    # elif name == "DeFiBroker":
+    #     from pfund.brokers.broker_defi import DeFiBroker
 
-        return DeFiBroker
+    #     return DeFiBroker
     elif name == "Bybit":
         from pfund.brokers.crypto.exchanges import Bybit
 
         return Bybit
-    elif name == "Binance":
-        from pfund.brokers.crypto.exchanges import Binance
+    # elif name == "Binance":
+    #     from pfund.brokers.crypto.exchanges import Binance
 
-        return Binance
-    elif name.upper() == "OKX":
-        from pfund.brokers.crypto.exchanges import OKX
+    #     return Binance
+    # elif name.upper() == "OKX":
+    #     from pfund.brokers.crypto.exchanges import OKX
 
-        return OKX
+    #     return OKX
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
-__version__ = version("pfund")
 __all__ = (
-    "__version__",
     "alias",
     "plot",
     # configs
@@ -180,11 +180,11 @@ __all__ = (
     "IBKR",
     "IB",
     "CryptoBroker",
-    "DeFiBroker",
+    # "DeFiBroker",
     # exchanges
     "Bybit",
-    "Binance",
-    "OKX",
+    # "Binance",
+    # "OKX",
 )
 
 
