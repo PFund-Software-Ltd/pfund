@@ -869,7 +869,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3c/1b/6a69800c82bffaee8d10bd6f063da1ec9d745b20826daba22a87acff778d/orbax_checkpoint-0.11.39-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/3f/d6eb875163ace4ebcb5630b8d9f9ab0c2db5b9d892002269e5103574c618/pfund_ibapi-10.42.1-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/e7/10/8fe2ec675c02355a1b585c5bda8bde3ca05cd150d8eb5394d5453cf8d33b/pfund_kit-0.1.7-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/a6/f9/f1c40b404199acf5e46a21a26229a9f9e7d84bea055da9864bf53ee1bb57/pfund_kit-0.1.8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/75/a6/a0a304dc33b49145b21f4808d763822111e67d1c3a32b524a1baf947b6e1/platformdirs-4.9.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/84/03/0d3ce49e2505ae70cf43bc5bb3033955d2fc9f932163e84dc0779cc47f48/prompt_toolkit-3.0.52-py3-none-any.whl
@@ -977,7 +977,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3c/1b/6a69800c82bffaee8d10bd6f063da1ec9d745b20826daba22a87acff778d/orbax_checkpoint-0.11.39-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/3f/d6eb875163ace4ebcb5630b8d9f9ab0c2db5b9d892002269e5103574c618/pfund_ibapi-10.42.1-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/e7/10/8fe2ec675c02355a1b585c5bda8bde3ca05cd150d8eb5394d5453cf8d33b/pfund_kit-0.1.7-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/a6/f9/f1c40b404199acf5e46a21a26229a9f9e7d84bea055da9864bf53ee1bb57/pfund_kit-0.1.8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/75/a6/a0a304dc33b49145b21f4808d763822111e67d1c3a32b524a1baf947b6e1/platformdirs-4.9.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/84/03/0d3ce49e2505ae70cf43bc5bb3033955d2fc9f932163e84dc0779cc47f48/prompt_toolkit-3.0.52-py3-none-any.whl
@@ -1116,7 +1116,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3c/1b/6a69800c82bffaee8d10bd6f063da1ec9d745b20826daba22a87acff778d/orbax_checkpoint-0.11.39-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/3f/d6eb875163ace4ebcb5630b8d9f9ab0c2db5b9d892002269e5103574c618/pfund_ibapi-10.42.1-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/e7/10/8fe2ec675c02355a1b585c5bda8bde3ca05cd150d8eb5394d5453cf8d33b/pfund_kit-0.1.7-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/a6/f9/f1c40b404199acf5e46a21a26229a9f9e7d84bea055da9864bf53ee1bb57/pfund_kit-0.1.8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/75/a6/a0a304dc33b49145b21f4808d763822111e67d1c3a32b524a1baf947b6e1/platformdirs-4.9.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/84/03/0d3ce49e2505ae70cf43bc5bb3033955d2fc9f932163e84dc0779cc47f48/prompt_toolkit-3.0.52-py3-none-any.whl
@@ -1224,7 +1224,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3c/1b/6a69800c82bffaee8d10bd6f063da1ec9d745b20826daba22a87acff778d/orbax_checkpoint-0.11.39-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/3f/d6eb875163ace4ebcb5630b8d9f9ab0c2db5b9d892002269e5103574c618/pfund_ibapi-10.42.1-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/e7/10/8fe2ec675c02355a1b585c5bda8bde3ca05cd150d8eb5394d5453cf8d33b/pfund_kit-0.1.7-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/a6/f9/f1c40b404199acf5e46a21a26229a9f9e7d84bea055da9864bf53ee1bb57/pfund_kit-0.1.8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/75/a6/a0a304dc33b49145b21f4808d763822111e67d1c3a32b524a1baf947b6e1/platformdirs-4.9.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/84/03/0d3ce49e2505ae70cf43bc5bb3033955d2fc9f932163e84dc0779cc47f48/prompt_toolkit-3.0.52-py3-none-any.whl
@@ -1361,7 +1361,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3c/1b/6a69800c82bffaee8d10bd6f063da1ec9d745b20826daba22a87acff778d/orbax_checkpoint-0.11.39-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/3f/d6eb875163ace4ebcb5630b8d9f9ab0c2db5b9d892002269e5103574c618/pfund_ibapi-10.42.1-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/e7/10/8fe2ec675c02355a1b585c5bda8bde3ca05cd150d8eb5394d5453cf8d33b/pfund_kit-0.1.7-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/a6/f9/f1c40b404199acf5e46a21a26229a9f9e7d84bea055da9864bf53ee1bb57/pfund_kit-0.1.8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/75/a6/a0a304dc33b49145b21f4808d763822111e67d1c3a32b524a1baf947b6e1/platformdirs-4.9.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/84/03/0d3ce49e2505ae70cf43bc5bb3033955d2fc9f932163e84dc0779cc47f48/prompt_toolkit-3.0.52-py3-none-any.whl
@@ -1470,7 +1470,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3c/1b/6a69800c82bffaee8d10bd6f063da1ec9d745b20826daba22a87acff778d/orbax_checkpoint-0.11.39-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/3f/d6eb875163ace4ebcb5630b8d9f9ab0c2db5b9d892002269e5103574c618/pfund_ibapi-10.42.1-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/e7/10/8fe2ec675c02355a1b585c5bda8bde3ca05cd150d8eb5394d5453cf8d33b/pfund_kit-0.1.7-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/a6/f9/f1c40b404199acf5e46a21a26229a9f9e7d84bea055da9864bf53ee1bb57/pfund_kit-0.1.8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/75/a6/a0a304dc33b49145b21f4808d763822111e67d1c3a32b524a1baf947b6e1/platformdirs-4.9.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/84/03/0d3ce49e2505ae70cf43bc5bb3033955d2fc9f932163e84dc0779cc47f48/prompt_toolkit-3.0.52-py3-none-any.whl
@@ -6899,9 +6899,9 @@ packages:
 - pypi: ../pfeed
   name: pfeed
   version: 0.0.5
-  sha256: c04753ebf84f0e2d5c3e6f9955f9b1afa47e8f13f2c7eb42d9e83153049257f1
+  sha256: 1762099ec1dd8a1ec4921708bc59712661d03d6c2ed4f96e3b73e4833db2e42d
   requires_dist:
-  - pfund>=0.0.7
+  - pfund>=0.0.8
   - polars>=1.40.1
   - pyarrow>=23.0.1
   - pandera>=0.31.1
@@ -6920,7 +6920,7 @@ packages:
   - pandas>=2.3.3 ; extra == 'pandas'
   - dask[complete,dataframe]>=2026.3.0 ; extra == 'dask'
   - pyspark[connect,pandas-on-spark,sql]>=4.1.1 ; extra == 'spark'
-  - daft>=0.7.11 ; extra == 'daft'
+  - daft>=0.7.13 ; extra == 'daft'
   - narwhals-daft>=0.4.1 ; extra == 'daft'
   - duckdb>=1.5.2 ; extra == 'duckdb'
   - lancedb>=0.30.2 ; extra == 'lancedb'
@@ -6937,9 +6937,9 @@ packages:
 - pypi: ./
   name: pfund
   version: 0.0.8
-  sha256: fd8a44801d34eeeb401954d1292df2af95db5e77c7309f83fd94d02dfab39ec3
+  sha256: 2607304267a8a63b81f3ffff2b85306b8b1e3ef5cf5f98e6a8505b6d92341e1f
   requires_dist:
-  - pfund-kit>=0.1.7
+  - pfund-kit>=0.1.8
   - httpx>=0.28.1
   - websockets>=16.0 ; sys_platform != 'emscripten'
   - numba>=0.65.1 ; sys_platform != 'emscripten' and extra == 'core'
@@ -6961,8 +6961,8 @@ packages:
   requires_python: '>=3.11'
 - pypi: ../pfund-kit
   name: pfund-kit
-  version: 0.1.7
-  sha256: 7c3f79f5a7d3747a060194092720f051f38f789a2fcb634dbdfec67baf046f85
+  version: 0.1.8
+  sha256: 3647ab6dce9d49b4e22b049739067d094e7a5f4ef168b4da01a25ad02c363502
   requires_dist:
   - rich>=14.2.0
   - tqdm>=4.67.1
@@ -6975,10 +6975,10 @@ packages:
   - python-dotenv>=1.2.1
   - prompt-toolkit>=3.0.51
   requires_python: '>=3.11'
-- pypi: https://files.pythonhosted.org/packages/e7/10/8fe2ec675c02355a1b585c5bda8bde3ca05cd150d8eb5394d5453cf8d33b/pfund_kit-0.1.7-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/a6/f9/f1c40b404199acf5e46a21a26229a9f9e7d84bea055da9864bf53ee1bb57/pfund_kit-0.1.8-py3-none-any.whl
   name: pfund-kit
-  version: 0.1.7
-  sha256: 45dc1c637611b022893f5bcb30821c046ae4f976de5fe475c4204cdbe4c8ad7d
+  version: 0.1.8
+  sha256: adf16443159ac48dfa1fb76995ee331156ea23d4d70f2e286cfa0c6e99c9e538
   requires_dist:
   - rich>=14.2.0
   - tqdm>=4.67.1
