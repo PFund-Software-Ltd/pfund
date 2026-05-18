@@ -6899,9 +6899,9 @@ packages:
 - pypi: ../pfeed
   name: pfeed
   version: 0.0.5
-  sha256: a02618de658382b1e05bc43f5bf952c187fe20c62b8268a0cee3709216bc59de
+  sha256: 36b7f4c5d8e09625e24130764fbac2d96e89071f67e2fdcc83b03a5840aa58d1
   requires_dist:
-  - pfund>=0.0.10
+  - pfund>=0.0.11
   - polars>=1.40.1
   - pyarrow>=23.0.1
   - pandera>=0.31.1
