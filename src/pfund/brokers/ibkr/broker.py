@@ -28,6 +28,8 @@ from pfund.enums import (
 from pfund.utils.adapter import Adapter
 
 
+# TODO: add get_supported_resolutions(), just like Exchange.get_supported_resolutions()
+# then update ComponentMixin.get_supported_resolutions
 class InteractiveBrokers(BaseBroker):
     NAME: ClassVar[Broker] = Broker.IBKR
     adapter = Adapter(TradingVenue[name])

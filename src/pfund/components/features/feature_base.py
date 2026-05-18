@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from numpy import ndarray
-    from pfeed.typing import GenericFrame
+    from narwhals.typing import IntoFrame
 
 from abc import abstractmethod
 

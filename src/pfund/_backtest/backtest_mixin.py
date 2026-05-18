@@ -8,8 +8,6 @@ from typing_extensions import override
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
-    from pfeed.typing import GenericFrame
-
     from pfund._backtest.typing import BacktestDataFrame
     from pfund.datas.timeframe import Timeframe
     from pfund.engines.backtest_engine import BacktestEngineContext
@@ -121,7 +119,7 @@ class BacktestMixin:
 
     # TODO
     @property
-    def train_set(self) -> GenericFrame:
+    def train_set(self):
         # FIXME: should use pfeed's config?
         storage_config = BacktestEngine._storage_config
         return self.store.load_data_from_storage(
@@ -131,14 +129,14 @@ class BacktestMixin:
 
     # TODO
     @property
-    def dev_set(self) -> GenericFrame:
+    def dev_set(self):
         return self.store.load_data(...)
 
     val_set = dev_set
 
     # TODO
     @property
-    def test_set(self) -> GenericFrame:
+    def test_set(self):
         return self.store.load_data(...)
 
     def _add_component(

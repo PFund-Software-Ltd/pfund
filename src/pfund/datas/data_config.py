@@ -17,7 +17,7 @@ class DataConfig(BaseModel):
 
     data_source: DataSource | str | None = Field(default=None)
     data_origin: str = ""
-    # data_resolutions = primary_resolution + extra_resolutions defined in add_data()
+    # data_resolutions = primary_resolution + extra_resolutions defined in data store's add_data()
     _data_resolutions: list[Resolution] = PrivateAttr(init=False)
     num_batch_workers: int | None = Field(
         default=None,

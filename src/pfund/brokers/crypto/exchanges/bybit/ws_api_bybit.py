@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
-    from pfeed.typing import ParsedMessage
+    from pfeed.feeds.streaming_feed_mixin import ParsedMessage
 
     from pfund.brokers.crypto.exchanges.ws_api_base import Message
     from pfund.datas.resolution import Resolution
