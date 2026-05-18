@@ -855,7 +855,7 @@ wheels = [
 
 [[package]]
 name = "pfund"
-version = "0.0.11"
+version = "0.0.12"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
