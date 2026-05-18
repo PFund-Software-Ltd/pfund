@@ -259,7 +259,7 @@ class BarData(MarketData):
     kline = bar
     candlestick = bar
 
-    def on_bar(
+    def on_update(
         self,
         o: float,
         h: float,
@@ -268,8 +268,6 @@ class BarData(MarketData):
         v: float,
         is_incremental: bool,
         is_snapshot: bool = True,
-        # TODO: handle backfilling
-        is_backfill: bool = False,
         ts: float | None = None,
         start_ts: float | None = None,
         end_ts: float | None = None,

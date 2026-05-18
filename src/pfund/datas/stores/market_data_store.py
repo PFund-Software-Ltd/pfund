@@ -174,7 +174,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         data = self.get_data(update["product"], update["resolution"])
         if data is None:
             return
-        data.on_quote(
+        data.on_update(
             update["bids"], update["asks"], update["ts"], **update["extra_data"]
         )
         self._databoy._deliver(data)
@@ -184,7 +184,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         data = self.get_data(update["product"], update["resolution"])
         if data is None:
             return
-        data.on_tick(
+        data.on_update(
             price=update["price"],
             volume=update["volume"],
             ts=update["ts"],
@@ -212,7 +212,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         """
 
         def _update_data(data: MarketData):
-            data.on_bar(
+            data.on_update(
                 o=update["open"],
                 h=update["high"],
                 l=update["low"],

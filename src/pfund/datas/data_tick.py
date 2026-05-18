@@ -47,13 +47,11 @@ class TickData(MarketData):
     def volume(self):
         return self._volume
 
-    def on_tick(
+    def on_update(
         self,
         price: float,
         volume: float,
         ts: float,
-        # TODO: handle backfilling
-        is_backfill=False,
         msg_ts: float | None = None,
         extra_data: dict[str, Any] | None = None,
     ):
