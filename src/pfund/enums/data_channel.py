@@ -20,7 +20,6 @@ class DataChannelType(StrEnum):
 
 
 class PFundDataChannel(StrEnum):
-    logging = "logging"
     internal = "internal"
     # ping = 'ping'
     # pong = 'pong'

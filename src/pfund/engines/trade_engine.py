@@ -32,7 +32,7 @@ from threading import Thread
 from pfeed.enums import DataCategory
 
 from pfund.engines.base_engine import BaseEngine
-from pfund.enums import Environment, PFundDataChannel
+from pfund.enums import Environment
 
 
 class TradeEngine(BaseEngine):
@@ -134,6 +134,7 @@ class TradeEngine(BaseEngine):
     def _setup_proxy(self):
         import zmq
         from pfeed.streaming.zeromq import ZeroMQ
+        from pfeed.streaming import TickMessage, BarMessage
 
         self._proxy = ZeroMQ(
             name=self.name + "_proxy",
@@ -141,6 +142,7 @@ class TradeEngine(BaseEngine):
             io_threads=2,
             sender_type=zmq.XPUB,  # publish order updates (from websocket), engine states, to components and external listeners
             receiver_type=zmq.SUB,  # subscribe to data engine, component's logs (if using ray) etc.
+            recv_type=TickMessage | BarMessage,
         )
         zmq_url = self.settings.zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL)
         zmq_port = self.settings.zmq_ports.get(self.name, None)
@@ -222,6 +224,8 @@ class TradeEngine(BaseEngine):
         return False
 
     def _run_zmq_loop(self):
+        from pfeed.streaming.zeromq import ZeroMQDataChannel
+
         self._setup_proxy()
         for strategy in self.strategies.values():
             strategy._setup_messaging()
@@ -234,7 +238,7 @@ class TradeEngine(BaseEngine):
                 if msg := self._proxy.recv():
                     channel, topic, data, msg_ts = msg
 
-                    if channel == PFundDataChannel.logging:
+                    if channel == ZeroMQDataChannel.logging:
                         log_level: str = topic
                         log_level: int = logging._nameToLevel.get(
                             log_level.upper(), logging.DEBUG

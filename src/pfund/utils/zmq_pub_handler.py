@@ -4,8 +4,6 @@ import time
 from msgspec import msgpack
 from zmq.log.handlers import PUBHandler
 
-from pfund.enums import PFundDataChannel
-
 
 class ZMQPubHandler(PUBHandler):
     """Custom PUBHandler that sends log messages that follow the internal format to ZMQ"""
@@ -18,8 +16,10 @@ class ZMQPubHandler(PUBHandler):
         self._is_receiver_ready = False
 
     def emit(self, record: logging.LogRecord):
+        from pfeed.streaming.zeromq import ZeroMQDataChannel
+
         try:
-            channel = PFundDataChannel.logging
+            channel = ZeroMQDataChannel.logging
             topic = record.levelname
             text = self.format(record)
             data = self._encoder.encode(text)

@@ -87,6 +87,8 @@ class DataBoy:
         zmq_urls = settings.zmq_urls
         zmq_ports = settings.zmq_ports
 
+        from pfeed.streaming import TickMessage, BarMessage
+
         component_name = self.name
         component_zmq_url = zmq_urls.get(component_name, ZeroMQ.DEFAULT_URL)
 
@@ -96,6 +98,7 @@ class DataBoy:
             logger=self.logger,
             sender_type=zmq.PUSH,  # send component created data (e.g. orders) to trade engine
             receiver_type=zmq.SUB,  # receive data from data engine, order updates from trade engine
+            recv_type=TickMessage | BarMessage,
         )
         self._data_zmq.bind(
             socket=self._data_zmq.sender,

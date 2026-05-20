@@ -238,7 +238,8 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             # without this, resamplee might not know the bar is closed when update['ts'] < data.end_ts
             update["ts"] = max(update["ts"], data.end_ts)
         else:
-            # deliver the closed bar before update() clears it for the next bar
+            # deliver the closed bar before update() clears it for the next bar.
+            # NOTE: `not data.is_closed()` guard is necessary because data could be already closed after an non-incremental update
             if not data.is_closed() and data.is_closed(
                 now=update["ts"] or update["msg_ts"] or time.time()
             ):
