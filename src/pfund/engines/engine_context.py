@@ -5,16 +5,15 @@ from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 if TYPE_CHECKING:
     import datetime
+    from pathlib import Path
 
+    from pfund.engines.settings.base_engine_settings import BaseEngineSettings
     from pfund.config import PFundConfig
 
 from pfeed.enums import DataTool
 
 from pfund.config import get_config, get_logging_config
 from pfund.datas.resolution import Resolution
-from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
-from pfund.engines.settings.sandbox_engine_settings import SandboxEngineSettings
-from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 from pfund.enums import Environment, RunMode, RunStage
 
 
@@ -29,10 +28,7 @@ class EngineContext:
         env: Environment,
         name: str,
         data_range: str | Resolution | DataRangeDict | Literal["ytd"],
-        settings: TradeEngineSettings
-        | SandboxEngineSettings
-        | BacktestEngineSettings
-        | None = None,
+        settings: BaseEngineSettings | None = None,
     ):
         import pfeed as pe
 
@@ -48,12 +44,10 @@ class EngineContext:
         )
         self.project_name = "default"
         self.data_start, self.data_end = self._parse_data_range(data_range)
-        self.settings = settings or self._load_settings()
-        if settings and settings.persist:
-            settings.save(self.env)
+        self.settings = self._resolve_settings(settings)
         # NOTE: config obtained by get_config() inside ray actor could be different from the one in the main thread (e.g. after calling pf.configure())
         # so we create the config object here in the context and treat it as the source of truth
-        self.pfund_config: PFundConfig = get_config()
+        self.pfund_config: PFundConfig = get_config(engine_name=self.name)
         self.pfeed_config = pe.get_config()
         if self.pfeed_config.data_tool not in [DataTool.pandas, DataTool.polars]:
             raise ValueError(f"Unsupported data tool: {self.pfeed_config.data_tool}")
@@ -68,6 +62,15 @@ class EngineContext:
             return RunMode.WASM
         else:
             return RunMode.LOCAL
+
+    def _resolve_settings(
+        self, settings: BaseEngineSettings | None
+    ) -> BaseEngineSettings:
+        if settings is None:
+            return self._load_settings()
+        if settings.persist:
+            self._save_settings(settings)
+        return settings
 
     def set_run_stage(self, stage: RunStage | str) -> None:
         stage = RunStage[stage.upper()]
@@ -109,15 +112,16 @@ class EngineContext:
             rollback_period=data_range if not is_data_range_dict else "",
         )
 
-    def _load_settings(
-        self,
-    ) -> TradeEngineSettings | SandboxEngineSettings | BacktestEngineSettings:
+    def _load_settings(self) -> BaseEngineSettings:
         """Load settings from settings.toml"""
         from pfund_kit.utils import toml
+        from pfund.engines.settings.backtest_engine_settings import (
+            BacktestEngineSettings,
+        )
+        from pfund.engines.settings.sandbox_engine_settings import SandboxEngineSettings
+        from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 
-        from pfund import get_config
-
-        config = get_config()
+        settings_file_path = self.pfund_config.get_settings_file_path(self.name)
 
         if self.env == Environment.BACKTEST:
             EngineSettings = BacktestEngineSettings
@@ -128,7 +132,6 @@ class EngineContext:
         else:
             raise ValueError(f"Unsupported environment: {self.env}")
 
-        settings_file_path = config.settings_file_path
         if settings_file_path.exists():
             settings_toml = toml.load(settings_file_path)
             env_settings = settings_toml.get(self.env, {})
@@ -142,9 +145,16 @@ class EngineContext:
         else:
             settings = EngineSettings()
         # Always write back — this adds new fields with defaults and drops removed fields automatically
+        self._save_settings(settings)
+        return settings
+
+    def _save_settings(self, settings: BaseEngineSettings):
+        """saves current settings to settings.toml"""
+        from pfund_kit.utils import toml
+
+        settings_file_path = self.pfund_config.get_settings_file_path(self.name)
         data = {self.env: settings.model_dump()}
         toml.dump(data, settings_file_path, mode="update", auto_inline=True)
-        return settings
 
     def get_env(self, key: str) -> str | None:
         """Get env var by key. Automatically adds prefix if not present.

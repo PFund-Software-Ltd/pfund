@@ -77,7 +77,7 @@ class BaseEngine:
         """
         import pfeed as pe
 
-        from pfund.config import get_config, setup_logging
+        from pfund.config import setup_logging
         from pfund.engines.engine_context import EngineContext
 
         env = Environment[env.upper()]
@@ -86,8 +86,7 @@ class BaseEngine:
         if env == Environment.LIVE:
             raise ValueError(f"{env=} is not allowed for now")
 
-        get_config(engine_name=name)
-        setup_logging(env=env)
+        setup_logging(env=env, engine_name=name)
         self._logger: logging.Logger = logging.getLogger("pfund")
         self._context: EngineContext = EngineContext(
             env=env, name=name, data_range=data_range, settings=settings

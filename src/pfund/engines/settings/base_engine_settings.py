@@ -34,18 +34,6 @@ class BaseEngineSettings(BaseModel):
         """,
     )
 
-    def save(self, env: Environment):
-        """saves current settings to settings.toml"""
-        from pfund_kit.utils import toml
-
-        from pfund import get_config
-
-        # write settings to settings.toml
-        config = get_config()
-        env_section = env.value
-        data = {env_section: self.model_dump()}
-        toml.dump(data, config.settings_file_path, mode="update", auto_inline=True)
-
     @field_validator("cache_materialized_data", mode="before")
     @classmethod
     def _normalize_cache_resampled_data(cls, v: Any) -> bool | str:
