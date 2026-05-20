@@ -29,7 +29,7 @@ uv = ">=0.11.14"
 gh = ">=2.92.0"
 
 [pypi-dependencies]
-pfund-kit = ">=0.1.9"
+pfund-kit = ">=0.1.10"
 # TODO: enable when ready
 # pfeed = ">=0.0.5"
 httpx = ">=0.28.1"
