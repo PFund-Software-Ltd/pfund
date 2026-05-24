@@ -227,6 +227,9 @@ class DataBoy:
 
         data_store = self.get_data_store(msg.data_category)
         update = structs.asdict(msg)
+        # convert timestamps from nanoseconds integer to float in seconds
+        update["ts"] = update["ts"] / 10**9
+        update["msg_ts"] = update["msg_ts"] / 10**9
 
         if msg.data_category == DataCategory.MARKET_DATA:
             if msg.is_quote():

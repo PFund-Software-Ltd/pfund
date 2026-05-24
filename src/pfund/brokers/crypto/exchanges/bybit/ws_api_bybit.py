@@ -25,12 +25,8 @@ from pfund.entities.products.product_bybit import BybitProduct
 from pfund.enums import CryptoExchange, DataChannelType, PublicDataChannel
 from pfund.utils.parser import SchemaParser
 
+
 ProductCategory = BybitProduct.Category
-
-
-def _convert_mts_to_ts(ms: int) -> float:
-    """Convert milliseconds timestamp to timestamp in seconds"""
-    return ms / 10**3
 
 
 class BybitWebSocketAPI(BaseWebSocketAPI):
@@ -217,13 +213,22 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
     @staticmethod
     def _parse_candlestick(msg: Message) -> ParsedMessage:
         schema = {
-            "ts": ("ts", _convert_mts_to_ts),
+            "ts": ("ts",),
             "channel": ["topic"],
             "@data": ["data"],
             "data": {
-                "start_ts": ("start", float, _convert_mts_to_ts),
-                "end_ts": ("end", float, _convert_mts_to_ts),
-                "ts": ("timestamp", float, _convert_mts_to_ts),
+                "start_ts": (
+                    "start",
+                    float,
+                ),
+                "end_ts": (
+                    "end",
+                    float,
+                ),
+                "ts": (
+                    "timestamp",
+                    float,
+                ),
                 "open": ("open", float),
                 "high": ("high", float),
                 "low": ("low", float),
@@ -242,11 +247,14 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
     @staticmethod
     def _parse_tradebook(msg: Message) -> ParsedMessage:
         schema = {
-            "ts": ("ts", _convert_mts_to_ts),
+            "ts": ("ts",),
             "channel": ["topic"],
             "@data": ["data"],
             "data": {
-                "ts": ("T", float, _convert_mts_to_ts),
+                "ts": (
+                    "T",
+                    float,
+                ),
                 "price": (
                     "p",
                     float,
