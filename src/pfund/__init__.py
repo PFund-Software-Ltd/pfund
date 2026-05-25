@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from pfund.engines.settings.sandbox_engine_settings import SandboxEngineSettings
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.engines.trade_engine import TradeEngine
-    from pfund.utils.aliases import ALIASES as alias
+    from pfund.utils.aliases import ALIASES as alias  # noqa: N811
     # from pfund.brokers.broker_defi import DeFiBroker
 
 from pfund.config import configure, configure_logging, get_config

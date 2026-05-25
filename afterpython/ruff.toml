@@ -16,6 +16,9 @@ select = [
 # ignored rules:
 ignore = [
     "E501",  # line too long
+    "N806",  # variable names should be lowercase
+    "RUF059",  # unused-unpacked-variable
+    "N815",  # mixed-case-variable-in-class-scope
 ]
 # extended rules:
 extend-select = [
