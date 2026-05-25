@@ -2150,15 +2150,15 @@ torch = [
 requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "jax", marker = "sys_platform != 'emscripten' and extra == 'jax'", specifier = ">=0.10.0" },
-    { name = "joblib", marker = "extra == 'sklean'", specifier = ">=1.5.3" },
+    { name = "joblib", marker = "extra == 'sklean'", specifier = ">=1.4.0" },
     { name = "numba", marker = "sys_platform != 'emscripten' and extra == 'core'", specifier = ">=0.65.1" },
     { name = "orbax-checkpoint", marker = "sys_platform != 'emscripten' and extra == 'jax'", specifier = ">=0.11.39" },
     { name = "pfeed", specifier = ">=0.0.6" },
     { name = "pfeed", extras = ["duckdb", "core"], marker = "extra == 'core'", specifier = ">=0.0.6" },
     { name = "pfund-ibapi", marker = "sys_platform != 'emscripten' and extra == 'ibkr'", specifier = ">=10.42.1" },
-    { name = "pfund-kit", specifier = ">=0.1.10" },
+    { name = "pfund-kit", specifier = ">=0.1.11" },
     { name = "safetensors", marker = "sys_platform != 'emscripten' and extra == 'torch'", specifier = ">=0.7.0" },
-    { name = "scikit-learn", marker = "extra == 'sklean'", specifier = ">=1.8.0" },
+    { name = "scikit-learn", marker = "extra == 'sklean'", specifier = ">=1.6.1" },
     { name = "ta-lib", marker = "sys_platform != 'emscripten' and extra == 'ta-lib'", specifier = ">=0.6.4" },
     { name = "torch", marker = "sys_platform != 'emscripten' and extra == 'torch'", specifier = ">=2.11.0" },
     { name = "websockets", marker = "sys_platform != 'emscripten'", specifier = ">=16.0" },
@@ -2179,7 +2179,7 @@ wheels = [
 
 [[package]]
 name = "pfund-kit"
-version = "0.1.10"
+version = "0.1.11"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -2192,9 +2192,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "trogon", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6b/f3/ad5e377d315520d7fdab97e4642612950a90a7e3634bb4d8ad0cb6ddff22/pfund_kit-0.1.10.tar.gz", hash = "sha256:fe6869948bea1013746c62825ccc498f3e2341203e7ab915450688c2e1570d5e", size = 42252, upload-time = "2026-05-20T07:14:32.717Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/2e/403ac85e30382252740d75033ef2a2b704ec364c7b279cfc268dc145b528/pfund_kit-0.1.11.tar.gz", hash = "sha256:c266895e314070d1907aec99ba2fd52d9832b6e4089198fee383a803f2591990", size = 42252, upload-time = "2026-05-25T13:02:25.258Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/73/52a38c3ef6928ae77cd294a2523d0b337b577be6b427646c83d3f0cd8797/pfund_kit-0.1.10-py3-none-any.whl", hash = "sha256:2638beda56ee8fa236f6010631df618dcf07dd87f7065c53a1ef7585768f33cf", size = 58131, upload-time = "2026-05-20T07:14:33.844Z" },
+    { url = "https://files.pythonhosted.org/packages/80/43/921d5411495856602462be621f7573ab86de31b4ce594b30a36e1cfcd7c0/pfund_kit-0.1.11-py3-none-any.whl", hash = "sha256:cff9680a81fd34c647e5e163e40a5094bd114f44c624809f19f16022ee8a9ea8", size = 58131, upload-time = "2026-05-25T13:02:24.157Z" },
 ]
 
 [[package]]

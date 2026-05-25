@@ -45,7 +45,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/uv-0.11.14-h29f5ae7_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
       - pypi: https://files.pythonhosted.org/packages/18/a6/907a406bb7d359e6a63f99c313846d9eec4f7e6f7437809e03aa00fa3074/absl_py-2.4.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/ee/b9/4ffd96860a7b88492541e933690dcac8dbea35a67ec90530e1db864edc27/afterpython-0.3.8-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/dd/de/7979612df176b11bf4d5977022737ab9521cacccbaa5988106f53d1613e4/afterpython-0.3.10-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/bc/8a/340a1555ae33d7354dbca4faa54948d76d89a27ceef032c8c3bc661d003e/aiofiles-25.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0f/15/5bf3b99495fb160b63f95972b81750f18f7f4e02ad051373b669d17d44f2/aiohappyeyeballs-2.6.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/7e/a5/0521aa32c1ddf3aa1e71dcc466be0b7db2771907a13f18cddaa45967d97b/aiohttp-3.13.5-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
@@ -428,7 +428,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2025c-hc9c84f9_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/uv-0.11.14-h2c65d96_0.conda
       - pypi: https://files.pythonhosted.org/packages/18/a6/907a406bb7d359e6a63f99c313846d9eec4f7e6f7437809e03aa00fa3074/absl_py-2.4.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/ee/b9/4ffd96860a7b88492541e933690dcac8dbea35a67ec90530e1db864edc27/afterpython-0.3.8-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/dd/de/7979612df176b11bf4d5977022737ab9521cacccbaa5988106f53d1613e4/afterpython-0.3.10-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/bc/8a/340a1555ae33d7354dbca4faa54948d76d89a27ceef032c8c3bc661d003e/aiofiles-25.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0f/15/5bf3b99495fb160b63f95972b81750f18f7f4e02ad051373b669d17d44f2/aiohappyeyeballs-2.6.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/87/ec/e38ce072e724fd7add6243613f8d1810da084f54175353d25ccf9f9c7e5a/aiohttp-3.13.5-cp311-cp311-macosx_11_0_arm64.whl
@@ -920,7 +920,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/2c/2d/6ea7cad2c2f0625c4120bef5353ab7cf749141bf1d070011cebb72f68189/pandera-0.31.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/69/6a/e1455b94ee48f5666f2e7831b6247098794bfe9747da457111be4d0bea10/peewee-4.0.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/3f/d6eb875163ace4ebcb5630b8d9f9ab0c2db5b9d892002269e5103574c618/pfund_ibapi-10.42.1-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/49/73/52a38c3ef6928ae77cd294a2523d0b337b577be6b427646c83d3f0cd8797/pfund_kit-0.1.10-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/80/43/921d5411495856602462be621f7573ab86de31b4ce594b30a36e1cfcd7c0/pfund_kit-0.1.11-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/75/a6/a0a304dc33b49145b21f4808d763822111e67d1c3a32b524a1baf947b6e1/platformdirs-4.9.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c3/c8/5807714256c5f3de08593113df17f14f99417a451cb2d91530ad94785003/polars-1.41.0-py3-none-any.whl
@@ -1115,7 +1115,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/2c/2d/6ea7cad2c2f0625c4120bef5353ab7cf749141bf1d070011cebb72f68189/pandera-0.31.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/69/6a/e1455b94ee48f5666f2e7831b6247098794bfe9747da457111be4d0bea10/peewee-4.0.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/3f/d6eb875163ace4ebcb5630b8d9f9ab0c2db5b9d892002269e5103574c618/pfund_ibapi-10.42.1-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/49/73/52a38c3ef6928ae77cd294a2523d0b337b577be6b427646c83d3f0cd8797/pfund_kit-0.1.10-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/80/43/921d5411495856602462be621f7573ab86de31b4ce594b30a36e1cfcd7c0/pfund_kit-0.1.11-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/75/a6/a0a304dc33b49145b21f4808d763822111e67d1c3a32b524a1baf947b6e1/platformdirs-4.9.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c3/c8/5807714256c5f3de08593113df17f14f99417a451cb2d91530ad94785003/polars-1.41.0-py3-none-any.whl
@@ -1341,7 +1341,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/2c/2d/6ea7cad2c2f0625c4120bef5353ab7cf749141bf1d070011cebb72f68189/pandera-0.31.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/69/6a/e1455b94ee48f5666f2e7831b6247098794bfe9747da457111be4d0bea10/peewee-4.0.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/3f/d6eb875163ace4ebcb5630b8d9f9ab0c2db5b9d892002269e5103574c618/pfund_ibapi-10.42.1-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/49/73/52a38c3ef6928ae77cd294a2523d0b337b577be6b427646c83d3f0cd8797/pfund_kit-0.1.10-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/80/43/921d5411495856602462be621f7573ab86de31b4ce594b30a36e1cfcd7c0/pfund_kit-0.1.11-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/75/a6/a0a304dc33b49145b21f4808d763822111e67d1c3a32b524a1baf947b6e1/platformdirs-4.9.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c3/c8/5807714256c5f3de08593113df17f14f99417a451cb2d91530ad94785003/polars-1.41.0-py3-none-any.whl
@@ -1536,7 +1536,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/2c/2d/6ea7cad2c2f0625c4120bef5353ab7cf749141bf1d070011cebb72f68189/pandera-0.31.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/69/6a/e1455b94ee48f5666f2e7831b6247098794bfe9747da457111be4d0bea10/peewee-4.0.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/3f/d6eb875163ace4ebcb5630b8d9f9ab0c2db5b9d892002269e5103574c618/pfund_ibapi-10.42.1-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/49/73/52a38c3ef6928ae77cd294a2523d0b337b577be6b427646c83d3f0cd8797/pfund_kit-0.1.10-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/80/43/921d5411495856602462be621f7573ab86de31b4ce594b30a36e1cfcd7c0/pfund_kit-0.1.11-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/75/a6/a0a304dc33b49145b21f4808d763822111e67d1c3a32b524a1baf947b6e1/platformdirs-4.9.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c3/c8/5807714256c5f3de08593113df17f14f99417a451cb2d91530ad94785003/polars-1.41.0-py3-none-any.whl
@@ -1760,7 +1760,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/2c/2d/6ea7cad2c2f0625c4120bef5353ab7cf749141bf1d070011cebb72f68189/pandera-0.31.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/69/6a/e1455b94ee48f5666f2e7831b6247098794bfe9747da457111be4d0bea10/peewee-4.0.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/3f/d6eb875163ace4ebcb5630b8d9f9ab0c2db5b9d892002269e5103574c618/pfund_ibapi-10.42.1-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/49/73/52a38c3ef6928ae77cd294a2523d0b337b577be6b427646c83d3f0cd8797/pfund_kit-0.1.10-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/80/43/921d5411495856602462be621f7573ab86de31b4ce594b30a36e1cfcd7c0/pfund_kit-0.1.11-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/75/a6/a0a304dc33b49145b21f4808d763822111e67d1c3a32b524a1baf947b6e1/platformdirs-4.9.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c3/c8/5807714256c5f3de08593113df17f14f99417a451cb2d91530ad94785003/polars-1.41.0-py3-none-any.whl
@@ -1956,7 +1956,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/2c/2d/6ea7cad2c2f0625c4120bef5353ab7cf749141bf1d070011cebb72f68189/pandera-0.31.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/69/6a/e1455b94ee48f5666f2e7831b6247098794bfe9747da457111be4d0bea10/peewee-4.0.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/3f/d6eb875163ace4ebcb5630b8d9f9ab0c2db5b9d892002269e5103574c618/pfund_ibapi-10.42.1-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/49/73/52a38c3ef6928ae77cd294a2523d0b337b577be6b427646c83d3f0cd8797/pfund_kit-0.1.10-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/80/43/921d5411495856602462be621f7573ab86de31b4ce594b30a36e1cfcd7c0/pfund_kit-0.1.11-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/75/a6/a0a304dc33b49145b21f4808d763822111e67d1c3a32b524a1baf947b6e1/platformdirs-4.9.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c3/c8/5807714256c5f3de08593113df17f14f99417a451cb2d91530ad94785003/polars-1.41.0-py3-none-any.whl
@@ -2061,10 +2061,10 @@ packages:
   version: 2.4.0
   sha256: 88476fd881ca8aab94ffa78b7b6c632a782ab3ba1cd19c9bd423abc4fb4cd28d
   requires_python: '>=3.10'
-- pypi: https://files.pythonhosted.org/packages/ee/b9/4ffd96860a7b88492541e933690dcac8dbea35a67ec90530e1db864edc27/afterpython-0.3.8-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/dd/de/7979612df176b11bf4d5977022737ab9521cacccbaa5988106f53d1613e4/afterpython-0.3.10-py3-none-any.whl
   name: afterpython
-  version: 0.3.8
-  sha256: a29db8e5d07dca96af36d827e8af7251ff3d3177451e8b6c581f80585b1d10c7
+  version: 0.3.10
+  sha256: 44c71763217a4e282bab1d9becde3ef3304969651030927f537d26b70212e55b
   requires_dist:
   - click>=8.2.1
   - trogon>=0.6.0
@@ -8199,17 +8199,17 @@ packages:
 - pypi: ../pfeed
   name: pfeed
   version: 0.0.6
-  sha256: c5819a4bf2651413aabadba7b1ec05e88d08f91594f9a97c22d9c4cd186e9f56
+  sha256: cdf7b76c16e0cc957e447574e654a38539fda760b6fbce2f521b9a9a6ee65933
   requires_dist:
   - pfund>=0.0.15
-  - polars>=1.41.0
-  - pyarrow>=23.0.1
+  - polars>=1.41.0 ; sys_platform != 'emscripten'
+  - pyarrow>=23.0.1 ; sys_platform != 'emscripten'
   - pandera>=0.31.1
-  - msgspec>=0.21.1
-  - pydantic>=2.13.4
-  - narwhals>=2.21.2
-  - zstandard>=0.25.0
-  - beautifulsoup4>=4.14.3
+  - msgspec>=0.21.1 ; sys_platform != 'emscripten'
+  - pydantic>=2.10.5
+  - narwhals>=2.19.0
+  - zstandard>=0.22.0
+  - beautifulsoup4>=4.12.3
   - cloudpathlib[s3,gs,azure]>=0.24.0
   - ray[default]>=2.55.1 ; sys_platform != 'emscripten' and extra == 'core'
   - pyzmq>=27.1.0 ; sys_platform != 'emscripten' and extra == 'core'
@@ -8237,9 +8237,9 @@ packages:
 - pypi: ./
   name: pfund
   version: 0.0.15
-  sha256: 703a5353c3dfd2d38e5293de48c43002ec94b508fdd3f884c9e4634383dccbb1
+  sha256: 4c43bf81b118fdbf28c956ec2c3df2f527f6c05b65ae1883b3f5a0255fd8d596
   requires_dist:
-  - pfund-kit>=0.1.10
+  - pfund-kit>=0.1.11
   - pfeed>=0.0.6
   - httpx>=0.28.1
   - websockets>=16.0 ; sys_platform != 'emscripten'
@@ -8247,8 +8247,8 @@ packages:
   - pfeed[duckdb,core]>=0.0.6 ; extra == 'core'
   - pfund-ibapi>=10.42.1 ; sys_platform != 'emscripten' and extra == 'ibkr'
   - ta-lib>=0.6.4 ; sys_platform != 'emscripten' and extra == 'ta-lib'
-  - joblib>=1.5.3 ; extra == 'sklean'
-  - scikit-learn>=1.8.0 ; extra == 'sklean'
+  - joblib>=1.4.0 ; extra == 'sklean'
+  - scikit-learn>=1.6.1 ; extra == 'sklean'
   - torch>=2.11.0 ; sys_platform != 'emscripten' and extra == 'torch'
   - safetensors>=0.7.0 ; sys_platform != 'emscripten' and extra == 'torch'
   - jax>=0.10.0 ; sys_platform != 'emscripten' and extra == 'jax'
@@ -8263,33 +8263,33 @@ packages:
   requires_python: '>=3.11'
 - pypi: ../pfund-kit
   name: pfund-kit
-  version: 0.1.10
-  sha256: 4db7e23162fef2a3ae086afe589d7f764af32c98ac8d07fa712c025cc6b5f73d
+  version: 0.1.11
+  sha256: 710e3e9d573b2d9cc3e16e49cccf81652bd82a8c2cb2b7a71bddbbb42e0ef68c
   requires_dist:
-  - rich>=14.2.0
-  - tqdm>=4.67.1
-  - click>=8.2.1
+  - rich>=13.7.1
+  - tqdm>=4.66.2
+  - click>=8.1.7
   - trogon>=0.6.0 ; sys_platform != 'emscripten'
-  - pyyaml>=6.0.3
-  - tomlkit>=0.13.3
-  - packaging>=25.0
-  - python-dotenv>=1.2.1
-  - prompt-toolkit>=3.0.51
+  - pyyaml>=6.0.2
+  - tomlkit>=0.15.0
+  - packaging>=24.2
+  - python-dotenv>=1.2.2
+  - prompt-toolkit>=3.0.43
   requires_python: '>=3.11'
-- pypi: https://files.pythonhosted.org/packages/49/73/52a38c3ef6928ae77cd294a2523d0b337b577be6b427646c83d3f0cd8797/pfund_kit-0.1.10-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/80/43/921d5411495856602462be621f7573ab86de31b4ce594b30a36e1cfcd7c0/pfund_kit-0.1.11-py3-none-any.whl
   name: pfund-kit
-  version: 0.1.10
-  sha256: 2638beda56ee8fa236f6010631df618dcf07dd87f7065c53a1ef7585768f33cf
+  version: 0.1.11
+  sha256: cff9680a81fd34c647e5e163e40a5094bd114f44c624809f19f16022ee8a9ea8
   requires_dist:
-  - rich>=14.2.0
-  - tqdm>=4.67.1
-  - click>=8.2.1
+  - rich>=13.7.1
+  - tqdm>=4.66.2
+  - click>=8.1.7
   - trogon>=0.6.0 ; sys_platform != 'emscripten'
-  - pyyaml>=6.0.3
-  - tomlkit>=0.13.3
-  - packaging>=25.0
-  - python-dotenv>=1.2.1
-  - prompt-toolkit>=3.0.51
+  - pyyaml>=6.0.2
+  - tomlkit>=0.15.0
+  - packaging>=24.2
+  - python-dotenv>=1.2.2
+  - prompt-toolkit>=3.0.43
   requires_python: '>=3.11'
 - pypi: ../pfund-plot
   name: pfund-plot
