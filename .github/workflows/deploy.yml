@@ -63,6 +63,11 @@ jobs:
       - name: Install afterpython
         run: uv pip install --system afterpython
 
+      - name: Install marimo
+        # Needed by `ap build` when afterpython/README.py is a marimo notebook;
+        # afterpython shells out to the `marimo` CLI for the WASM export.
+        run: uv pip install --system marimo
+
       - name: Install website dependencies
         run: pnpm install
         working-directory: ./afterpython/_website

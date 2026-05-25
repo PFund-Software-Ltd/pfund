@@ -45,7 +45,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/uv-0.11.14-h29f5ae7_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
       - pypi: https://files.pythonhosted.org/packages/18/a6/907a406bb7d359e6a63f99c313846d9eec4f7e6f7437809e03aa00fa3074/absl_py-2.4.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/f0/52/d680e7bf5aa4e594fe6d12b490a38a9396c907f9e68c6be12ace240e2dda/afterpython-0.3.6-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/ee/b9/4ffd96860a7b88492541e933690dcac8dbea35a67ec90530e1db864edc27/afterpython-0.3.8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/bc/8a/340a1555ae33d7354dbca4faa54948d76d89a27ceef032c8c3bc661d003e/aiofiles-25.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0f/15/5bf3b99495fb160b63f95972b81750f18f7f4e02ad051373b669d17d44f2/aiohappyeyeballs-2.6.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/7e/a5/0521aa32c1ddf3aa1e71dcc466be0b7db2771907a13f18cddaa45967d97b/aiohttp-3.13.5-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
@@ -428,7 +428,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2025c-hc9c84f9_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/uv-0.11.14-h2c65d96_0.conda
       - pypi: https://files.pythonhosted.org/packages/18/a6/907a406bb7d359e6a63f99c313846d9eec4f7e6f7437809e03aa00fa3074/absl_py-2.4.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/f0/52/d680e7bf5aa4e594fe6d12b490a38a9396c907f9e68c6be12ace240e2dda/afterpython-0.3.6-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/ee/b9/4ffd96860a7b88492541e933690dcac8dbea35a67ec90530e1db864edc27/afterpython-0.3.8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/bc/8a/340a1555ae33d7354dbca4faa54948d76d89a27ceef032c8c3bc661d003e/aiofiles-25.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0f/15/5bf3b99495fb160b63f95972b81750f18f7f4e02ad051373b669d17d44f2/aiohappyeyeballs-2.6.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/87/ec/e38ce072e724fd7add6243613f8d1810da084f54175353d25ccf9f9c7e5a/aiohttp-3.13.5-cp311-cp311-macosx_11_0_arm64.whl
@@ -2061,10 +2061,10 @@ packages:
   version: 2.4.0
   sha256: 88476fd881ca8aab94ffa78b7b6c632a782ab3ba1cd19c9bd423abc4fb4cd28d
   requires_python: '>=3.10'
-- pypi: https://files.pythonhosted.org/packages/f0/52/d680e7bf5aa4e594fe6d12b490a38a9396c907f9e68c6be12ace240e2dda/afterpython-0.3.6-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/ee/b9/4ffd96860a7b88492541e933690dcac8dbea35a67ec90530e1db864edc27/afterpython-0.3.8-py3-none-any.whl
   name: afterpython
-  version: 0.3.6
-  sha256: 12bfffcba1790fd5581fbd23754a31988242e28bd9442fea4ba835d4a1b0dd2e
+  version: 0.3.8
+  sha256: a29db8e5d07dca96af36d827e8af7251ff3d3177451e8b6c581f80585b1d10c7
   requires_dist:
   - click>=8.2.1
   - trogon>=0.6.0
@@ -8199,9 +8199,9 @@ packages:
 - pypi: ../pfeed
   name: pfeed
   version: 0.0.6
-  sha256: fb8b2739b9ed786cc187970c96be52688f7d3b4a7f0ab83beb2d7218f02713b5
+  sha256: c5819a4bf2651413aabadba7b1ec05e88d08f91594f9a97c22d9c4cd186e9f56
   requires_dist:
-  - pfund>=0.0.14
+  - pfund>=0.0.15
   - polars>=1.41.0
   - pyarrow>=23.0.1
   - pandera>=0.31.1
