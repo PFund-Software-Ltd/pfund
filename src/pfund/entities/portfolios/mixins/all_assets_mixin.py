@@ -1,20 +1,17 @@
 from collections import defaultdict
 
 from pfund.mixins.assets.cefi_assets_mixin import CeFiAssetsMixin
-from pfund.mixins.assets.defi_assets_mixin import DeFiAssetsMixin
 from pfund.mixins.assets.tradfi_assets_mixin import TradFiAssetsMixin
 
 from pfund.enums import CeFiProductType, TradFiProductType
 
 
-class AllAssetsMixin(TradFiAssetsMixin, CeFiAssetsMixin, DeFiAssetsMixin):
+class AllAssetsMixin(TradFiAssetsMixin, CeFiAssetsMixin):
     def setup_assets(self):
         all_assets = {}
         TradFiAssetsMixin.setup_assets(self)
         all_assets.update(self._all_assets)
         CeFiAssetsMixin.setup_assets(self)
-        all_assets.update(self._all_assets)
-        DeFiAssetsMixin.setup_assets(self)
         all_assets.update(self._all_assets)
         self._all_assets = all_assets
 

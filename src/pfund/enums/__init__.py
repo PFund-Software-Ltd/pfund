@@ -3,7 +3,6 @@ from pfund.enums.asset_type import (
     AllAssetType,
     AssetTypeModifier,
     CryptoAssetType,
-    DeFiAssetType,
     TraditionalAssetType,
 )
 from pfund.enums.backtest_mode import BacktestMode
@@ -49,7 +48,6 @@ __all__ = [
     "CryptoMonthCode",
     "DataChannelType",
     "Database",
-    "DeFiAssetType",
     "Environment",
     "FillOrderStatus",
     "FutureMonthCode",

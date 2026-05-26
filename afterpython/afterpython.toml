@@ -10,4 +10,5 @@ logo_dark = "logo.svg"
 thumbnail = "thumbnail.png"
 announcement = ""
 readme_py = "wasm"
+execute_readme_py = true  # execute README.py cells at build time and embed outputs as a preview (wasm mode only)
 api_reference = false

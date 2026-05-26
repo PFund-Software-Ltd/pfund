@@ -7,7 +7,6 @@ from pfund.enums.asset_type import (
     AllAssetType,
     AssetTypeModifier,
     CryptoAssetType,
-    DeFiAssetType,
     TraditionalAssetType,
 )
 

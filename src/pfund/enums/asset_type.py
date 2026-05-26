@@ -70,11 +70,6 @@ class CryptoAssetType(StrEnum):
     INDEX = AllAssetType.INDEX
 
 
-# TODO: add DeFi asset types
-class DeFiAssetType(StrEnum):
-    INDEX = AllAssetType.INDEX
-
-
 # EXTEND
 ASSET_TYPE_ALIASES: dict[str, str] = {
     "IPERP": f"{AssetTypeModifier.INVERSE}-{AllAssetType.PERPETUAL}",
