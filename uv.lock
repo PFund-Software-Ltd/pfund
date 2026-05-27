@@ -1054,9 +1054,10 @@ wheels = [
 
 [[package]]
 name = "huggingface-hub"
-version = "1.16.1"
+version = "1.16.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "click" },
     { name = "filelock" },
     { name = "fsspec" },
     { name = "hf-xet", marker = "platform_machine == 'AMD64' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'" },
@@ -1067,9 +1068,9 @@ dependencies = [
     { name = "typer" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/48/0f/ed994dbade67a54407c28cab96ef845e0e6d25500be56aca6394f8bfc9dd/huggingface_hub-1.16.1.tar.gz", hash = "sha256:7f1dc4c5ec21aed69be630ad0c3378616be16f3de1a47b141c0e812965d9c832", size = 792534, upload-time = "2026-05-21T18:40:00.908Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ab/11/9b6e439cb2417c479c3da108b38363232a1554721de9f8ef4836cb07422b/huggingface_hub-1.16.4.tar.gz", hash = "sha256:023bacd155f837d3fa56379ac8e23dababe6d6d87b04f8dacc258a44a38abe01", size = 792585, upload-time = "2026-05-26T17:19:09.971Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/79/621a7dbb80c70974f73a597275351ebe03ce5bc65cb5f8f4acb5859252bc/huggingface_hub-1.16.1-py3-none-any.whl", hash = "sha256:64340de934b9ce37857ef85a82de72f5629e8a270f9119eabb12bf495eb53c22", size = 668176, upload-time = "2026-05-21T18:39:58.596Z" },
+    { url = "https://files.pythonhosted.org/packages/da/86/e05d58ea272089151ba9f6fcc7b44a97aa2533d5a5bce46611220c23c6d6/huggingface_hub-1.16.4-py3-none-any.whl", hash = "sha256:994ec184c3330952d7b5f131ea0b1a6ba1047bd05461f5dec191f8fc1099fbd7", size = 668190, upload-time = "2026-05-26T17:19:08.228Z" },
 ]
 
 [[package]]
@@ -2161,7 +2162,7 @@ wheels = [
 
 [[package]]
 name = "pfeed"
-version = "0.0.11"
+version = "0.0.12"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -2175,9 +2176,9 @@ dependencies = [
     { name = "pydantic", marker = "sys_platform != 'emscripten'" },
     { name = "zstandard" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1d/bf/03ef6a14a1c33c373200d8b44fe57a94608c293bedd1c13a229c9c27d166/pfeed-0.0.11.tar.gz", hash = "sha256:f0adbca9eb6392d70f6d81d1f126a92bb53e605c839e0f78ed3a162a0a0532eb", size = 136326, upload-time = "2026-05-26T08:12:19.457Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e0/48/5848cdbf8fe4a74ff374538c6d6a2e1570d088b04be93854c69770e0c238/pfeed-0.0.12.tar.gz", hash = "sha256:0239bc998fe3993066cfeeafa7ba0e0ceec53ddc20483db98634b1e8709f8a97", size = 136419, upload-time = "2026-05-27T09:18:54.629Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d6/e3/c9ef02f6a107ac45d51aef102c68e19e53f14604a1de7148712e109c8af0/pfeed-0.0.11-py3-none-any.whl", hash = "sha256:8993dc1b6413e557a7ccb4bb24269268951bcaca38840433c02825f971106f00", size = 206182, upload-time = "2026-05-26T08:12:17.896Z" },
+    { url = "https://files.pythonhosted.org/packages/82/ca/fd645509559655b611bfc6d5ef0e40ca6f60c1745d642f2978a6dfc5c9a0/pfeed-0.0.12-py3-none-any.whl", hash = "sha256:9857da0d3793bd794504519c79abcd9174e27b62b421ec5b87f26a66c34ab2e6", size = 206285, upload-time = "2026-05-27T09:18:53.564Z" },
 ]
 
 [package.optional-dependencies]
@@ -2238,7 +2239,7 @@ requires-dist = [
     { name = "joblib", marker = "extra == 'sklean'", specifier = ">=1.5.3" },
     { name = "numba", marker = "sys_platform != 'emscripten' and extra == 'core'", specifier = ">=0.65.1" },
     { name = "orbax-checkpoint", marker = "sys_platform != 'emscripten' and extra == 'jax'", specifier = ">=0.11.40" },
-    { name = "pfeed", specifier = ">=0.0.11" },
+    { name = "pfeed", specifier = ">=0.0.12" },
     { name = "pfeed", extras = ["duckdb", "core", "yfinance", "hf"], marker = "extra == 'core'", specifier = ">=0.0.11" },
     { name = "pfund-ibapi", marker = "sys_platform != 'emscripten' and extra == 'ibkr'", specifier = ">=10.42.1" },
     { name = "pfund-kit", specifier = ">=0.1.11" },

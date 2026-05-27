@@ -5,9 +5,9 @@
 [![PyPI](https://img.shields.io/pypi/v/pfund.svg?cacheSeconds=300)](https://pypi.org/project/pfund)
 ![PyPI - Support Python Versions](https://img.shields.io/pypi/pyversions/pfund?cacheSeconds=300)
 [![afterpython](https://afterpython.org/shield.svg)](https://afterpython.org)
+[![Discussions](https://img.shields.io/badge/Discussions-Let's%20Chat-green)](https://github.com/PFund-Software-Ltd/pfund/discussions)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/PFund-Software-Ltd/pfund)
 [![View Code Wiki](https://assets.codewiki.google/readme-badge/static.svg)](https://codewiki.google/github.com/pfund-software-ltd/pfund?utm_source=badge&utm_medium=github&utm_campaign=github.com/pfund-software-ltd/pfund)
-[![Discussions](https://img.shields.io/badge/Discussions-Let's%20Chat-green)](https://github.com/PFund-Software-Ltd/pfund/discussions)
 <!-- ![GitHub stars](https://img.shields.io/github/stars/PFund-Software-Ltd/pfund?style=social&cacheSeconds=300) -->
 <!-- ![PyPI downloads](https://img.shields.io/pypi/dm/pfund?label=downloads&cacheSeconds=86400) -->
 <!-- [![marimo](https://marimo.io/shield.svg)](https://marimo.io) -->
@@ -176,7 +176,7 @@ model = strategy.add_model(...)
 
 model.add_data(...)  # using different data than strategy's
 sub_model = model.add_model(...)  # YES, model can add another model to its use
-# You can keep going: 
+# You can keep going:
 # sub_sub_model = sub_model.add_model(...)
 
 engine.run()

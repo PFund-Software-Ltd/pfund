@@ -7,7 +7,7 @@ authors = [
     {name = "Stephen Yau", email = "softwareentrepreneer+pfund@gmail.com"}
 ]
 readme = "README.md"
-keywords = ["trading", "algo-trading", "stocks", "cryptos", "cryptocurrencies", "TradFi", "CeFi", "backtesting", "machine learning"]
+keywords = ["trading", "algo-trading", "stocks", "cryptos", "cryptocurrencies", "TradFi", "CeFi", "DeFi", "backtesting", "machine learning"]
 classifiers = [
     "Operating System :: OS Independent",
     "Intended Audience :: Developers",
@@ -25,7 +25,7 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = [
     "pfund-kit>=0.1.11",
-    'pfeed>=0.0.11',
+    'pfeed>=0.0.12',
     "httpx>=0.28.1",
     "websockets>=16.0 ; sys_platform != 'emscripten'",
 ]
