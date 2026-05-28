@@ -56,7 +56,7 @@ pfund = { path = ".", editable = true }
 pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo", "jupyter", "matplotlib", "plotly", "altair"] }
 pfolio = { path = "../pfolio", editable = true }
 mtflow = { path = "../mtflow", editable = true }
-afterpython = ">=0.3.11"
+afterpython = ">=0.3.14"
 marimo = { version = ">=0.23.8", extras = ["recommended", "lsp"] }
 graphviz = ">=0.21"
 basedpyright = ">=1.39.6"

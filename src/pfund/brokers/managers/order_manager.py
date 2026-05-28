@@ -28,6 +28,7 @@ class OrderUpdateSource(Enum):
 OrderClosedReason = FillOrderStatus | CancelOrderStatus | MainOrderStatus
 
 
+# TODO: rename it to OMS?
 class OrderManager:
     _NUM_OF_CACHED_CLOSED_ORDERS = 200
     _MAX_NUM_OF_CLOSED_ORDERS = 500

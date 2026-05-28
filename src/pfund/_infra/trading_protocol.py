@@ -1,0 +1,13 @@
+from typing import Protocol, runtime_checkable
+
+
+# TODO: draft only
+@runtime_checkable
+class ITradingVenue(Protocol):
+    venue: TradingVenue  # enum identity
+    env: Environment
+
+    def add_product(self, *, exch, basis, name, symbol, **specs) -> BaseProduct: ...
+    def add_account(self, **kwargs) -> BaseAccount: ...
+    def start(self) -> None: ...
+    def stop(self) -> None: ...

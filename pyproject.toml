@@ -41,7 +41,7 @@ core = [
 ]
 ibkr = ["pfund-ibapi>=10.42.1 ; sys_platform != 'emscripten'"]
 ta-lib = ["ta-lib>=0.6.4 ; sys_platform != 'emscripten'"]
-sklean = ["joblib>=1.5.3", "scikit-learn>=1.8.0"]
+sklearn = ["joblib>=1.5.3", "scikit-learn>=1.8.0"]
 torch = ["torch>=2.11.0 ; sys_platform != 'emscripten'", "safetensors>=0.7.0 ; sys_platform != 'emscripten'"]
 jax = ["jax>=0.10.1 ; sys_platform != 'emscripten'", "orbax-checkpoint>=0.11.40 ; sys_platform != 'emscripten'"]
 

@@ -16,6 +16,7 @@ Balance = TypeVar("Balance", bound=BaseBalance)
 Position = TypeVar("Position", bound=BasePosition)
 
 
+# FIXME: merge with Portfolio class?
 class PortfolioManager(Generic[Balance, Position]):
     _balances: dict[TradingVenue, dict[AccountName, dict[Currency, Balance]]]
     _positions: dict[TradingVenue, dict[AccountName, dict[ProductName, Position]]]
