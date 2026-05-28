@@ -1,6 +1,8 @@
 # PFund: A Complete Algo-Trading Framework powered by Machine Learning and Data Engineering, TradFi, CeFi and DeFi ready.
 
-[![Twitter Follow](https://img.shields.io/twitter/follow/pfund_ai?style=social)](https://x.com/pfund_ai)
+
+[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://discord.gg/vqpS94tpdp)
+[![X](https://img.shields.io/twitter/follow/pfund_ai?style=social)](https://x.com/pfund_ai)
 [![Downloads](https://static.pepy.tech/badge/pfund/month)](https://pepy.tech/project/pfund)
 [![PyPI](https://img.shields.io/pypi/v/pfund.svg?cacheSeconds=300)](https://pypi.org/project/pfund)
 ![PyPI - Support Python Versions](https://img.shields.io/pypi/pyversions/pfund?cacheSeconds=300)
