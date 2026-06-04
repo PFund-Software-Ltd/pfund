@@ -8210,8 +8210,8 @@ packages:
   requires_python: '>=3.11'
 - pypi: ./
   name: pfund
-  version: 0.0.17
-  sha256: a4ea861e1714d907372d084a5bcc2de3f423fff490f84ba586b69b13fa25641a
+  version: 0.0.18
+  sha256: 6462f71be8455ad19183211c66991e3239e1a3aff591ff59573dcc0674f2e1a1
   requires_dist:
   - pfund-kit>=0.1.11
   - pfeed>=0.0.14
