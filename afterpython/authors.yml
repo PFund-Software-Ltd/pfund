@@ -1,6 +1,8 @@
 version: 1
 project:
-  contributors:
+  authors:
   - id: stephen_yau
-    name: Stephen Yau
+    name:
+      given: Stephen
+      surname: Yau
     email: softwareentrepreneer+pfund@gmail.com

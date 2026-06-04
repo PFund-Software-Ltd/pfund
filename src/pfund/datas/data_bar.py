@@ -241,8 +241,16 @@ class BarData(MarketData):
             storage_config=storage_config,
         )
         self._bar = Bar(resolution, shift=self.config.shift.get(resolution, 0))
-        self._stale_bar_timeout = self.config.stale_bar_timeout[resolution]
-        self._skip_first_bar = self.config.skip_first_bar[resolution]
+        # NOTE: stale_bar_timeout / skip_first_bar are normally pre-populated by
+        # DataConfig.auto_set_stale_bar_timeout() / auto_skip_first_bar(), but BarData
+        # can be constructed from a raw (un-resolved) config — e.g. pfeed's streaming
+        # resample path — so fall back to the same defaults those validators apply.
+        from pfund.datas.data_config import DataConfig
+
+        self._stale_bar_timeout = self.config.stale_bar_timeout.get(
+            resolution, DataConfig.default_stale_bar_timeout(resolution)
+        )
+        self._skip_first_bar = self.config.skip_first_bar.get(resolution, False)
 
     def __getattr__(self, attr):
         if "_bar" in self.__dict__:

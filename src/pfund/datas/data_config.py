@@ -9,11 +9,21 @@ from pfund.datas.resolution import Resolution
 from pfund.datas.timeframe import Timeframe
 
 
+# fraction of a bar's duration to wait past its close (bar.end_ts) for delayed
+# updates before flushing the bar; used as the default when stale_bar_timeout
+# has no explicit entry for a resolution.
+DEFAULT_STALE_BAR_TIMEOUT_RATIO = 0.1
+
+
 class DataConfig(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(
         arbitrary_types_allowed=True,
         validate_assignment=True,
     )
+
+    @staticmethod
+    def default_stale_bar_timeout(resolution: Resolution) -> float:
+        return resolution.to_seconds() * DEFAULT_STALE_BAR_TIMEOUT_RATIO
 
     data_source: DataSource | str | None = Field(default=None)
     data_origin: str = ""
@@ -288,7 +298,7 @@ class DataConfig(BaseModel):
         for resolution in self.data_resolutions:
             if resolution in self.stale_bar_timeout:
                 continue
-            stale_bar_timeout = resolution.to_seconds() * 0.1
+            stale_bar_timeout = self.default_stale_bar_timeout(resolution)
             stale_bar_timeout_dict[resolution] = stale_bar_timeout
         resolved_data_config = DataConfig(
             **self.model_dump(exclude={"stale_bar_timeout"}),

@@ -25,25 +25,25 @@ py313 = ["py313", "test", "optional"]
 
 [dependencies]
 python = ">=3.11.15"
-uv = ">=0.11.16"
+uv = ">=0.11.18"
 gh = ">=2.92.0"
 
 [pypi-dependencies]
 pfund-kit = ">=0.1.11"
-pfeed = ">=0.0.12"
+pfeed = ">=0.0.14"
 httpx = ">=0.28.1"
 websockets = ">=16.0.0"
 
 [feature.optional.pypi-dependencies]
 numba = ">=0.65.1"
-pfeed = { version = ">=0.0.11", extras = ["duckdb", "core", "yfinance", "hf"] }
+pfeed = { version = ">=0.0.14", extras = ["duckdb", "core", "yfinance", "hf"] }
+pfolio = ">=0.0.4"
 # TODO: enable when ready
-# pfolio = ">=0.0.3"
 # pfund-plot = {version = ">=0.0.1.dev3", extras = ["marimo"]}
 # mtflow = ">=0.0.1.dev2"
 pfund-ibapi = ">=10.42.1"
 joblib = ">=1.5.3"
-scikit-learn = ">=1.8.0"
+scikit-learn = ">=1.9.0"
 torch = ">=2.11.0"
 safetensors = ">=0.7.0"
 jax = ">=0.10.1"
@@ -53,17 +53,19 @@ ta-lib = ">=0.6.4"
 
 [feature.dev.pypi-dependencies]
 pfund = { path = ".", editable = true }
+# TEMP
 pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo", "jupyter", "matplotlib", "plotly", "altair"] }
 pfolio = { path = "../pfolio", editable = true }
 mtflow = { path = "../mtflow", editable = true }
-afterpython = ">=0.3.14"
-marimo = { version = ">=0.23.8", extras = ["recommended", "lsp"] }
-graphviz = ">=0.21"
+afterpython = ">=0.3.16"
 basedpyright = ">=1.39.6"
+marimo = { version = ">=0.23.8", extras = ["recommended", "lsp"] }
+jupytext = ">=1.19.3"
+jupyterlab = ">=4.5.7"
+graphviz = ">=0.21"
 memray = ">=1.19.3"
 pandas-stubs = ">=2.2.3.250527"
 pybit = ">=5.16.0"
-skorch = ">=1.4.0"
 flax = ">=0.12.7"
 equinox = ">=0.13.8"
 optax = ">=0.2.8"

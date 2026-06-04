@@ -196,8 +196,6 @@ tests/data/
 .pixi
 *.egg-info
 
-.python-version
-
 # Ignore dynaconf secret files
 .secrets.*
 
