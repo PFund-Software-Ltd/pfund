@@ -2218,7 +2218,7 @@ wheels = [
 
 [[package]]
 name = "pfeed"
-version = "0.0.14"
+version = "0.0.15"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -2232,9 +2232,9 @@ dependencies = [
     { name = "pydantic", marker = "sys_platform != 'emscripten'" },
     { name = "zstandard" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/95/fc/798acf7f4490badc843681c1003fa08132cbd0e270c010514eb928d8333e/pfeed-0.0.14.tar.gz", hash = "sha256:0dc160edf00da7ad2a1af38fbce7c9cc3a632c0964a7476de20d2c344999829e", size = 139879, upload-time = "2026-06-04T22:22:24.608Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/30/47/a2283639926cafb2aee5c48e96605a29cd957b3be259c442429d54166b5f/pfeed-0.0.15.tar.gz", hash = "sha256:1a890d2bc234e3eb17d0245f0a03a2183222e1a3db22be118807591e89036fda", size = 140435, upload-time = "2026-06-04T23:16:00.603Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/76/a9/99153bf0145665c60fc1d0e8c0a8e47aa0781f6b8e3fd4750ac4c7e46cd7/pfeed-0.0.14-py3-none-any.whl", hash = "sha256:ae00bbc128eabe0c481877a41a01371a695bbb25c01a42594f2c486e60abb63b", size = 211343, upload-time = "2026-06-04T22:22:23.356Z" },
+    { url = "https://files.pythonhosted.org/packages/33/4b/bc40657ddfcb6cdd7fb142c4de2b8c47ad86b5c9b66ceb41acdc810cbb83/pfeed-0.0.15-py3-none-any.whl", hash = "sha256:be63a9ab8c195a79914ec5555041f87b82d225760816b8451ffc9ba8219fdd9c", size = 211878, upload-time = "2026-06-04T23:16:01.751Z" },
 ]
 
 [package.optional-dependencies]
@@ -2310,7 +2310,7 @@ requires-dist = [
     { name = "joblib", marker = "extra == 'sklearn'", specifier = ">=1.5.3" },
     { name = "numba", marker = "sys_platform != 'emscripten' and extra == 'core'", specifier = ">=0.65.1" },
     { name = "orbax-checkpoint", marker = "sys_platform != 'emscripten' and extra == 'jax'", specifier = ">=0.11.40" },
-    { name = "pfeed", specifier = ">=0.0.14" },
+    { name = "pfeed", specifier = ">=0.0.15" },
     { name = "pfeed", extras = ["duckdb", "core", "yfinance", "hf"], marker = "extra == 'core'", specifier = ">=0.0.13" },
     { name = "pfolio", marker = "extra == 'core'", specifier = ">=0.0.4" },
     { name = "pfund-ibapi", marker = "sys_platform != 'emscripten' and extra == 'ibkr'", specifier = ">=10.42.1" },

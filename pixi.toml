@@ -30,13 +30,13 @@ gh = ">=2.92.0"
 
 [pypi-dependencies]
 pfund-kit = ">=0.1.11"
-pfeed = ">=0.0.14"
+pfeed = ">=0.0.15"
 httpx = ">=0.28.1"
 websockets = ">=16.0.0"
 
 [feature.optional.pypi-dependencies]
 numba = ">=0.65.1"
-pfeed = { version = ">=0.0.14", extras = ["duckdb", "core", "yfinance", "hf"] }
+pfeed = { version = ">=0.0.15", extras = ["duckdb", "core", "yfinance", "hf"] }
 pfolio = ">=0.0.4"
 # TODO: enable when ready
 # pfund-plot = {version = ">=0.0.1.dev3", extras = ["marimo"]}

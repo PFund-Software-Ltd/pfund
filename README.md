@@ -1,4 +1,4 @@
-# PFund: A Complete Algo-Trading Framework powered by Machine Learning and Data Engineering, TradFi, CeFi and DeFi ready.
+# `pfund`: A Complete Algo-Trading Framework powered by Machine Learning and Data Engineering, TradFi, CeFi and DeFi ready.
 
 
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://discord.gg/vqpS94tpdp)
@@ -28,6 +28,21 @@
 [uv]: https://docs.astral.sh/uv/
 [Futu]: https://www.futunn.com
 [FirstRate Data]: https://firstratedata.com
+
+<div align="center">
+  <h2>⚠️ Important Notice</h2>
+  <p><strong>`pfund` is NOT a cryptocurrency project.</strong></p>
+  <p>
+    `pfund` has <strong>never issued any coin or token</strong>
+    and has <strong>no plans to issue one</strong>.
+  </p>
+  <p>
+    This project is <strong>not affiliated with PFund (pfund.tech), Pump.Fund (PFUND),
+    or any similarly named crypto, meme coin, token, launchpad, or blockchain project</strong>.
+  </p>
+</div>
+
+---
 
 > **This library is NOT ready for use, please wait for 0.1.0 release.**
 
