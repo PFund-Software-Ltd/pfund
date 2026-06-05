@@ -31,14 +31,18 @@
 
 <div align="center">
   <h2>⚠️ Important Notice</h2>
-  <p><strong>`pfund` is NOT a cryptocurrency project.</strong></p>
+  <p><strong>pfund is NOT a cryptocurrency project.</strong></p>
   <p>
-    `pfund` has <strong>never issued any coin or token</strong>
+    pfund has <strong>never issued any coin or token</strong>
     and has <strong>no plans to issue one</strong>.
   </p>
   <p>
     This project is <strong>not affiliated with PFund (pfund.tech), Pump.Fund (PFUND),
     or any similarly named crypto, meme coin, token, launchpad, or blockchain project</strong>.
+  </p>
+  <p>
+    <strong>pfund</strong> is an open-source Python algorithmic trading framework
+    for backtesting, paper trading, live trading, and AI-driven trading workflows.
   </p>
 </div>
 
