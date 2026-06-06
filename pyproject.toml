@@ -33,9 +33,9 @@ dependencies = [
 [project.optional-dependencies]
 core = [
     "numba>=0.65.1 ; sys_platform != 'emscripten'",
-    'pfeed[duckdb,core,yfinance,hf]>=0.0.13',
+    'pfeed[core,duckdb,yfinance,hf]>=0.0.15',
     'pfolio>=0.0.4',
-    # 'pfund-plot[marimo]>=0.0.1.dev3',
+    'pfund-plot[marimo]>=0.0.5',
     # TODO: enable when ready
     # 'mtflow>=0.0.1.dev2 ; sys_platform != "emscripten"',
 ]
@@ -57,7 +57,7 @@ repository = "https://github.com/PFund-Software-Ltd/pfund"
 documentation = "https://pfund.pfund.ai/doc"
 
 [build-system]
-requires = ["uv_build>=0.11.18,<0.12.0"]
+requires = ["uv_build>=0.11.19,<0.12.0"]
 build-backend = "uv_build"
 
 [tool.pyright]

@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 if TYPE_CHECKING:
     import datetime
-    from pathlib import Path
 
     from pfund.engines.settings.base_engine_settings import BaseEngineSettings
     from pfund.config import PFundConfig
@@ -44,7 +43,6 @@ class EngineContext:
         )
         self.project_name = "default"
         self.data_start, self.data_end = self._parse_data_range(data_range)
-        self.settings = self._resolve_settings(settings)
         # NOTE: config obtained by get_config() inside ray actor could be different from the one in the main thread (e.g. after calling pf.configure())
         # so we create the config object here in the context and treat it as the source of truth
         self.pfund_config: PFundConfig = get_config(engine_name=self.name)
@@ -52,6 +50,7 @@ class EngineContext:
         if self.pfeed_config.data_tool not in [DataTool.pandas, DataTool.polars]:
             raise ValueError(f"Unsupported data tool: {self.pfeed_config.data_tool}")
         self.logging_config: dict[str, Any] = get_logging_config()
+        self.settings = self._resolve_settings(settings)
 
     # REVIEW: engine has no REMOTE run mode
     @staticmethod

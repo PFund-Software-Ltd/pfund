@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
-    from pfeed.sources.pfund.component_feed import ComponentFeed
+    from pfeed.sources.pfund.component_feed import PFundComponentFeed
 
     from pfund.typing import ColumnName, Component
 
@@ -25,7 +25,7 @@ class TradingStore:
 
         self._component: Component = component
         self._df: nw.DataFrame[Any] | None = None  # component's signals_df
-        self._feed = pe.PFund().component_feed(self._component)
+        self._feed: PFundComponentFeed = pe.PFund().component_feed(self._component)
         context = component.context
         self._storage_config = StorageConfig(
             data_path=context.pfund_config.data_path,
@@ -47,7 +47,7 @@ class TradingStore:
         return self._component.logger
 
     @property
-    def component_feed(self) -> ComponentFeed:
+    def component_feed(self) -> PFundComponentFeed:
         return self._feed
 
     def set_pivot_cols(self, pivot_cols: list[str]):

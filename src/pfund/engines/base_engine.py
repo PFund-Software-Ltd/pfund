@@ -1,10 +1,10 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, Self
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 if TYPE_CHECKING:
-    from pfeed.sources.pfund.engine_feed import EngineFeed
+    from pfeed.sources.pfund.engine_feed import PFundEngineFeed
     from pfeed.storages.storage_config import StorageConfig
 
     from pfund.brokers.broker_base import BaseBroker
@@ -25,7 +25,8 @@ import logging
 
 from pfeed.enums import DataCategory
 from pfund_kit.style import RichColor, TextStyle, cprint
-
+from pfund_kit.utils.singleton import SingletonMeta
+from pfund.engines.meta_engine import MetaEngine
 from pfund.enums import (
     Broker,
     ComponentType,
@@ -33,6 +34,7 @@ from pfund.enums import (
     RunMode,
     TradingVenue,
 )
+
 
 ENV_COLORS = {
     # 'yellow': 'bold yellow on #ffffe0',
@@ -45,18 +47,7 @@ ENV_COLORS = {
 }
 
 
-class BaseEngine:
-    _is_initialized: bool = False
-
-    def __new__(cls, *args: Any, **kwargs: Any) -> Self:
-        if BaseEngine._is_initialized:
-            raise RuntimeError(
-                "an engine has already been initiated in this process; "
-                + "only one engine may be created per Python process"
-            )
-        BaseEngine._is_initialized = True
-        return super().__new__(cls)
-
+class BaseEngine(metaclass=SingletonMeta):
     def __init__(
         self,
         *,
@@ -93,7 +84,7 @@ class BaseEngine:
         )
         self._is_running = False
         # TODO: write engine's states using engine_feed.load()
-        self._feed: EngineFeed = pe.PFund().engine_feed
+        # self._feed: PFundEngineFeed = pe.PFund().engine_feed
         self.brokers: dict[Broker, BaseBroker] = {}
         self.strategies: dict[str, BaseStrategy | ActorProxy[BaseStrategy]] = {}
         self.results: dict[str, Any] | None = None
@@ -118,7 +109,10 @@ class BaseEngine:
     def settings(
         self,
     ) -> TradeEngineSettings | BacktestEngineSettings | SandboxEngineSettings:
-        return self._context.settings
+        return cast(
+            "TradeEngineSettings | BacktestEngineSettings | SandboxEngineSettings",
+            self._context.settings,
+        )
 
     @property
     def data_start(self) -> datetime.date:
