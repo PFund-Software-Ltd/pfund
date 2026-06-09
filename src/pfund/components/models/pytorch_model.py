@@ -32,34 +32,30 @@ class PytorchModel(BaseModel):
             return obj
         return {}
 
-    def dump(self, obj: dict[str, any] | None = None):
-        if obj is None:
-            obj = {}
-        obj.update(
-            {
-                "state_dict": self.model.state_dict(),
-                "datas": self.datas,
-                # TODO, refer to model_base, e.g. dump self.datas
-                # 'dataset_periods': {
-                #     'train_period': "2020-01-01 to 2020-12-31",
-                #     'dev_period': ...,
-                #     'test_period': ...,
-                # },
-                # "data_info": {
-                #     'data_source': ...,
-                #     'resolution': ...,
-                # }
-            }
-        )
-        file_path = self._get_file_path(extension=".pt")
-        # TODO: use safetensors to save model if available
-        try:
-            import safetensors
-        except ImportError:
-            pass
+    def dump(self, obj: dict[str, any] | None = None) -> bytes:
+        from safetensors.torch import save
+
+        # TODO: move these fields to metadata
+        # TODO, refer to model_base, e.g. dump self.datas
+        # 'dataset_periods': {
+        #     'train_period': "2020-01-01 to 2020-12-31",
+        #     'dev_period': ...,
+        #     'test_period': ...,
+        # },
+        # "data_info": {
+        #     'data_source': ...,
+        #     'resolution': ...,
+        # }
         # TODO: need to dump datasets (parquet.gz) as well?
-        torch.save(obj, file_path)
-        self.logger.debug(f"dumped trained '{self.name}' to {trim_path(file_path)}")
+        # return bytes, not a file — pfeed's BlobIO owns persistence (writes the .pth).
+        # The component only knows its own format.
+        data = save(self.model.state_dict())
+        self.logger.debug(f"dumped trained '{self.name}' to bytes")
+        return data
+
+    # TODO:
+    def checkpoint(self):
+        pass
 
     def predict(self, X: Tensor | IntoDataFrame, *args, **kwargs) -> Tensor:
         import torch
@@ -77,3 +73,6 @@ class PytorchModel(BaseModel):
             signal_cols = self._get_default_signal_cols(num_cols)
             self.set_signal_cols(signal_cols)
         return pred_y
+
+
+PyTorchModel = PytorchModel

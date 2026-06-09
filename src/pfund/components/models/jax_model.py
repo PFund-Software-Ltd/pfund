@@ -45,18 +45,42 @@ class JaxModel(BaseModel):
             return obj
         return {}
 
-    def dump(self, obj: dict[str, Any] | None = None):
-        if obj is None:
-            obj = {}
+    def dump(self, obj: dict[str, Any] | None = None) -> bytes:
+        from flax.traverse_util import flatten_dict
+        from safetensors.flax import save
+
         if self._is_equinox():
-            obj["model"] = self.model
-        else:
-            obj["params"] = self.params
-        obj["datas"] = self.datas
-        file_path = self._get_file_path(extension=".jax")
-        with open(file_path, "wb") as f:
-            pickle.dump(obj, f)
-        self.logger.debug(f"dumped trained '{self.name}' to {trim_path(file_path)}")
+            raise NotImplementedError(
+                "JaxModel.dump() only supports Flax params as safetensors bytes; "
+                "use checkpoint() for Equinox/full model state"
+            )
+        if self.params is None:
+            raise ValueError(f"'{self.name}' is using Flax but self.params is not set")
+
+        # TODO: move these fields to metadata
+        # TODO, refer to model_base, e.g. dump self.datas
+        # 'dataset_periods': {
+        #     'train_period': "2020-01-01 to 2020-12-31",
+        #     'dev_period': ...,
+        #     'test_period': ...,
+        # },
+        # "data_info": {
+        #     'data_source': ...,
+        #     'resolution': ...,
+        # }
+        # TODO: need to dump datasets (parquet.gz) as well?
+        # return bytes, not a file — pfeed's BlobIO owns persistence.
+        # The component only knows its own format.
+        flat_params = {
+            "/".join(key): value for key, value in flatten_dict(self.params).items()
+        }
+        data = save(flat_params)
+        self.logger.debug(f"dumped trained '{self.name}' to bytes")
+        return data
+
+    # TODO:
+    def checkpoint(self):
+        pass
 
     def predict(self, X: Array | IntoDataFrame, *args, **kwargs) -> Array:
         import jax.numpy as jnp
@@ -82,3 +106,6 @@ class JaxModel(BaseModel):
             signal_cols = self._get_default_signal_cols(num_cols)
             self.set_signal_cols(signal_cols)
         return pred_y
+
+
+JAXModel = JaxModel

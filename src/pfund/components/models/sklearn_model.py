@@ -17,3 +17,25 @@ class SklearnModel(BaseModel):
             signal_cols = self._get_default_signal_cols(num_cols)
             self.set_signal_cols(signal_cols)
         return pred_y
+
+    def dump(self, obj: dict[str, Any] | None = None) -> bytes:
+        import io
+
+        import joblib
+
+        if obj is None:
+            obj = {}
+        obj.update(
+            {
+                "model": self.model,
+                "datas": self.datas,
+            }
+        )
+        # serialize to bytes, not a file — pfeed's BlobIO owns persistence (writes
+        # the .joblib). The component only knows its own format.
+        buffer = io.BytesIO()
+        joblib.dump(obj, buffer)
+        return buffer.getvalue()
+
+
+SKLearnModel = SklearnModel

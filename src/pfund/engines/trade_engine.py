@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
     from pfund.engines.engine_context import DataRangeDict
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
-    from pfund.typing import Component
 
 import logging
 import time
@@ -80,7 +79,7 @@ class TradeEngine(BaseEngine):
         from pfeed.streaming.zeromq import ZeroMQ
 
         self._data_engine = pe.DataEngine()
-        is_using_zmq = self._is_using_zmq()
+        is_using_zmq = self._is_using_ray()
 
         if is_using_zmq:
             # setup messaging for data engine
@@ -204,23 +203,15 @@ class TradeEngine(BaseEngine):
                 f"{self.name} zmq worker connected to {zmq_name} at {zmq_url}:{zmq_port}"
             )
 
-    def _is_using_zmq(self) -> bool:
-        """Returns True if any strategy is remote or has any remote component or any data has num_stream_workers
-        Conceptually it is equivalent to: if Ray is being used, then ZeroMQ is also being used.
-        """
-
-        def _has_any_remote_component(component: Component) -> bool:
-            for _component in component.get_components():
-                if _component.is_remote() or _has_any_remote_component(_component):
-                    return True
-            return False
-
-        for strategy in self.strategies.values():
-            if strategy.is_remote() or _has_any_remote_component(strategy):
-                return True
-            for data in strategy.get_datas():
-                if data.config.num_stream_workers is not None:
-                    return True
+    def _is_using_ray(self):
+        if super()._is_using_ray():
+            return True
+        if self._data_engine:
+            return any(
+                data.config.num_stream_workers is not None
+                for strategy in self.strategies.values()
+                for data in strategy.get_datas()
+            )
         return False
 
     def _run_zmq_loop(self):
@@ -268,10 +259,10 @@ class TradeEngine(BaseEngine):
         self._proxy.terminate()
         self._worker.terminate()
 
-    def run(self, project: str = "default"):
+    def run(self, project: str = BaseEngine.DEFAULT_PROJECT_NAME):
         """
         Args:
-            project: project name under the stage. Defaults to "default".
+            project: project name under the stage. Defaults to "default_project".
                 it will be used as a folder name that groups all runs of this stage together.
                 Path layout: {stage}s/{project}/your_runs
                 e.g. experiments/momentum_v2/
@@ -279,7 +270,8 @@ class TradeEngine(BaseEngine):
         try:
             if self.settings.auto_stream:
                 self._setup_data_engine()
-            if self._is_using_zmq():
+            is_using_zmq = self._is_using_ray()
+            if is_using_zmq:
                 self._zmq_thread = Thread(target=self._run_zmq_loop, daemon=True)
                 self._zmq_thread.start()
             super().run(project=project)

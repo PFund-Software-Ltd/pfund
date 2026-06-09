@@ -1,7 +1,7 @@
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
+# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportArgumentType=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast, ClassVar
 
 if TYPE_CHECKING:
     from pfeed.sources.pfund.engine_feed import PFundEngineFeed
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.entities.accounts.account_base import BaseAccount
     from pfund.entities.products.product_base import BaseProduct
-    from pfund.typing import StrategyT
+    from pfund.typing import Component, StrategyT
 
 import datetime
 import logging
@@ -26,7 +26,6 @@ import logging
 from pfeed.enums import DataCategory
 from pfund_kit.style import RichColor, TextStyle, cprint
 from pfund_kit.utils.singleton import SingletonMeta
-from pfund.engines.meta_engine import MetaEngine
 from pfund.enums import (
     Broker,
     ComponentType,
@@ -48,6 +47,9 @@ ENV_COLORS = {
 
 
 class BaseEngine(metaclass=SingletonMeta):
+    DEFAULT_PROJECT_NAME: ClassVar[str] = "default_project"
+    DEFAULT_RUN_ID: ClassVar[str] = "default_run"
+
     def __init__(
         self,
         *,
@@ -84,7 +86,7 @@ class BaseEngine(metaclass=SingletonMeta):
         )
         self._is_running = False
         # TODO: write engine's states using engine_feed.load()
-        # self._feed: PFundEngineFeed = pe.PFund().engine_feed
+        self._feed: PFundEngineFeed = pe.PFund().engine_feed
         self.brokers: dict[Broker, BaseBroker] = {}
         self.strategies: dict[str, BaseStrategy | ActorProxy[BaseStrategy]] = {}
         self.results: dict[str, Any] | None = None
@@ -125,6 +127,24 @@ class BaseEngine(metaclass=SingletonMeta):
     def is_running(self) -> bool:
         return self._is_running
 
+    def _is_using_ray(self):
+        """Returns True if any strategy is remote or has any remote component.
+        Subclasses may extend this (e.g. the trade engine also treats data with
+        num_stream_workers as using Ray). Conceptually: if Ray is being used,
+        then ZeroMQ is also being used.
+        """
+
+        def _has_any_remote_component(component: Component) -> bool:
+            for _component in component.get_components():
+                if _component.is_remote() or _has_any_remote_component(_component):
+                    return True
+            return False
+
+        for strategy in self.strategies.values():
+            if strategy.is_remote() or _has_any_remote_component(strategy):
+                return True
+        return False
+
     def add_strategy(
         self,
         strategy: StrategyT,
@@ -153,6 +173,17 @@ class BaseEngine(metaclass=SingletonMeta):
         if strat in self.strategies:
             raise ValueError(f"{strat} already exists")
 
+        # enforce GLOBAL name uniqueness (across other Ray actors too), not just this engine's dict
+        if ray_kwargs:
+            # upgrade BEFORE the actor is created, so the shared-registry context is what ships into it
+            from pfund.engines.component_registry import to_registry_proxy
+
+            self._context.component_registry = to_registry_proxy(
+                self._context.component_registry
+            )
+        # claim before spawning the actor, so a duplicate name aborts without leaking a live actor
+        self._context.component_registry.claim(strat)
+
         if ray_kwargs:
             strategy: ActorProxy[StrategyT] = ActorProxy(
                 strategy,
@@ -173,7 +204,7 @@ class BaseEngine(metaclass=SingletonMeta):
             is_top_component=True,
         )
 
-        self.strategies[strat] = strategy  # pyright: ignore[reportArgumentType]
+        self.strategies[strat] = strategy
         self._logger.debug(f"added '{strat}'")
         return strategy
 
@@ -233,10 +264,10 @@ class BaseEngine(metaclass=SingletonMeta):
             else:
                 raise NotImplementedError(f"Unhandled data type: {type(data)}")
 
-    def run(self, project: str = "default"):
+    def run(self, project: str = DEFAULT_PROJECT_NAME):
         """
         Args:
-            project: project name under the stage. Defaults to "default".
+            project: project name under the stage. Defaults to "default_project".
                 it will be used as a folder name that groups all runs of this stage together.
                 Path layout: {stage}s/{project}/your_runs
                 e.g. experiments/momentum_v2/

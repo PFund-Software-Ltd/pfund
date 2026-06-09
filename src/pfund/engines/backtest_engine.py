@@ -212,9 +212,9 @@ class BacktestEngine(BaseEngine):
 
     def run(
         self,
-        stage: Literal[RunStage.EXPERIMENT, RunStage.REFINEMENT]
-        | str = RunStage.EXPERIMENT,
-        project: str = "default",
+        stage: Literal[RunStage.experiment, RunStage.refinement]
+        | str = RunStage.experiment,
+        project: str = BaseEngine.DEFAULT_PROJECT_NAME,
         num_chunks: int = 1,
         num_cpus: int | None = None,
     ) -> dict[str, Any]:
@@ -222,7 +222,7 @@ class BacktestEngine(BaseEngine):
         Args:
             stage:
                 defines which stage of the run this is, either EXPERIMENT or REFINEMENT
-            project: project name under the stage. Defaults to "default".
+            project: project name under the stage. Defaults to "default_project".
                 it will be used as a folder name that groups all runs of this stage together.
                 Path layout: {stage}s/{project}/your_runs
                 e.g. experiments/momentum_v2/

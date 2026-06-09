@@ -3558,6 +3558,7 @@ ibkr = [
 jax = [
     { name = "jax", marker = "sys_platform != 'emscripten'" },
     { name = "orbax-checkpoint", marker = "sys_platform != 'emscripten'" },
+    { name = "safetensors", marker = "sys_platform != 'emscripten'" },
 ]
 sklearn = [
     { name = "joblib" },
@@ -3583,7 +3584,8 @@ requires-dist = [
     { name = "pfolio", marker = "extra == 'core'", specifier = ">=0.0.4" },
     { name = "pfund-ibapi", marker = "sys_platform != 'emscripten' and extra == 'ibkr'", specifier = ">=10.42.1" },
     { name = "pfund-kit", specifier = ">=0.1.11" },
-    { name = "pfund-plot", extras = ["marimo"], marker = "extra == 'core'", specifier = ">=0.0.5" },
+    { name = "pfund-plot", extras = ["marimo", "dash"], marker = "extra == 'core'", specifier = ">=0.0.5" },
+    { name = "safetensors", marker = "sys_platform != 'emscripten' and extra == 'jax'", specifier = ">=0.7.0" },
     { name = "safetensors", marker = "sys_platform != 'emscripten' and extra == 'torch'", specifier = ">=0.7.0" },
     { name = "scikit-learn", marker = "extra == 'sklearn'", specifier = ">=1.9.0" },
     { name = "ta-lib", marker = "sys_platform != 'emscripten' and extra == 'ta-lib'", specifier = ">=0.6.4" },

@@ -38,7 +38,7 @@ websockets = ">=16.0.0"
 numba = ">=0.65.1"
 pfeed = { version = ">=0.0.15", extras = ["core", "duckdb", "yfinance", "hf"] }
 pfolio = ">=0.0.4"
-pfund-plot = {version = ">=0.0.5", extras = ["marimo"]}
+pfund-plot = {version = ">=0.0.5", extras = ["marimo", "dash"]}
 # mtflow = ">=0.0.1.dev2"
 pfund-ibapi = ">=10.42.1"
 joblib = ">=1.5.3"
@@ -54,12 +54,13 @@ ta-lib = ">=0.6.4"
 pfund = { path = ".", editable = true }
 # TEMP
 pfund-kit = { path = "../pfund-kit", editable = true }
-pfund-plot = { path = "../pfund-plot", editable = true }
+pfund-plot = { path = "../pfund-plot", editable = true, extras = ["jupyter"] }
 pfeed = { path = "../pfeed", editable = true, extras = ["core", "duckdb", "yfinance", "hf"] }
 pfolio = { path = "../pfolio", editable = true }
 mtflow = { path = "../mtflow", editable = true }
+# pfund-plot = {version = ">=0.0.5", extras = ["jupyter"]}
 afterpython = ">=0.3.16"
-basedpyright = ">=1.39.6"
+basedpyright = ">=1.39.7"
 marimo = { version = ">=0.23.8", extras = ["recommended", "lsp"] }
 jupytext = ">=1.19.3"
 jupyterlab = ">=4.5.7"

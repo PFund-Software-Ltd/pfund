@@ -282,24 +282,22 @@ class ComponentMixin:
     def to_dict(self) -> dict[str, Any]:
         return {
             "class_name": self.__class__.__name__,
-            "signature": (self.__pfund_args__, self.__pfund_kwargs__),
-            "env": self.env.value,
-            "run_mode": self.run_mode.value,
-            "name": self.name,
-            "data_range": (self.context.data_start, self.context.data_end),
+            "component_name": self.name,
+            "data_start": self.context.data_start,
+            "data_end": self.context.data_end,
             "resolution": repr(self.resolution),
             "df_form": self._df_form,
-            "component_type": self.component_type.value,
+            "component_type": self.component_type,
             "signal_cols": self._signal_cols,
+            "run_mode": self.run_mode,
+            "signature": (self.__pfund_args__, self.__pfund_kwargs__),
             "config": self.config,
             "params": self.params,
             "settings": self.settings.model_dump(),
             "datas": [data.to_dict() for data in self.get_datas()],
-            "models": [model.to_dict() for model in self.models.values()],
-            "features": [feature.to_dict() for feature in self.features.values()],
-            "indicators": [
-                indicator.to_dict() for indicator in self.indicators.values()
-            ],
+            "models": list(self.models),
+            "features": list(self.features),
+            "indicators": list(self.indicators),
         }
 
     @property
@@ -708,6 +706,17 @@ class ComponentMixin:
             component_name = name or component.name
             if component_name in components:
                 raise ValueError(f"{component_name} already exists")
+
+            # enforce GLOBAL name uniqueness (across other Ray actors too), not just this parent's dict
+            if ray_kwargs:
+                # upgrade BEFORE the actor is created, so the shared-registry context is what ships into it
+                from pfund.engines.component_registry import to_registry_proxy
+
+                self.context.component_registry = to_registry_proxy(
+                    self.context.component_registry
+                )
+            # claim before spawning the actor, so a duplicate name aborts without leaking a live actor
+            self.context.component_registry.claim(component_name)
 
             if ray_kwargs:
                 component = ActorProxy(

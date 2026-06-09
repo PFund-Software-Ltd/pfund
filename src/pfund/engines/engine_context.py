@@ -8,11 +8,13 @@ if TYPE_CHECKING:
 
     from pfund.engines.settings.base_engine_settings import BaseEngineSettings
     from pfund.config import PFundConfig
+    from pfund.engines.component_registry import RegistryProxy
 
 from pfeed.enums import DataTool
 
 from pfund.config import get_config, get_logging_config
 from pfund.datas.resolution import Resolution
+from pfund.engines.component_registry import ComponentRegistry
 from pfund.enums import Environment, RunMode, RunStage
 
 
@@ -37,9 +39,9 @@ class EngineContext:
         self._env_vars = self._load_env_vars()
         self.run_mode = self._detect_run_mode()
         self.run_stage = (
-            RunStage.EXPERIMENT
+            RunStage.experiment
             if self.env == Environment.BACKTEST
-            else RunStage.DEPLOYMENT
+            else RunStage.deployment
         )
         self.project_name = "default"
         self.data_start, self.data_end = self._parse_data_range(data_range)
@@ -51,6 +53,9 @@ class EngineContext:
             raise ValueError(f"Unsupported data tool: {self.pfeed_config.data_tool}")
         self.logging_config: dict[str, Any] = get_logging_config()
         self.settings = self._resolve_settings(settings)
+        # starts local; upgraded in-place to the shared actor-backed registry the first
+        # time a remote component is declared (see component_registry.to_registry_proxy)
+        self.component_registry: ComponentRegistry | RegistryProxy = ComponentRegistry()
 
     # REVIEW: engine has no REMOTE run mode
     @staticmethod
@@ -74,17 +79,17 @@ class EngineContext:
     def set_run_stage(self, stage: RunStage | str) -> None:
         stage = RunStage[stage.upper()]
         if self.env == Environment.BACKTEST:
-            assert stage in [RunStage.EXPERIMENT, RunStage.REFINEMENT], (
+            assert stage in [RunStage.experiment, RunStage.refinement], (
                 "Run stage can only be set to EXPERIMENT or REFINEMENT in backtesting"
             )
         else:
-            assert stage == RunStage.DEPLOYMENT, (
+            assert stage == RunStage.deployment, (
                 "Run stage can only be set to DEPLOYMENT in trading"
             )
         self.run_stage = stage
 
     def set_project_name(self, project_name: str) -> None:
-        self.project_name = project_name
+        self.project_name = project_name.lower()
 
     def _load_env_vars(self) -> dict[str, str]:
         from dotenv import dotenv_values, find_dotenv

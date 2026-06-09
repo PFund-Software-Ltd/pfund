@@ -26,7 +26,6 @@ import narwhals as nw
 
 from pfund.components.mixin import ComponentMixin
 from pfund.components.models.model_meta import MetaModel
-from pfund.enums import ArtifactType
 
 
 def wrap_model(
@@ -209,12 +208,6 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         # self._assert_no_missing_datas(obj)
         return
 
-    def dump(self):
-        self.store.component_feed.load(
-            artifact_type=ArtifactType.model,
-            storage=self.storage_config.storage,
-            data_path=self.storage_config.data_path,
-            data_layer=self.storage_config.data_layer,
-            data_domain=self.storage_config.data_domain,
-            storage_options=self.storage_config.storage_options,
-        )
+    @abstractmethod
+    def dump(self) -> bytes:
+        pass

@@ -13,7 +13,7 @@ import narwhals as nw
 from pfeed.enums import DataLayer, IOFormat
 from pfeed.storages.storage_config import StorageConfig
 
-from pfund.enums import RunStage
+from pfund.enums import RunStage, ArtifactType
 
 
 class TradingStore:
@@ -25,15 +25,17 @@ class TradingStore:
 
         self._component: Component = component
         self._df: nw.DataFrame[Any] | None = None  # component's signals_df
-        self._feed: PFundComponentFeed = pe.PFund().component_feed(self._component)
+        self._feed: PFundComponentFeed = pe.PFund(
+            pipeline_mode=True
+        ).component_feed.with_component(self._component)
         context = component.context
         self._storage_config = StorageConfig(
             data_path=context.pfund_config.data_path,
             # REVIEW: data_layer, data_domain are NOT in use.
             data_layer={
-                RunStage.EXPERIMENT: DataLayer.RAW,
-                RunStage.REFINEMENT: DataLayer.CLEANED,
-                RunStage.DEPLOYMENT: DataLayer.CURATED,
+                RunStage.experiment: DataLayer.RAW,
+                RunStage.refinement: DataLayer.CLEANED,
+                RunStage.deployment: DataLayer.CURATED,
             }[context.run_stage],
             data_domain="PFUND_DATA",
         )
@@ -45,10 +47,6 @@ class TradingStore:
     @property
     def logger(self):
         return self._component.logger
-
-    @property
-    def component_feed(self) -> PFundComponentFeed:
-        return self._feed
 
     def set_pivot_cols(self, pivot_cols: list[str]):
         self.PIVOT_COLS = pivot_cols
@@ -83,7 +81,7 @@ class TradingStore:
         df_backend = nw.get_native_namespace(features_df)
         signals_df = nw.concat(
             [
-                features_df.select(self.key_cols),
+                features_df.select(self.KEY_COLS),
                 nw.DataFrame.from_dict(data=signals, backend=df_backend),
             ],
             how="horizontal",
@@ -124,13 +122,14 @@ class TradingStore:
         data_layer = DataLayer.CURATED
         io_format = IOFormat.PARQUET
 
-        # TODO: how to write updates? need to use deltalake
-        self.component_feed.load(
-            data=self._df,
-            storage=self._storage_config.storage,
-            data_path=pfund_config.data_path,
-            data_layer=data_layer,
-            io_format=io_format,
+        (
+            self._feed.download(artifact_type=ArtifactType.data).load(
+                data=self._df,
+                storage=self._storage_config.storage,
+                data_path=pfund_config.data_path,
+                data_layer=data_layer,
+                io_format=io_format,
+            )
         )
 
     # TODO:
@@ -140,9 +139,21 @@ class TradingStore:
         - theres missing data
         - EOD data is available, replace SourceType.STREAM (live data) with SourceType.BATCH (official EOD data)
         """
-        self.component_feed.retrieve(...)
+        self._feed.retrieve(...)
 
     # TODO:
     def swap_live_for_eod(self):
         """Discard the interim live-stream buffer and load the official end-of-day dataset (if any)."""
         pass
+
+    # TODO: currently just a draft
+    def save_artifacts(self):
+        (self._feed.download(artifact_type=ArtifactType.model).load())
+        # component_feed.load(
+        #     artifact_type=ArtifactType.model,
+        #     storage=self.storage_config.storage,
+        #     data_path=self.storage_config.data_path,
+        #     data_layer=self.storage_config.data_layer,
+        #     data_domain=self.storage_config.data_domain,
+        #     storage_options=self.storage_config.storage_options,
+        # )
