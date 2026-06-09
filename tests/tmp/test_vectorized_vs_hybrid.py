@@ -19,7 +19,6 @@ import pytest
 
 from pfund._backtest.pandas import BacktestDataFrame as PandasBTDF
 from pfund._backtest.polars import BacktestDataFrame as PolarsBTDF
-from pfund.enums import BacktestMode
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -52,7 +51,7 @@ def _make_polars_df(
 def _run_pandas_vectorized(
     base_df: pd.DataFrame, signal: np.ndarray, **kwargs
 ) -> pd.DataFrame:
-    df = PandasBTDF(base_df.copy(), backtest_mode=BacktestMode.VECTORIZED)
+    df = PandasBTDF(base_df.copy())
     df = df.create_signal(signal=pd.Series(signal, index=df.index))
     open_kw = {
         k: v
@@ -67,13 +66,14 @@ def _run_pandas_vectorized(
     }
     df = df.open_position(**open_kw)
     df = df.close_position(**close_kw)
+    df = df.backtest_loop()
     return pd.DataFrame(df)
 
 
 def _run_pandas_hybrid(
     base_df: pd.DataFrame, signal: np.ndarray, **kwargs
 ) -> pd.DataFrame:
-    df = PandasBTDF(base_df.copy(), backtest_mode=BacktestMode.HYBRID)
+    df = PandasBTDF(base_df.copy())
     df = df.create_signal(signal=pd.Series(signal, index=df.index))
     open_kw = {
         k: v
@@ -101,7 +101,7 @@ def _np_signal_to_polars(signal: np.ndarray) -> pl.Series:
 def _run_polars_vectorized(
     base_df: pl.DataFrame, signal: np.ndarray, **kwargs
 ) -> pd.DataFrame:
-    df = PolarsBTDF(base_df.clone(), backtest_mode=BacktestMode.VECTORIZED)
+    df = PolarsBTDF(base_df.clone())
     sig = _np_signal_to_polars(signal)
     df = df.create_signal(signal=sig)
     open_kw = {
@@ -117,13 +117,14 @@ def _run_polars_vectorized(
     }
     df = df.open_position(**open_kw)
     df = df.close_position(**close_kw)
+    df = df.backtest_loop()
     return df.to_pandas()
 
 
 def _run_polars_hybrid(
     base_df: pl.DataFrame, signal: np.ndarray, **kwargs
 ) -> pd.DataFrame:
-    df = PolarsBTDF(base_df.clone(), backtest_mode=BacktestMode.HYBRID)
+    df = PolarsBTDF(base_df.clone())
     sig = _np_signal_to_polars(signal)
     df = df.create_signal(signal=sig)
     open_kw = {
@@ -790,13 +791,13 @@ class TestHybridKernelSanity:
         base = _make_pandas_df(n)
         signal = np.array([1, -1, 1, -1, 1], dtype=float)
 
-        df = PandasBTDF(base.copy(), backtest_mode=BacktestMode.HYBRID)
+        df = PandasBTDF(base.copy())
         df = df.create_signal(signal=pd.Series(signal))
         df = df.close_position()
         with pytest.raises(ValueError, match="open_position"):
             df.backtest_loop()
 
-        df2 = PandasBTDF(base.copy(), backtest_mode=BacktestMode.HYBRID)
+        df2 = PandasBTDF(base.copy())
         df2 = df2.create_signal(signal=pd.Series(signal))
         df2 = df2.open_position()
         with pytest.raises(ValueError, match="close_position"):

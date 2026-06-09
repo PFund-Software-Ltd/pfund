@@ -11,7 +11,6 @@ import pandas as pd
 import pytest
 
 from pfund._backtest.pandas import BacktestDataFrame
-from pfund.enums import BacktestMode
 
 
 def _make_df(
@@ -34,7 +33,7 @@ def _run_hybrid(
     trailing_stop: float | None = None,
     **kwargs,
 ) -> pd.DataFrame:
-    df = BacktestDataFrame(base_df.copy(), backtest_mode=BacktestMode.HYBRID)
+    df = BacktestDataFrame(base_df.copy())
     df = df.create_signal(signal=pd.Series(signal, index=df.index))
     open_kw = {
         k: v

@@ -104,8 +104,7 @@ class BacktestMixin:
         df = super().features_df
         # when components' features are not yet computed, it is not useful to cache the features_df since features_df = data_df + (empty signals_df)
         components_features_not_ready = (
-            self.backtest_mode == BacktestMode.EVENT_DRIVEN
-            and not self.settings.reuse_signals
+            self.backtest_mode == BacktestMode.EXACT and not self.settings.reuse_signals
         )
         if (
             self.settings.cache_features_df
@@ -169,12 +168,8 @@ class BacktestMixin:
 
     def _is_signals_precomputed(self) -> bool:
         return (
-            not self.is_top_component()
-            and self.backtest_mode in [BacktestMode.VECTORIZED, BacktestMode.HYBRID]
-        ) or (
-            self.backtest_mode == BacktestMode.EVENT_DRIVEN
-            and self.settings.reuse_signals
-        )
+            not self.is_top_component() and self.backtest_mode == BacktestMode.FAST
+        ) or (self.backtest_mode == BacktestMode.EXACT and self.settings.reuse_signals)
 
     def _materialize(self):
         for data_store in self.data_stores.values():

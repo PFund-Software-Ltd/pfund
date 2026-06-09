@@ -55,10 +55,7 @@ class BacktestContext:
     dataset_splitter: DatasetSplitter
 
     def __post_init__(self):
-        if (
-            self.backtest_mode == BacktestMode.EVENT_DRIVEN
-            and self.settings.reuse_signals
-        ):
+        if self.backtest_mode == BacktestMode.EXACT and self.settings.reuse_signals:
             cprint(
                 "Warning: Reusing pre-computed signals to speed up event-driven backtesting,\n"
                 + "i.e. computing signals on the fly will be skipped",
@@ -76,8 +73,7 @@ class BacktestEngine(BaseEngine):
         name: str = "engine",
         data_range: str | DataRangeDict | Literal["ytd"] = "1mo",
         settings: BacktestEngineSettings | None = None,
-        mode: BacktestMode
-        | Literal["vectorized", "hybrid", "event_driven"] = BacktestMode.VECTORIZED,
+        mode: BacktestMode | Literal["fast", "exact"] = BacktestMode.FAST,
         dataset_splits: int | DatasetSplitsDict | TimeSeriesSplit = 721,
         cv_test_ratio: float = 0.1,
         # TODO: add profiling option for event-driven backtesting?
@@ -298,13 +294,11 @@ class BacktestEngine(BaseEngine):
             chunk_num: int | None = None,
             batch_num: int | None = None,
         ) -> pf.BacktestDataFrame:
-            if backtest_mode in [BacktestMode.VECTORIZED, BacktestMode.HYBRID]:
+            if backtest_mode == BacktestMode.FAST:
                 BacktestDataFrame = importlib.import_module(
                     f"pfund._backtest.{data_tool.lower()}"
                 ).BacktestDataFrame
-                backtest_df_original = BacktestDataFrame(
-                    df_chunk.to_native(), backtest_mode=backtest_mode
-                )
+                backtest_df_original = BacktestDataFrame(df_chunk.to_native())
                 backtest_df = backtestee.backtest(backtest_df_original)
                 if backtestee.is_strategy() and backtest_df is backtest_df_original:
                     cprint(
@@ -315,7 +309,7 @@ class BacktestEngine(BaseEngine):
                         + "these return a new df, so you must reassign: df = df.create_signal(...) and return the new df",
                         style=TextStyle.BOLD + RichColor.RED,
                     )
-            elif backtest_mode == BacktestMode.EVENT_DRIVEN:
+            elif backtest_mode == BacktestMode.EXACT:
                 backtest_df = BacktestEngine._event_driven_loop(
                     backtestee=backtestee,
                     df_chunk=df_chunk,

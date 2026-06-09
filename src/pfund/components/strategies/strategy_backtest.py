@@ -102,9 +102,7 @@ def BacktestStrategy(Strategy: type[StrategyT], *args: Any, **kwargs: Any) -> St
 
             # wrap it back into the original BacktestDataFrame class for consistency
             BacktestDataFrame = type(backtest_df)
-            return BacktestDataFrame(
-                df.to_native(), backtest_mode=backtest_df._backtest_mode
-            )  # pyright: ignore[reportCallIssue]
+            return BacktestDataFrame(df.to_native())
 
     try:
         return cast("StrategyT", _BacktestStrategy(*args, **kwargs))

@@ -1,10 +1,11 @@
 # pyright: reportUnknownArgumentType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false, reportReturnType=false, reportMissingTypeArgument=false, reportImplicitStringConcatenation=false, reportUnknownParameterType=false, reportArgumentType=false, reportCallIssue=false
+from typing import Literal
+
 import narwhals as nw
 import numpy as np
 from narwhals.typing import IntoDataFrameT, IntoSeries
 
 from pfund._backtest.numba_kernel import backtest_loop_kernel
-from pfund.enums import BacktestMode
 
 
 def _to_float64(series: nw.Series) -> np.ndarray:
@@ -43,13 +44,190 @@ def _series_to_positional_float64(
 
 
 class NarwhalsMixin:
+    def create_signal(
+        self: IntoDataFrameT,
+        buy_condition: IntoSeries | None = None,
+        sell_condition: IntoSeries | None = None,
+        signal: IntoSeries | None = None,
+        first_only: bool = False,
+    ) -> IntoDataFrameT:
+        """
+        A signal is defined as a sequence of 1s and -1s, where 1 means a buy signal and -1 means a sell signal.
+        All series arguments are native series (pandas or polars), matching the dataframe's backend.
+        Args:
+            buy_condition: condition to create a buy signal 1
+            sell_condition: condition to create a sell signal -1
+            signal: provides self-defined signals, buy_condition and sell_condition are ignored if provided
+            first_only: only the first signal is remained in each signal sequence
+                useful when only the first signal is treated as a true signal
+        """
+        df = nw.from_native(self)
+
+        if signal is None:
+            if buy_condition is None and sell_condition is None:
+                raise ValueError("Either buy or sell condition must be provided")
+            if buy_condition is not None and sell_condition is not None:
+                buy = nw.from_native(buy_condition, series_only=True)
+                sell = nw.from_native(sell_condition, series_only=True)
+                overlaps = buy & sell
+                if overlaps.any():
+                    raise ValueError(
+                        "Overlapping buy and sell condition detected.\n"
+                        + "Please make sure that buy and sell conditions are mutually exclusive."
+                    )
+                df = df.with_columns(buy.alias("_buy"), sell.alias("_sell"))
+                df = df.with_columns(
+                    nw.when(nw.col("_buy"))
+                    .then(1)
+                    .when(nw.col("_sell"))
+                    .then(-1)
+                    .otherwise(None)
+                    .alias("signal")
+                ).drop("_buy", "_sell")
+            else:
+                cond = nw.from_native(
+                    buy_condition if buy_condition is not None else sell_condition,
+                    series_only=True,
+                )
+                value = 1 if buy_condition is not None else -1
+                df = df.with_columns(cond.alias("_cond"))
+                df = df.with_columns(
+                    nw.when(nw.col("_cond")).then(value).otherwise(None).alias("signal")
+                ).drop("_cond")
+        else:
+            signal_series = nw.from_native(signal, series_only=True)
+            assert signal_series.drop_nulls().unique().is_in([1, -1]).all(), (
+                "'signal' must only contain 1, -1, null"
+            )
+            df = df.with_columns(signal_series.alias("signal"))
+
+        # _signal_change: True where the forward-filled signal differs from its previous value
+        signal_ffill = nw.col("signal").fill_null(strategy="forward")
+        df = df.with_columns(
+            (
+                (signal_ffill != signal_ffill.shift(1)).fill_null(True)
+                & ~signal_ffill.is_null()
+            ).alias("_signal_change")
+        )
+
+        if first_only:
+            df = df.with_columns(
+                nw.when(nw.col("_signal_change"))
+                .then(nw.col("signal"))
+                .otherwise(None)
+                .alias("signal")
+            )
+
+        return self.__class__(df.to_native())
+
+    def open_position(
+        self: IntoDataFrameT,
+        order_price: IntoSeries | None = None,
+        order_quantity: IntoSeries | int | float = 1,
+        first_only: bool = False,
+        long_only: bool = False,
+        short_only: bool = False,
+        fill_price: Literal["open", "close"] = "close",
+    ) -> IntoDataFrameT:
+        """
+        Sets up position-opening orders; the actual backtest runs in backtest_loop().
+        Conceptually, this function places orders at the end of bar/candlestick N.
+        For example, for a buy order:
+        - If the order price >= close price of bar N, it is a market order,
+            by assuming that the close price is the current best price; otherwise it is a limit order.
+        Then the orders are opened at the beginning of bar N+1,
+        and filled during bar N+1 if high >= order price >= low.
+        If bar N+1 gaps through the limit (order price is outside [low, high]),
+        the order is treated as a marketable gap-through and fills at N+1 open.
+        Opened orders are considered as cancelled at the end of bar N+1 if not filled.
+        Args:
+            order_price: price to place the order.
+                If None, use 'close' price (market order).
+            order_quantity: quantity to place the order.
+            first_only: first trade only, do not trade after the first trade until signal changes
+            long_only: orders in signal=-1 only close the existing long position, the position will not be flipped
+                useful for long-only strategy with signal=-1 to close the position
+            short_only: orders in signal=1 only close the existing short position, the position will not be flipped
+                useful for short-only strategy with signal=1 to close the position
+            fill_price: fill price for market orders.
+                An order is placed at bar N's close. 'close' fills at bar N's close price,
+                'open' fills at bar N+1's open price.
+                Applies to regular market orders (aggressive vs close).
+                Gap-through limits always fill at bar N+1 open.
+                In-range limit orders fill at their limit price.
+                Default is 'close', which avoids gap exposure (e.g. overnight gaps on daily bars).
+        """
+        assert "signal" in self.columns, (
+            "No 'signal' column is found, please use create_signal() first"
+        )
+        assert not (long_only and short_only), (
+            "Cannot be long_only and short_only at the same time"
+        )
+        assert fill_price in ("open", "close"), "'fill_price' must be 'open' or 'close'"
+
+        # everything is delayed to backtest_loop(), only store the inputs here
+        self._open_position_inputs = {
+            "order_price": order_price,
+            "order_quantity": order_quantity,
+            "first_only": first_only,
+            "long_only": long_only,
+            "short_only": short_only,
+            "fill_price": fill_price,
+        }
+        # Keep stored inputs on the same object; returning a new
+        # BacktestDataFrame would reset these attributes in __init__.
+        return self
+
+    def close_position(
+        self: IntoDataFrameT,
+        take_profit: float | None = None,
+        stop_loss: float | None = None,
+        time_window: int | None = None,
+        fill_price: Literal["open", "close"] = "close",
+    ) -> IntoDataFrameT:
+        """
+        Sets up position-closing conditions; the actual backtest runs in backtest_loop().
+        Conceptually, this function places stop market orders at the end of each bar, after placing orders in open_position().
+        Args:
+            take_profit: take profit percentage (e.g. 0.1 = 10%).
+            stop_loss: stop loss percentage between 0 and 1 (e.g. 0.05 = 5%).
+            time_window: max number of bars to hold a position before auto-closing.
+            fill_price: fill price for market close orders (immediately triggered SL/TP and time_window).
+                These trigger at bar N's close. 'close' fills at bar N's close price,
+                'open' fills at bar N+1's open price.
+                Gap-through immediate SL/TP (stop outside [low, high]) always fill at bar N+1 open.
+                Non-immediately triggered SL/TP (high/low breach during bar) always fill at their trigger price.
+                Default is 'close', which avoids gap exposure (e.g. overnight gaps on daily bars).
+        """
+        if take_profit is not None:
+            assert take_profit > 0, "'take_profit' must be positive"
+        if stop_loss is not None:
+            stop_loss = abs(stop_loss)
+            assert 1 > stop_loss > 0, "'stop_loss' must be between 0 and 1"
+        if time_window is not None:
+            assert isinstance(time_window, int) and time_window > 0, (
+                "'time_window' must be a positive integer"
+            )
+        assert fill_price in ("open", "close"), "'fill_price' must be 'open' or 'close'"
+
+        # everything is delayed to backtest_loop(), only store the inputs here
+        self._close_position_inputs = {
+            "take_profit": take_profit,
+            "stop_loss": stop_loss,
+            "time_window": time_window,
+            "fill_price": fill_price,
+        }
+        # Keep stored inputs on the same object; returning a new
+        # BacktestDataFrame would reset these attributes in __init__.
+        return self
+
     def backtest_loop(
         self: IntoDataFrameT,
         trailing_stop: float | None = None,
     ) -> IntoDataFrameT:
-        """Runs the bar-by-bar hybrid backtest loop via the numba kernel.
+        """Runs the bar-by-bar backtest loop via the numba kernel.
 
-        This is the final step in the hybrid backtest chain:
+        This is the final step in the backtest chain:
             df.create_signal(...).open_position(...).close_position(...).backtest_loop(...)
 
         Args:
@@ -58,11 +236,6 @@ class NarwhalsMixin:
                 When price reverses by the trailing percentage from its best level, a market order is triggered to close the position.
                 When set, replaces the fixed stop_loss from close_position().
         """
-        if self._backtest_mode != BacktestMode.HYBRID:
-            raise ValueError(
-                "backtest_loop() is only available in backtest mode 'hybrid'"
-            )
-
         # ================================================================
         # Validate preconditions
         # ================================================================
@@ -197,4 +370,4 @@ class NarwhalsMixin:
             )
 
         # Wrap back into the custom BacktestDataframe class (to_native() returns plain pd/pl DataFrame)
-        return self.__class__(result_df.to_native(), backtest_mode=self._backtest_mode)
+        return self.__class__(result_df.to_native())

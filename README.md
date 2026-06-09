@@ -138,7 +138,7 @@ class YourStrategy(pf.Strategy):
         pass
 
 
-engine = pf.BacktestEngine(mode='vectorized')
+engine = pf.BacktestEngine(mode='fast')
 strategy = engine.add_strategy(YourStrategy(), name='your_strategy')
 strategy.add_data(
   'IB', 'AAPL', 'USD', 'STK', resolutions=['1d'],
