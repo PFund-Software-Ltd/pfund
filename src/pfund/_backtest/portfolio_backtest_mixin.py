@@ -8,18 +8,15 @@ from pfund_kit.style import RichColor, TextStyle, cprint
 
 from pfund._backtest.portfolio_backtest_kernel import portfolio_backtest_loop_kernel
 from pfund._backtest.product_backtest_mixin import (
-    _data_range_mask,
     _group_positions,
+    _resolve_targets,
     _series_to_positional_float64,
     _to_float64,
-    _validate_data_range,
 )
 
 # one entry per create_weight() call
 _registry: dict[tuple, dict] = {}
 # ((start_date, end_date), "BYBIT_BTC_USDT_PERPETUAL"): {  # key = (data_range, product); range resolved
-#   "data_range": (start, end) | None,  # as passed to create_weight();
-#                 None = full-span single-shot (strict full-row guard in backtest())
 #   "weight": np.array([nan, ..., 0.5]) — positional over the entry's target rows
 #   "dates":  np.array([date1, ...]) — target rows' dates, pin the exact rows so
 #             backtest() can verify it scatters weights onto the same rows
@@ -69,7 +66,7 @@ def _get_registry_key(
 class PortfolioBacktestMixin:
     def create_weight(
         self: IntoDataFrameT,
-        weight: IntoSeries | float,
+        weight: IntoSeries,
         data_range: tuple[datetime.date, datetime.date] | None = None,
     ) -> IntoDataFrameT:
         """Registers weights for this product's rows within data_range.
@@ -108,104 +105,43 @@ class PortfolioBacktestMixin:
         same product is an error (the past is never rewritten).
 
         Args:
-            weight:
-                scalar → one rebalance instruction at the LAST row in
-                data_range; the earlier rows in range get nan (drift).
-                native series (pandas or polars) matching the dataframe's
-                backend → positional weights over the rows in data_range,
-                length must match the row count exactly.
+            weight: a native series (pandas or polars) matching the
+                dataframe's backend — positional weights over the rows in
+                data_range, length must match the row count exactly. Each row
+                is spelled out explicitly: a non-nan value rebalances toward
+                that target, nan means no instruction (drift/hold). To
+                rebalance once at the period's end, pass a series that is nan
+                everywhere except its last row.
             data_range: (start_date, end_date), both inclusive — the rows this
                 call covers. A range selecting no rows (e.g. a delisted
                 product still in the universe) is a no-op.
-                None (default) → single-shot configuration over ALL rows of
-                this df: wipes the product's previously registered ranges
-                (reconfigure + rerun).
+                None (default) → configure over ALL rows of this df (full
+                span). Registration is still register-once: this raises if it
+                would overlap an already-registered range of the product.
         """
         df = nw.from_native(self)
-        if "date" not in df.columns:
-            raise ValueError(
-                "portfolio backtesting requires a 'date' column — it pins the "
-                "registered rows so backtest() can verify row alignment"
-            )
-        # weights are positional (a scalar lands at the range's LAST row): an
-        # unsorted df would silently anchor it to the wrong date
-        if not df.get_column("date").is_sorted():
-            raise ValueError(
-                "the dataframe passed to create_weight() must be sorted by "
-                "'date' (ascending)"
-            )
-        if data_range is not None:
-            data_range = _validate_data_range(data_range)
-        # an empty df is the "selects no rows" case taken to its limit (e.g. a
-        # product from a static universe with no rows in this window) — same
-        # no-op as a data_range selecting nothing; no product key can be
-        # derived from it, so it must be handled before _get_registry_key
-        if len(df) == 0:
-            return self
         key = _get_registry_key(df, data_range)
-        key_range, product = key
-        date_arr = df.get_column("date").to_numpy()
+        data_range, product = key
+        target_pos, target_dates = _resolve_targets(
+            _registry,
+            product,
+            lambda k: k[1],
+            df,
+            data_range,
+        )
 
-        if data_range is None:
-            target_pos = np.arange(len(df))
-        else:
-            start, end = data_range
-            target_pos = np.flatnonzero(_data_range_mask(date_arr, start, end))
-        if len(target_pos) == 0:
-            # nothing to register, e.g. a delisted product still in the
-            # universe has no rows in the current period — no-op
-            return self
-        target_dates = date_arr[target_pos]
-        # duplicate dates (e.g. one product at multiple resolutions) would
-        # double-write the same panel row at backtest() — last value silently
-        # wins; reject at registration instead
-        if len(np.unique(target_dates)) != len(target_dates):
-            raise ValueError(
-                f"{product}: duplicate dates in the registered rows — the df likely "
-                "holds multiple resolutions; portfolio backtesting requires a "
-                "single resolution (one row per (date, product))"
-            )
+        # compute weight series
+        weight_arr = _series_to_positional_float64(weight, len(target_pos), "weight")
 
-        if isinstance(weight, (int, float)) and not isinstance(weight, bool):
-            # one rebalance instruction at the range's last row, drift before it
-            weight_arr = np.full(len(target_pos), np.nan)
-            weight_arr[-1] = float(weight)
-        else:
-            weight_arr = _series_to_positional_float64(
-                weight, len(target_pos), "weight"
-            )
-        if np.isinf(weight_arr).any():
-            raise ValueError(
-                "'weight' must not contain inf/-inf — weights are fractions of "
-                "the portfolio's sizing capital (nan = hold, 0.0 = close)"
-            )
-
-        if data_range is None:
-            # legacy single-shot configuration: wipe the product's previously
-            # registered ranges (reconfigure + rerun) and cover all rows
-            for registered_key in [k for k in _registry if k[1] == product]:
-                del _registry[registered_key]
-        else:
-            # a row's weight is registered once — the past is never rewritten
-            for (registered_range, registered_product), entry in _registry.items():
-                if registered_product != product:
-                    continue
-                if np.isin(target_dates, entry["dates"]).any():
-                    raise ValueError(
-                        f"{product}: data_range {key_range} overlaps the already-registered "
-                        f"{registered_range} — a row's weight can only be registered once"
-                    )
-
+        # register weight series and its target dates
         _registry[key] = {
-            # data_range as passed: None = full-span single-shot configuration
-            "data_range": data_range,
-            "weight": weight_arr,
             "dates": target_dates,
+            "weight": weight_arr,
         }
 
+        # dynamically add backtest method to the dataframe class
         df_class = type(self)
         df_class.backtest = PortfolioBacktestMixin.backtest
-
         return self
 
     def backtest(
@@ -347,22 +283,17 @@ class PortfolioBacktestMixin:
             for (key_range, registered_product), entry in _registry.items():
                 if registered_product != product:
                     continue
-                # min. safe guard to avoid attaching weights to the wrong rows
-                if entry["data_range"] is None:
-                    # full-span single-shot entry: must pin the product's exact rows
-                    if not np.array_equal(product_dates, entry["dates"]):
-                        raise ValueError(f"{product}: mismatched dates")
-                    seg_rows = np.arange(len(pos))
-                else:
-                    if not np.isin(entry["dates"], product_dates).all():
-                        raise ValueError(
-                            f"{product}: registered dates from data_range {key_range} are "
-                            "missing from the dataframe passed to backtest()"
-                        )
-                    # product dates are unique (duplicate-dates guard above)
-                    # and ascending, so searchsorted maps the segment's dates
-                    # to the product's row indices exactly
-                    seg_rows = np.searchsorted(product_dates, entry["dates"])
+                # min. safe guard to avoid attaching weights to the wrong rows:
+                # every registered date must be present in this product's rows
+                if not np.isin(entry["dates"], product_dates).all():
+                    raise ValueError(
+                        f"{product}: registered dates from data_range {key_range} are "
+                        "missing from the dataframe passed to backtest()"
+                    )
+                # product dates are unique (duplicate-dates guard above) and
+                # ascending, so searchsorted maps the entry's dates to the
+                # product's row indices exactly
+                seg_rows = np.searchsorted(product_dates, entry["dates"])
                 weight_mat[t_idx[seg_rows], j] = entry["weight"]
 
         # ================================================================

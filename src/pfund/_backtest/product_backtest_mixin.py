@@ -1,5 +1,6 @@
 # pyright: reportUnknownArgumentType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false, reportReturnType=false, reportMissingTypeArgument=false, reportImplicitStringConcatenation=false, reportUnknownParameterType=false, reportArgumentType=false, reportCallIssue=false
 import datetime
+from collections.abc import Callable
 from typing import Literal
 
 import narwhals as nw
@@ -9,6 +10,10 @@ from narwhals.typing import IntoDataFrameT, IntoSeries
 from pfund.datas.stores.market_data_store import MarketDataStore
 from pfund._backtest.product_backtest_kernel import backtest_loop_kernel
 
+# what a registration is keyed by, minus its data_range: a (resolution, product)
+# combo for product backtesting, a bare product string for portfolio
+_Identity = tuple[str, str] | str
+
 # (resolution, product) = a combo; one entry per create_signal() call
 # (= one time SEGMENT of a combo). Registration controls INSTRUCTIONS, never
 # data: backtest() always runs the kernel over a combo's FULL rows and
@@ -16,8 +21,6 @@ from pfund._backtest.product_backtest_kernel import backtest_loop_kernel
 # segments and stops are evaluated on every bar.
 _registry: dict[tuple, dict] = {}
 # ((start_date, end_date), "1d", "BTC"): {  # key = (data_range, *combo); combo in PIVOT_COLS order
-#   "data_range": (start, end) | None,  # as passed to create_signal();
-#                 None = full-span single-shot (strict full-row guard in backtest())
 #   "signal": np.array([1.0, nan, -1.0, ...]),  # positional over the entry's rows
 #   "dates":  np.array([date1, date2, ...]),  # the entry's rows' dates, pin row alignment
 #   "open":   {"order_quantity": 2, "order_price": None, "first_only": False, ...},  # open_position kwargs
@@ -64,8 +67,8 @@ def _clear_registry() -> None:
     _latest_key_by_combo.clear()
 
 
-def _get_registry_key(df: nw.DataFrame) -> tuple:
-    """Return the single (product, resolution) combo's values in PIVOT_COLS order."""
+def _get_current_combo(df: nw.DataFrame) -> tuple:
+    """Return the single (resolution, product) combo's values in PIVOT_COLS order."""
     combos = df.select(*MarketDataStore.PIVOT_COLS).unique().rows()
     if len(combos) != 1:
         raise ValueError(
@@ -73,6 +76,26 @@ def _get_registry_key(df: nw.DataFrame) -> tuple:
             + _PATTERN
         )
     return combos[0]
+
+
+def _get_registry_key(
+    df: nw.DataFrame, data_range: tuple[datetime.date, datetime.date] | None
+) -> tuple[tuple[datetime.date, datetime.date], str, str]:
+    """Build the real registry key (data_range, resolution, product) for one
+    create_signal() call — the combo from the df (which must hold exactly one
+    resolution and one product), the range as passed (None → the df's
+    first/last dates)."""
+    resolutions = df.get_column("resolution").unique().to_list()
+    products = df.get_column("product").unique().to_list()
+    if len(resolutions) != 1 or len(products) != 1:
+        raise ValueError(
+            "Multiple (resolution, product)s detected — backtest one (resolution, product) at a time:\n"
+            + _PATTERN
+        )
+    if data_range is None:
+        date_col = df.get_column("date")
+        data_range = (date_col.item(0), date_col.item(len(date_col) - 1))
+    return (data_range, resolutions[0], products[0])
 
 
 def _validate_data_range(
@@ -225,6 +248,80 @@ def _scatter_order_inputs(
         order_quantity_arr[seg_rows] = arr
 
 
+def _resolve_targets(
+    registry: dict[tuple, dict],
+    identity: _Identity,
+    key_identity: Callable[[tuple], _Identity],
+    df: nw.DataFrame,
+    data_range: tuple[datetime.date, datetime.date],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Resolve one registration call's target rows and enforce register-once rules.
+
+    Shared by product (create_signal) and portfolio (create_weight): both
+    register one identity's rows for a (already-resolved) data_range into a
+    module-global registry keyed by (data_range, *identity). The caller's
+    _get_registry_key resolves None→the df's first/last span, so the range
+    here is always concrete.
+
+    First the df is validated: it must carry a 'date' column (it pins the rows
+    so backtest() can verify alignment) and be sorted ascending by it —
+    registration is positional (signal ffill/shift; a scalar weight lands on the
+    range's last row) and a segment's first row anchors backtest()'s
+    extend-forward rule, so an unsorted df would silently misalign. Then the
+    in-range rows are covered and any OVERLAP with an already-registered range
+    of this identity is rejected (a row's instruction/weight is registered once
+    — the past is never rewritten).
+
+    Duplicate dates in the covered rows are rejected: they would double-scatter
+    onto the same row at backtest() (searchsorted maps every duplicate to its
+    first occurrence — last value silently wins).
+
+    Args:
+        registry: the caller's module-global registry dict.
+        identity: the combo/product this call registers; its str() prefixes the
+            error messages and it is matched against existing keys via key_identity.
+        key_identity: maps a stored registry key to its identity, so entries of the
+            SAME identity can be found (product: ``k[1:]``; portfolio: ``k[1]``).
+        df: the df the registration method was called on (must hold a sorted
+            'date' column).
+        data_range: the resolved (start, end), both inclusive.
+
+    Returns:
+        (target_pos, target_dates) — the covered rows' positions in the df and
+        their dates (to pin alignment).
+    """
+    if "date" not in df.columns:
+        raise ValueError(
+            "backtesting requires a 'date' column — it pins the registered rows "
+            "so backtest() can verify row alignment"
+        )
+    date_col = df.get_column("date")
+    if not date_col.is_sorted():
+        raise ValueError(
+            "the dataframe passed to backtesting must be sorted by 'date' (ascending)"
+        )
+    start, end = _validate_data_range(data_range)
+    date_arr = date_col.to_numpy()
+    target_pos = np.flatnonzero(_data_range_mask(date_arr, start, end))
+    target_dates = date_arr[target_pos]
+    if len(np.unique(target_dates)) != len(target_dates):
+        raise ValueError(
+            f"{identity}: duplicate dates in the registered rows — backtesting "
+            "requires one row per date per product (a single resolution)"
+        )
+
+    # a row is registered once — the past is never rewritten
+    for registered_key, entry in registry.items():
+        if key_identity(registered_key) != identity:
+            continue
+        if len(target_dates) and np.isin(target_dates, entry["dates"]).any():
+            raise ValueError(
+                f"{identity}: data_range {data_range} overlaps the already-registered "
+                f"{registered_key[0]} — a row can only be registered once"
+            )
+    return target_pos, target_dates
+
+
 class ProductBacktestMixin:
     def create_signal(
         self: IntoDataFrameT,
@@ -258,9 +355,9 @@ class ProductBacktestMixin:
                 combo raises — a row's instruction is registered once. A range
                 selecting no rows (e.g. a product not yet listed in that
                 period) is a no-op.
-                None (default) → single-shot configuration over ALL rows of
-                this df: wipes the combo's previously registered segments
-                (reconfigure + rerun) — today's fixed-period behavior.
+                None (default) → configure over ALL rows of this df (full
+                span). Registration is still register-once: this raises if it
+                would overlap an already-registered segment of the combo.
 
         Pure REGISTRATION step: computes this combo's signal series and
         registers the rows in data_range (with their dates) in the session
@@ -270,10 +367,18 @@ class ProductBacktestMixin:
         (product, resolution) combo (a bare OHLCV df is one combo).
         """
         df = nw.from_native(self)
-        key = _get_registry_key(df)
-        if data_range is not None:
-            data_range = _validate_data_range(data_range)
+        key = _get_registry_key(df, data_range)
+        data_range, resolution, product = key
+        combo = (resolution, product)
+        target_pos, target_dates = _resolve_targets(
+            _registry,
+            combo,
+            lambda k: k[1:],
+            df,
+            data_range,
+        )
 
+        # compute signal series
         if signal is None:
             if buy_condition is None and sell_condition is None:
                 raise ValueError("Either buy or sell condition must be provided")
@@ -328,74 +433,18 @@ class ProductBacktestMixin:
                 .otherwise(None)
                 .alias("signal")
             )
-
-        if "date" not in df.columns:
-            raise ValueError(
-                "product backtesting requires a 'date' column — it pins the "
-                "combo's rows so backtest() can verify row alignment"
-            )
-        # signals/conditions are positional (ffill, shift) and a segment's
-        # first row anchors the extend-forward rule in backtest(): an
-        # unsorted df would silently misalign both
-        if not df.get_column("date").is_sorted():
-            raise ValueError(
-                "the dataframe passed to create_signal() must be sorted by "
-                "'date' (ascending)"
-            )
-        # Register this segment's inputs; the df itself is left untouched.
-        # dates pin the segment's exact rows so backtest() can verify it
-        # scatters values onto the same rows in the same order.
-        date_arr = df.get_column("date").to_numpy()
         signal_arr = _to_float64(df.get_column("signal"))
-        if data_range is None:
-            # legacy single-shot configuration: wipe the combo's previously
-            # registered segments (reconfigure + rerun) and cover all rows
-            for registered_key in [k for k in _registry if k[1:] == key]:
-                del _registry[registered_key]
-            date_col = df.get_column("date")
-            resolved_range = (date_col.item(0), date_col.item(len(date_col) - 1))
-            target_pos = np.arange(len(df))
-        else:
-            resolved_range = data_range
-            start, end = data_range
-            target_pos = np.flatnonzero(_data_range_mask(date_arr, start, end))
-        target_dates = date_arr[target_pos]
-        # duplicate dates in the registered rows would double-scatter onto the
-        # same row at backtest() (searchsorted maps every duplicate to its
-        # first occurrence) — last value silently wins; reject at registration
-        # instead (mirrors the portfolio side)
-        if len(np.unique(target_dates)) != len(target_dates):
-            raise ValueError(
-                f"{key}: duplicate dates in the registered rows — product "
-                "backtesting requires one row per date per (resolution, product)"
-            )
 
-        if data_range is not None:
-            # a row's instruction is registered once — the past is never rewritten
-            for registered_key, entry in _registry.items():
-                if registered_key[1:] != key:
-                    continue
-                if len(target_dates) and np.isin(target_dates, entry["dates"]).any():
-                    raise ValueError(
-                        f"{key}: data_range {resolved_range} overlaps the already-registered "
-                        f"{registered_key[0]} — a row's instruction can only be registered once"
-                    )
-
-        registry_key = (resolved_range, *key)
-        _registry[registry_key] = {
-            # data_range as passed: None = full-span single-shot configuration
-            "data_range": data_range,
-            "signal": signal_arr[target_pos],
+        # register signal series and its target dates
+        _registry[key] = {
             "dates": target_dates,
+            "signal": signal_arr[target_pos],
             "open": None,
             "close": None,
         }
-        _latest_key_by_combo[key] = registry_key
+        _latest_key_by_combo[combo] = key
 
-        # create_signal() is the entry point of PRODUCT backtesting: from here
-        # on, backtest() means the product implementation, and the rest of the
-        # product configure chain is available. (create_weight(), the portfolio
-        # entry, attaches PortfolioBacktestMixin's backtest.)
+        # dynamically add backtest methods to the dataframe class
         df_class = type(self)
         df_class.open_position = ProductBacktestMixin.open_position
         df_class.close_position = ProductBacktestMixin.close_position
@@ -458,8 +507,8 @@ class ProductBacktestMixin:
                 "'order_quantity' must be a number or a Series, not a bool"
             )
 
-        key = _get_registry_key(nw.from_native(self))
-        latest_key = _latest_key_by_combo.get(key)
+        combo = _get_current_combo(nw.from_native(self))
+        latest_key = _latest_key_by_combo.get(combo)
         if latest_key is None:
             raise ValueError(
                 "open_position() requires create_signal() to be called first:\n"
@@ -530,8 +579,8 @@ class ProductBacktestMixin:
         if fill_price not in ("open", "close"):
             raise ValueError("'fill_price' must be 'open' or 'close'")
 
-        key = _get_registry_key(nw.from_native(self))
-        latest_key = _latest_key_by_combo.get(key)
+        combo = _get_current_combo(nw.from_native(self))
+        latest_key = _latest_key_by_combo.get(combo)
         if latest_key is None:
             raise ValueError(
                 "close_position() requires create_signal() to be called first:\n"
@@ -657,23 +706,17 @@ class ProductBacktestMixin:
                     # the segment's data_range selected no rows at registration
                     # (e.g. a product not yet listed in that period) — no-op
                     continue
-                # min. safe guard to avoid attaching values to the wrong rows
-                if reg["data_range"] is None:
-                    # full-span single-shot segment: must pin the combo's exact rows
-                    if not np.array_equal(combo_dates, reg["dates"]):
-                        raise ValueError(f"{combo}: mismatched dates")
-                    seg_rows = np.arange(num_rows)
-                else:
-                    if not np.isin(reg["dates"], combo_dates).all():
-                        raise ValueError(
-                            f"{combo}: registered dates from data_range {key_range} "
-                            "are missing from the dataframe passed to backtest()"
-                        )
-                    # combo dates are unique (duplicate-dates guard above) and
-                    # ascending (df sorted by date, pos ascending), so
-                    # searchsorted maps the segment's dates to the combo's row
-                    # indices exactly
-                    seg_rows = np.searchsorted(combo_dates, reg["dates"])
+                # min. safe guard to avoid attaching values to the wrong rows:
+                # every registered date must be present in the combo's rows
+                if not np.isin(reg["dates"], combo_dates).all():
+                    raise ValueError(
+                        f"{combo}: registered dates from data_range {key_range} "
+                        "are missing from the dataframe passed to backtest()"
+                    )
+                # combo dates are unique (duplicate-dates guard above) and
+                # ascending (df sorted by date, pos ascending), so searchsorted
+                # maps the segment's dates to the combo's row indices exactly
+                seg_rows = np.searchsorted(combo_dates, reg["dates"])
                 resolved.append((reg, seg_rows))
             if not resolved:
                 continue
