@@ -6,7 +6,6 @@ if TYPE_CHECKING:
     # need these imports to support IDE hints:
     import pfund_plot as plot
 
-    from pfund._backtest.typing import BacktestDataFrame
     from pfund.brokers.crypto.broker import CryptoBroker
     from pfund.brokers.crypto.exchanges import Bybit
     from pfund.brokers.ibkr.broker import (
@@ -15,6 +14,7 @@ if TYPE_CHECKING:
     from pfund.brokers.ibkr.broker import (
         InteractiveBrokers as IBKR,
     )
+    from pfund._backtest.typing import PolarsBacktestDataFrame, PandasBacktestDataFrame
     from pfund.components.features.feature_base import BaseFeature as Feature
     from pfund.components.indicators.indicator_base import BaseIndicator as Indicator
     from pfund.components.indicators.talib_indicator import TalibIndicator
@@ -56,22 +56,14 @@ def __getattr__(name: str):
         from pfund.engines.backtest_engine import BacktestEngine
 
         return BacktestEngine
-    elif name == "BacktestDataFrame":
-        from pfeed import get_config
-        from pfeed.enums import DataTool
+    elif name == "PolarsBacktestDataFrame":
+        from pfund._backtest.typing import PolarsBacktestDataFrame
 
-        pfeed_config = get_config()
-        if pfeed_config.data_tool == DataTool.polars:
-            from pfund._backtest.polars import BacktestDataFrame
+        return PolarsBacktestDataFrame
+    elif name == "PandasBacktestDataFrame":
+        from pfund._backtest.typing import PandasBacktestDataFrame
 
-            return BacktestDataFrame
-        elif pfeed_config.data_tool == DataTool.pandas:
-            from pfund._backtest.pandas import BacktestDataFrame
-
-            return BacktestDataFrame
-        else:
-            raise ValueError(f"Unsupported data tool: {pfeed_config.data_tool}")
-        return BacktestDataFrame
+        return PandasBacktestDataFrame
     elif name == "TradeEngine":
         from pfund.engines.trade_engine import TradeEngine
 
@@ -167,7 +159,8 @@ __all__ = (
     "SandboxEngineSettings",
     "BacktestEngineSettings",
     # backtest
-    "BacktestDataFrame",
+    "PolarsBacktestDataFrame",
+    "PandasBacktestDataFrame",
     # components
     "Strategy",
     "Model",

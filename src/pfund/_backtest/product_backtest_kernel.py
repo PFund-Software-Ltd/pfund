@@ -14,21 +14,30 @@ def backtest_loop_kernel(
     volume_arr: NDArray[np.float64],
     # signal from create_signal() — already computed vectorized (float64[N]: 1.0, -1.0, nan)
     signal_arr: NDArray[np.float64],
-    # open_position inputs
+    # open_position inputs — per-bar arrays: values may vary per registered
+    # time segment (constant within a segment, extended forward through
+    # uncovered rows by backtest()); read at the ORDER-PLACEMENT bar
     order_price_arr: NDArray[np.float64],  # user-specified or close prices
     order_quantity_arr: NDArray[np.float64],  # broadcast to array beforehand
-    first_only: bool,
-    long_only: bool,
-    short_only: bool,
-    # close_position inputs
-    take_profit: float,  # nan = disabled
-    stop_loss: float,  # nan = disabled
-    time_window: int,  # -1 = disabled
-    # backtest_loop inputs
-    trailing_stop: float,  # nan = disabled; replaces stop_loss when set
-    # fill_price controls (True = fill at open, False = fill at prev close)
-    market_fill_at_open: bool,  # for entry market orders (from open_position)
-    exit_market_fill_at_open: bool,  # for exit market orders (immediate stops and time_window from close_position)
+    first_only_arr: NDArray[np.bool_],
+    long_only_arr: NDArray[np.bool_],
+    short_only_arr: NDArray[np.bool_],
+    # close_position inputs — per-bar arrays, read at the STOP-PLACEMENT bar
+    take_profit_arr: NDArray[np.float64],  # nan = disabled
+    stop_loss_arr: NDArray[np.float64],  # nan = disabled
+    time_window_arr: NDArray[np.int64],  # -1 = disabled
+    trailing_stop_arr: NDArray[
+        np.float64
+    ],  # nan = disabled; replaces stop_loss when set
+    # fill_price controls (True = fill at open, False = fill at prev close) —
+    # per-bar arrays, read at the bar where the order/stop was PLACED
+    # (i.e. arr[i - 1] when filling at bar i)
+    market_fill_at_open_arr: NDArray[
+        np.bool_
+    ],  # for entry market orders (from open_position)
+    exit_market_fill_at_open_arr: NDArray[
+        np.bool_
+    ],  # for exit market orders (immediate stops and time_window from close_position)
     n: int,  # number of bars (len of all input arrays)
 ):
     """Bar-by-bar backtest loop. Processes one bar at a time with full state tracking.
@@ -149,14 +158,6 @@ def backtest_loop_kernel(
     has_traded_in_streak = (
         False  # for first_only: block orders after first trade in streak
     )
-
-    # ============================
-    # Pre-computed flags for constant params (avoid np.isnan in loop)
-    # ============================
-    has_sl = not np.isnan(stop_loss)
-    has_tp = not np.isnan(take_profit)
-    has_trailing = not np.isnan(trailing_stop)
-    has_tw = time_window > 0
 
     # ============================
     # Main loop
@@ -323,7 +324,9 @@ def backtest_loop_kernel(
                     # Regular immediate: fill per exit_market_fill_at_open policy
                     trade_price = (
                         o
-                        if (immediate_stop_is_gap or exit_market_fill_at_open)
+                        if (
+                            immediate_stop_is_gap or exit_market_fill_at_open_arr[i - 1]
+                        )
                         else prev_c
                     )
                     trade_size = -position
@@ -334,7 +337,7 @@ def backtest_loop_kernel(
                     )
                 elif pending_tw_close:
                     # Priority 2: time window close
-                    trade_price = o if exit_market_fill_at_open else prev_c
+                    trade_price = o if exit_market_fill_at_open_arr[i - 1] else prev_c
                     trade_size = -position
                     has_fill = True
                     is_position_close = True
@@ -343,7 +346,9 @@ def backtest_loop_kernel(
                     # Gap-through: always fill at open (limit price outside bar range)
                     # Regular market: fill per market_fill_at_open policy
                     trade_price = (
-                        o if (is_gap_market or market_fill_at_open) else prev_c
+                        o
+                        if (is_gap_market or market_fill_at_open_arr[i - 1])
+                        else prev_c
                     )
                     trade_size = pending_order_size
                     has_fill = True
@@ -490,8 +495,12 @@ def backtest_loop_kernel(
                 has_traded_in_streak = False
             # Check if we can place an order
             can_order = True
-            if first_only and has_traded_in_streak:
-                # first_only: only one trade per signal streak
+            if first_only_arr[i] and has_traded_in_streak:
+                # first_only: only one trade per signal streak. The streak
+                # state is global (value-based ffill detection); the per-bar
+                # flag only gates it — so a streak that already traded under
+                # first_only=False stays blocked when a later segment turns
+                # the flag on, until the signal changes.
                 can_order = False
 
             if can_order:
@@ -500,14 +509,19 @@ def backtest_loop_kernel(
 
                 has_order = False
                 order_size = np.nan  # only read when has_order is True
-                if long_only and sig == -1.0:
+                # a nan order_price on a close bar means "no instruction —
+                # hold through the signal": place no order, so the order
+                # columns stay nan like every other no-instruction path
+                # (a nan-priced order could never fill anyway: all fill
+                # checks compare against nan → False)
+                if long_only_arr[i] and sig == -1.0:
                     # Long-only close: sell exactly the current long position
-                    if position > 0.0:
+                    if position > 0.0 and not np.isnan(order_px):
                         order_size = -position
                         has_order = True
-                elif short_only and sig == 1.0:
+                elif short_only_arr[i] and sig == 1.0:
                     # Short-only close: buy exactly the current short position
-                    if position < 0.0:
+                    if position < 0.0 and not np.isnan(order_px):
                         order_size = -position
                         has_order = True
                 else:
@@ -538,20 +552,27 @@ def backtest_loop_kernel(
         # STEP 5: Place stop / time_window orders based on current position
         # ================================================================
         # Stop/TW orders placed at end of bar i, checked at bar i+1.
+        # Params are read per-bar: stops are cancelled and re-placed every bar
+        # anyway (avg_price/best_price may have changed), so a segment changing
+        # a value simply moves the next bar's stop — bookkeeping is untouched.
         if position != 0.0:
             pos_side = 1.0 if position > 0.0 else -1.0
+            stop_loss = stop_loss_arr[i]
+            take_profit = take_profit_arr[i]
+            trailing_stop = trailing_stop_arr[i]
+            time_window = time_window_arr[i]
 
             # SL stop price: move against position direction
             # Long: avg_price * (1 - stop_loss)  → below avg_price
             # Short: avg_price * (1 + stop_loss) → above avg_price
-            if has_sl:
+            if not np.isnan(stop_loss):
                 pending_sl_price = avg_price * (1.0 - pos_side * stop_loss)
                 has_pending_sl = True
 
             # Trailing stop: replaces SL when set — uses best price instead of avg_price
             # Long: best_high * (1 - trailing_stop)  → trails below the peak
             # Short: best_low * (1 + trailing_stop)  → trails above the trough
-            if has_trailing:
+            if not np.isnan(trailing_stop):
                 pending_sl_price = best_price_since_entry * (
                     1.0 - pos_side * trailing_stop
                 )
@@ -560,14 +581,14 @@ def backtest_loop_kernel(
             # TP stop price: move with position direction
             # Long: avg_price * (1 + take_profit)  → above avg_price
             # Short: avg_price * (1 - take_profit) → below avg_price
-            if has_tp:
+            if not np.isnan(take_profit):
                 pending_tp_price = avg_price * (1.0 + pos_side * take_profit)
                 has_pending_tp = True
 
             # Time window: close position when held for 'time_window' bars
             # SL/TP may also be pending; priority is resolved in step 1 of the next bar
             # (immediate_stop > tw_close > market > limit_before_stop > non_immediate_stop)
-            if has_tw and bars_in_position >= time_window:
+            if time_window > 0 and bars_in_position >= time_window:
                 pending_tw_close = True
 
     return (

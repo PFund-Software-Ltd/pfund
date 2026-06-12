@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast
 
 if TYPE_CHECKING:
     import torch.nn as nn
+    from narwhals.typing import IntoDataFrame
     from pfeed.storages.storage_config import StorageConfig
     from sklearn.base import BaseEstimator
     from sklearn.model_selection import TimeSeriesSplit
@@ -35,7 +36,6 @@ if TYPE_CHECKING:
 
     BacktesteeName: TypeAlias = str
 
-import importlib
 import os
 from dataclasses import dataclass
 
@@ -44,7 +44,6 @@ from pfeed.enums import DataTool
 from pfund_kit.style import RichColor, TextStyle, cprint
 from pfund_kit.utils.progress_bar import ProgressBar, track
 
-import pfund as pf
 from pfund.engines.base_engine import BaseEngine
 from pfund.enums import BacktestMode, Environment, RunStage
 
@@ -71,7 +70,7 @@ class BacktestEngine(BaseEngine):
         self,
         *,
         name: str = "engine",
-        data_range: str | DataRangeDict | Literal["ytd"] = "1mo",
+        data_range: str | DataRangeDict | tuple[str, str] | Literal["ytd"] = "1mo",
         settings: BacktestEngineSettings | None = None,
         mode: BacktestMode | Literal["fast", "exact"] = BacktestMode.FAST,
         dataset_splits: int | DatasetSplitsDict | TimeSeriesSplit = 721,
@@ -244,7 +243,7 @@ class BacktestEngine(BaseEngine):
 
         super().run(project=project)
 
-        backtest_results: dict[BacktesteeName, list[pf.BacktestDataFrame]] = {}
+        backtest_results: dict[BacktesteeName, list[IntoDataFrame]] = {}
 
         try:
             for strategy in self.strategies.values():
@@ -275,11 +274,11 @@ class BacktestEngine(BaseEngine):
         backtestee: BaseStrategy | BaseModel,
         num_chunks: int = 1,
         num_cpus: int | None = None,
-    ) -> list[pf.BacktestDataFrame]:
+    ) -> list[IntoDataFrame]:
         ### Pre-Backtest ###
         data_tool: DataTool = self._context.pfeed_config.data_tool
         is_using_ray = num_chunks > 1
-        backtest_dfs: list[pf.BacktestDataFrame] = []
+        backtest_dfs: list[IntoDataFrame] = []
 
         features_df = backtestee.features_df
         if features_df is None:
@@ -293,18 +292,17 @@ class BacktestEngine(BaseEngine):
             data_tool: DataTool,
             chunk_num: int | None = None,
             batch_num: int | None = None,
-        ) -> pf.BacktestDataFrame:
+        ) -> IntoDataFrame:
             if backtest_mode == BacktestMode.FAST:
-                BacktestDataFrame = importlib.import_module(
-                    f"pfund._backtest.{data_tool.lower()}"
-                ).BacktestDataFrame
-                backtest_df_original = BacktestDataFrame(df_chunk.to_native())
+                from pfund._backtest.backtest_mixin import setup_backtest_df
+
+                backtest_df_original = setup_backtest_df(df_chunk.to_native())
                 backtest_df = backtestee.backtest(backtest_df_original)
                 if backtestee.is_strategy() and backtest_df is backtest_df_original:
                     cprint(
                         f"WARNING: {backtestee.name} backtest() returned the same df unchanged.\n"
                         + "This is fine if you only used native e.g. Polars/Pandas operations on the original df.\n"
-                        + "However, [italic]this is an ERROR[/italic] if you called BacktestDataFrame methods like "
+                        + "However, [italic]this is an ERROR[/italic] if you called backtest methods like "
                         + "create_signal(), open_position(), or close_position() —\n"
                         + "these return a new df, so you must reassign: df = df.create_signal(...) and return the new df",
                         style=TextStyle.BOLD + RichColor.RED,
@@ -322,7 +320,7 @@ class BacktestEngine(BaseEngine):
 
         ### Backtest ###
         if not is_using_ray:
-            backtest_df: pf.BacktestDataFrame = _run_backtest(
+            backtest_df: IntoDataFrame = _run_backtest(
                 backtestee=backtestee,
                 df_chunk=df,
                 backtest_mode=self.backtest_mode,
@@ -351,7 +349,7 @@ class BacktestEngine(BaseEngine):
                 backtestee = ray.get(backtestee_ref)
                 logger = setup_logger_in_ray_task(backtestee.logger.name, log_queue)
                 try:
-                    backtest_df: pf.BacktestDataFrame = _run_backtest(
+                    backtest_df: IntoDataFrame = _run_backtest(
                         backtestee=backtestee,
                         df_chunk=df_chunk,
                         backtest_mode=backtest_mode,
@@ -406,12 +404,10 @@ class BacktestEngine(BaseEngine):
                                 )
                                 for df_chunk, chunk_num in batch
                             ]
-                            backtest_dfs_in_batch: list[pf.BacktestDataFrame | None] = (
-                                ray.get(futures)
+                            backtest_dfs_in_batch: list[IntoDataFrame | None] = ray.get(
+                                futures
                             )
-                            backtest_dfs_in_batch_not_none: list[
-                                pf.BacktestDataFrame
-                            ] = [
+                            backtest_dfs_in_batch_not_none: list[IntoDataFrame] = [
                                 backtest_df
                                 for backtest_df in backtest_dfs_in_batch
                                 if backtest_df is not None
@@ -431,7 +427,7 @@ class BacktestEngine(BaseEngine):
 
         # ### Post-Backtest ###
         if backtestee.is_strategy():
-            backtest_dfs: list[pf.BacktestDataFrame] = [
+            backtest_dfs: list[IntoDataFrame] = [
                 backtestee._postprocess_backtest_df(backtest_df)
                 for backtest_df in backtest_dfs
             ]
@@ -445,7 +441,7 @@ class BacktestEngine(BaseEngine):
         df_chunk: nw.DataFrame[Any],
         chunk_num: int | None = None,
         batch_num: int | None = None,
-    ) -> pf.BacktestDataFrame:
+    ) -> IntoDataFrame:
         if chunk_num is not None and batch_num is not None:
             description = f"Backtest-Chunk{chunk_num}-Batch{batch_num}"
         else:

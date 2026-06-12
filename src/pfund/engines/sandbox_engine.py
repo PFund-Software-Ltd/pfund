@@ -15,7 +15,11 @@ class SandboxEngine(TradeEngine):
     def __init__(
         self,
         name: str = "engine",
-        data_range: str | Resolution | DataRangeDict | Literal["ytd"] = "ytd",
+        data_range: str
+        | Resolution
+        | DataRangeDict
+        | tuple[str, str]
+        | Literal["ytd"] = "ytd",
         settings: SandboxEngineSettings | None = None,
     ):
         super().__init__(

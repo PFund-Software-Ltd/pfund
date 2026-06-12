@@ -8,7 +8,6 @@ from typing_extensions import override
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
-    from pfund._backtest.typing import BacktestDataFrame
     from pfund.datas.timeframe import Timeframe
     from pfund.engines.backtest_engine import BacktestEngineContext
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
@@ -22,6 +21,96 @@ if TYPE_CHECKING:
 from pfund.enums import BacktestMode
 
 
+def setup_backtest_df(df: IntoDataFrame) -> IntoDataFrame:
+    """Prepare a native dataframe (pandas/polars) for FAST backtesting.
+
+    Attaches the two ENTRY methods to the df's class so they survive native
+    operations (filter/join/... construct plain dataframes of the same class):
+        create_signal — product backtesting
+        create_weight — portfolio backtesting
+
+    The rest of each mode's methods are deliberately NOT attached here:
+    backtest()'s name is shared by both modes, so the entry method attaches
+    its mode's implementation when called — create_signal() attaches
+    open_position/close_position and ProductBacktestMixin's backtest,
+    create_weight() attaches PortfolioBacktestMixin's backtest. (Consequence:
+    chains must run sequentially — finish one chain before starting one of
+    the other mode.)
+
+    Validates that the df is in LONG form — one row per bar with shared OHLCV
+    columns; for multiple (product, resolution) combos, one row per
+    (date, resolution, product):
+
+        date | resolution | product | open | high | low | close | volume
+        d1   | 1d         | BTC     | ...
+        d1   | 1d         | ETH     | ...
+        d2   | 1d         | BTC     | ...
+
+    Wide form (e.g. 'BTC_close', 'ETH_close' columns) is not supported.
+
+    Product backtesting is configured per (product, resolution) combo and
+    executed once — the configure chain only REGISTERS inputs:
+
+        for product, resolution in combos:
+            (df.filter(...)  # one combo
+               .create_signal(...).open_position(...).close_position(...))
+        df = df.backtest()   # ONE call: kernel per configured combo
+
+    Dynamic periods (optional): wrap the configure loop in an outer period
+    loop and pass data_range=(period_start, period_end) to create_signal()
+    to register each combo per period with a point-in-time universe — all
+    params may vary per period. Registration controls instructions, never
+    data: the kernel still runs once per combo over its FULL rows, so
+    positions carry across periods and stops stay live on every bar (see
+    create_signal's docstring).
+
+    Every df must carry (date, resolution, product) — MarketDataStore
+    guarantees them; a single-product df is simply one combo, so the fluent
+    df.create_signal(...)....backtest() chain works on it directly.
+    Calling setup_backtest_df starts a fresh session (clears the product
+    and portfolio registries of any previous configuration).
+
+    Returns the df unchanged.
+    """
+    import narwhals as nw
+
+    from pfund._backtest import portfolio_backtest_mixin, product_backtest_mixin
+    from pfund._backtest.portfolio_backtest_mixin import PortfolioBacktestMixin
+    from pfund._backtest.product_backtest_mixin import ProductBacktestMixin
+
+    product_backtest_mixin._clear_registry()
+    portfolio_backtest_mixin._clear_registry()
+
+    df_class = type(df)
+    df_class.create_signal = ProductBacktestMixin.create_signal
+    df_class.create_weight = PortfolioBacktestMixin.create_weight
+
+    nw_df = nw.from_native(df)
+    if "close" not in nw_df.columns:
+        raise ValueError(
+            "'close' column not found — the dataframe must be in LONG form: "
+            + "one row per bar with shared OHLCV columns "
+            + "(one row per (date, product) for multiple products). "
+            + "Wide form (e.g. 'BTC_close', 'ETH_close') is not supported."
+        )
+    from pfund.datas.stores.market_data_store import MarketDataStore
+
+    key_cols = [MarketDataStore.INDEX_COL, *MarketDataStore.PIVOT_COLS]
+    missing = [c for c in key_cols if c not in nw_df.columns]
+    if missing:
+        raise ValueError(
+            f"backtesting requires columns ({', '.join(key_cols)}) "
+            + f"to identify each bar — missing column(s) {missing}"
+        )
+    if len(nw_df.select(*key_cols).unique()) != len(nw_df):
+        raise ValueError(f"({', '.join(key_cols)}) keys must be unique for backtesting")
+    # bars are processed positionally per (product, resolution) combo: an
+    # unsorted df would silently produce garbage results
+    if not nw_df.get_column("date").is_sorted():
+        raise ValueError("the dataframe must be sorted by 'date' (ascending)")
+    return df
+
+
 class BacktestMixin:
     def __mixin_post_init__(self, *args: Any, **kwargs: Any):
         super().__mixin_post_init__(*args, **kwargs)
@@ -29,10 +118,10 @@ class BacktestMixin:
 
     @staticmethod
     def _validate_backtest_signature(
-        func: Callable[[BacktestDataFrame], BacktestDataFrame],
+        func: Callable[[IntoDataFrame], IntoDataFrame],
     ):
         """Validates the signature of the backtest() function.
-        The backtest() function must accept exactly 1 argument (df) and return a BacktestDataFrame.
+        The backtest() function must accept exactly 1 argument (df) and return the backtested dataframe.
         """
         import ast
         import inspect
@@ -55,20 +144,20 @@ class BacktestMixin:
             )
             if not has_return:
                 raise TypeError(
-                    "backtest() must return a BacktestDataFrame. No return statement found. Did you forget to return df?"
+                    "backtest() must return the backtested dataframe. No return statement found. Did you forget to return df?"
                 )
         except OSError:
             pass  # source not available (e.g. built-in), skip check
 
-    def backtest(self, df: BacktestDataFrame) -> BacktestDataFrame:
+    def backtest(self, df: IntoDataFrame) -> IntoDataFrame:
         if hasattr(super(), "backtest"):
             self._validate_backtest_signature(super().backtest)
-            backtest_df: BacktestDataFrame | None = cast(
-                "BacktestDataFrame | None", super().backtest(df)
+            backtest_df: IntoDataFrame | None = cast(
+                "IntoDataFrame | None", super().backtest(df)
             )
             if backtest_df is None:
                 raise TypeError(
-                    f"{self.name}.backtest() must return a BacktestDataFrame, got None. Did you forget to return df?"
+                    f"{self.name}.backtest() must return the backtested dataframe, got None. Did you forget to return df?"
                 )
             return backtest_df
         else:

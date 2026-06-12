@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from pfeed.storages.storage_config import StorageConfig
-
+    from pfeed._io.io_config import IOConfig
     from pfund.datas.data_config import DataConfig
     from pfund.datas.resolution import Resolution
     from pfund.datas.timeframe import Timeframe
@@ -231,14 +231,16 @@ class BarData(MarketData):
         self,
         product: BaseProduct,
         resolution: Resolution,
-        data_config: DataConfig | None = None,
-        storage_config: StorageConfig | None = None,
+        data_config: DataConfig,
+        storage_config: StorageConfig,
+        io_config: IOConfig,
     ):
         super().__init__(
             product=product,
             resolution=resolution,
             data_config=data_config,
             storage_config=storage_config,
+            io_config=io_config,
         )
         self._bar = Bar(resolution, shift=self.config.shift.get(resolution, 0))
         # NOTE: stale_bar_timeout / skip_first_bar are normally pre-populated by

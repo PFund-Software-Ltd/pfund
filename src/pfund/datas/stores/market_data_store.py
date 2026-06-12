@@ -1,12 +1,12 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false, reportArgumentType=false, reportUnnecessaryComparison=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeAlias, TypedDict
+from typing import TYPE_CHECKING, Any, TypeAlias, TypedDict, ClassVar
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
+    from pfeed.dataflow.result import RunResult
 
-    from pfund.datas.data_config import DataConfig
     from pfund.datas.databoy import DataBoy
     from pfund.datas.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
@@ -33,10 +33,11 @@ from collections import defaultdict
 from functools import partial
 
 import narwhals as nw
+
 from pfeed.enums import DataAccessType, DataLayer, DataStorage
 from pfeed.feeds.market_feed import MarketFeed
 from pfeed.storages.storage_config import StorageConfig
-
+from pfeed._io.io_config import IOConfig
 from pfund.datas import BarData, QuoteData, TickData
 from pfund.datas.data_config import DataConfig
 from pfund.datas.data_market import MarketData
@@ -47,14 +48,38 @@ from pfund.enums import Environment
 
 class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
     # Columns pinned to the left side of the materialized dataframe for readability
-    LEFT_COLS = ["date", "resolution", "product", "source_type"]
-    PIVOT_COLS = ["resolution", "product"]
+    LEFT_COLS: ClassVar[list[str]] = ["date", "resolution", "product", "source_type"]
+    PIVOT_COLS: ClassVar[list[str]] = ["resolution", "product"]
+    METADATA_COLS: ClassVar[list[str]] = ["source_type"]
 
     def __init__(self, databoy: DataBoy):
         super().__init__(databoy)
         self._datas: dict[ProductName, dict[ResolutionRepr, MarketData]] = defaultdict(
             dict
         )
+
+    @staticmethod
+    def adjust_date_to_bar_close_time(df: nw.DataFrame[Any]) -> nw.DataFrame[Any]:
+        """Shift 'date' from bar open time (storage convention) to bar close time.
+
+        Bars are stored labeled by their open time, but a bar's information only
+        exists once the bar closes: a 1m bar labeled 00:00:00 is formed at
+        00:00:59.999, a 15m bar at 00:14:59.999. Aligning rows across
+        resolutions (and avoiding lookahead) is only correct on close time.
+        Each row is shifted by its own 'resolution' column value, using the
+        same convention as BarData's end_ts (start + period - 1ms).
+        """
+        from datetime import timedelta
+
+        expr = nw.col("date")
+        for res in df.get_column("resolution").unique().to_list():
+            offset = timedelta(seconds=Resolution(res).to_seconds(), milliseconds=-1)
+            expr = (
+                nw.when(nw.col("resolution") == res)
+                .then(nw.col("date") + offset)
+                .otherwise(expr)
+            )
+        return df.with_columns(expr.alias("date"))
 
     def get_data(
         self, product: ProductName, resolution: Resolution | ResolutionRepr
@@ -80,6 +105,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         resolution: Resolution,
         data_config: DataConfig | None,
         storage_config: StorageConfig | None,
+        io_config: IOConfig | None,
     ) -> MarketData:
         data = self.get_data(product.name, resolution)
         if data is not None:
@@ -89,6 +115,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             resolution=resolution,
             data_config=data_config,
             storage_config=storage_config,
+            io_config=io_config,
         )
         self._datas[product.name][repr(resolution)] = data
         return data
@@ -121,20 +148,23 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         resolutions: list[Resolution | str] | None = None,
         data_config: DataConfig | None = None,
         storage_config: StorageConfig | None = None,
+        io_config: IOConfig | None = None,
     ) -> list[MarketData]:
         data_config = self._resolve_data_config(
             product=product,
             resolutions=resolutions or [],
             data_config=data_config or DataConfig(),
         )
+        storage_config = storage_config or StorageConfig()
+        io_config = io_config or IOConfig()
 
         # mutually bind data_resampler and data_resamplee
         for resamplee_resolution, resampler_resolution in data_config.resample.items():
             data_resamplee = self._add_data(
-                product, resamplee_resolution, data_config, storage_config
+                product, resamplee_resolution, data_config, storage_config, io_config
             )
             data_resampler = self._add_data(
-                product, resampler_resolution, data_config, storage_config
+                product, resampler_resolution, data_config, storage_config, io_config
             )
             data_resamplee.bind_resampler(data_resampler)
             self._logger.debug(
@@ -142,7 +172,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             )
 
         datas: list[MarketData] = [
-            self._add_data(product, resolution, data_config, storage_config)
+            self._add_data(product, resolution, data_config, storage_config, io_config)
             for resolution in data_config.data_resolutions
         ]
         return datas
@@ -153,6 +183,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         resolution: Resolution,
         data_config: DataConfig | None = None,
         storage_config: StorageConfig | None = None,
+        io_config: IOConfig | None = None,
     ) -> MarketData:
         if resolution.is_quote():
             DataClass = QuoteData
@@ -167,6 +198,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             resolution=resolution,
             data_config=data_config,
             storage_config=storage_config,
+            io_config=io_config,
         )
 
     # TODO
@@ -272,7 +304,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         if setting is False:
             return False
         # 'auto': cache only when resampling actually occurred
-        request = feed._current_request
+        request = feed._get_current_request()
         return request.data_resolution != request.target_resolution
 
     def materialize(self) -> nw.DataFrame[Any]:
@@ -310,10 +342,13 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             self._logger.debug(
                 f"Materializing market data {data.product.name} {data.resolution}..."
             )
+            data_config = data.config
             storage_config = data.storage_config
+            io_config = data.io_config
             product, symbol = str(data.product.basis), data.product.symbol
             product_specs = data.product.specs
             cache_storage_config = self._create_cache_storage_config(storage_config)
+            requires_resampling = data.resolution in data_config.resample
             retrieve = partial(
                 feed.retrieve,
                 env=Environment.BACKTEST,
@@ -323,15 +358,24 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                 start_date=start_date,
                 end_date=end_date,
                 data_origin=data.origin,
-                dataflow_per_date=None,  # setting it to None, pfeed will automatically determine it
+                dataflow_per_date=True
+                if requires_resampling and data_config.num_batch_workers
+                else False,
                 **product_specs,
             )
 
             # check cache first for previously resampled data
             if settings.cache_materialized_data is not False:
-                _df: IntoDataFrame | None = retrieve(
-                    storage_config=cache_storage_config
+                result: RunResult = retrieve(
+                    storage_config=cache_storage_config,
+                    io_config=io_config,
                 ).run()
+                # cache is best-effort: a miss/failure just falls through to original storage
+                if result.failed:
+                    self._logger.debug(
+                        f"failed to load cached data for {data.product.name} {data.resolution}: {result.errors}"
+                    )
+                _df: IntoDataFrame | None = result.data
                 if _df is not None:
                     self._logger.info(
                         f"loaded data from {storage_config.data_path} for {data.product.name} {data.resolution}"
@@ -340,19 +384,24 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                     continue
 
             # cache miss or caching disabled, retrieve from original storage
-            _df: IntoDataFrame | None = (
+            result: RunResult = (
                 retrieve(storage_config=storage_config)
                 .load(
-                    storage=DataStorage.CACHE
-                    if self._should_cache_resampled(feed)
-                    else None,
-                    data_path=storage_config.data_path,
-                    data_layer=DataLayer.CURATED,
-                    io_format=storage_config.io_format,
-                    compression=storage_config.compression,
+                    storage_config=(
+                        cache_storage_config
+                        if self._should_cache_resampled(feed)
+                        else None
+                    ),
+                    io_config=io_config,
                 )
                 .run()
             )
+            # not critical here: a None result falls through to auto-download below
+            if result.failed:
+                self._logger.warning(
+                    f"failed to retrieve data for {data.product.name} {data.resolution} from {storage_config.data_path}: {result.errors}"
+                )
+            _df: IntoDataFrame | None = result.data
             if _df is not None:
                 dfs.append(self._standardize_df(_df))
                 self._logger.info(
@@ -361,7 +410,10 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             else:
                 if settings.auto_download_data:
                     # PAID data cannot be downloaded automatically, user must download it manually
-                    if feed.data_source.access_type == DataAccessType.PAID_BY_USAGE:
+                    if (
+                        feed.data_source.METADATA.access_type
+                        == DataAccessType.PAID_BY_USAGE
+                    ):
                         raise DataNotFoundError(
                             f"No data found for {data.product.name} {data.resolution}, and auto-downloading PAID data from {feed.data_source.name} is NOT allowed"
                         )
@@ -369,7 +421,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                     self._logger.warning(
                         f"No data found for {data.product.name} {data.resolution}, auto-downloading data..."
                     )
-                    _df: IntoDataFrame | None = feed.download(
+                    result: RunResult = feed.download(
                         product=product,
                         resolution=data.resolution,
                         symbol=symbol,
@@ -377,11 +429,15 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                         end_date=end_date,
                         data_origin=data.origin,
                         storage_config=storage_config,
+                        io_config=io_config,
                         **product_specs,
                     ).run()
+                    # critical: data is required here, so a failure must raise
+                    _df: IntoDataFrame | None = result.data
                     if _df is None:
                         raise DataNotFoundError(
                             f"Failed to download data for {data.product.name} {data.resolution}"
+                            + (f": {result.errors}" if result.errors else "")
                         )
                     else:
                         dfs.append(self._standardize_df(_df))
@@ -391,7 +447,10 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                         + "and 'auto_download_data' is disabled in settings, please enable it in engine settings or use 'pfeed' to download the data manually."
                     )
 
-        df = nw.concat(dfs)
+        # concat just stacks per-(product, resolution) frames; sort by KEY_COLS
+        # (date-leading) so _df holds a deterministic, date-ascending invariant
+        # for every downstream consumer (get_df, merge_data_dfs, features_df)
+        df = nw.concat(dfs).sort(self.KEY_COLS)
         if isinstance(df, nw.LazyFrame):
             df = df.collect()
         self._df = df

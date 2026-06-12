@@ -3,11 +3,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
+    from narwhals.typing import IntoDataFrame
+
     from pfund.typing import StrategyT
 
 import narwhals as nw
 
-import pfund as pf
 from pfund._backtest.backtest_mixin import BacktestMixin
 
 
@@ -38,8 +39,8 @@ def BacktestStrategy(Strategy: type[StrategyT], *args: Any, **kwargs: Any) -> St
 
         @staticmethod
         def _postprocess_backtest_df(
-            backtest_df: pf.BacktestDataFrame,
-        ) -> pf.BacktestDataFrame:
+            backtest_df: IntoDataFrame,
+        ) -> IntoDataFrame:
             """Postprocesses backtest DataFrame by merging internal debug columns into a
             single 'remark' column and dropping them.
 
@@ -100,9 +101,9 @@ def BacktestStrategy(Strategy: type[StrategyT], *args: Any, **kwargs: Any) -> St
             if internal_cols:
                 df = df.drop(*internal_cols)
 
-            # wrap it back into the original BacktestDataFrame class for consistency
-            BacktestDataFrame = type(backtest_df)
-            return BacktestDataFrame(df.to_native())
+            # to_native() already returns the same native class (pandas/polars)
+            # that backtest methods are attached to — no wrapping needed
+            return df.to_native()
 
     try:
         return cast("StrategyT", _BacktestStrategy(*args, **kwargs))

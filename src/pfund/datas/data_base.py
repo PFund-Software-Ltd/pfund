@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TYPE_CHECKING
 
-from pfeed.enums import DataCategory, DataLayer, DataSource
-from pfeed.storages.storage_config import StorageConfig
+if TYPE_CHECKING:
+    from pfeed.storages.storage_config import StorageConfig
+    from pfeed._io.io_config import IOConfig
+    from pfund.datas.data_config import DataConfig
 
-from pfund.datas.data_config import DataConfig
+from pfeed.enums import DataCategory, DataSource
 
 
 class BaseData:
@@ -13,15 +15,13 @@ class BaseData:
 
     def __init__(
         self,
-        data_config: DataConfig | None = None,
-        storage_config: StorageConfig | None = None,
+        data_config: DataConfig,
+        storage_config: StorageConfig,
+        io_config: IOConfig,
     ):
-        self.config: DataConfig = data_config or DataConfig()
-        self.storage_config: StorageConfig = storage_config or StorageConfig()
-        if self.storage_config.data_layer == DataLayer.RAW:
-            raise ValueError(
-                "data from RAW data layer is not supported, pfund can only deal with cleaned data"
-            )
+        self.config: DataConfig = data_config
+        self.storage_config: StorageConfig = storage_config
+        self.io_config: IOConfig = io_config
         self.extra_data: dict[str, Any] = {}
 
     @property
@@ -37,6 +37,7 @@ class BaseData:
         return {
             "data_config": self.config.model_dump(),
             "storage_config": self.storage_config.model_dump(),
+            "io_config": self.io_config.model_dump(),
         }
 
     def update_extra_data(self, extra_data: dict[str, Any]):

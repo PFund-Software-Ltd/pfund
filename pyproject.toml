@@ -35,7 +35,7 @@ core = [
     "numba>=0.65.1 ; sys_platform != 'emscripten'",
     'pfeed[core,duckdb,yfinance,hf]>=0.0.15',
     'pfolio>=0.0.4',
-    'pfund-plot[marimo,dash]>=0.0.5',
+    'pfund-plot[marimo]>=0.0.5',
     # TODO: enable when ready
     # 'mtflow>=0.0.1.dev2 ; sys_platform != "emscripten"',
 ]
@@ -48,8 +48,8 @@ torch = [
 ]
 jax = [
     "jax>=0.10.1 ; sys_platform != 'emscripten'",
-    "safetensors>=0.7.0 ; sys_platform != 'emscripten'",
-    "orbax-checkpoint>=0.11.40 ; sys_platform != 'emscripten'",
+    "safetensors>=0.8.0 ; sys_platform != 'emscripten'",
+    "orbax-checkpoint>=0.12.0 ; sys_platform != 'emscripten'",
 ]
 
 [project.scripts]
@@ -64,7 +64,7 @@ repository = "https://github.com/PFund-Software-Ltd/pfund"
 documentation = "https://pfund.pfund.ai/doc"
 
 [build-system]
-requires = ["uv_build>=0.11.19,<0.12.0"]
+requires = ["uv_build>=0.11.21,<0.12.0"]
 build-backend = "uv_build"
 
 [tool.pyright]

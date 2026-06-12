@@ -55,7 +55,7 @@ class BaseEngine(metaclass=SingletonMeta):
         *,
         env: Environment,
         name: str,
-        data_range: str | Resolution | DataRangeDict | Literal["ytd"],
+        data_range: str | Resolution | DataRangeDict | tuple[str, str] | Literal["ytd"],
         settings: TradeEngineSettings
         | BacktestEngineSettings
         | SandboxEngineSettings
@@ -67,6 +67,8 @@ class BaseEngine(metaclass=SingletonMeta):
                 when it is a string, it is a resolution, e.g. '1m', '1d', '1w', '1mo', '1y'
                 when it is a dict, it is a dict with keys 'start_date' and 'end_date',
                     e.g. {'start_date': '2024-01-01', 'end_date': '2024-12-31'}
+                when it is a tuple, it is (start_date, end_date),
+                    e.g. ('2024-01-01', '2024-12-31')
         """
         import pfeed as pe
 

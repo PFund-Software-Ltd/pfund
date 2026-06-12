@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, TypeAlias
 
 if TYPE_CHECKING:
     from pfeed.storages.storage_config import StorageConfig
-
+    from pfeed._io.io_config import IOConfig
     from pfund.datas.data_config import DataConfig
     from pfund.datas.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
@@ -21,14 +21,16 @@ class QuoteData(MarketData):
         self,
         product: BaseProduct,
         resolution: Resolution,
-        data_config: DataConfig | None = None,
-        storage_config: StorageConfig | None = None,
+        data_config: DataConfig,
+        storage_config: StorageConfig,
+        io_config: IOConfig,
     ):
         super().__init__(
             product=product,
             resolution=resolution,
             data_config=data_config,
             storage_config=storage_config,
+            io_config=io_config,
         )
         self._orderbook_depth: int = resolution.period
         self._orderbook_level: int | None = resolution.orderbook_level

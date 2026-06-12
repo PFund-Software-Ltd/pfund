@@ -1,7 +1,7 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false, reportArgumentType=false, reportUnnecessaryComparison=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from logging import Logger
@@ -27,7 +27,7 @@ from pfund.enums import PrivateDataChannel
 class DataBoy:
     def __init__(self, component: Component):
         self._component: Component = component
-        self._data_stores: dict[DataCategory, BaseDataStore] = {}
+        self._data_stores: dict[DataCategory, BaseDataStore[Any, Any]] = {}
         self._data_zmq: ZeroMQ | None = None
         self._signals_zmq: ZeroMQ | None = None
         # REVIEW: currently all components use ZeroMQ and a thread to run _collect()
@@ -46,7 +46,7 @@ class DataBoy:
     def is_using_zmq(self) -> bool:
         return self._data_zmq is not None and self._signals_zmq is not None
 
-    def _create_data_store(self, category: DataCategory) -> BaseDataStore:
+    def _create_data_store(self, category: DataCategory) -> BaseDataStore[Any, Any]:
         from pfund.datas.stores.market_data_store import MarketDataStore
 
         if category == DataCategory.MARKET_DATA:
@@ -54,7 +54,7 @@ class DataBoy:
         else:
             raise NotImplementedError(f"{category} is not supported")
 
-    def get_data_store(self, category: DataCategory | str) -> BaseDataStore:
+    def get_data_store(self, category: DataCategory | str) -> BaseDataStore[Any, Any]:
         category = DataCategory[category.upper()]
         if category in self._data_stores:
             return self._data_stores[category]

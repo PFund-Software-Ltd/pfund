@@ -132,7 +132,7 @@ class CryptoBroker(BaseBroker):
         exchange: BaseExchange = self.add_exchange(exch)
         # create another product object to get a correct product name
         product: CryptoProduct = exchange.create_product(
-            basis, name=name, symbol=symbol, specs=specs
+            basis, name=name, symbol=symbol, **specs
         )
         if product.name not in self._products[exchange.name]:
             exchange.add_product(product)

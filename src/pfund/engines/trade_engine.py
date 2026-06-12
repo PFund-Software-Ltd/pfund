@@ -40,7 +40,11 @@ class TradeEngine(BaseEngine):
         *,
         env: Environment | Literal["SANDBOX", "PAPER", "LIVE"] = Environment.SANDBOX,
         name: str = "engine",
-        data_range: str | Resolution | DataRangeDict | Literal["ytd"] = "ytd",
+        data_range: str
+        | Resolution
+        | DataRangeDict
+        | tuple[str, str]
+        | Literal["ytd"] = "ytd",
         settings: TradeEngineSettings | None = None,
     ):
         super().__init__(
@@ -124,6 +128,7 @@ class TradeEngine(BaseEngine):
                 data_origin=data.origin,
                 env=self.env,
                 storage_config=data.storage_config,
+                io_config=data.io_config,
                 **data.product.specs,
             )
             # if not using zmq, data will be sent via transform()

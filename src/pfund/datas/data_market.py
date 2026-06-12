@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     from pfeed.storages.storage_config import StorageConfig
-
+    from pfeed._io.io_config import IOConfig
     from pfund.datas.data_config import DataConfig
     from pfund.datas.resolution import Resolution
     from pfund.datas.timeframe import Timeframe
@@ -24,10 +24,13 @@ class MarketData(TimeBasedData, ABC):
         self,
         product: BaseProduct,
         resolution: Resolution,
-        data_config: DataConfig | None = None,
-        storage_config: StorageConfig | None = None,
+        data_config: DataConfig,
+        storage_config: StorageConfig,
+        io_config: IOConfig,
     ):
-        super().__init__(data_config=data_config, storage_config=storage_config)
+        super().__init__(
+            data_config=data_config, storage_config=storage_config, io_config=io_config
+        )
         if self.config.data_source is None:
             self.config.data_source = product.source
         self.product: BaseProduct = product

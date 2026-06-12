@@ -28,7 +28,7 @@ class EngineContext:
         self,
         env: Environment,
         name: str,
-        data_range: str | Resolution | DataRangeDict | Literal["ytd"],
+        data_range: str | Resolution | DataRangeDict | tuple[str, str] | Literal["ytd"],
         settings: BaseEngineSettings | None = None,
     ):
         import pfeed as pe
@@ -77,14 +77,14 @@ class EngineContext:
         return settings
 
     def set_run_stage(self, stage: RunStage | str) -> None:
-        stage = RunStage[stage.upper()]
+        stage = RunStage[stage.lower()]
         if self.env == Environment.BACKTEST:
             assert stage in [RunStage.experiment, RunStage.refinement], (
-                "Run stage can only be set to EXPERIMENT or REFINEMENT in backtesting"
+                "Run stage can only be set to 'experiment' or 'refinement' in backtesting"
             )
         else:
             assert stage == RunStage.deployment, (
-                "Run stage can only be set to DEPLOYMENT in trading"
+                "Run stage can only be set to 'deployment' in trading"
             )
         self.run_stage = stage
 
@@ -105,9 +105,15 @@ class EngineContext:
         return {f"{self._env_var_prefix}{k}": v for k, v in raw_env_vars.items()}
 
     def _parse_data_range(
-        self, data_range: str | Resolution | DataRangeDict | Literal["ytd"]
+        self,
+        data_range: str | Resolution | DataRangeDict | tuple[str, str] | Literal["ytd"],
     ) -> tuple[datetime.date, datetime.date]:
         from pfeed.utils.temporal import parse_date_range
+
+        # normalize a (start_date, end_date) tuple into a DataRangeDict
+        if isinstance(data_range, tuple):
+            start_date, end_date = data_range
+            data_range = {"start_date": start_date, "end_date": end_date}
 
         is_data_range_dict = isinstance(data_range, dict)
         return parse_date_range(

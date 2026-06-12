@@ -13,6 +13,7 @@ import narwhals as nw
 from pfeed.enums import DataLayer, DataStorage
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.storages.storage_config import StorageConfig
+from pfeed._io.io_config import IOConfig
 
 from pfund.datas.data_base import BaseData
 
@@ -21,15 +22,15 @@ FeedT = TypeVar("FeedT", bound=BaseFeed)
 
 
 class BaseDataStore(ABC, Generic[DataT, FeedT]):
-    LEFT_COLS: ClassVar[list[str]]
+    LEFT_COLS: ClassVar[list[str]] = []
     INDEX_COL: ClassVar[str] = "date"
-    PIVOT_COLS: ClassVar[list[str]]
-    METADATA_COLS: ClassVar[list[str]] = ["source_type"]
+    PIVOT_COLS: ClassVar[list[str]] = []
+    METADATA_COLS: ClassVar[list[str]] = []
 
     def __init__(self, databoy: DataBoy):
         self._databoy: DataBoy = databoy
         self._logger = databoy.logger
-        self._df: nw.DataFrame[Any] | None = None
+        self._df: nw.DataFrame[Any] | None = None  # in long form
 
     @property
     def KEY_COLS(self) -> list[str]:
@@ -69,16 +70,14 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
             num_workers=data.config.num_batch_workers,
         )
 
-    def _create_cache_storage_config(
-        self, storage_config: StorageConfig
-    ) -> StorageConfig:
+    @staticmethod
+    def _create_cache_storage_config(storage_config: StorageConfig) -> StorageConfig:
         """Create a cache storage config inheriting io settings from the original storage config."""
-        return StorageConfig(
-            storage=DataStorage.CACHE,
-            data_path=storage_config.data_path,
-            data_layer=DataLayer.CURATED,
-            io_format=storage_config.io_format,
-            compression=storage_config.compression,
+        return storage_config.model_copy(
+            update={
+                "storage": DataStorage.CACHE,
+                "data_layer": DataLayer.CURATED,
+            }
         )
 
     def _standardize_df(self, df: IntoDataFrame) -> nw.DataFrame[Any]:
