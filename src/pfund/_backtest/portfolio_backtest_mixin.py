@@ -194,29 +194,6 @@ class PortfolioBacktestMixin:
         native_backend = nw.get_native_namespace(df)
         n = len(df)
 
-        # ================================================================
-        # Data arrays from the df backtest() is called on, converted once
-        # ================================================================
-        if "date" not in df.columns:
-            raise ValueError(
-                "portfolio backtesting requires a 'date' column — it is needed to "
-                "verify row alignment against the registered weights"
-            )
-        # weight alignment maps registered dates to panel rows via
-        # searchsorted over each product's dates: an unsorted df would
-        # silently scatter weights onto the wrong rows
-        if not df.get_column("date").is_sorted():
-            raise ValueError(
-                "the dataframe passed to backtest() must be sorted by "
-                "'date' (ascending)"
-            )
-        close_arr = _to_float64(df.get_column("close"))
-        date_arr = df.get_column("date").to_numpy()
-
-        # ================================================================
-        # Single resolution: mixing resolutions is not meaningful for
-        # portfolio management (one shared equity pot is marked per date)
-        # ================================================================
         resolutions = df.get_column("resolution").unique().to_list()
         if len(resolutions) > 1:
             raise ValueError(
@@ -224,24 +201,38 @@ class PortfolioBacktestMixin:
                 "mixing resolutions is not supported; resample your data to one resolution first"
             )
 
-        # Group rows by product once (O(n log n)) instead of an
-        # O(products * n) boolean mask rebuilt per product below.
-        positions_by_product = _group_positions(
-            [df.get_column("product").to_numpy()], n
-        )
+        close_arr = _to_float64(df.get_column("close"))
+        date_arr = df.get_column("date").to_numpy()
+
+        # Group rows by product once (O(n log n))
+        positions_by_product = _group_positions(df.get_column("product").to_numpy(), n)
+
+        # ================================================================
+        # Regroup the flat registry into {product -> [(date_range, reg), ...]},
+        # bucketing every segment (one create_weight() call) under its product:
+        #   _registry = {
+        #       (jan, "AAPL"): reg1,  # reg = {"dates": [...], "weight": [...]}
+        #       (feb, "AAPL"): reg2,
+        #       (jan, "TSLA"): reg3,
+        #   }
+        #   entries_by_product = {
+        #       "AAPL": [(jan, reg1), (feb, reg2)],   # 2 segments
+        #       "TSLA": [(jan, reg3)],                # 1 segment
+        #   }
+        # ================================================================
+        entries_by_product: dict[str, list[tuple]] = {}
+        for (key_range, product), reg in _registry.items():
+            entries_by_product.setdefault(product, []).append((key_range, reg))
 
         # ================================================================
         # Per-product row positions (products in first-registration order)
         # ================================================================
-        products: list[str] = []
-        for _, product in _registry:
-            if product not in products:
-                products.append(product)
+        products: list[str] = list(entries_by_product)
         P = len(products)
         product_positions: list[np.ndarray] = []
         for product in products:
             # positions of this product's rows (ascending), computed once above
-            pos = positions_by_product.get((product,))
+            pos: np.ndarray | None = positions_by_product.get((product,))
             if pos is None:
                 raise ValueError(
                     f"{product} has no rows in the dataframe passed to backtest()"
@@ -249,13 +240,22 @@ class PortfolioBacktestMixin:
             product_positions.append(pos)
 
         # ================================================================
-        # Pivot long df → date-major (T, P) matrices for the kernel
+        # Pivot long df → date-major (T, P) matrices for the kernel.
+        # Rows = union_dates (T), columns = products (P); a missing
+        # (date, product) row stays nan. e.g. for AAPL/MSFT where MSFT
+        # halts a day early:
+        #
+        #              AAPL  MSFT
+        #     01-01 │  100   200
+        #     01-02 │  101   201
+        #     01-03 │  102   nan   ← MSFT has no row → stays nan
+        #            └──────────── price_mat (weight_mat filled the same way)
         # ================================================================
         union_dates = np.unique(
             np.concatenate([date_arr[pos] for pos in product_positions])
         )
         T = len(union_dates)
-        close_mat = np.full((T, P), np.nan)
+        price_mat = np.full((T, P), np.nan)
         weight_mat = np.full((T, P), np.nan)
         # each product's row positions in the (T, P) panel; reused to scatter
         # outputs back, so round-trip row alignment is structural
@@ -263,10 +263,6 @@ class PortfolioBacktestMixin:
         for j, product in enumerate(products):
             pos = product_positions[j]
             product_dates = date_arr[pos]
-            # duplicate (date, product) rows would collapse onto one panel row
-            # (searchsorted maps to the first occurrence, close last-write-wins);
-            # the registration guard only sees the df passed to create_weight(),
-            # so guard this df too. Dates are ascending → duplicates are adjacent.
             if (
                 len(product_dates) > 1
                 and (product_dates[1:] == product_dates[:-1]).any()
@@ -277,24 +273,20 @@ class PortfolioBacktestMixin:
                 )
             t_idx = np.searchsorted(union_dates, product_dates)
             t_idxs.append(t_idx)
-            close_mat[t_idx, j] = close_arr[pos]
+            price_mat[t_idx, j] = close_arr[pos]
             # scatter every registered range of this product onto its rows;
             # rows covered by no range keep weight nan (no instruction → drift)
-            for (key_range, registered_product), entry in _registry.items():
-                if registered_product != product:
-                    continue
+            for key_range, reg in entries_by_product[product]:
                 # min. safe guard to avoid attaching weights to the wrong rows:
                 # every registered date must be present in this product's rows
-                if not np.isin(entry["dates"], product_dates).all():
+                if not np.isin(reg["dates"], product_dates).all():
                     raise ValueError(
                         f"{product}: registered dates from data_range {key_range} are "
                         "missing from the dataframe passed to backtest()"
                     )
-                # product dates are unique (duplicate-dates guard above) and
-                # ascending, so searchsorted maps the entry's dates to the
-                # product's row indices exactly
-                seg_rows = np.searchsorted(product_dates, entry["dates"])
-                weight_mat[t_idx[seg_rows], j] = entry["weight"]
+                # rows for the current time_segment/period
+                seg_rows = np.searchsorted(product_dates, reg["dates"])
+                weight_mat[t_idx[seg_rows], j] = reg["weight"]
 
         # ================================================================
         # Ragged panel check: nan closes are only allowed as a PREFIX
@@ -304,7 +296,7 @@ class PortfolioBacktestMixin:
         # kernel cannot handle (no price to fill orders / mark equity)
         # ================================================================
         for j, product in enumerate(products):
-            non_nan = ~np.isnan(close_mat[:, j])
+            non_nan = ~np.isnan(price_mat[:, j])
             first = int(non_nan.argmax())
             last = T - 1 - int(non_nan[::-1].argmax())
             life = non_nan[first : last + 1]
@@ -322,7 +314,7 @@ class PortfolioBacktestMixin:
         # whose close is null (allowed above as prefix/suffix missingness)
         # would be silently dropped by the kernel — reject it instead
         # ================================================================
-        dropped = ~np.isnan(weight_mat) & np.isnan(close_mat)
+        dropped = ~np.isnan(weight_mat) & np.isnan(price_mat)
         if dropped.any():
             t_bad, j_bad = np.argwhere(dropped)[0]
             raise ValueError(
@@ -332,8 +324,10 @@ class PortfolioBacktestMixin:
             )
 
         # ================================================================
-        # check: positive weights summing above 100% on a date lever the
-        # free capital — flag it (typo or deliberate), never alter results
+        # check: positive weights are target fractions of total equity, so a
+        # long sum above 100% on a date implies leverage (each segment is a
+        # rebalance to new targets, not a spend of leftover free capital) —
+        # flag it (typo or deliberate), never alter results
         # ================================================================
         if check:
             positive_weight_sums = np.where(weight_mat > 0.0, weight_mat, 0.0).sum(
@@ -346,7 +340,8 @@ class PortfolioBacktestMixin:
                 cprint(
                     f"WARNING: positive weights sum above 100% on {over.sum()} date(s) "
                     f"(first: {over_dates[0]}, max: {positive_weight_sums.max():.1%}) — "
-                    "weights are fractions of FREE capital, so this means leverage.\n"
+                    "weights are target fractions of total equity, so a long "
+                    "sum above 100% means leverage.\n"
                     "Pass check=False to backtest() if leverage is intentional.",
                     style=TextStyle.BOLD + RichColor.YELLOW,
                 )
@@ -364,7 +359,7 @@ class PortfolioBacktestMixin:
             cash_arr,
             equity_arr,
         ) = portfolio_backtest_loop_kernel(
-            close_mat,
+            price_mat,
             weight_mat,
             float(initial_capital),
             compound,

@@ -11,7 +11,7 @@ def portfolio_backtest_loop_kernel(
     # nan close = product has no bar that date. Missingness is validated
     # upstream to be a prefix (listed mid-period) and/or a suffix
     # (delisted/halted mid-period); mid-series gaps are rejected.
-    close_mat: NDArray[np.float64],
+    price_mat: NDArray[np.float64],
     # weight from create_weight(): signed fraction of FREE capital — sizing
     # capital minus the value of drifting positions (see STEP 4).
     # nan = hold (no instruction, weight drifts), 0.0 = close the position.
@@ -125,7 +125,7 @@ def portfolio_backtest_loop_kernel(
     last_bar = np.full(P, -1, dtype=np.int64)
     for j in range(P):
         for t in range(T):
-            if not np.isnan(close_mat[t, j]):
+            if not np.isnan(price_mat[t, j]):
                 last_bar[j] = t
 
     # ============================
@@ -196,7 +196,7 @@ def portfolio_backtest_loop_kernel(
                 # and keeps equity continuous. Alternative: settle at 0.0
                 # (full write-off — overstates the loss for non-bankrupt
                 # delistings, and is a windfall for shorts).
-                settlement_price = close_mat[last_bar[j], j]
+                settlement_price = price_mat[last_bar[j], j]
                 # TBD: this (t, j) cell has no row in the long df (no bar →
                 # no row), so the forced close cannot surface in the result
                 # df's trade columns; it is still recorded in the panel for
@@ -219,7 +219,7 @@ def portfolio_backtest_loop_kernel(
         equity = cash
         for j in range(P):
             if position[j] != 0.0:
-                c = close_mat[t, j]
+                c = price_mat[t, j]
                 if not np.isnan(c):
                     equity += position[j] * c
         cash_out[t] = cash
@@ -240,9 +240,9 @@ def portfolio_backtest_loop_kernel(
         has_instruction = False
         for j in range(P):
             if np.isnan(weight_mat[t, j]):
-                if position[j] != 0.0 and not np.isnan(close_mat[t, j]):
-                    drift_value += position[j] * close_mat[t, j]
-            elif weight_mat[t, j] != 0.0 and not np.isnan(close_mat[t, j]):
+                if position[j] != 0.0 and not np.isnan(price_mat[t, j]):
+                    drift_value += position[j] * price_mat[t, j]
+            elif weight_mat[t, j] != 0.0 and not np.isnan(price_mat[t, j]):
                 # weight 0.0 (close) needs no sizing: target is 0 regardless
                 # of free capital, so it never triggers the raise below
                 has_instruction = True
@@ -258,7 +258,7 @@ def portfolio_backtest_loop_kernel(
             w = weight_mat[t, j]
             if np.isnan(w):
                 continue
-            c = close_mat[t, j]
+            c = price_mat[t, j]
             if np.isnan(c):
                 # no bar for this product on this date (prefix missingness);
                 # weights here are rejected upstream — skip defensively

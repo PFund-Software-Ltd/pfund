@@ -514,8 +514,6 @@ class ProductBacktestMixin:
                 "open_position() requires create_signal() to be called first:\n"
                 + _PATTERN
             )
-        # everything is delayed to backtest(), only register the inputs here;
-        # attaches to the combo's most recently registered segment
         _registry[latest_key]["open"] = {
             "order_price": order_price,
             "order_quantity": order_quantity,
@@ -586,8 +584,6 @@ class ProductBacktestMixin:
                 "close_position() requires create_signal() to be called first:\n"
                 + _PATTERN
             )
-        # everything is delayed to backtest(), only register the inputs here;
-        # attaches to the combo's most recently registered segment
         _registry[latest_key]["close"] = {
             "take_profit": take_profit,
             "stop_loss": stop_loss,
@@ -608,22 +604,6 @@ class ProductBacktestMixin:
         native_backend = nw.get_native_namespace(df)
         n = len(df)
 
-        # ================================================================
-        # Data arrays from the df backtest() is called on, converted once
-        # ================================================================
-        if "date" not in df.columns:
-            raise ValueError(
-                "product backtesting requires a 'date' column — it is needed to "
-                "verify row alignment against the configured combos"
-            )
-        # segment alignment maps registered dates to row indices via
-        # searchsorted over each combo's dates: an unsorted df would
-        # silently scatter values onto the wrong rows
-        if not df.get_column("date").is_sorted():
-            raise ValueError(
-                "the dataframe passed to backtest() must be sorted by "
-                "'date' (ascending)"
-            )
         open_arr = _to_float64(df.get_column("open"))
         high_arr = _to_float64(df.get_column("high"))
         low_arr = _to_float64(df.get_column("low"))
@@ -631,10 +611,10 @@ class ProductBacktestMixin:
         volume_arr = _to_float64(df.get_column("volume"))
         date_arr = df.get_column("date").to_numpy()
 
-        # Group rows by combo once (O(n log n)) instead of an O(combos * n)
-        # boolean mask rebuilt per combo below.
-        pivot_arrs = [df.get_column(c).to_numpy() for c in MarketDataStore.PIVOT_COLS]
-        positions_by_key = _group_positions(pivot_arrs, n)
+        # Group rows by combo once (O(n log n))
+        positions_by_combo = _group_positions(
+            [df.get_column(c).to_numpy() for c in MarketDataStore.PIVOT_COLS], n
+        )
 
         # Outputs: nan = row not backtested (its combo was never configured)
         signal_out = np.full(n, np.nan)
@@ -660,6 +640,18 @@ class ProductBacktestMixin:
         # combo's FULL rows; each registered segment scatters its values onto
         # per-bar input arrays (registration controls instructions, not data:
         # positions carry across segments, stops are evaluated on every bar)
+        #
+        # Regroup the flat registry into {combo -> [(date_range, reg), ...]},
+        # bucketing every segment under its (resolution, product):
+        #   _registry = {
+        #       (jan, "1d", "AAPL"): reg1,  reg = {"signal": +1, "stop_loss": 0.02, ...},
+        #       (feb, "1d", "AAPL"): reg2,
+        #       (jan, "1d", "TSLA"): reg3,
+        #   }
+        #   entries_by_combo = {
+        #       ("1d", "AAPL"): [(jan, reg1), (feb, reg2)],   # 2 segments
+        #       ("1d", "TSLA"): [(jan, reg3)],                # 1 segment
+        #   }
         # ================================================================
         entries_by_combo: dict[tuple, list[tuple]] = {}
         for registry_key, reg in _registry.items():
@@ -669,7 +661,7 @@ class ProductBacktestMixin:
 
         for combo, entries in entries_by_combo.items():
             # positions of this combo's rows (ascending), computed once above
-            pos = positions_by_key.get(combo)
+            pos: np.ndarray | None = positions_by_combo.get(combo)
             if pos is None:
                 raise ValueError(
                     f"{combo} has no rows in the dataframe passed to backtest()"
@@ -677,11 +669,6 @@ class ProductBacktestMixin:
             combo_dates = date_arr[pos]
             combo_close = close_arr[pos]
             num_rows = len(pos)
-            # duplicate dates within the combo would break the searchsorted
-            # alignment below (every registered date maps to its first
-            # occurrence — last write silently wins); the registration guard
-            # only sees the df passed to create_signal(), so guard this df
-            # too. Dates are ascending → duplicates are adjacent.
             if num_rows > 1 and (combo_dates[1:] == combo_dates[:-1]).any():
                 raise ValueError(
                     f"{combo}: duplicate dates in the dataframe passed to backtest() — "
@@ -693,10 +680,8 @@ class ProductBacktestMixin:
             # Resolve each segment's row indices within the combo's full
             # row sequence (seg_rows below)
             # ------------------------------------------------------------
-            resolved: list[tuple] = []
+            segments: list[tuple] = []
             for key_range, reg in entries:
-                # an incomplete configure chain is an error even when the
-                # segment covers no rows — surfacing it must not depend on data
                 if reg["open"] is None or reg["close"] is None:
                     raise ValueError(
                         f"{combo} is missing open_position()/close_position():\n"
@@ -713,16 +698,14 @@ class ProductBacktestMixin:
                         f"{combo}: registered dates from data_range {key_range} "
                         "are missing from the dataframe passed to backtest()"
                     )
-                # combo dates are unique (duplicate-dates guard above) and
-                # ascending (df sorted by date, pos ascending), so searchsorted
-                # maps the segment's dates to the combo's row indices exactly
+                # rows for the current time_segment/period
                 seg_rows = np.searchsorted(combo_dates, reg["dates"])
-                resolved.append((reg, seg_rows))
-            if not resolved:
+                segments.append((reg, seg_rows))
+            if not segments:
                 continue
             # segments are non-overlapping date intervals → their row blocks
             # are disjoint; order by first row for the extend-forward rule
-            resolved.sort(key=lambda item: item[1][0])
+            segments.sort(key=lambda item: item[1][0])
 
             # ------------------------------------------------------------
             # Per-bar kernel inputs over the combo's full rows.
@@ -742,7 +725,7 @@ class ProductBacktestMixin:
             market_fill_at_open_arr = np.zeros(num_rows, dtype=np.bool_)
             exit_market_fill_at_open_arr = np.zeros(num_rows, dtype=np.bool_)
 
-            for seg_idx, (reg, seg_rows) in enumerate(resolved):
+            for seg_idx, (reg, seg_rows) in enumerate(segments):
                 # instructions: nan outside segments (the kernel skips them)
                 signal_arr[seg_rows] = reg["signal"]
                 _scatter_order_inputs(
@@ -759,8 +742,8 @@ class ProductBacktestMixin:
                 # through uncovered rows keeps this segment's params live
                 seg_start = int(seg_rows[0])
                 seg_end = (
-                    int(resolved[seg_idx + 1][1][0])
-                    if seg_idx + 1 < len(resolved)
+                    int(segments[seg_idx + 1][1][0])
+                    if seg_idx + 1 < len(segments)
                     else num_rows
                 )
                 open_inputs, close_inputs = reg["open"], reg["close"]
