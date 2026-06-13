@@ -141,6 +141,40 @@ def _to_float64(series: nw.Series) -> np.ndarray:
     return arr.astype(np.float64, copy=False)
 
 
+def _slice_series_to_data_range(
+    df: nw.DataFrame,
+    data_range: tuple[datetime.date, datetime.date],
+    series_input: IntoSeries | int | float | None,
+    name: str,
+) -> IntoSeries | int | float | None:
+    """Slice a full-window series down to its data_range rows.
+
+    Mirrors create_signal: every series passed in the chain is positional over
+    the SAME df the method was called on (the expanding point-in-time window),
+    so order_price/order_quantity are built the same shape as the conditions —
+    one rule for the whole chain. The full length is validated, then only the
+    data_range rows (the rows actually registered) are kept, so the stored
+    series lines up positionally with the segment. Scalars and None pass through
+    unchanged.
+    """
+    if series_input is None or isinstance(series_input, (int, float, np.number)):
+        return series_input
+    nw_series = nw.from_native(series_input, series_only=True)
+    n = len(df)
+    if len(nw_series) != n:
+        raise ValueError(
+            f"'{name}' length ({len(nw_series)}) must match the dataframe length "
+            f"({n}) — a series passed to open_position() is positional over the "
+            "same df create_signal() was called on (it is sliced internally to "
+            "the data_range rows)."
+        )
+    start, end = _validate_data_range(data_range)
+    mask = _data_range_mask(df.get_column("date").to_numpy(), start, end)
+    backend = nw.get_native_namespace(nw_series)
+    nmask = nw.new_series("_mask", mask, nw.Boolean, backend=backend)
+    return nw_series.filter(nmask).to_native()
+
+
 def _group_positions(pivot_arrs: list[np.ndarray], n: int) -> dict[tuple, np.ndarray]:
     """Map each (resolution, product) combo to its row positions in ONE pass.
 
@@ -474,9 +508,11 @@ class ProductBacktestMixin:
         Pure REGISTRATION step: validates and registers the kwargs for this
         combo's MOST RECENTLY registered segment (create_signal must have been
         called on it first); self is returned unchanged. All params may vary
-        per segment. Series args are positional over the segment's registered
-        rows (the rows inside create_signal's data_range — slice accordingly
-        when configuring per-period on an expanding point-in-time df).
+        per segment. Series args (order_price/order_quantity) are positional
+        over the SAME df create_signal() was called on (the full expanding
+        point-in-time window) and are sliced internally to the segment's
+        data_range rows — build them the same shape as create_signal's
+        conditions; no manual slicing needed.
         Args:
             order_price: price to place the order.
                 If None, use 'close' price (market order).
@@ -507,13 +543,24 @@ class ProductBacktestMixin:
                 "'order_quantity' must be a number or a Series, not a bool"
             )
 
-        combo = _get_current_combo(nw.from_native(self))
+        df = nw.from_native(self)
+        combo = _get_current_combo(df)
         latest_key = _latest_key_by_combo.get(combo)
         if latest_key is None:
             raise ValueError(
                 "open_position() requires create_signal() to be called first:\n"
                 + _PATTERN
             )
+        # series are positional over the SAME df create_signal() was called on
+        # (the expanding window); slice them down to the segment's data_range
+        # rows here, exactly as create_signal does for its signal series
+        data_range = latest_key[0]
+        order_price = _slice_series_to_data_range(
+            df, data_range, order_price, "order_price"
+        )
+        order_quantity = _slice_series_to_data_range(
+            df, data_range, order_quantity, "order_quantity"
+        )
         _registry[latest_key]["open"] = {
             "order_price": order_price,
             "order_quantity": order_quantity,

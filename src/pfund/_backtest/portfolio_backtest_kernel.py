@@ -250,9 +250,9 @@ def portfolio_backtest_loop_kernel(
         if has_instruction and free_capital <= 0.0:
             raise ValueError(
                 "free capital (sizing capital minus the value of drifting "
-                "positions) is non-positive on a rebalance date — weights "
-                "cannot be sized; give the drifting positions explicit "
-                "weights instead of nan, or reduce prior exposure"
+                + "positions) is non-positive on a rebalance date — weights "
+                + "cannot be sized; give the drifting positions explicit "
+                + "weights instead of nan, or reduce prior exposure"
             )
         for j in range(P):
             w = weight_mat[t, j]

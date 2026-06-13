@@ -106,12 +106,14 @@ class PortfolioBacktestMixin:
 
         Args:
             weight: a native series (pandas or polars) matching the
-                dataframe's backend — positional weights over the rows in
-                data_range, length must match the row count exactly. Each row
-                is spelled out explicitly: a non-nan value rebalances toward
-                that target, nan means no instruction (drift/hold). To
-                rebalance once at the period's end, pass a series that is nan
-                everywhere except its last row.
+                dataframe's backend — positional weights over the SAME df
+                create_weight() was called on (the full expanding window), so
+                its length must match the df exactly; it is sliced internally to
+                the data_range rows (the rows actually registered). Each row is
+                spelled out explicitly: a non-nan value rebalances toward that
+                target, nan means no instruction (drift/hold). To rebalance once
+                at the period's end, pass a series that is nan everywhere except
+                the period's last (data_range) row.
             data_range: (start_date, end_date), both inclusive — the rows this
                 call covers. A range selecting no rows (e.g. a delisted
                 product still in the universe) is a no-op.
@@ -130,8 +132,12 @@ class PortfolioBacktestMixin:
             data_range,
         )
 
-        # compute weight series
-        weight_arr = _series_to_positional_float64(weight, len(target_pos), "weight")
+        # weight is positional over the SAME df create_weight() was called on
+        # (the full expanding window); validate that length, then keep only the
+        # data_range rows — mirrors create_signal's signal_arr[target_pos], so
+        # every series in the chain follows one rule (positional over the df)
+        weight_full = _series_to_positional_float64(weight, len(df), "weight")
+        weight_arr = weight_full[target_pos]
 
         # register weight series and its target dates
         _registry[key] = {
@@ -205,7 +211,9 @@ class PortfolioBacktestMixin:
         date_arr = df.get_column("date").to_numpy()
 
         # Group rows by product once (O(n log n))
-        positions_by_product = _group_positions(df.get_column("product").to_numpy(), n)
+        positions_by_product = _group_positions(
+            [df.get_column("product").to_numpy()], n
+        )
 
         # ================================================================
         # Regroup the flat registry into {product -> [(date_range, reg), ...]},
