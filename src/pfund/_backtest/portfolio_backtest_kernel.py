@@ -7,17 +7,14 @@ from numpy.typing import NDArray
 @jit(nopython=True, cache=True)
 def portfolio_backtest_loop_kernel(
     # date-major matrices (float64[T, P]): row t = one date, column j = one product.
-    # Pivoted from the long df by PortfolioBacktestMixin.backtest();
-    # nan close = product has no bar that date. Missingness is validated
-    # upstream to be a prefix (listed mid-period) and/or a suffix
-    # (delisted/halted mid-period); mid-series gaps are rejected.
     price_mat: NDArray[np.float64],
-    # weight from create_weight(): signed fraction of FREE capital — sizing
-    # capital minus the value of drifting positions (see STEP 4).
-    # nan = hold (no instruction, weight drifts), 0.0 = close the position.
-    # Magnitude is never checked: |w| > 1 is leverage, that's the user's business.
     weight_mat: NDArray[np.float64],
-    # backtest() inputs
+    # universe membership (bool[T, P]): True where the product was registered
+    # (in that date's universe), False otherwise. A nan weight where this is
+    # True means "hold". A position whose product is False here has left the
+    # universe: its committed order is still FILLED (STEP 1, no look-ahead),
+    # then it is exited via a close order (STEP 3).
+    in_universe: NDArray[np.bool_],
     initial_capital: float,
     compound: bool,  # True: size on current equity; False: size on initial_capital
     T: int,  # number of dates
@@ -35,15 +32,21 @@ def portfolio_backtest_loop_kernel(
            with fill_price="close"). Fills are always full size: volume
            is ignored and there are no transaction costs (FAST mode is
            for prototyping; execution realism belongs to EXACT mode).
-           A pending order of a product whose data has ended (t is past
-           its last bar) is CANCELLED instead — there is no market to
-           fill in (the per-product version of "the last date's orders
-           never fill").
-        2. Force-close any position whose product's data ended at t-1
-           (delisted/bankrupt/halted): the position is converted to cash
-           at the product's last close and zeroed. Without this step,
-           mark-to-market (which skips nan closes) would silently drop
-           the position's value from equity.
+           A committed order is filled even if the product has LEFT THE
+           UNIVERSE by date t: a weight is a committed market order, so
+           dropping it now because the product was deselected this period
+           would be look-ahead bias. The position it opens is exited via a
+           close order in step 4. The only order that does NOT fill is one
+           whose product is DELISTED at t (price nan) — genuinely no market.
+        2. Settle any held position whose product is DELISTED at t (price
+           nan = no market): it cannot be sold via an order, so it is
+           written off at 0.0 (the conservative bound modelling a delisting
+           as a bankruptcy wipeout; that trade has no row in the long df, so
+           it reaches the user only as the cash/equity move). Without this
+           step the value would silently vanish from equity (mark-to-market
+           skips nan closes). A still-trading product that merely left the
+           universe is NOT settled here — it is exited by a close order in
+           step 4, after its committed fill is honored in step 1.
 
         ── Date t closes (close[t] and weight[t] known) ────────────────
         3. Mark to market: equity = cash + Σ_j position[j] * close[t, j].
@@ -72,10 +75,11 @@ def portfolio_backtest_loop_kernel(
 
     Notes:
         - Product lifetimes: leading nan closes = listed mid-period,
-          trailing nan closes = gone mid-period. A position held when its
-          product's data ends is force-closed at the last close (step 2);
-          a position held to the GLOBAL last date is left open, same as
-          the product kernel.
+          trailing nan closes = gone mid-period. A position whose product
+          leaves the universe is closed (step 2) — at the current close if
+          it still trades, or written off to 0 if its data has ended; a
+          position held to the GLOBAL last date while still in the universe
+          is left open, same as the product kernel.
         - No exposure/leverage checks: explicit weights summing above 1
           lever the free capital, cash may go negative (borrowing),
           equity may go negative — the kernel computes, the user judges.
@@ -116,19 +120,6 @@ def portfolio_backtest_loop_kernel(
     pending_price = np.full(P, np.nan)
 
     # ============================
-    # Per-product end of life: last bar with a real close. Upstream
-    # validation guarantees no mid-series gaps, so every t > last_bar[j]
-    # means the product is gone (delisted/halted); nans before the first
-    # bar (listed mid-period) need no index — weights can't exist there
-    # and mark-to-market skips nan closes anyway.
-    # ============================
-    last_bar = np.full(P, -1, dtype=np.int64)
-    for j in range(P):
-        for t in range(T):
-            if not np.isnan(price_mat[t, j]):
-                last_bar[j] = t
-
-    # ============================
     # Main loop
     # ============================
     for t in range(T):
@@ -140,13 +131,13 @@ def portfolio_backtest_loop_kernel(
                 size = pending_size[j]
                 if np.isnan(size):
                     continue
-                if t > last_bar[j]:
-                    # the product's data ended before the fill date: there is
-                    # no market to fill in — cancel (the per-product version
-                    # of "the last date's orders never fill")
-                    pending_size[j] = np.nan
-                    pending_price[j] = np.nan
-                    continue
+                # FILL — always. A placed order is a COMMITTED market order and
+                # is honored at its frozen price no matter what happened to the
+                # product since: left the universe, or even delisted (the frozen
+                # price is its last real close). Refusing a committed fill with
+                # hindsight would be look-ahead bias. STEP 3 then places a close
+                # order to exit the position (at the current close, or 0 if the
+                # product is now delisted).
                 price = pending_price[j]
                 trade_price_out[t, j] = price
                 trade_size_out[t, j] = size
@@ -181,73 +172,49 @@ def portfolio_backtest_loop_kernel(
                 pending_size[j] = np.nan
                 pending_price[j] = np.nan
 
-        # ================================================================
-        # STEP 2: Force-close positions whose product's data has ended
-        # ================================================================
-        # t == last_bar[j] + 1 is the first date with no price for j; from
-        # here on STEP 3's mark-to-market skips j (nan close), so without
-        # this step the position's value would silently vanish from equity.
-        for j in range(P):
-            if position[j] != 0.0 and t == last_bar[j] + 1:
-                # TBD: settlement price — price data alone cannot distinguish
-                # bankruptcy (recovery ~0) from a halt/migration (recovery
-                # ~last price). Chosen: the LAST CLOSE, the last observable
-                # mark — it captures every loss already in the price series
-                # and keeps equity continuous. Alternative: settle at 0.0
-                # (full write-off — overstates the loss for non-bankrupt
-                # delistings, and is a windfall for shorts).
-                settlement_price = price_mat[last_bar[j], j]
-                # TBD: this (t, j) cell has no row in the long df (no bar →
-                # no row), so the forced close cannot surface in the result
-                # df's trade columns; it is still recorded in the panel for
-                # internal consistency, and reaches the user as the
-                # cash/equity jump on this date.
-                trade_price_out[t, j] = settlement_price
-                trade_size_out[t, j] = -position[j]
-                cash += position[j] * settlement_price
-                position[j] = 0.0
-                avg_price[j] = np.nan
-                agg_cost[j] = 0.0
-
         ################################################################
         ### Date t closes (close[t] and weight[t] known) ###
         ################################################################
 
         # ================================================================
-        # STEP 3: Mark to market and record state for this date
+        # STEP 2: Mark to market and record state for this date
         # ================================================================
         equity = cash
         for j in range(P):
             if position[j] != 0.0:
                 c = price_mat[t, j]
+                # a delisted held position (price nan) is worth 0 — its close
+                # order (STEP 3) exits it at 0 — so it contributes nothing here
                 if not np.isnan(c):
                     equity += position[j] * c
-        cash_out[t] = cash
-        equity_out[t] = equity
-        for j in range(P):
             position_out[t, j] = position[j]
             avg_price_out[t, j] = avg_price[j]
+        cash_out[t] = cash
+        equity_out[t] = equity
 
         # ================================================================
-        # STEP 4: Place rebalance orders, to be filled at date t+1
+        # STEP 3: Place orders, to be filled at date t+1
         # ================================================================
         sizing_capital = equity if compound else initial_capital
-        # Free capital: sizing capital minus the value of drifting positions
-        # (open position, nan weight = "keep it"). A position can only exist
-        # within its product's bar life, so its close here is never nan
-        # (force-closed in STEP 2 once the data ends) — checked defensively.
+        # Free capital: sizing capital minus the value of drifting positions —
+        # an IN-UNIVERSE open position with a nan weight ("keep it"). An out-of-
+        # universe held position is NOT reserved: it is being closed (close
+        # order placed below) and its capital is freed next date, on the same
+        # bar the new orders fill, so in-universe weights size as if it is
+        # already free. (in_universe is True only on a real-price bar.)
         drift_value = 0.0
-        has_instruction = False
+        is_rebalance = False
         for j in range(P):
+            # nan weight and its still in the universe = hold
             if np.isnan(weight_mat[t, j]):
-                if position[j] != 0.0 and not np.isnan(price_mat[t, j]):
+                if in_universe[t, j] and position[j] != 0.0:
                     drift_value += position[j] * price_mat[t, j]
-            elif weight_mat[t, j] != 0.0 and not np.isnan(price_mat[t, j]):
+            elif weight_mat[t, j] != 0.0:
                 # weight 0.0 (close) needs no sizing: target is 0 regardless
                 # of free capital, so it never triggers the raise below
-                has_instruction = True
+                is_rebalance = True
         free_capital = sizing_capital - drift_value
-        if has_instruction and free_capital <= 0.0:
+        if is_rebalance and free_capital <= 0.0:
             raise ValueError(
                 "free capital (sizing capital minus the value of drifting "
                 + "positions) is non-positive on a rebalance date — weights "
@@ -255,14 +222,24 @@ def portfolio_backtest_loop_kernel(
                 + "weights instead of nan, or reduce prior exposure"
             )
         for j in range(P):
+            if not in_universe[t, j]:
+                # out of universe: if still holding, place a close order to exit,
+                # filled next date. Exit price = the current close if it still
+                # trades, or 0 if the product is delisted (price nan) — a
+                # bankruptcy write-off. The committed order (if any) was already
+                # honored in STEP 1; this closes the resulting position.
+                if position[j] != 0.0:
+                    c = price_mat[t, j]
+                    close_price = 0.0 if np.isnan(c) else c
+                    order_price_out[t, j] = close_price
+                    order_size_out[t, j] = -position[j]
+                    pending_size[j] = -position[j]
+                    pending_price[j] = close_price
+                continue
             w = weight_mat[t, j]
             if np.isnan(w):
                 continue
             c = price_mat[t, j]
-            if np.isnan(c):
-                # no bar for this product on this date (prefix missingness);
-                # weights here are rejected upstream — skip defensively
-                continue
             target_position = w * free_capital / c
             delta = target_position - position[j]
             if delta != 0.0:

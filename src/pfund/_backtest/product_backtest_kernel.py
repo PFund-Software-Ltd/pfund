@@ -14,6 +14,14 @@ def backtest_loop_kernel(
     volume_arr: NDArray[np.float64],
     # signal from create_signal() — already computed vectorized (float64[N]: 1.0, -1.0, nan)
     signal_arr: NDArray[np.float64],
+    # universe membership (bool[N]): True where a create_signal() segment
+    # registered this bar, False on uncovered bars. On a False bar, pending
+    # orders/stops are cancelled (not filled) and any open position is closed
+    # at that bar's close — the per-product close-on-exit, mirroring the
+    # portfolio kernel. Positions still carry across CONTIGUOUS segments (those
+    # bars are covered); only a gap (uncovered rows) closes a position. To hold
+    # across a gap, register those rows (a nan signal = hold while in-universe).
+    in_universe: NDArray[np.bool_],
     # open_position inputs — per-bar arrays: values may vary per registered
     # time segment (constant within a segment, extended forward through
     # uncovered rows by backtest()); read at the ORDER-PLACEMENT bar
@@ -81,6 +89,14 @@ def backtest_loop_kernel(
                 limit_price > stop_price → limit is hit first.
              5. Non-immediate stop (high/low breaches SL/TP during bar)
              6. Limit order (no stop contention)
+
+        1b. If the product is not in this bar's universe (in_universe[i] is
+            False — an uncovered bar, registered by no create_signal segment),
+            cancel any pending orders/stops instead of filling, and close an
+            open position at this bar's close. Combos only ever see real bars,
+            so there is no 0.0/delisting settlement (a product whose data ends
+            is left open at its last bar by the loop ending). Positions carry
+            across CONTIGUOUS segments (covered bars); only a gap closes.
 
         ── Bar i closes (close price available, signal[i] known) ──────
 
@@ -175,7 +191,9 @@ def backtest_loop_kernel(
         # Only ONE trade per bar.
         # for order priority, refer to the docstring
         if i > 0:
-            if (
+            # in_universe[i] False → product left the universe by this bar:
+            # skip all fills; the clear below cancels every pending order/stop
+            if in_universe[i] and (
                 has_pending_order
                 or has_pending_sl
                 or has_pending_tp
@@ -461,6 +479,23 @@ def backtest_loop_kernel(
             has_pending_sl = False
             has_pending_tp = False
             pending_tw_close = False
+
+        # ================================================================
+        # STEP 1b: Close a position whose product has left the universe
+        # ================================================================
+        # Out-of-universe bar with an open position → close it at this bar's
+        # close (a clean sale: combos only ever see real bars, so no 0.0/
+        # delisting settlement). Pending orders/stops were already cancelled
+        # in STEP 1's skip+clear, so this writes the bar's single trade with no
+        # collision. Only fires on a gap (uncovered) row.
+        if not in_universe[i] and position != 0.0:
+            trade_price_out[i] = close_arr[i]
+            trade_size_out[i] = -position
+            position = 0.0
+            avg_price = np.nan
+            agg_cost = 0.0
+            bars_in_position = 0
+            best_price_since_entry = np.nan
 
         ################################################################
         ### Bar i closes (close price available, signal[i] known) ###

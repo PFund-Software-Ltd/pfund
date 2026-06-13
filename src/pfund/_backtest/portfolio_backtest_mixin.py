@@ -265,6 +265,14 @@ class PortfolioBacktestMixin:
         T = len(union_dates)
         price_mat = np.full((T, P), np.nan)
         weight_mat = np.full((T, P), np.nan)
+        # universe membership: True where a create_weight() call covered this
+        # (date, product) cell, False elsewhere. Set alongside weight_mat in the
+        # scatter loop below. A nan weight where this is True means "hold" (in
+        # universe, no instruction); a cell that is False sits outside every
+        # registered range — the product is not in that date's universe. This is
+        # the bit weight_mat alone cannot carry: covered-but-nan and uncovered
+        # both read as nan in weight_mat, but differ here (True vs False).
+        in_universe = np.full((T, P), False)
         # each product's row positions in the (T, P) panel; reused to scatter
         # outputs back, so round-trip row alignment is structural
         t_idxs: list[np.ndarray] = []
@@ -295,6 +303,10 @@ class PortfolioBacktestMixin:
                 # rows for the current time_segment/period
                 seg_rows = np.searchsorted(product_dates, reg["dates"])
                 weight_mat[t_idx[seg_rows], j] = reg["weight"]
+                # mark every registered row as in-universe — INCLUDING rows
+                # whose weight is nan ("hold"); that is exactly what separates
+                # them from uncovered (out-of-universe) rows
+                in_universe[t_idx[seg_rows], j] = True
 
         # ================================================================
         # Ragged panel check: nan closes are only allowed as a PREFIX
@@ -369,6 +381,7 @@ class PortfolioBacktestMixin:
         ) = portfolio_backtest_loop_kernel(
             price_mat,
             weight_mat,
+            in_universe,
             float(initial_capital),
             compound,
             T,

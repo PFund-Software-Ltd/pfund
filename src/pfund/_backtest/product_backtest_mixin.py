@@ -18,7 +18,8 @@ _Identity = tuple[str, str] | str
 # (= one time SEGMENT of a combo). Registration controls INSTRUCTIONS, never
 # data: backtest() always runs the kernel over a combo's FULL rows and
 # scatters each segment's values onto them, so positions carry across
-# segments and stops are evaluated on every bar.
+# CONTIGUOUS segments and stops are evaluated on every covered bar; a position
+# on an uncovered (gap) row is closed — out of the universe (close-on-exit).
 _registry: dict[tuple, dict] = {}
 # ((start_date, end_date), "1d", "BTC"): {  # key = (data_range, *combo); combo in PIVOT_COLS order
 #   "signal": np.array([1.0, nan, -1.0, ...]),  # positional over the entry's rows
@@ -381,10 +382,11 @@ class ProductBacktestMixin:
                 indicators); only the rows inside data_range are registered.
                 Registration controls instructions, never data: backtest()
                 always runs the kernel over the combo's FULL rows, so positions
-                carry across segments (no force-close at segment ends) and
-                stops are evaluated on every bar — rows covered by no segment
-                simply get no signal (hold/drift), with the previous segment's
-                open/close params extended forward.
+                carry across CONTIGUOUS segments and stops are evaluated on
+                every covered bar. A row covered by NO segment is out of the
+                universe: an open position there is CLOSED at that bar's close
+                (close-on-exit) — to hold across a gap, register those rows
+                (a nan signal = hold while in the universe).
                 A range overlapping an already-registered range of the same
                 combo raises — a row's instruction is registered once. A range
                 selecting no rows (e.g. a product not yet listed in that
@@ -586,8 +588,9 @@ class ProductBacktestMixin:
         combo's MOST RECENTLY registered segment (create_signal must have been
         called on it first); self is returned unchanged. All params may vary
         per segment; each segment's params govern from its first row until the
-        next segment begins (extended forward), so a position carried through
-        rows covered by no segment keeps the previous segment's stops live.
+        next segment begins. A position is closed on the first row covered by
+        no segment (close-on-exit), so stops only ever apply within covered
+        rows.
         Args:
             take_profit: take profit percentage (e.g. 0.1 = 10%).
             stop_loss: stop loss percentage between 0 and 1 (e.g. 0.05 = 5%).
@@ -785,8 +788,9 @@ class ProductBacktestMixin:
 
                 # flags/risk params EXTEND FORWARD: from this segment's first
                 # row until the next segment's first row (the last segment
-                # extends to the end of the series), so a position carried
-                # through uncovered rows keeps this segment's params live
+                # extends to the end of the series). A position never survives
+                # onto uncovered rows now (close-on-exit), so this only matters
+                # across CONTIGUOUS segments — the gap portion is inert
                 seg_start = int(seg_rows[0])
                 seg_end = (
                     int(segments[seg_idx + 1][1][0])
@@ -825,6 +829,16 @@ class ProductBacktestMixin:
                     -1 if time_window is None else int(time_window)
                 )
 
+            # universe membership over the combo's rows: True on bars a
+            # create_signal() segment registered, False on uncovered (gap)
+            # bars. The kernel closes an open position on a False bar (the
+            # product left the period's universe) and carries it across
+            # contiguous covered bars. To hold across a gap, register those
+            # rows (a nan signal = hold while in the universe).
+            in_universe = np.zeros(num_rows, dtype=np.bool_)
+            for _reg, seg_rows in segments:
+                in_universe[seg_rows] = True
+
             combo_outs = backtest_loop_kernel(
                 open_arr[pos],
                 high_arr[pos],
@@ -832,6 +846,7 @@ class ProductBacktestMixin:
                 combo_close,
                 volume_arr[pos],
                 signal_arr,
+                in_universe,
                 order_price_arr,
                 order_quantity_arr,
                 first_only_arr,
