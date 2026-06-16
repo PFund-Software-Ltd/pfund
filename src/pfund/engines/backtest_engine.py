@@ -256,7 +256,9 @@ class BacktestEngine(BaseEngine):
             if backtest_mode == BacktestMode.FAST:
                 from pfund._backtest.backtest_mixin import setup_backtest_df
 
-                backtest_df_original = setup_backtest_df(df_chunk.to_native())
+                backtest_df_original = df_chunk.to_native()
+                if backtestee.is_strategy():
+                    backtest_df_original = setup_backtest_df(df_chunk.to_native())
                 backtest_df = backtestee.backtest(backtest_df_original)
                 if backtestee.is_strategy() and backtest_df is backtest_df_original:
                     cprint(
