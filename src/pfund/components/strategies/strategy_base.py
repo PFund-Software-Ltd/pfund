@@ -139,7 +139,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
 
     def add_account(
         self, venue: TradingVenue | str, name: str = "", **kwargs: Any
-    ) -> BaseAccount:  # pyright: ignore[reportInconsistentOverload]
+    ) -> BaseAccount:
         from pfund.brokers import create_broker
 
         venue = TradingVenue[venue.upper()]

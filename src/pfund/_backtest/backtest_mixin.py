@@ -180,8 +180,9 @@ class BacktestMixin:
 
     @property
     def backtest_mode(self) -> BacktestMode:
-        return self.context.backtest.backtest_mode
+        return self.settings.backtest_mode
 
+    # FIXME
     @property
     def dataset_periods(self) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
         return self.context.backtest.dataset_splitter.dataset_periods

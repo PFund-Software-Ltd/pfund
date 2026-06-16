@@ -15,7 +15,7 @@ from pfeed.enums import DataTool
 from pfund.config import get_config, get_logging_config
 from pfund.datas.resolution import Resolution
 from pfund.engines.component_registry import ComponentRegistry
-from pfund.enums import Environment, RunMode, RunStage
+from pfund.enums import Environment, RunMode
 
 
 class DataRangeDict(TypedDict, total=False):
@@ -24,6 +24,9 @@ class DataRangeDict(TypedDict, total=False):
 
 
 class EngineContext:
+    DEFAULT_PROJECT_NAME = "default_project"
+    DEFAULT_RUN_NAME = "default_run"
+
     def __init__(
         self,
         env: Environment,
@@ -38,12 +41,8 @@ class EngineContext:
         self._env_var_prefix = f"PFUND_{env.upper()}_"
         self._env_vars = self._load_env_vars()
         self.run_mode = self._detect_run_mode()
-        self.run_stage = (
-            RunStage.experiment
-            if self.env == Environment.BACKTEST
-            else RunStage.deployment
-        )
-        self.project_name = "default"
+        self.project_name = self.DEFAULT_PROJECT_NAME
+        self.run_name = self.DEFAULT_RUN_NAME
         self.data_start, self.data_end = self._parse_data_range(data_range)
         # NOTE: config obtained by get_config() inside ray actor could be different from the one in the main thread (e.g. after calling pf.configure())
         # so we create the config object here in the context and treat it as the source of truth
@@ -75,21 +74,6 @@ class EngineContext:
         if settings.persist:
             self._save_settings(settings)
         return settings
-
-    def set_run_stage(self, stage: RunStage | str) -> None:
-        stage = RunStage[stage.lower()]
-        if self.env == Environment.BACKTEST:
-            assert stage in [RunStage.experiment, RunStage.refinement], (
-                "Run stage can only be set to 'experiment' or 'refinement' in backtesting"
-            )
-        else:
-            assert stage == RunStage.deployment, (
-                "Run stage can only be set to 'deployment' in trading"
-            )
-        self.run_stage = stage
-
-    def set_project_name(self, project_name: str) -> None:
-        self.project_name = project_name.lower()
 
     def _load_env_vars(self) -> dict[str, str]:
         from dotenv import dotenv_values, find_dotenv
@@ -176,3 +160,9 @@ class EngineContext:
         if not key.startswith(self._env_var_prefix):
             key = f"{self._env_var_prefix}{key}"
         return self._env_vars[key]
+
+    def set_project_name(self, name: str):
+        self.project_name = name
+
+    def set_run_name(self, name: str):
+        self.run_name = name

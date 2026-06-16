@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from typing import Annotated, ClassVar, cast
 
-from pfeed.enums import DataSource
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
+from pfeed.enums import DataSource
+from pfeed.storages.storage_config import StorageConfig
+from pfeed._io.io_config import IOConfig
 
 from pfund.datas.resolution import Resolution
 from pfund.datas.timeframe import Timeframe
@@ -20,6 +22,8 @@ class DataConfig(BaseModel):
         arbitrary_types_allowed=True,
         validate_assignment=True,
     )
+    storage_config: StorageConfig | None = Field(default=None)
+    io_config: IOConfig | None = Field(default=None)
 
     @staticmethod
     def default_stale_bar_timeout(resolution: Resolution) -> float:
@@ -29,6 +33,7 @@ class DataConfig(BaseModel):
     data_origin: str = ""
     # data_resolutions = primary_resolution + extra_resolutions defined in data store's add_data()
     _data_resolutions: list[Resolution] = PrivateAttr(init=False)
+
     num_batch_workers: int | None = Field(
         default=None,
         description="""

@@ -1,27 +1,17 @@
 from __future__ import annotations
 
-from typing import Any, ClassVar, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pfeed.storages.storage_config import StorageConfig
-    from pfeed._io.io_config import IOConfig
-    from pfund.datas.data_config import DataConfig
+from typing import Any, ClassVar
 
 from pfeed.enums import DataCategory, DataSource
+
+from pfund.datas.data_config import DataConfig
 
 
 class BaseData:
     category: ClassVar[DataCategory]
 
-    def __init__(
-        self,
-        data_config: DataConfig,
-        storage_config: StorageConfig,
-        io_config: IOConfig,
-    ):
-        self.config: DataConfig = data_config
-        self.storage_config: StorageConfig = storage_config
-        self.io_config: IOConfig = io_config
+    def __init__(self, data_config: DataConfig | None = None):
+        self.config: DataConfig = data_config or DataConfig()
         self.extra_data: dict[str, Any] = {}
 
     @property
@@ -36,8 +26,6 @@ class BaseData:
     def to_dict(self) -> dict[str, Any]:
         return {
             "data_config": self.config.model_dump(),
-            "storage_config": self.storage_config.model_dump(),
-            "io_config": self.io_config.model_dump(),
         }
 
     def update_extra_data(self, extra_data: dict[str, Any]):

@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast
 if TYPE_CHECKING:
     import torch.nn as nn
     from narwhals.typing import IntoDataFrame
-    from pfeed.storages.storage_config import StorageConfig
     from sklearn.base import BaseEstimator
     from sklearn.model_selection import TimeSeriesSplit
+    from mtflow.contexts.backtest_context import BacktestContext
 
     from pfund.brokers.broker_simulated import SimulatedBroker
     from pfund.brokers.crypto.broker import CryptoBroker
@@ -17,53 +17,32 @@ if TYPE_CHECKING:
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.datas.data_bar import BarData
     from pfund.datas.stores.market_data_store import BarUpdate
-    from pfund.engines.engine_context import DataRangeDict, EngineContext
+    from pfund.engines.engine_context import DataRangeDict
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.typing import FeatureT, IndicatorT, ModelT, StrategyT
     from pfund.utils.dataset_splitter import (
         CrossValidatorDatasetPeriods,
         DatasetPeriods,
         DatasetSplitsDict,
-        DatasetSplitter,
     )
 
     class SimulatedCryptoBroker(SimulatedBroker, CryptoBroker): ...
 
     class SimulatedInteractiveBrokers(SimulatedBroker, InteractiveBrokers): ...
 
-    class BacktestEngineContext(EngineContext):
-        backtest: BacktestContext
-
     BacktesteeName: TypeAlias = str
 
 import os
-from dataclasses import dataclass
 
 import narwhals as nw
-from pfeed.enums import DataTool
 from pfund_kit.style import RichColor, TextStyle, cprint
 from pfund_kit.utils.progress_bar import ProgressBar, track
 
 from pfund.engines.base_engine import BaseEngine
-from pfund.enums import BacktestMode, Environment, RunStage
-
-
-@dataclass(frozen=True)
-class BacktestContext:
-    backtest_mode: BacktestMode
-    dataset_splitter: DatasetSplitter
-
-    def __post_init__(self):
-        if self.backtest_mode == BacktestMode.EXACT and self.settings.reuse_signals:
-            cprint(
-                "Warning: Reusing pre-computed signals to speed up event-driven backtesting,\n"
-                + "i.e. computing signals on the fly will be skipped",
-                style=TextStyle.BOLD + RichColor.YELLOW,
-            )
+from pfund.enums import BacktestMode, Environment
 
 
 class BacktestEngine(BaseEngine):
-    _context: BacktestEngineContext
     strategies: dict[str, BaseStrategy]
 
     def __init__(
@@ -95,15 +74,14 @@ class BacktestEngine(BaseEngine):
             data_range=data_range,
             settings=settings,
         )
-        self._context.backtest = BacktestContext(
-            backtest_mode=BacktestMode[mode.upper()],
-            dataset_splitter=DatasetSplitter(
-                dataset_start=self.data_start,
-                dataset_end=self.data_end,
-                dataset_splits=dataset_splits,
-                cv_test_ratio=cv_test_ratio,
-            ),
-        )
+        # TODO
+        # dataset_splitter=DatasetSplitter(
+        #     dataset_start=self.data_start,
+        #     dataset_end=self.data_end,
+        #     dataset_splits=dataset_splits,
+        #     cv_test_ratio=cv_test_ratio,
+        # )
+        self._context.settings.backtest_mode = BacktestMode[mode.upper()]
 
     @property
     def settings(self) -> BacktestEngineSettings:
@@ -111,7 +89,7 @@ class BacktestEngine(BaseEngine):
 
     @property
     def backtest_mode(self) -> BacktestMode:
-        return self._context.backtest.backtest_mode
+        return self.settings.backtest_mode
 
     @property
     def dataset_periods(self) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
@@ -122,7 +100,6 @@ class BacktestEngine(BaseEngine):
         strategy: StrategyT,
         resolution: str,
         name: str = "",
-        storage_config: StorageConfig | None = None,
     ) -> StrategyT:
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
         from pfund.components.strategies.strategy_backtest import BacktestStrategy
@@ -147,7 +124,6 @@ class BacktestEngine(BaseEngine):
                 strategy=strategy,
                 resolution=resolution,
                 name=name or Strategy.__name__,
-                storage_config=storage_config,
             ),
         )
 
@@ -156,7 +132,6 @@ class BacktestEngine(BaseEngine):
         component: ModelT | FeatureT | IndicatorT,
         resolution: str,
         name: str = "",
-        storage_config: StorageConfig | None = None,
     ) -> ModelT | FeatureT | IndicatorT:
         """Add model without creating a strategy (using dummy strategy)"""
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
@@ -181,7 +156,6 @@ class BacktestEngine(BaseEngine):
             component,
             resolution,
             name=name,
-            storage_config=storage_config,
             is_top_component=True,
         )
         return component
@@ -193,7 +167,6 @@ class BacktestEngine(BaseEngine):
         model: ModelT | BaseEstimator | nn.Module,
         resolution: str,
         name: str = "",
-        storage_config: StorageConfig | None = None,
     ) -> ModelT:
         from pfund.components.models.model_base import wrap_model
 
@@ -202,25 +175,16 @@ class BacktestEngine(BaseEngine):
             component=model,
             resolution=resolution,
             name=name,
-            storage_config=storage_config,
         )
 
     def run(
         self,
-        stage: Literal[RunStage.experiment, RunStage.refinement]
-        | str = RunStage.experiment,
-        project: str = BaseEngine.DEFAULT_PROJECT_NAME,
+        ctx: BacktestContext | None = None,
         num_chunks: int = 1,
         num_cpus: int | None = None,
     ) -> dict[str, Any]:
         """
         Args:
-            stage:
-                defines which stage of the run this is, either EXPERIMENT or REFINEMENT
-            project: project name under the stage. Defaults to "default_project".
-                it will be used as a folder name that groups all runs of this stage together.
-                Path layout: {stage}s/{project}/your_runs
-                e.g. experiments/momentum_v2/
             num_chunks:
                 Number of chunks to split the dataset into.
                 if = 1, process the whole dataset all at once.
@@ -232,8 +196,6 @@ class BacktestEngine(BaseEngine):
         """
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
 
-        self._context.set_run_stage(stage)
-
         if num_chunks < 1:
             raise ValueError("num_chunks must be greater than 0")
         if num_cpus:
@@ -241,7 +203,7 @@ class BacktestEngine(BaseEngine):
             if num_cpus < 1:
                 raise ValueError("num_cpus must be greater than 0")
 
-        super().run(project=project)
+        super().run(ctx=ctx)
 
         backtest_results: dict[BacktesteeName, list[IntoDataFrame]] = {}
 
@@ -276,7 +238,6 @@ class BacktestEngine(BaseEngine):
         num_cpus: int | None = None,
     ) -> list[IntoDataFrame]:
         ### Pre-Backtest ###
-        data_tool: DataTool = self._context.pfeed_config.data_tool
         is_using_ray = num_chunks > 1
         backtest_dfs: list[IntoDataFrame] = []
 
@@ -289,7 +250,6 @@ class BacktestEngine(BaseEngine):
             backtestee: BaseStrategy | BaseModel,
             df_chunk: nw.DataFrame[Any],
             backtest_mode: BacktestMode,
-            data_tool: DataTool,
             chunk_num: int | None = None,
             batch_num: int | None = None,
         ) -> IntoDataFrame:
@@ -324,7 +284,6 @@ class BacktestEngine(BaseEngine):
                 backtestee=backtestee,
                 df_chunk=df,
                 backtest_mode=self.backtest_mode,
-                data_tool=data_tool,
             )
             backtest_dfs.append(backtest_df)
         else:
@@ -342,7 +301,6 @@ class BacktestEngine(BaseEngine):
                 backtestee_ref: ray.ObjectRef[BaseStrategy | BaseModel],
                 df_chunk: nw.DataFrame[Any],
                 backtest_mode: BacktestMode,
-                data_tool: DataTool,
                 chunk_num: int,
                 batch_num: int,
             ):
@@ -353,7 +311,6 @@ class BacktestEngine(BaseEngine):
                         backtestee=backtestee,
                         df_chunk=df_chunk,
                         backtest_mode=backtest_mode,
-                        data_tool=data_tool,
                         chunk_num=chunk_num,
                         batch_num=batch_num,
                     )
@@ -398,7 +355,6 @@ class BacktestEngine(BaseEngine):
                                     backtestee_ref=backtestee_ref,
                                     df_chunk=df_chunk,
                                     backtest_mode=self.backtest_mode,
-                                    data_tool=data_tool,
                                     chunk_num=chunk_num,
                                     batch_num=batch_num,
                                 )

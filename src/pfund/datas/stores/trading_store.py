@@ -11,11 +11,8 @@ if TYPE_CHECKING:
 
 import narwhals as nw
 from pfeed.enums import DataLayer, IOFormat
-from pfeed.storages.storage_config import StorageConfig
-from pfeed._io.io_config import IOConfig
 
-from pfeed.enums import DataCategory
-from pfund.enums import RunStage, ArtifactType
+from pfund.enums import ArtifactType
 
 
 class TradingStore:
@@ -30,8 +27,6 @@ class TradingStore:
         self._feed: PFundComponentFeed = pe.PFund(
             pipeline_mode=True
         ).component_feed.with_component(self._component)
-        self._storage_config: StorageConfig | None = None
-        self._io_config: IOConfig | None = None
 
     @property
     def KEY_COLS(self) -> list[str]:
@@ -43,19 +38,6 @@ class TradingStore:
 
     def set_pivot_cols(self, pivot_cols: list[str]):
         self.PIVOT_COLS = pivot_cols
-
-    def set_storage_config(self, storage_config: StorageConfig | None):
-        context = self._component.context
-        if storage_config is None:
-            storage_config = StorageConfig(data_path=context.pfund_config.data_path)
-        self._storage_config = storage_config
-        # override data_layer and data_domain
-        self._storage_config.data_layer = {
-            RunStage.experiment: DataLayer.RAW,
-            RunStage.refinement: DataLayer.CLEANED,
-            RunStage.deployment: DataLayer.CURATED,
-        }[context.run_stage]
-        self._storage_config.data_domain = DataCategory.COMPONENT_DATA
 
     def get_df(
         self,

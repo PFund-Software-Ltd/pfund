@@ -5,23 +5,14 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import datetime
 
-    from pfeed.storages.storage_config import StorageConfig
-    from pfeed._io.io_config import IOConfig
     from pfund.datas.data_config import DataConfig
 
 from pfund.datas.data_base import BaseData
 
 
 class TimeBasedData(BaseData):
-    def __init__(
-        self,
-        data_config: DataConfig,
-        storage_config: StorageConfig,
-        io_config: IOConfig,
-    ):
-        super().__init__(
-            data_config=data_config, storage_config=storage_config, io_config=io_config
-        )
+    def __init__(self, data_config: DataConfig | None = None):
+        super().__init__(data_config=data_config)
         self._ts: float | None = None
         self._msg_ts: float | None = None
 

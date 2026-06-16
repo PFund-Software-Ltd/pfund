@@ -16,6 +16,7 @@ from pfund.enums.data_channel import (
     PublicDataChannel,
 )
 from pfund.enums.database import Database
+from pfund.enums.datalake import DataLake
 from pfund.enums.env import Environment
 from pfund.enums.month_code import CryptoMonthCode, FutureMonthCode
 from pfund.enums.option_type import OptionType
@@ -28,7 +29,6 @@ from pfund.enums.order_status import (
 )
 from pfund.enums.order_type import OrderType
 from pfund.enums.run_mode import RunMode
-from pfund.enums.run_stage import RunStage
 from pfund.enums.source_type import SourceType
 from pfund.enums.time_in_force import TimeInForce
 from pfund.enums.trading_venue import TradingVenue
@@ -48,6 +48,7 @@ __all__ = [
     "CryptoMonthCode",
     "DataChannelType",
     "Database",
+    "DataLake",
     "Environment",
     "FillOrderStatus",
     "FutureMonthCode",
@@ -60,7 +61,6 @@ __all__ = [
     "PrivateDataChannel",
     "PublicDataChannel",
     "RunMode",
-    "RunStage",
     "SourceType",
     "TimeInForce",
     "TradingVenue",

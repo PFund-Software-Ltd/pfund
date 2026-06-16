@@ -37,8 +37,6 @@ import logging
 
 import narwhals as nw
 from pfeed.enums import DataCategory
-from pfeed.storages.storage_config import StorageConfig
-from pfeed._io.io_config import IOConfig
 from pfund_kit.style import RichColor, TextStyle, cprint
 from pfund_kit.utils import toml
 
@@ -116,10 +114,6 @@ class ComponentMixin:
     def data_stores(self) -> dict[DataCategory, BaseDataStore[Any, Any]]:
         return self.databoy._data_stores
 
-    @property
-    def storage_config(self) -> StorageConfig:
-        return self.store._storage_config
-
     # TODO: also check on_bar, on_tick, on_quote etc.
     def _assert_functions_signatures(self):
         pass
@@ -139,7 +133,6 @@ class ComponentMixin:
         run_mode: RunMode,
         resolution: Resolution | str,
         engine_context: EngineContext,
-        storage_config: StorageConfig | None = None,
         is_top_component: bool = False,
     ):
         """
@@ -150,14 +143,12 @@ class ComponentMixin:
             run_mode (RunMode): The mode in which the component will run (e.g., local or remote).
             resolution (Resolution | str): The data resolution used by this component.
             engine_context (EngineContext): The engine context associated with this component. It is None if the component is running in a remote process.
-            storage_config (StorageConfig): The storage configuration associated with this component.
         """
         self._context = engine_context
         self._run_mode = run_mode
         self._set_name(name)
         self._set_resolution(resolution)
         self.set_logger(self.logger)
-        self.store.set_storage_config(storage_config)
         self._is_top_component = is_top_component
 
     def _setup_messaging(self):
@@ -624,8 +615,6 @@ class ComponentMixin:
         symbol: str = "",
         product_name: str = "",
         data_config: DataConfig | None = None,
-        storage_config: StorageConfig | None = None,
-        io_config: IOConfig | None = None,
         **product_specs: Any,
     ) -> list[MarketData]:
         """
@@ -656,8 +645,6 @@ class ComponentMixin:
             product=product,
             resolutions=resolutions,
             data_config=data_config,
-            storage_config=storage_config,
-            io_config=io_config,
         )
         return datas
 
@@ -666,7 +653,6 @@ class ComponentMixin:
         component: ComponentT | ActorProxy[ComponentT],
         resolution: str = "",
         name: str = "",
-        storage_config: StorageConfig | None = None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ) -> ComponentT | ActorProxy[ComponentT] | None:
@@ -736,7 +722,6 @@ class ComponentMixin:
                 run_mode=RunMode.REMOTE if ray_kwargs else RunMode.LOCAL,
                 resolution=resolution or self.resolution,
                 engine_context=self.context,
-                storage_config=storage_config,
             )
 
         components[component.name] = component
@@ -752,7 +737,6 @@ class ComponentMixin:
         model: ModelT | ActorProxy[ModelT] | BaseEstimator | nn.Module,
         resolution: str = "",
         name: str = "",
-        storage_config: StorageConfig | None = None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ) -> ModelT | ActorProxy[ModelT] | None:
@@ -763,7 +747,6 @@ class ComponentMixin:
             component=model,
             resolution=resolution,
             name=name,
-            storage_config=storage_config,
             ray_actor_options=ray_actor_options,
             **ray_kwargs,
         )
@@ -773,7 +756,6 @@ class ComponentMixin:
         feature: FeatureT | ActorProxy[FeatureT],
         resolution: str = "",
         name: str = "",
-        storage_config: StorageConfig | None = None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ) -> FeatureT | ActorProxy[FeatureT] | None:
@@ -781,7 +763,6 @@ class ComponentMixin:
             component=feature,
             resolution=resolution,
             name=name,
-            storage_config=storage_config,
             ray_actor_options=ray_actor_options,
             **ray_kwargs,
         )
@@ -791,7 +772,6 @@ class ComponentMixin:
         indicator: IndicatorT | ActorProxy[IndicatorT],
         resolution: str = "",
         name: str = "",
-        storage_config: StorageConfig | None = None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ) -> IndicatorT | ActorProxy[IndicatorT] | None:
@@ -799,7 +779,6 @@ class ComponentMixin:
             component=indicator,
             resolution=resolution,
             name=name,
-            storage_config=storage_config,
             ray_actor_options=ray_actor_options,
             **ray_kwargs,
         )

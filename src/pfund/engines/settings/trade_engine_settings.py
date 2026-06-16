@@ -3,8 +3,8 @@ from typing import Any
 from pydantic import Field, field_serializer, field_validator, model_validator
 
 from pfund.engines.settings.base_engine_settings import BaseEngineSettings
-from pfund.enums import Database
 from pfund.utils.ray_dict import RayCompatibleDict
+
 
 DEFAULT_CANCEL_ALL_AT: dict[str, bool] = {
     "start": False,
@@ -16,7 +16,6 @@ class TradeEngineSettings(BaseEngineSettings):
     # e.g. url='tcp://localhost'
     zmq_urls: RayCompatibleDict = Field(default_factory=RayCompatibleDict)
     zmq_ports: RayCompatibleDict = Field(default_factory=RayCompatibleDict)
-    database: Database = Field(default=Database.DUCKDB)
     auto_stream: bool = Field(
         default=True,
         description="""

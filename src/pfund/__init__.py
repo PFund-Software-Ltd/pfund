@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     # need these imports to support IDE hints:
     import pfund_plot as plot
+    import pfund.hub as hub
 
     from pfund.brokers.crypto.broker import CryptoBroker
     from pfund.brokers.crypto.exchanges import Bybit
@@ -48,6 +49,10 @@ def __getattr__(name: str):
         import pfund_plot as plot
 
         return plot
+    elif name == "hub":
+        import pfund.hub as hub
+
+        return hub
     elif name == "DataConfig":
         from pfund.datas.data_config import DataConfig
 
@@ -146,6 +151,7 @@ def __getattr__(name: str):
 __all__ = (
     "alias",
     "plot",
+    "hub",
     # configs
     "configure",
     "get_config",

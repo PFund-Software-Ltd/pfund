@@ -27,13 +27,13 @@ dependencies = [
     "pfund-kit>=0.1.11",
     'pfeed>=0.0.15',
     "httpx>=0.28.1",
-    "websockets>=16.0 ; sys_platform != 'emscripten'",
+    "websockets>=16.0.0 ; sys_platform != 'emscripten'",
 ]
 
 [project.optional-dependencies]
 core = [
     "numba>=0.65.1 ; sys_platform != 'emscripten'",
-    'pfeed[core,duckdb,yfinance,hf]>=0.0.15',
+    'pfeed[core,duckdb,yfinance]>=0.0.15',
     'pfolio>=0.0.4',
     'pfund-plot[marimo]>=0.0.5',
     # TODO: enable when ready
@@ -41,10 +41,13 @@ core = [
 ]
 ibkr = ["pfund-ibapi>=10.42.1 ; sys_platform != 'emscripten'"]
 ta-lib = ["ta-lib>=0.6.4 ; sys_platform != 'emscripten'"]
+# TODO: enable when ready
+# optuna = ["mtflow[optuna]>=0.0.1.dev2]
+# botorch = ["mtflow[botorch]>=0.0.1.dev2]
 sklearn = ["joblib>=1.5.3", "scikit-learn>=1.9.0"]
 torch = [
     "torch>=2.11.0 ; sys_platform != 'emscripten'",
-    "safetensors>=0.7.0 ; sys_platform != 'emscripten'",
+    "safetensors>=0.8.0 ; sys_platform != 'emscripten'",
 ]
 jax = [
     "jax>=0.10.1 ; sys_platform != 'emscripten'",

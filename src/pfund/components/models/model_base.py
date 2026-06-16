@@ -143,7 +143,6 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         symbol: str = "",
         product_name: str = "",
         data_config: DataConfig | None = None,
-        storage_config: StorageConfig | None = None,
         **product_specs: Any,
     ) -> list[MarketData]:
         datas: list[MarketData] = super().add_data(
@@ -153,7 +152,6 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             symbol=symbol,
             product_name=product_name,
             data_config=data_config,
-            storage_config=storage_config,
             **product_specs,
         )
         return datas

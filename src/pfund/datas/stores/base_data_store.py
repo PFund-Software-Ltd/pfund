@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
+    from pfeed.storages.storage_config import StorageConfig
 
     from pfund.datas.databoy import DataBoy
 
@@ -12,8 +13,6 @@ from abc import ABC, abstractmethod
 import narwhals as nw
 from pfeed.enums import DataLayer, DataStorage
 from pfeed.feeds.base_feed import BaseFeed
-from pfeed.storages.storage_config import StorageConfig
-from pfeed._io.io_config import IOConfig
 
 from pfund.datas.data_base import BaseData
 

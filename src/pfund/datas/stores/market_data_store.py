@@ -36,8 +36,6 @@ import narwhals as nw
 
 from pfeed.enums import DataAccessType, DataLayer, DataStorage
 from pfeed.feeds.market_feed import MarketFeed
-from pfeed.storages.storage_config import StorageConfig
-from pfeed._io.io_config import IOConfig
 from pfund.datas import BarData, QuoteData, TickData
 from pfund.datas.data_config import DataConfig
 from pfund.datas.data_market import MarketData
@@ -103,9 +101,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         self,
         product: BaseProduct,
         resolution: Resolution,
-        data_config: DataConfig | None,
-        storage_config: StorageConfig | None,
-        io_config: IOConfig | None,
+        data_config: DataConfig,
     ) -> MarketData:
         data = self.get_data(product.name, resolution)
         if data is not None:
@@ -114,8 +110,6 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             product=product,
             resolution=resolution,
             data_config=data_config,
-            storage_config=storage_config,
-            io_config=io_config,
         )
         self._datas[product.name][repr(resolution)] = data
         return data
@@ -140,6 +134,14 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                 f"{product.name} {primary_resolution=!r} {extra_resolutions=!r} "
                 + f"is auto-resampled from {data_config.resample} to {resolved_data_config.resample}"
             )
+        if resolved_data_config.storage_config is None:
+            from pfeed.storages.storage_config import StorageConfig
+
+            resolved_data_config.storage_config = StorageConfig()
+        if resolved_data_config.io_config is None:
+            from pfeed._io.io_config import IOConfig
+
+            resolved_data_config.io_config = IOConfig()
         return resolved_data_config
 
     def add_data(
@@ -147,32 +149,24 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         product: BaseProduct,
         resolutions: list[Resolution | str] | None = None,
         data_config: DataConfig | None = None,
-        storage_config: StorageConfig | None = None,
-        io_config: IOConfig | None = None,
     ) -> list[MarketData]:
         data_config = self._resolve_data_config(
             product=product,
             resolutions=resolutions or [],
             data_config=data_config or DataConfig(),
         )
-        storage_config = storage_config or StorageConfig()
-        io_config = io_config or IOConfig()
 
         # mutually bind data_resampler and data_resamplee
         for resamplee_resolution, resampler_resolution in data_config.resample.items():
-            data_resamplee = self._add_data(
-                product, resamplee_resolution, data_config, storage_config, io_config
-            )
-            data_resampler = self._add_data(
-                product, resampler_resolution, data_config, storage_config, io_config
-            )
+            data_resamplee = self._add_data(product, resamplee_resolution, data_config)
+            data_resampler = self._add_data(product, resampler_resolution, data_config)
             data_resamplee.bind_resampler(data_resampler)
             self._logger.debug(
                 f"{product.name} resolution={resampler_resolution} is used to resample {resamplee_resolution} data"
             )
 
         datas: list[MarketData] = [
-            self._add_data(product, resolution, data_config, storage_config, io_config)
+            self._add_data(product, resolution, data_config)
             for resolution in data_config.data_resolutions
         ]
         return datas
@@ -181,9 +175,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         self,
         product: BaseProduct,
         resolution: Resolution,
-        data_config: DataConfig | None = None,
-        storage_config: StorageConfig | None = None,
-        io_config: IOConfig | None = None,
+        data_config: DataConfig,
     ) -> MarketData:
         if resolution.is_quote():
             DataClass = QuoteData
@@ -194,11 +186,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         else:
             raise ValueError(f"Unsupported resolution: {resolution}")
         return DataClass(
-            product=product,
-            resolution=resolution,
-            data_config=data_config,
-            storage_config=storage_config,
-            io_config=io_config,
+            product=product, resolution=resolution, data_config=data_config
         )
 
     # TODO
@@ -343,8 +331,8 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                 f"Materializing market data {data.product.name} {data.resolution}..."
             )
             data_config = data.config
-            storage_config = data.storage_config
-            io_config = data.io_config
+            storage_config = data_config.storage_config
+            io_config = data_config.io_config
             product, symbol = str(data.product.basis), data.product.symbol
             product_specs = data.product.specs
             cache_storage_config = self._create_cache_storage_config(storage_config)

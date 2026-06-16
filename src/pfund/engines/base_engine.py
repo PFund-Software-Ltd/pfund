@@ -1,11 +1,11 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportArgumentType=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, cast, ClassVar
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 if TYPE_CHECKING:
+    from mtflow.contexts.base_context import BaseContext
     from pfeed.sources.pfund.engine_feed import PFundEngineFeed
-    from pfeed.storages.storage_config import StorageConfig
 
     from pfund.brokers.broker_base import BaseBroker
     from pfund.components.actor_proxy import ActorProxy
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.entities.accounts.account_base import BaseAccount
     from pfund.entities.products.product_base import BaseProduct
-    from pfund.typing import Component, StrategyT
+    from pfund.typing import StrategyT
 
 import datetime
 import logging
@@ -47,9 +47,6 @@ ENV_COLORS = {
 
 
 class BaseEngine(metaclass=SingletonMeta):
-    DEFAULT_PROJECT_NAME: ClassVar[str] = "default_project"
-    DEFAULT_RUN_ID: ClassVar[str] = "default_run"
-
     def __init__(
         self,
         *,
@@ -63,6 +60,7 @@ class BaseEngine(metaclass=SingletonMeta):
     ):
         """
         Args:
+            name: engine name
             data_range: range of data to be used for the engine,
                 when it is a string, it is a resolution, e.g. '1m', '1d', '1w', '1mo', '1y'
                 when it is a dict, it is a dict with keys 'start_date' and 'end_date',
@@ -84,10 +82,12 @@ class BaseEngine(metaclass=SingletonMeta):
         setup_logging(env=env, engine_name=name)
         self._logger: logging.Logger = logging.getLogger("pfund")
         self._context: EngineContext = EngineContext(
-            env=env, name=name, data_range=data_range, settings=settings
+            env=env,
+            name=name,
+            data_range=data_range,
+            settings=settings,
         )
         self._is_running = False
-        # TODO: write engine's states using engine_feed.load()
         self._feed: PFundEngineFeed = pe.PFund().engine_feed
         self.brokers: dict[Broker, BaseBroker] = {}
         self.strategies: dict[str, BaseStrategy | ActorProxy[BaseStrategy]] = {}
@@ -129,30 +129,11 @@ class BaseEngine(metaclass=SingletonMeta):
     def is_running(self) -> bool:
         return self._is_running
 
-    def _is_using_ray(self):
-        """Returns True if any strategy is remote or has any remote component.
-        Subclasses may extend this (e.g. the trade engine also treats data with
-        num_stream_workers as using Ray). Conceptually: if Ray is being used,
-        then ZeroMQ is also being used.
-        """
-
-        def _has_any_remote_component(component: Component) -> bool:
-            for _component in component.get_components():
-                if _component.is_remote() or _has_any_remote_component(_component):
-                    return True
-            return False
-
-        for strategy in self.strategies.values():
-            if strategy.is_remote() or _has_any_remote_component(strategy):
-                return True
-        return False
-
     def add_strategy(
         self,
         strategy: StrategyT,
         resolution: str,
         name: str = "",
-        storage_config: StorageConfig | None = None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ) -> StrategyT | ActorProxy[StrategyT]:
@@ -202,7 +183,6 @@ class BaseEngine(metaclass=SingletonMeta):
             run_mode=RunMode.REMOTE if ray_kwargs else RunMode.LOCAL,
             resolution=resolution,
             engine_context=self._context,
-            storage_config=storage_config,
             is_top_component=True,
         )
 
@@ -266,15 +246,14 @@ class BaseEngine(metaclass=SingletonMeta):
             else:
                 raise NotImplementedError(f"Unhandled data type: {type(data)}")
 
-    def run(self, project: str = DEFAULT_PROJECT_NAME):
-        """
-        Args:
-            project: project name under the stage. Defaults to "default_project".
-                it will be used as a folder name that groups all runs of this stage together.
-                Path layout: {stage}s/{project}/your_runs
-                e.g. experiments/momentum_v2/
-        """
-        self._context.set_project_name(project)
+    def run(self, ctx: BaseContext | None = None):
+        if ctx is not None:
+            if ctx.env != self.env:
+                raise ValueError(
+                    f"mtflow's env {ctx.env} does not match with engine env {self.env}"
+                )
+            self._context.set_project_name(ctx.run.project)
+            self._context.set_run_name(ctx.run.id)
         self._logger.debug(f"Running {self.name}...")
         self._is_running = True
         self._gather()
