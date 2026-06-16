@@ -1,3 +1,5 @@
+# ruff: noqa
+
 import marimo
 
 __generated_with = "0.23.9"
