@@ -39,6 +39,21 @@ class TradingStore:
     def set_pivot_cols(self, pivot_cols: list[str]):
         self.PIVOT_COLS = pivot_cols
 
+    def pivot_df(self, df: nw.DataFrame[Any]) -> nw.DataFrame[Any]:
+        """Pivots signals dataframe from long form to wide form.
+
+        Args:
+            df: signals_df in long form
+        """
+        from pfund.datas.stores.base_data_store import pivot_long_to_wide
+
+        return pivot_long_to_wide(
+            df,
+            index_col=self.INDEX_COL,
+            pivot_cols=self.PIVOT_COLS,
+            key_cols=self.KEY_COLS,
+        )
+
     def get_df(
         self,
         window_size: int | None = None,
@@ -78,16 +93,6 @@ class TradingStore:
         max_rows = self._component.config["max_rows"]
         if max_rows is not None and len(self._df) > max_rows:
             self._df = self._df.tail(max_rows)
-
-    def pivot_df(self, df: nw.DataFrame[Any]) -> nw.DataFrame[Any]:
-        """Pivots signals dataframe from long form to wide form.
-        Args:
-            df: signals_df in long form
-        """
-        return df.pivot(
-            on=self.PIVOT_COLS,
-            index=self.INDEX_COL,
-        ).sort(self.INDEX_COL)
 
     # TODO: load {component_name}.parquet
     def materialize(self):
