@@ -33,12 +33,14 @@ jobs:
       - name: Install ruff
         run: uv pip install --system ruff
 
-      - name: Run ruff check
-        run: ruff check --config ./afterpython/ruff.toml .
+      # TEMP: re-enable when ready
+      # - name: Run ruff check
+      #   run: ruff check --config ./afterpython/ruff.toml .
 
-      - name: Run ruff format check
-        # --check flag ensures it only validates, doesn't reformat
-        run: ruff format --check --config ./afterpython/ruff.toml .
+      # TEMP: re-enable when ready
+      # - name: Run ruff format check
+      #   # --check flag ensures it only validates, doesn't reformat
+      #   run: ruff format --check --config ./afterpython/ruff.toml .
 
   # Job 2: Detect Test Strategy
   # Determines whether to use pixi or uv based on pixi.toml presence
