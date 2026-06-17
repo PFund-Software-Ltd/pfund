@@ -1,6 +1,7 @@
 from pfund_kit.cli import create_cli_group
-from pfund_kit.cli.commands import config, docker_compose, remove
+from pfund_kit.cli.commands import config, remove
 
+from pfund.cli.commands.docker_compose import docker_compose
 from pfund.cli.commands.settings import settings
 
 

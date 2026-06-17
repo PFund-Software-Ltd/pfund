@@ -38,7 +38,6 @@ class EngineContext:
 
         self.env = env
         self.name = name
-        self._env_var_prefix = f"PFUND_{env.upper()}_"
         self._env_vars = self._load_env_vars()
         self.run_mode = self._detect_run_mode()
         self.project_name = self.DEFAULT_PROJECT_NAME
@@ -84,9 +83,10 @@ class EngineContext:
         env_file_path = find_dotenv(
             filename=env_filename, usecwd=True, raise_error_if_not_found=False
         )
-        raw_env_vars = dotenv_values(env_file_path)
-        # add prefix to env vars to avoid name collisions, e.g. PFUND_LIVE_BYBIT_API_KEY
-        return {f"{self._env_var_prefix}{k}": v for k, v in raw_env_vars.items()}
+        # this dict is the source of truth for this engine's env vars; reads go
+        # through get_env. Since it's per-engine and never enters os.environ, two
+        # engines with different envs can't collide, so no prefix is needed.
+        return dict(dotenv_values(env_file_path))
 
     def _parse_data_range(
         self,
@@ -151,15 +151,15 @@ class EngineContext:
         toml.dump(data, settings_file_path, mode="update", auto_inline=True)
 
     def get_env(self, key: str) -> str | None:
-        """Get env var by key. Automatically adds prefix if not present.
+        """Get an env var for this engine's env, or None if unset.
 
-        Examples:
-            ctx.get_env('BYBIT_API_KEY')  # looks up PFUND_LIVE_BYBIT_API_KEY
-            ctx.get_env('PFUND_LIVE_BYBIT_API_KEY')  # also works
+        Reads from the per-engine dict loaded once at context init (the source of
+        truth for this engine's env vars); never touches os.environ.
+
+        Example:
+            ctx.get_env('BYBIT_API_KEY')
         """
-        if not key.startswith(self._env_var_prefix):
-            key = f"{self._env_var_prefix}{key}"
-        return self._env_vars[key]
+        return self._env_vars.get(key)
 
     def set_project_name(self, name: str):
         self.project_name = name

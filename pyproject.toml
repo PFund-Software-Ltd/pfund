@@ -25,21 +25,21 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = [
     "pfund-kit>=0.1.11",
-    'pfeed>=0.0.15',
-    "httpx>=0.28.1",
+    'pfeed>=0.0.16',
+    "niquests>=3.19.1",
     "websockets>=16.0.0 ; sys_platform != 'emscripten'",
 ]
 
 [project.optional-dependencies]
 core = [
     "numba>=0.65.1 ; sys_platform != 'emscripten'",
-    'pfeed[core,duckdb,yfinance]>=0.0.15',
+    'pfeed[core,duckdb,yfinance]>=0.0.16',
     'pfolio>=0.0.4',
     'pfund-plot[marimo]>=0.0.5',
     # TODO: enable when ready
     # 'mtflow>=0.0.1.dev2 ; sys_platform != "emscripten"',
 ]
-ibkr = ["pfund-ibapi>=10.42.1 ; sys_platform != 'emscripten'"]
+ibkr = ["pfund-ibapi>=10.47.1 ; sys_platform != 'emscripten'"]
 ta-lib = ["ta-lib>=0.6.4 ; sys_platform != 'emscripten'"]
 # TODO: enable when ready
 # optuna = ["mtflow[optuna]>=0.0.1.dev2]

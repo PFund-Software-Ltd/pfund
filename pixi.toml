@@ -27,17 +27,17 @@ py313 = ["py313", "test", "optional"]
 
 [pypi-dependencies]
 pfund-kit = ">=0.1.11"
-pfeed = ">=0.0.15"
-httpx = ">=0.28.1"
+pfeed = ">=0.0.16"
+niquests = ">=3.19.1"
 websockets = ">=16.0.0"
 
 [feature.optional.pypi-dependencies]
 numba = ">=0.65.1"
-pfeed = { version = ">=0.0.15", extras = ["core", "duckdb", "yfinance"] }
+pfeed = { version = ">=0.0.16", extras = ["core", "duckdb", "yfinance"] }
 pfolio = ">=0.0.4"
 pfund-plot = {version = ">=0.0.5", extras = ["marimo"]}
 # mtflow = ">=0.0.1.dev2"
-pfund-ibapi = ">=10.42.1"
+pfund-ibapi = ">=10.47.1"
 joblib = ">=1.5.3"
 scikit-learn = ">=1.9.0"
 torch = ">=2.11.0"
@@ -50,7 +50,7 @@ ta-lib = ">=0.6.4"
 [feature.dev.pypi-dependencies]
 pfund = { path = ".", editable = true }
 # TEMP
-pfeed = { path = "../pfeed", editable = true, extras = ["core", "duckdb", "yfinance"] }
+pfeed = { path = "../pfeed", editable = true, extras = ["core", "duckdb", "yfinance", "hf"] }
 pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo"] }
 pfund-kit = { path = "../pfund-kit", editable = true }
 pfolio = { path = "../pfolio", editable = true }

@@ -1,0 +1,56 @@
+name: pfund
+services:
+  ib-gateway:
+      restart: always
+      build:
+        context: ./latest
+        tags:
+          - "ghcr.io/gnzsnz/ib-gateway:10.47.1e"
+      image: ghcr.io/gnzsnz/ib-gateway:10.47.1e
+      environment:
+        TWS_USERID: ${IBKR_TWS_USERID}
+        TWS_PASSWORD: ${IBKR_TWS_PASSWORD}
+        TWS_PASSWORD_FILE: ${IBKR_TWS_PASSWORD_FILE}
+        TRADING_MODE: ${IBKR_TRADING_MODE:-paper}
+        TWS_SETTINGS_PATH: ${IBKR_TWS_SETTINGS_PATH:-}
+        TWS_ACCEPT_INCOMING: ${IBKR_TWS_ACCEPT_INCOMING:-}
+        TWS_MASTER_CLIENT_ID: ${IBKR_TWS_MASTER_CLIENT_ID:-}
+        READ_ONLY_API: ${IBKR_READ_ONLY_API:-}
+        VNC_SERVER_PASSWORD: ${IBKR_VNC_SERVER_PASSWORD:-}
+        TWOFA_TIMEOUT_ACTION: ${IBKR_TWOFA_TIMEOUT_ACTION:-exit}
+        BYPASS_WARNING: ${IBKR_BYPASS_WARNING:-}
+        AUTO_RESTART_TIME: ${IBKR_AUTO_RESTART_TIME:-}
+        AUTO_LOGOFF_TIME: ${IBKR_AUTO_LOGOFF_TIME:-}
+        TWS_COLD_RESTART: ${IBKR_TWS_COLD_RESTART:-}
+        SAVE_TWS_SETTINGS: ${IBKR_SAVE_TWS_SETTINGS:-}
+        RELOGIN_AFTER_TWOFA_TIMEOUT: ${IBKR_RELOGIN_AFTER_TWOFA_TIMEOUT:-no}
+        TWOFA_EXIT_INTERVAL: ${IBKR_TWOFA_EXIT_INTERVAL:-60}
+        TWOFA_DEVICE: ${IBKR_TWOFA_DEVICE:-}
+        EXISTING_SESSION_DETECTED_ACTION: ${IBKR_EXISTING_SESSION_DETECTED_ACTION:-primary}
+        ALLOW_BLIND_TRADING: ${IBKR_ALLOW_BLIND_TRADING:-no}
+        TIME_ZONE: ${IBKR_TIME_ZONE:-Etc/UTC}
+        TZ: ${IBKR_TIME_ZONE:-Etc/UTC}
+        CUSTOM_CONFIG: ${IBKR_CUSTOM_CONFIG:-NO}
+        JAVA_HEAP_SIZE: ${IBKR_JAVA_HEAP_SIZE:-}
+        SSH_TUNNEL: ${IBKR_SSH_TUNNEL:-}
+        SSH_OPTIONS: ${IBKR_SSH_OPTIONS:-}
+        SSH_ALIVE_INTERVAL: ${IBKR_SSH_ALIVE_INTERVAL:-}
+        SSH_ALIVE_COUNT: ${IBKR_SSH_ALIVE_COUNT:-}
+        SSH_PASSPHRASE: ${IBKR_SSH_PASSPHRASE:-}
+        SSH_REMOTE_PORT: ${IBKR_SSH_REMOTE_PORT:-}
+        SSH_USER_TUNNEL: ${IBKR_SSH_USER_TUNNEL:-}
+        SSH_RESTART: ${IBKR_SSH_RESTART:-}
+        SSH_VNC_PORT: ${IBKR_SSH_VNC_PORT:-}
+        START_SCRIPTS: ${IBKR_START_SCRIPTS:-}
+        X_SCRIPTS: ${IBKR_X_SCRIPTS:-}
+        IBC_SCRIPTS: ${IBKR_IBC_SCRIPTS:-}
+  #    volumes:
+  #      - ${PWD}/jts.ini:/home/ibgateway/Jts/jts.ini
+  #      - ${PWD}/config.ini:/home/ibgateway/ibc/config.ini
+  #      - ${PWD}/tws_settings/:${TWS_SETTINGS_PATH:-/home/ibgateway/tws_settings}
+  #      - ${PWD}/ssh/:/home/ibgateway/.ssh
+  #      - ${PWD}/init-scripts:/home/ibgateway/init-scripts
+      ports:
+        - "127.0.0.1:${IBKR_LIVE_PORT:-4001}:4003"
+        - "127.0.0.1:${IBKR_PAPER_PORT:-4002}:4004"
+        - "127.0.0.1:${IBKR_VNC_PORT:-5900}:5900"
