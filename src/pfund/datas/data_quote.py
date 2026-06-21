@@ -73,14 +73,14 @@ class QuoteData(MarketData):
         _, size = self.get_ask(level)
         return size
 
-    def on_update(self, bids, asks, ts: float | None, **extra_data):
+    def on_update(self, bids, asks, ts: float | None, **extra):
         # e.g. IB's reqMktData may send only asks with empty bids
         if bids:
             self._orderbook.bids = bids
         if asks:
             self._orderbook.asks = asks
         self.update_ts(ts)
-        self.update_extra_data(extra_data)
+        self.update_extra(extra)
 
     def __getstate__(self):
         state = self.__dict__.copy()

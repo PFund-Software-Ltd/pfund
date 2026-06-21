@@ -564,28 +564,16 @@ class ComponentMixin:
         self,
         venue: TradingVenue | str,
         basis: str,
-        exch: str = "",
+        exchange: str = "",
         symbol: str = "",
         name: str = "",
         **specs: Any,
     ) -> BaseProduct:
-        from pfund.brokers import create_broker
-
-        # NOTE: broker is only used to create product but nothing else
-        broker: BaseBroker = create_broker(
-            env=self.env, bkr=TradingVenue[venue.upper()].broker, settings=self.settings
+        venue = TradingVenue[venue.upper()]
+        VenueClass = venue.venue_class
+        product = VenueClass.create_product(
+            basis=basis, exchange=exchange, name=name, symbol=symbol, **specs
         )
-        if broker.name == Broker.CRYPTO:
-            exch = venue
-            product: BaseProduct = broker.add_product(
-                exch=exch, basis=basis, name=name, symbol=symbol, **specs
-            )
-        elif broker.name == Broker.IBKR:
-            product: BaseProduct = broker.add_product(
-                exch=exch, basis=basis, name=name, symbol=symbol, **specs
-            )
-        else:
-            raise NotImplementedError(f"Broker {broker.name} is not supported")
         if product.name not in self.products:
             self.products[product.name] = product
         else:

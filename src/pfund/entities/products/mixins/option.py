@@ -12,6 +12,7 @@ from pydantic import Field, field_validator
 
 from pfund.entities.products.mixins.derivative import DerivativeMixin
 from pfund.enums.option_type import OptionType
+from pfund.utils import trim_trailing_zeros
 
 
 # TODO: how to add Greeks? get from broker?
@@ -28,11 +29,7 @@ class OptionMixin(DerivativeMixin):
     @field_validator("strike_price", mode="after")
     @classmethod
     def _remove_redundant_zeros(cls, strike_price: Decimal) -> Decimal:
-        return (
-            strike_price.quantize(Decimal("1"))
-            if strike_price == strike_price.to_integral_value()
-            else strike_price
-        )
+        return trim_trailing_zeros(strike_price)
 
     def _create_symbol(self: OptionMixin | BaseProduct) -> str:
         """

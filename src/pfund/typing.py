@@ -9,14 +9,13 @@ if TYPE_CHECKING:
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.entities.products.product_base import BaseProduct
 
+Component: TypeAlias = "BaseStrategy | BaseModel | BaseFeature | BaseIndicator"
+ComponentT = TypeVar("ComponentT", bound="Component")
 StrategyT = TypeVar("StrategyT", bound="BaseStrategy")
 ModelT = TypeVar("ModelT", bound="BaseModel")
 FeatureT = TypeVar("FeatureT", bound="BaseFeature")
 IndicatorT = TypeVar("IndicatorT", bound="BaseIndicator")
 ProductT = TypeVar("ProductT", bound="BaseProduct")
-
-Component: TypeAlias = "BaseStrategy | BaseModel | BaseFeature | BaseIndicator"
-ComponentT = TypeVar("ComponentT", bound="Component")
 
 
 EngineName: TypeAlias = str
@@ -25,18 +24,8 @@ ProductName: TypeAlias = str
 AccountName: TypeAlias = str
 ColumnName: TypeAlias = str
 Currency: TypeAlias = str
-# when user types in the full channel name, it is of type FullDataChannel
 FullDataChannel: TypeAlias = str
 
-
-# since Literal doesn't support variables as inputs, define variables in common.py here with prefix 't'
-# DEPRECATED: to be removed
-tEnvironment = Literal["BACKTEST", "SANDBOX", "PAPER", "LIVE"]
-tTradingVenue = Literal["IB", "BINANCE", "BYBIT", "OKX"]
-tBroker = Literal["CRYPTO", "DEFI", "IB"]
-tCryptoExchange = Literal["BINANCE", "BYBIT", "OKX"]
-tDatabase = Literal["DUCKDB", "POSTGRESQL"]
-tOrderType = Literal["LIMIT", "MARKET", "STOP_MARKET", "STOP_LIMIT"]
 
 EngineNameWithProxy: TypeAlias = EngineName
 ComponentNameWithData: TypeAlias = ComponentName

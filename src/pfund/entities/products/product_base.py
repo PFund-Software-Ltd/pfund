@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from pfund.entities.products.asset_type import AssetType
 from pfund.entities.products.product_basis import ProductBasis
-from pfund.enums import Broker, CryptoExchange
+from pfund.enums import TradingVenue
 
 
 class BaseProduct(BaseModel):
@@ -17,8 +17,8 @@ class BaseProduct(BaseModel):
     )
 
     source: DataSource
-    broker: Broker | None = None
-    exchange: CryptoExchange | str | None = None
+    venue: TradingVenue | None = None
+    exchange: str | None = None
     basis: ProductBasis | str
     specs: dict[str, Any] = Field(
         default_factory=dict,
@@ -45,14 +45,6 @@ class BaseProduct(BaseModel):
         if isinstance(basis, str):
             basis = ProductBasis(basis=basis.upper())
         return basis
-
-    @model_validator(mode="after")
-    def _check_if_source_is_trading_venue(self):
-        from pfund.enums import TradingVenue
-
-        if self.source.value in TradingVenue.__members__:
-            assert self.broker is not None, f"broker must be provided for {self.source}"
-        return self
 
     @model_validator(mode="before")
     @classmethod
@@ -92,6 +84,8 @@ class BaseProduct(BaseModel):
         self.specs = self._create_specs()
         self.symbol = self.symbol or self._create_symbol()
         self.name = self.name or self._create_name()
+        if self.venue is None and self.source in TradingVenue.__members__:
+            self.venue = TradingVenue[self.source]
 
     def _create_name(self) -> str:
         return "_".join([str(self.source), self.symbol])
@@ -130,7 +124,7 @@ class BaseProduct(BaseModel):
     @classmethod
     def get_allowed_specs(cls) -> set[str]:
         """Gets all specification field names (required + optional) contributed by subclasses/mixins."""
-        from pfund.entities.products.product_crypto import CryptoProduct
+        from pfund.venues._crypto.product_base import CryptoProduct
 
         excluded = set(BaseProduct.model_fields) | set(CryptoProduct.model_fields)
         return {
@@ -142,7 +136,7 @@ class BaseProduct(BaseModel):
 
     def _create_specs(self) -> dict[str, Any]:
         """Create specifications that make a product unique"""
-        from pfund.entities.products.product_crypto import CryptoProduct
+        from pfund.venues._crypto.product_base import CryptoProduct
 
         # TODO: add DeFiProduct
         specification_fields = [

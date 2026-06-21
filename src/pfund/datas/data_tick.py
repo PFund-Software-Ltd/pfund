@@ -49,12 +49,12 @@ class TickData(MarketData):
         volume: float,
         ts: float,
         msg_ts: float | None = None,
-        extra_data: dict[str, Any] | None = None,
+        extra: dict[str, Any] | None = None,
     ):
         self._price = price
         self._volume = volume
         self.update_timestamps(ts=ts, msg_ts=msg_ts)
-        if extra_data is not None:
-            self.update_extra_data(extra_data)
+        if extra is not None:
+            self.update_extra(extra)
         # if self._is_appended:
         #     self.ticks.append((px, qty, ts))

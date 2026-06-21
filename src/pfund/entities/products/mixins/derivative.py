@@ -11,7 +11,7 @@ from decimal import Decimal
 class DerivativeMixin:
     underlying: str = ""
     # TODO: information that requires data fetching or config loading
-    contract_size: Decimal = Decimal(1)
+    multiplier: Decimal = Decimal(1)
 
     # contract_unit: str | None = None  # e.g. barrels
     # notional: Decimal | None = None
@@ -22,7 +22,3 @@ class DerivativeMixin:
 
     def __mixin_post_init__(self: DerivativeMixin | BaseProduct):
         self.underlying = self.base_asset  # TODO: inaccurate
-
-    @property
-    def multiplier(self) -> Decimal:
-        return self.contract_size

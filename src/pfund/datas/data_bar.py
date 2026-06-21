@@ -276,7 +276,7 @@ class BarData(MarketData):
         start_ts: float | None = None,
         end_ts: float | None = None,
         msg_ts: float | None = None,
-        extra_data: dict[str, Any] | None = None,
+        extra: dict[str, Any] | None = None,
     ):
         """
         Args:
@@ -312,8 +312,8 @@ class BarData(MarketData):
             is_snapshot=is_snapshot,
         )
         self.update_timestamps(ts=ts, msg_ts=msg_ts)
-        if extra_data is not None:
-            self.update_extra_data(extra_data)
+        if extra is not None:
+            self.update_extra(extra)
 
     def is_second(self):
         return self.bar._timeframe.is_second()

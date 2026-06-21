@@ -1,37 +1,57 @@
 from __future__ import annotations
-
-from typing import TYPE_CHECKING
+from typing import ClassVar, TypedDict, TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from pfund.typing import Currency
 
-from dataclasses import dataclass, replace
+    class BalanceUpdate(TypedDict, total=False):
+        total: Decimal
+        available: Decimal
+
+
+import time
 from decimal import Decimal
 
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, computed_field
 
-class BaseBalance:
-    @dataclass(frozen=True)
-    class Snapshot:
-        ts: float = 0.0
-        wallet: Decimal = Decimal(0)
-        available: Decimal = Decimal(0)
-        margin: Decimal = Decimal(0)
 
-    def __init__(self, ccy: Currency):
-        self.ccy = ccy
-        self._balance = self.Snapshot()
+class BalanceSnapshot(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
 
-    def on_update(self, data: dict[str, Decimal], ts: float | None = None):
-        self._balance = replace(self._balance, ts=ts, **data)
+    updated_at: float = Field(default_factory=time.time)
+    total: Decimal = Field(default=Decimal(0), ge=0)
+    available: Decimal = Field(default=Decimal(0), ge=0)
+
+
+class BaseBalance(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+    _Snapshot: ClassVar[type[BalanceSnapshot]] = BalanceSnapshot
+    _snapshot: BalanceSnapshot = PrivateAttr(default_factory=BalanceSnapshot)
+
+    currency: str
+
+    def on_snapshot_update(self, update: BalanceUpdate) -> None:
+        self._snapshot = self._Snapshot.model_validate(update)
 
     @property
-    def wallet(self) -> Decimal:
-        return self._balance.wallet
+    def ccy(self) -> str:
+        return self.currency
 
+    @computed_field
+    @property
+    def total(self) -> Decimal:
+        return self._snapshot.total
+
+    @computed_field
     @property
     def available(self) -> Decimal:
-        return self._balance.available
+        return self._snapshot.available
 
     @property
-    def margin(self) -> Decimal:
-        return self._balance.margin
+    def updated_at(self) -> float:
+        return self._snapshot.updated_at
+
+    def __str__(self):
+        return f"Currency={self.currency} | Total={self.total} | Available={self.available}"
+
+    def __repr__(self):
+        return f"{self.currency} | total={self.total} | available={self.available}"

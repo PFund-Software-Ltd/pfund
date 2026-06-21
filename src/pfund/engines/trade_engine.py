@@ -1,19 +1,7 @@
 # pyright: reportArgumentType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false
-"""This is an engine used to trade against multiple brokers and cryptocurrency exchanges.
-
-This engine is designed for algorithmic trading and contains all the major
-components at the highest level such as:
-    brokers (e.g. Interactive Brokers, Crypto, ...),
-        where broker `Crypto` is a fake broker name that includes the actual
-        crypto exchanges (e.g. Binance, Bybit, ...)
-    strategies (your trading strategies)
-In order to communicate with other processes, it uses ZeroMQ as the core
-message queue.
-"""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from mtflow.contexts.trade_context import TradeContext
@@ -33,10 +21,14 @@ from threading import Thread
 from pfeed.enums import DataCategory
 
 from pfund.engines.base_engine import BaseEngine
+from pfund.engines.managers.order_manager import OrderManager
+from pfund.engines.managers.portfolio_manager import PortfolioManager
 from pfund.enums import Environment
 
 
 class TradeEngine(BaseEngine):
+    settings: TradeEngineSettings
+
     def __init__(
         self,
         *,
@@ -59,10 +51,20 @@ class TradeEngine(BaseEngine):
         self._worker: ZeroMQ | None = None
         self._data_engine: DataEngine | None = None
         self._zmq_thread: Thread | None = None
+        self._order_manager = OrderManager()
+        self._portfolio_manager = PortfolioManager()
 
     @property
-    def settings(self) -> TradeEngineSettings:
-        return cast("TradeEngineSettings", self._context.settings)
+    def order_manager(self) -> OrderManager:
+        return self._order_manager
+
+    om = order_manager
+
+    @property
+    def portfolio_manager(self) -> PortfolioManager:
+        return self._portfolio_manager
+
+    pm = portfolio_manager
 
     # TODO: include descriptions
     def show_zmq_graph(self):
@@ -105,7 +107,7 @@ class TradeEngine(BaseEngine):
             self.settings.zmq_ports.update({sender_name: data_engine_port})
 
         def _collect_msg_if_not_using_ray(msg: StreamingMessage):
-            for strategy in self.strategies.values():
+            for strategy in self._strategies.values():
                 strategy.databoy._collect(msg=msg)
             return msg
 
@@ -223,13 +225,13 @@ class TradeEngine(BaseEngine):
                     return True
             return False
 
-        for strategy in self.strategies.values():
+        for strategy in self._strategies.values():
             if strategy.is_remote() or _has_any_remote_component(strategy):
                 return True
         if self._data_engine:
             return any(
                 data.config.num_stream_workers is not None
-                for strategy in self.strategies.values()
+                for strategy in self._strategies.values()
                 for data in strategy.get_datas()
             )
         return False
@@ -238,7 +240,7 @@ class TradeEngine(BaseEngine):
         from pfeed.streaming.zeromq import ZeroMQDataChannel
 
         self._setup_proxy()
-        for strategy in self.strategies.values():
+        for strategy in self._strategies.values():
             strategy._setup_messaging()
         self._setup_worker()
         assert self._proxy is not None, "proxy is not set"

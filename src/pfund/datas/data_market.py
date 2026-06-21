@@ -6,9 +6,10 @@ if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
     from pfund.datas.timeframe import Timeframe
     from pfund.entities.products.product_base import BaseProduct
-    from pfund.enums import Broker, CryptoExchange
+    from pfund.enums import TradingVenue
 
 from abc import ABC, abstractmethod
+from decimal import Decimal
 
 from pfeed.enums import DataCategory
 
@@ -33,18 +34,20 @@ class MarketData(TimeBasedData, ABC):
         self.timeframe: Timeframe = resolution.timeframe
         self._resamplers = []  # data used to be resampled into another data
         self._resamplees = []  # opposite of resampler
+        # TODO:
+        self.mark_price: Decimal | None = None
 
     @abstractmethod
     def on_update(self, *args: Any, **kwargs: Any):
         pass
 
     @property
-    def broker(self) -> Broker | None:
-        return self.product.broker
+    def mark_px(self) -> Decimal | None:
+        return self.mark_price
 
     @property
-    def exchange(self) -> CryptoExchange | str | None:
-        return self.product.exchange
+    def venue(self) -> TradingVenue | None:
+        return self.product.venue
 
     def is_quote_l1(self):
         return self.is_quote() and self.resolution.orderbook_level == 1
@@ -115,7 +118,7 @@ class MarketData(TimeBasedData, ABC):
     def to_dict(self) -> dict[str, Any]:
         return {
             **super().to_dict(),
-            "product": self.product.to_dict(),
+            "product": self.product.model_dump(),
             "resolution": repr(self.resolution),
         }
 

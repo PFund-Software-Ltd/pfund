@@ -10,6 +10,28 @@ from pfund_kit.cli.commands.docker_compose import docker_compose as _kit_docker_
 _ENV_FILE_REQUIRED_SUBCOMMANDS = {"up", "create", "run"}
 
 
+def _warn_third_party_image():
+    """Disclaim the upstream IB Gateway image before it receives credentials.
+
+    The ib-gateway service runs gnzsnz/ib-gateway-docker, a third-party image
+    pfund neither maintains nor security-audits. We print this on every launch
+    subcommand (up/create/run). It can over-fire if a future service is started
+    without ib-gateway, but that's deliberate: an extra warning is harmless,
+    whereas a missed one lets credentials flow into an unvetted image silently.
+    (Future: vet/pin the upstream, or move this into the container via
+    START_SCRIPTS so it scopes to ib-gateway exactly, once there's >1 service.)
+    """
+    click.secho(
+        "\n⚠️  pfund's IB Gateway runs a THIRD-PARTY image, not an official pfund package:\n"
+        + "      gnzsnz/ib-gateway-docker  (https://github.com/gnzsnz/ib-gateway-docker)\n"
+        + "    It bundles IBKR's software + IBC and receives your IBKR credentials.\n"
+        + "    pfund does NOT maintain or security-audit this upstream image — review it\n"
+        + "    yourself before using live credentials. No security guarantees.\n",
+        fg="yellow",
+        err=True,
+    )
+
+
 @click.command(
     name="docker-compose",
     context_settings=dict(
@@ -42,8 +64,9 @@ def docker_compose(ctx):
         if not has_env_file:
             raise click.UsageError(
                 "pfund compose up/create/run requires an explicit --env-file "
-                "selecting the trading env, e.g. `pfund compose --env-file .env.paper up`"
+                + "selecting the trading env, e.g. `pfund compose --env-file .env.paper up`"
             )
+        _warn_third_party_image()
     # delegate to the shared pfund-kit command (handles --file, docker checks, run).
     # call its callback within the CURRENT context so our ctx.args (the user's
     # --env-file and compose subcommand) is preserved; ctx.forward/ctx.invoke would

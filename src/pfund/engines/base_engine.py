@@ -1,24 +1,21 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportArgumentType=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from mtflow.contexts.base_context import BaseContext
     from pfeed.sources.pfund.engine_feed import PFundEngineFeed
 
-    from pfund.brokers.broker_base import BaseBroker
+    from pfund.venues.venue_base import BaseVenue
     from pfund.components.actor_proxy import ActorProxy
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.datas.data_base import BaseData
     from pfund.datas.resolution import Resolution
     from pfund.engines.engine_context import DataRangeDict
-    from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
-    from pfund.engines.settings.sandbox_engine_settings import SandboxEngineSettings
-    from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
-    from pfund.entities.accounts.account_base import BaseAccount
-    from pfund.entities.products.product_base import BaseProduct
-    from pfund.typing import StrategyT
+    from pfund.engines.settings.base_engine_settings import BaseEngineSettings
+    from pfund.entities import BaseAccount, BaseProduct
+    from pfund.typing import StrategyT, ComponentName
 
 import datetime
 import logging
@@ -27,7 +24,6 @@ from pfeed.enums import DataCategory
 from pfund_kit.style import RichColor, TextStyle, cprint
 from pfund_kit.utils.singleton import SingletonMeta
 from pfund.enums import (
-    Broker,
     ComponentType,
     Environment,
     RunMode,
@@ -53,10 +49,7 @@ class BaseEngine(metaclass=SingletonMeta):
         env: Environment,
         name: str,
         data_range: str | Resolution | DataRangeDict | tuple[str, str] | Literal["ytd"],
-        settings: TradeEngineSettings
-        | BacktestEngineSettings
-        | SandboxEngineSettings
-        | None = None,
+        settings: BaseEngineSettings | None = None,
     ):
         """
         Args:
@@ -89,8 +82,10 @@ class BaseEngine(metaclass=SingletonMeta):
         )
         self._is_running = False
         self._feed: PFundEngineFeed = pe.PFund().engine_feed
-        self.brokers: dict[Broker, BaseBroker] = {}
-        self.strategies: dict[str, BaseStrategy | ActorProxy[BaseStrategy]] = {}
+        self._venues: dict[TradingVenue, BaseVenue] = {}
+        self._strategies: dict[
+            ComponentName, BaseStrategy | ActorProxy[BaseStrategy]
+        ] = {}
         self.results: dict[str, Any] | None = None
         cprint(
             f"{self.env} {self.name} is running (data_range=({self.data_start}, {self.data_end}))",
@@ -110,13 +105,8 @@ class BaseEngine(metaclass=SingletonMeta):
         return self._context.run_mode
 
     @property
-    def settings(
-        self,
-    ) -> TradeEngineSettings | BacktestEngineSettings | SandboxEngineSettings:
-        return cast(
-            "TradeEngineSettings | BacktestEngineSettings | SandboxEngineSettings",
-            self._context.settings,
-        )
+    def settings(self) -> BaseEngineSettings:
+        return self._context.settings
 
     @property
     def data_start(self) -> datetime.date:
@@ -153,7 +143,7 @@ class BaseEngine(metaclass=SingletonMeta):
         )
 
         strat = name or strategy.name
-        if strat in self.strategies:
+        if strat in self._strategies:
             raise ValueError(f"{strat} already exists")
 
         # enforce GLOBAL name uniqueness (across other Ray actors too), not just this engine's dict
@@ -186,30 +176,30 @@ class BaseEngine(metaclass=SingletonMeta):
             is_top_component=True,
         )
 
-        self.strategies[strat] = strategy
+        self._strategies[strat] = strategy
         self._logger.debug(f"added '{strat}'")
         return strategy
 
     def get_strategy(self, name: str) -> BaseStrategy | ActorProxy[BaseStrategy]:
-        return self.strategies[name]
+        return self._strategies[name]
 
-    def _add_broker(self, venue: TradingVenue) -> BaseBroker:
-        from pfund.brokers import create_broker
+    def _add_venue(self, venue: TradingVenue) -> BaseVenue:
+        venue = TradingVenue[venue.upper()]
+        if venue not in self._venues:
+            VenueClass = venue.venue_class
+            venue = VenueClass(env=self.env, settings=self.settings)
+            self._venues[venue] = venue
+            self._logger.debug(f"added trading venue {venue}")
+        return self._venues[venue]
 
-        bkr: Broker = TradingVenue[venue.upper()].broker
-        if bkr not in self.brokers:
-            broker = create_broker(env=self.env, bkr=bkr, settings=self.settings)
-            broker.set_engine_settings(self.settings)
-            self.brokers[bkr] = broker
-            self._logger.debug(f"added broker {bkr}")
-        return self.brokers[bkr]
+    def get_venue(self, venue: TradingVenue) -> BaseVenue:
+        return self._venues[TradingVenue[venue.upper()]]
 
-    def get_broker(self, bkr: Broker) -> BaseBroker:
-        return self.brokers[Broker[bkr.upper()]]
+    get_trading_venue = get_venue
 
     def _add_product(self, product: BaseProduct):
-        broker: BaseBroker = self._add_broker(product.source)
-        broker.add_product(
+        venue: BaseVenue = self._add_venue(product.source)
+        venue.add_product(
             exch=product.exchange,
             basis=str(product.basis),
             name=product.name,
@@ -219,20 +209,20 @@ class BaseEngine(metaclass=SingletonMeta):
         self._logger.debug(f"added product {product.symbol}")
 
     def _add_account(self, account: BaseAccount):
-        broker: BaseBroker = self._add_broker(account.venue)
-        account = broker.add_account(**account.to_dict())
+        venue: BaseVenue = self._add_venue(account.venue)
+        account = venue.add_account(**account.to_dict())
         self._logger.debug(f"added account {account}")
 
     def _get_all_datas(self) -> set[BaseData]:
         datas: list[BaseData] = []
-        for strategy in self.strategies.values():
+        for strategy in self._strategies.values():
             datas.extend(strategy.get_datas())
             for component in strategy.get_components():
                 datas.extend(component.get_datas())
         return set(datas)
 
     def _gather(self):
-        for strategy in self.strategies.values():
+        for strategy in self._strategies.values():
             strategy: BaseStrategy | ActorProxy[BaseStrategy]
             strategy._gather()
 
@@ -257,18 +247,18 @@ class BaseEngine(metaclass=SingletonMeta):
         self._logger.debug(f"Running {self.name}...")
         self._is_running = True
         self._gather()
-        for broker in self.brokers.values():
-            broker.start()
-        for strategy in self.strategies.values():
+        for venue in self._venues.values():
+            venue.start()
+        for strategy in self._strategies.values():
             strategy.start()
 
     def end(self):
         from pfeed.utils.ray import shutdown_ray
 
         self._logger.debug(f"Ending {self.name}...")
-        for strategy in self.strategies.values():
+        for strategy in self._strategies.values():
             strategy.stop()
-        for broker in self.brokers.values():
-            broker.stop()
+        for venue in self._venues.values():
+            venue.stop()
         self._is_running = False
         shutdown_ray()

@@ -26,6 +26,7 @@ requires-python = ">=3.11"
 dependencies = [
     "pfund-kit>=0.1.11",
     'pfeed>=0.0.16',
+    "apscheduler>=3.11.2",
     "niquests>=3.19.1",
     "websockets>=16.0.0 ; sys_platform != 'emscripten'",
 ]
@@ -39,20 +40,25 @@ core = [
     # TODO: enable when ready
     # 'mtflow>=0.0.1.dev2 ; sys_platform != "emscripten"',
 ]
-ibkr = ["pfund-ibapi>=10.47.1 ; sys_platform != 'emscripten'"]
-ta-lib = ["ta-lib>=0.6.4 ; sys_platform != 'emscripten'"]
+ibkr = ["pfund-ibapi>=10.47.1"]
+alpaca = ["alpaca-py>=0.43.4"]
+hyperliquid = ["hyperliquid-python-sdk>=0.24.0"]
+ta-lib = ["ta-lib>=0.6.8"]
 # TODO: enable when ready
 # optuna = ["mtflow[optuna]>=0.0.1.dev2]
 # botorch = ["mtflow[botorch]>=0.0.1.dev2]
-sklearn = ["joblib>=1.5.3", "scikit-learn>=1.9.0"]
+sklearn = [
+    "joblib>=1.5.3",
+    "scikit-learn>=1.9.0",
+]
 torch = [
-    "torch>=2.11.0 ; sys_platform != 'emscripten'",
-    "safetensors>=0.8.0 ; sys_platform != 'emscripten'",
+    "torch>=2.12.1",
+    "safetensors>=0.8.0",
 ]
 jax = [
-    "jax>=0.10.1 ; sys_platform != 'emscripten'",
-    "safetensors>=0.8.0 ; sys_platform != 'emscripten'",
-    "orbax-checkpoint>=0.12.0 ; sys_platform != 'emscripten'",
+    "jax>=0.10.2",
+    "safetensors>=0.8.0",
+    "orbax-checkpoint>=0.12.0",
 ]
 
 [project.scripts]

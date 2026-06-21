@@ -49,8 +49,8 @@ class ProductBasis(BaseModel):
         if not re.match(pattern, basis):
             raise ValueError(
                 f"Invalid product basis format: `{basis}`. "
-                'Product basis must be in format "XXX_YYY_ZZZ" or "XXX_YYY_ZZZ-ZZZ" (e.g. "TSLA_USD_STK", "BTC_USDT_SPOT", "ETH_USDT_PERP", "BTC_USD_INVERSE-PERP") where each part contains only letters '
-                f"and maximum {max_len} characters long."
+                + 'Product basis must be in format "XXX_YYY_ZZZ" or "XXX_YYY_ZZZ-ZZZ" (e.g. "TSLA_USD_STK", "BTC_USDT_SPOT", "ETH_USDT_PERP", "BTC_USD_INVERSE-PERP") where each part contains only letters '
+                + f"and maximum {max_len} characters long."
             )
         return basis
 

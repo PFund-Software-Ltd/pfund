@@ -28,8 +28,12 @@ py313 = ["py313", "test", "optional"]
 [pypi-dependencies]
 pfund-kit = ">=0.1.11"
 pfeed = ">=0.0.16"
+apscheduler = ">=3.11.2"
 niquests = ">=3.19.1"
 websockets = ">=16.0.0"
+
+[feature.optional.system-requirements]
+macos = "14.0"  # min version of macOS required by torch>=2.12.0
 
 [feature.optional.pypi-dependencies]
 numba = ">=0.65.1"
@@ -38,14 +42,17 @@ pfolio = ">=0.0.4"
 pfund-plot = {version = ">=0.0.5", extras = ["marimo"]}
 # mtflow = ">=0.0.1.dev2"
 pfund-ibapi = ">=10.47.1"
+alpaca-py = ">=0.43.4"
+hyperliquid-python-sdk = ">=0.24.0"
 joblib = ">=1.5.3"
 scikit-learn = ">=1.9.0"
-torch = ">=2.11.0"
+torch = ">=2.12.1"
 safetensors = ">=0.8.0"
-jax = ">=0.10.1"
+jax = ">=0.10.2"
 orbax-checkpoint = ">=0.12.0"
-[feature.optional.dependencies]
-ta-lib = ">=0.6.4"
+ta-lib = ">=0.6.8"
+# [feature.optional.dependencies]
+# ta-lib = ">=0.6.4"
 
 [feature.dev.pypi-dependencies]
 pfund = { path = ".", editable = true }

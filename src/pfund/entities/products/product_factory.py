@@ -31,7 +31,8 @@ def ProductFactory(source: DataSource | str, basis: str) -> type[BaseProduct]:
 
     source = DataSource[str(source).upper()]
     if source.value in TradingVenue.__members__:
-        Product = TradingVenue[source.value].product_class
+        VenueClass = TradingVenue[source.value].venue_class
+        Product = VenueClass.Product
     else:
         Product = source.product_class
     asset_type = ProductBasis(basis=basis.upper()).asset_type

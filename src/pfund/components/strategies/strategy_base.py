@@ -5,25 +5,21 @@ from typing import TYPE_CHECKING, Any, Literal, overload
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
 
-    from pfund.brokers.broker_base import BaseBroker
     from pfund.components.actor_proxy import ActorProxy
     from pfund.entities.accounts.account_base import BaseAccount
-    from pfund.entities.accounts.account_crypto import CryptoAccount
-    from pfund.entities.accounts.account_ibkr import IBKRAccount
+    from pfund.venues._crypto.account_base import CryptoAccount
+    from pfund.entities.accounts.account_ibkr import InteractiveBrokersAccount
     from pfund.entities.balances.balance_base import BaseBalance
-    from pfund.entities.balances.balance_crypto import CryptoBalance
-    from pfund.entities.balances.balance_ibkr import IBKRBalance
+    from pfund.entities.balances.balance_ibkr import InteractiveBrokersBalance
     from pfund.entities.orders.order_base import BaseOrder
     from pfund.entities.positions.position_base import BasePosition
-    from pfund.entities.positions.position_crypto import CryptoPosition
-    from pfund.entities.positions.position_ibkr import IBKRPosition
+    from pfund.entities.positions.position_ibkr import InteractiveBrokersPosition
     from pfund.entities.products.product_base import BaseProduct
-    from pfund.enums import CryptoExchange, OrderSide
+    from pfund.enums import TradingVenue, Side
     from pfund.typing import (
         AccountName,
         Component,
-        Currency,
-        ProductName,
+        ComponentName,
         StrategyT,
     )
 
@@ -39,23 +35,8 @@ from pfund.enums import Broker, TradingVenue
 class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def __init__(self, *args: Any, **kwargs: Any):
         self._df_form: Literal["wide", "long"] = "long"
-        # TODO: also include sub-strategies' accounts
         self.accounts: dict[AccountName, BaseAccount] = {}
         self.strategies: dict[str, BaseStrategy] = {}
-        # TODO: Portfolio (from pfolio?) at this level?
-        # self._portfolio: Portfolio = ...
-        # TODO: aggregate sub-strategies' portfolios
-        # self._aggregated_portfolio: Portfolio = ...
-
-        # FIXME: move positions, balances, orders, all to account object!
-        # TODO: if its a sub-strategy, it should not have positions, balances, orders, etc.
-        self.positions: dict[AccountName, dict[ProductName, BasePosition]] = {}
-        self.balances: dict[AccountName, dict[Currency, BaseBalance]] = {}
-        # NOTE: includes submitted orders and opened orders
-        self.orders: dict[AccountName, list[BaseOrder]] = {}
-        # TODO: create Trade object, BaseTrade?
-        # self.trades: dict[AccountName, list[BaseTrade]] = {}
-
         self.__mixin_post_init__(
             *args, **kwargs
         )  # calls ComponentMixin.__mixin_post_init__()
@@ -89,21 +70,23 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         return [*self.strategies.values(), *super().get_components()]
 
     @overload
-    def get_position(
-        self, account: CryptoAccount, pdt: str
-    ) -> CryptoPosition | None: ...
+    def get_position(self, account: CryptoAccount, pdt: str) -> BasePosition | None: ...
 
     @overload
-    def get_position(self, account: IBKRAccount, pdt: str) -> IBKRPosition | None: ...
+    def get_position(
+        self, account: InteractiveBrokersAccount, pdt: str
+    ) -> InteractiveBrokersPosition | None: ...
 
     def get_position(self, account: BaseAccount, pdt: str) -> BasePosition | None:
         return self.positions[account].get(pdt, None)
 
     @overload
-    def get_balance(self, account: CryptoAccount, ccy: str) -> CryptoBalance | None: ...
+    def get_balance(self, account: CryptoAccount, ccy: str) -> BaseBalance | None: ...
 
     @overload
-    def get_balance(self, account: IBKRAccount, ccy: str) -> IBKRBalance | None: ...
+    def get_balance(
+        self, account: InteractiveBrokersAccount, ccy: str
+    ) -> InteractiveBrokersBalance | None: ...
 
     def get_balance(self, account: BaseAccount, ccy: str) -> BaseBalance | None:
         return self.balances[account].get(ccy, None)
@@ -121,7 +104,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     @overload
     def add_account(
         self,
-        venue: CryptoExchange | str,
+        venue: TradingVenue | str,
         name: str = "",
         key: str = "",
         secret: str = "",
@@ -135,22 +118,16 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         host: str = "",
         port: int | None = None,
         client_id: int | None = None,
-    ) -> IBKRAccount: ...
+    ) -> InteractiveBrokersAccount: ...
 
     def add_account(
         self, venue: TradingVenue | str, name: str = "", **kwargs: Any
     ) -> BaseAccount:
-        from pfund.brokers import create_broker
-
         venue = TradingVenue[venue.upper()]
-        # NOTE: broker is only used to create account but does nothing else
-        broker: BaseBroker = create_broker(
-            env=self.env, bkr=venue.broker, settings=self.settings
+        VenueClass = venue.venue_class
+        account: BaseAccount = VenueClass.create_account(
+            name=name or self.name, **kwargs
         )
-        account: BaseAccount = broker.add_account(
-            venue=venue, name=name or self.name, **kwargs
-        )
-
         if not self.is_top_component():
             raise ValueError(f"Sub-strategy '{self.name}' cannot add accounts")
 
@@ -195,7 +172,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         self.on_balance(balance.account, balance)
 
     def _update_orders(
-        self, order, type_: Literal["submitted", "opened", "closed", "amended"]
+        self, order, type_: Literal["submitted", "opened", "closed", "modified"]
     ):
         if type_ in ["submitted", "opened"]:
             if order not in self.orders[order.account]:
@@ -222,9 +199,10 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
 
     def create_order(
         self,
+        *,
         account: BaseAccount,
         product: BaseProduct,
-        side: OrderSide | Literal["BUY", "SELL"] | Literal[1, -1],
+        side: Side | Literal["BUY", "SELL", 1, -1],
         quantity: float,
         price: float | None = None,
         **kwargs,

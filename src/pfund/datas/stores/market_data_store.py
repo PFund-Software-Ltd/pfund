@@ -25,7 +25,7 @@ if TYPE_CHECKING:
         volume: float
         is_incremental: bool
         msg_ts: float | None
-        extra_data: dict[str, Any]
+        extra: dict[str, Any]
 
 
 import time
@@ -194,9 +194,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         data = self.get_data(update["product"], update["resolution"])
         if data is None:
             return
-        data.on_update(
-            update["bids"], update["asks"], update["ts"], **update["extra_data"]
-        )
+        data.on_update(update["bids"], update["asks"], update["ts"], **update["extra"])
         self._databoy._deliver(data)
 
     # TODO
@@ -209,7 +207,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             volume=update["volume"],
             ts=update["ts"],
             msg_ts=update["msg_ts"],
-            extra_data=update["extra_data"],
+            extra=update["extra"],
         )
         self._databoy._deliver(data)
         if data_resamplees := data.get_resamplees():
@@ -240,7 +238,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                 v=update["volume"],
                 ts=update["ts"],
                 msg_ts=update["msg_ts"],
-                extra_data=update["extra_data"],
+                extra=update["extra"],
                 is_incremental=update["is_incremental"],
             )
 

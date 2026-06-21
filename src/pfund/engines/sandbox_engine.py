@@ -1,3 +1,4 @@
+# pyright: reportIncompatibleVariableOverride=false
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal, cast
@@ -12,6 +13,8 @@ from pfund.enums import Environment
 
 
 class SandboxEngine(TradeEngine):
+    settings: SandboxEngineSettings
+
     def __init__(
         self,
         name: str = "engine",
@@ -28,7 +31,3 @@ class SandboxEngine(TradeEngine):
             data_range=data_range,
             settings=settings,
         )
-
-    @property
-    def settings(self) -> SandboxEngineSettings:
-        return cast("SandboxEngineSettings", self._context.settings)

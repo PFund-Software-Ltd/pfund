@@ -12,7 +12,7 @@ class BaseData:
 
     def __init__(self, data_config: DataConfig | None = None):
         self.config: DataConfig = data_config or DataConfig()
-        self.extra_data: dict[str, Any] = {}
+        self.extra: dict[str, Any] = {}
 
     @property
     def source(self) -> DataSource:
@@ -28,8 +28,8 @@ class BaseData:
             "data_config": self.config.model_dump(),
         }
 
-    def update_extra_data(self, extra_data: dict[str, Any]):
-        self.extra_data = extra_data
+    def update_extra(self, extra: dict[str, Any]):
+        self.extra = extra
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, BaseData):

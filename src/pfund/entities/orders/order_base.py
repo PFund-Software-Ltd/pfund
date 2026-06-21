@@ -1,124 +1,247 @@
 from __future__ import annotations
-
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias
 
 if TYPE_CHECKING:
-    from pfund.entities.accounts.account_base import BaseAccount
-    from pfund.entities.products.product_base import BaseProduct
-    from pfund.enums import Broker, CryptoExchange, TradingVenue
+    from pfund.entities import BaseProduct, BaseAccount
+    from pfund.enums import TradingVenue
 
-import logging
 import math
 import time
-from decimal import Decimal
+import logging
 from uuid import uuid4
+from decimal import Decimal, ROUND_HALF_UP
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
+from pfund.entities import Trade, Quantity
+from pfund.utils import trim_trailing_zeros
+from pfund.enums.order_status import OrderStatus
 from pfund.enums import (
-    AmendOrderStatus,
-    CancelOrderStatus,
-    FillOrderStatus,
-    MainOrderStatus,
-    OrderSide,
+    Side,
     OrderType,
     TimeInForce,
 )
 
-# Indices in order status, e.g. order status = 'S---', index 0 represents the MainOrderStatus etc.
-STATUS_INDEX = {
-    MainOrderStatus: 0,
-    0: MainOrderStatus,
-    FillOrderStatus: 1,
-    1: FillOrderStatus,
-    CancelOrderStatus: 2,
-    2: CancelOrderStatus,
-    AmendOrderStatus: 3,
-    3: AmendOrderStatus,
-}
 
-ORDER_SIDE = {
-    OrderSide.BUY: 1,
-    1: OrderSide.BUY,
-    OrderSide.SELL: -1,
-    -1: OrderSide.SELL,
-}
-logger = logging.getLogger("orders")
+StrategyName: TypeAlias = str
+logger = logging.getLogger("pfund.order_manager")
 
 
 class BaseOrder(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
 
-    creator: str = Field(
-        default="",
-        description="creator of the order, e.g. strategy's name, agent's name, etc.",
+    creator: StrategyName | Literal["USER"] = Field(
+        description="""
+        creator of the order, in most cases it should be a strategy name, e.g. xxx_strategy.
+        If it is a manual order placed by the user, it is marked as "USER".
+        """,
     )
     account: BaseAccount
     product: BaseProduct
-    side: OrderSide | None = None
-    size: Decimal | None = Field(
-        default=None, description="size = signed quantity = quantity * side"
-    )
-    quantity: Decimal = Field(default=0.0, gt=0.0)
+    side: Side | Literal["BUY", "SELL", 1, -1]
+    quantity: Quantity = Field(gt=0.0)
     price: Decimal | None = Field(default=None, gt=0.0)
-    trigger_price: Decimal | None = None
-    target_price: Decimal | None = None  # used for slippage calculation
+    amend_price: Decimal | None = Field(
+        default=None, gt=0.0, description="price to amend the order to"
+    )
+    amend_quantity: Quantity | None = Field(
+        default=None, gt=0.0, description="quantity to amend the order to"
+    )
+    trigger_price: Decimal | None = Field(
+        default=None,
+        description="""
+        price level that activates a conditional order (stop/take-profit);
+        when touched, the order converts into a market or limit order.
+        """,
+    )
+    trades: list[Trade] = Field(default_factory=list)
+    target_price: Decimal | None = Field(
+        default=None,
+        description="""
+        FOR ANALYSIS ONLY: the price the creator ideally wanted to trade at.
+        It is never sent to the trading venue and has no effect on the
+        actual order being placed; it only records intent for post-trade analysis.
+        e.g. the gap between the fill (avg_price) and target_price measures fill quality
+        """,
+    )
     order_type: OrderType | str = OrderType.LIMIT
     time_in_force: TimeInForce | str = TimeInForce.GTC
-    is_reduce_only: bool = False
-    key: str | None = Field(
-        default=None,
-        description="unique key for the order, can be used as client order id",
+    key: str = Field(
+        default="",
+        description="""
+        your own identifier for the order, set by you when placing it (auto-generated if omitted).
+        This is the client order id sent to the trading venue, as opposed to order_id which is
+        assigned by the venue.
+        """,
     )
     order_id: str = Field(default="", description="order id given by the trading venue")
-    alias: str = ""
+    reduce_only: bool = False
     remark: str = ""
 
     def model_post_init(self, __context: Any):
-        self.size = self.quantity * self.side
         self.key = self.key or self._generate_key()
+        self.quantity = self._round_to_lot(self.quantity)
+        if self.price is not None:
+            self.price = self._round_to_tick(self.price, rounding="passive")
+        if self.trigger_price is not None:
+            self.trigger_price = self._round_to_tick(
+                self.trigger_price, rounding="nearest"
+            )
         # TODO
-        # self.quantity = self._adjust_by_lot_size(qty)
-        # self.prev_qty = self.remain_qty = self.quantity
-        # self.filled_qty = self.last_traded_qty = self.ltq = 0.0
-        # self.amend_qty = None
-        # self.price = self._adjust_by_tick_size(px) if px else None
-        # self.prev_px = self.price
-        # self.trigger_px = self._adjust_by_tick_size(trigger_px) if trigger_px else None
-        # self.target_px = self._adjust_by_tick_size(target_px) if target_px else None
-        # self.avg_px = self.last_traded_px = self.ltp = None
-        # self.amend_px = None
         # self._status = [None] * 4
         # self._status_reasons = {}  # { MainOrderStatus: reason}
         # self.timestamps = {}  # { MainOrderStatus.SUBMITTED: ts }
-        # self.trades = []
 
-    def _generate_key(self):
-        # return hashlib.md5((self.creator + str(time.time())).encode()).hexdigest()
-        return uuid4()
+    @field_validator("side", mode="before")
+    @classmethod
+    def _validate_side(cls, value: Any) -> Side:
+        if isinstance(value, str):
+            side = Side[value.upper()]
+        elif isinstance(value, int):
+            side = Side(value)
+        else:
+            raise ValueError(f"Invalid side: {value}")
+        return side
+
+    @field_validator("order_type", mode="before")
+    @classmethod
+    def _validate_order_type(cls, value: Any) -> OrderType:
+        if isinstance(value, str):
+            return OrderType[value.upper()]
+        raise ValueError(f"Invalid order_type: {value}")
+
+    @field_validator("time_in_force", mode="before")
+    @classmethod
+    def _validate_time_in_force(cls, value: Any) -> TimeInForce:
+        if isinstance(value, str):
+            return TimeInForce[value.upper()]
+        raise ValueError(f"Invalid time_in_force: {value}")
+
+    @staticmethod
+    def _generate_key() -> str:
+        return str(uuid4())
+
+    def _round_to_lot(self, quantity: Quantity) -> Quantity:
+        if self.lot_size is None:
+            return quantity
+        lot_size = self.lot_size
+        rounded_quantity = math.floor(quantity / lot_size) * lot_size
+        return Quantity(trim_trailing_zeros(rounded_quantity))
+
+    def _round_to_tick(
+        self,
+        price: Decimal,
+        rounding: Literal["nearest", "passive", "aggressive"] = "nearest",
+    ) -> Decimal:
+        if self.tick_size is None:
+            return price
+        tick_size = self.tick_size
+        steps = price / tick_size
+        if rounding == "nearest":
+            adj_steps = steps.to_integral_value(rounding=ROUND_HALF_UP)
+        elif rounding == "passive":  # favorable price (buy down / sell up)
+            adj_steps = math.floor(steps) if self.side == 1 else math.ceil(steps)
+        elif rounding == "aggressive":  # unfavorable price (buy up / sell down)
+            adj_steps = math.ceil(steps) if self.side == 1 else math.floor(steps)
+        else:
+            raise ValueError(f"Invalid rounding mode: {rounding}")
+        return trim_trailing_zeros(adj_steps * tick_size)
+
+    @computed_field
+    @property
+    def size(self) -> Quantity:
+        return self.quantity * Side(self.side)
+
+    @property
+    def last_traded_price(self) -> Decimal | None:
+        if not self.is_traded():
+            return None
+        return self.trades[-1].price
+
+    ltp = last_traded_price
+
+    @property
+    def last_traded_size(self) -> Quantity:
+        return self.last_traded_quantity * Side(self.side)
+
+    lts = last_traded_size
+
+    @property
+    def last_traded_quantity(self) -> Quantity:
+        if not self.is_traded():
+            return Quantity(0)
+        return self.trades[-1].quantity
+
+    last_traded_qty = ltq = last_traded_quantity
+
+    @property
+    def qty(self) -> Quantity:
+        return self.quantity
+
+    @property
+    def amend_qty(self) -> Quantity | None:
+        return self.amend_quantity
+
+    @property
+    def px(self) -> Decimal | None:
+        return self.price
+
+    @property
+    def amend_px(self) -> Decimal | None:
+        return self.amend_price
+
+    @property
+    def trigger_px(self) -> Decimal | None:
+        return self.trigger_price
+
+    @property
+    def target_px(self) -> Decimal | None:
+        return self.target_price
+
+    @computed_field
+    @property
+    def filled_size(self) -> Quantity:
+        return self.filled_quantity * Side(self.side)
+
+    @property
+    def filled_quantity(self) -> Quantity:
+        return sum((trade.quantity for trade in self.trades), Quantity(0))
+
+    filled_qty = filled_quantity
+
+    @property
+    def avg_price(self) -> Decimal | None:
+        filled_quantity = self.filled_quantity
+        if filled_quantity == 0:
+            return None
+        notional = sum(
+            (trade.price * trade.quantity for trade in self.trades), Decimal(0)
+        )
+        return notional / filled_quantity
+
+    avg_px = avg_price
+
+    @property
+    def remaining_size(self) -> Quantity:
+        return self.remaining_quantity * Side(self.side)
+
+    @property
+    def remaining_quantity(self) -> Quantity:
+        return self.quantity - self.filled_quantity
+
+    remaining_qty = remaining_quantity
 
     @property
     def venue(self) -> TradingVenue:
-        return self.product.source
+        assert self.product.venue is not None, "product venue is not set"
+        return self.product.venue
 
     @property
-    def broker(self) -> Broker:
-        return self.product.broker
-
-    @property
-    def exchange(self) -> CryptoExchange | str:
-        return self.product.exchange
-
-    @property
-    def adapter(self):
-        return self.product.adapter
-
-    @property
-    def tick_size(self):
+    def tick_size(self) -> Decimal | None:
         return self.product.tick_size
 
     @property
-    def lot_size(self):
+    def lot_size(self) -> Decimal | None:
         return self.product.lot_size
 
     @property
@@ -133,117 +256,41 @@ class BaseOrder(BaseModel):
     def id(self):
         return self.order_id
 
-    @property
-    def is_inverse(self):
-        return self.product.is_inverse()
+    def is_traded(self) -> bool:
+        return bool(self.trades)
 
-    def _create_side(
-        self, side: OrderSide | Literal["BUY", "SELL"] | Literal[1, -1]
-    ) -> OrderSide:
-        if isinstance(side, int):
-            side = ORDER_SIDE[side]
-        return OrderSide[side.upper()]
-
-    @property
-    def linear_size(self):
-        if px := self.price if self.is_inverse() else 1:
-            return self.size * self.product.multi / px
-
-    @property
-    def linear_qty(self):
-        return abs(self.linear_size)
-
-    @property
-    def linear_filled_qty(self):
-        if avg_px := self.avg_px if self.is_inverse() else 1:
-            return self.filled_qty * self.product.multi / avg_px
-
-    @property
-    def linear_remain_qty(self):
-        return self.linear_qty - self.linear_filled_qty
-
-    # NOTE: Q is shorthand for expressing values in the quote asset as the unit
-    @property
-    def qtyQ(self):
-        if not self.is_inverse():
-            if self.filled_qtyQ is None or self.remain_qtyQ is None:
-                return None
-            else:
-                return self.filled_qtyQ + self.remain_qtyQ
-
-    @property
-    def sizeQ(self):
-        if not self.is_inverse():
-            return self.quantityQ * -self.side
-
-    @property
-    def filled_qtyQ(self):
-        if not self.is_inverse():
-            if not self.avg_px:
-                return Decimal(0) if self.filled_qty == 0 else None
-            else:
-                return self.avg_px * self.filled_qty
-
-    @property
-    def remain_qtyQ(self):
-        if not self.is_inverse():
-            if not self.price:
-                return Decimal(0) if self.remain_qty == 0 else None
-            else:
-                return self.price * self.remain_qty
-
-    def _adjust_by_tick_size(self, px: float | str):
-        math_func = math.floor if self.side == 1 else math.ceil
-        tick_size = self.product.tsize
-        px = Decimal(str(px))
-        adj_px = Decimal(str(math_func(px / tick_size) * tick_size))
-        # trim unnecessary zeros e.g. 25000.00 -> 25000
-        adj_px = (
-            adj_px.to_integral()
-            if adj_px == adj_px.to_integral()
-            else adj_px.normalize()
-        )
-        return adj_px
-
-    def _adjust_by_lot_size(self, qty: float | str):
-        lot_size = self.product.lsize
-        qty = Decimal(str(qty))
-        adj_qty = Decimal(str(math.floor(qty / lot_size) * lot_size))
-        # trim unnecessary zeros e.g. 0.010 -> 0.01
-        adj_qty = (
-            adj_qty.to_integral()
-            if adj_qty == adj_qty.to_integral()
-            else adj_qty.normalize()
-        )
-        return adj_qty
+    def is_filled(self):
+        return self.filled_qty == self.qty
 
     def is_amending(self):
-        status_index = STATUS_INDEX[AmendOrderStatus]
-        return self._status[status_index] == AmendOrderStatus.SUBMITTED
+        return self._status[OrderStatus.Amend.position] == OrderStatus.Amend.SUBMITTED
 
     def is_cancelling(self):
-        status_index = STATUS_INDEX[CancelOrderStatus]
-        return self._status[status_index] == CancelOrderStatus.SUBMITTED
+        return self._status[OrderStatus.Cancel.position] == OrderStatus.Cancel.SUBMITTED
 
     def is_opened(self):
-        status_index = STATUS_INDEX[MainOrderStatus]
-        return self._status[status_index] == MainOrderStatus.OPENED
+        return self._status[OrderStatus.Main.position] == OrderStatus.Main.OPENED
 
     def is_closed(self):
         return not self.is_opened()
 
-    def is_traded(self):
-        return self.filled_qty > 0
+    def amend(self, *, price: Decimal | None = None, quantity: Quantity | None = None):
+        if price is None and quantity is None:
+            raise ValueError("amend() requires price and/or quantity")
+        if quantity is not None:
+            self.amend_quantity = self._round_to_lot(quantity)
+        if price is not None:
+            self.amend_price = self._round_to_tick(price, rounding="passive")
+        # TODO: self.on_status_update(OrderStatus.Amend.SUBMITTED) once the status machine is wired
 
-    def is_filled(self):
-        return self.filled_qty == self.quantity
+    def add_trade(self, trade: Trade):
+        self.trades.append(trade)
 
     def on_status_update(self, status, ts=None, reason="") -> bool:
         is_updated = False
         prev_status = self._status
         status_type = type(status)
-        status_index = STATUS_INDEX[status_type]
-        self._status[status_index] = status
+        self._status[status_type.position] = status
         self._status_reasons[status_type] = reason
         self.timestamps[status] = ts or time.time()
         if prev_status != self._status:
@@ -251,44 +298,45 @@ class BaseOrder(BaseModel):
             logger.debug(repr(self))
         return is_updated
 
-    def on_trade_update(
-        self, avg_px, filled_qty, last_traded_px, last_traded_qty
-    ) -> bool:
-        prev_avg_px = self.avg_px if self.avg_px else 0.0
-        prev_filled_qty = self.filled_qty
-        is_updated = False
-        if not filled_qty:
-            logger.error(
-                f"trade update has {filled_qty=} {self.creator=} {self.bkr} {self.exch} {self.oid=}"
-            )
-        else:
-            if filled_qty > prev_filled_qty:
-                is_updated = True
-                self.filled_qty = filled_qty
-                self.last_traded_qty = self.ltq = filled_qty - prev_filled_qty
-                self.remain_qty = self.quantity - filled_qty
-                # prev_avg_px * prev_filled_qty + last_traded_qty * last_traded_px = avg_px * filled_qty
-                if avg_px:
-                    self.avg_px = avg_px
-                    # NOTE: derived last_traded_px
-                    self.last_traded_px = self.ltp = (
-                        avg_px * self.filled_qty - prev_avg_px * prev_filled_qty
-                    ) / self.last_traded_qty
-                elif last_traded_px:
-                    self.last_traded_px = self.ltp = last_traded_px
-                    # NOTE: derived avg_px
-                    self.avg_px = (
-                        prev_avg_px * prev_filled_qty + self.ltq * last_traded_px
-                    ) / self.filled_qty
-                else:
-                    # NOTE: assumed avg_px and last_traded_px to be order price
-                    self.avg_px = self.ltp = self.price
-                self.trades.append({"px": self.ltp, "qty": self.ltq})
-            elif filled_qty < prev_filled_qty:
-                logger.warning(
-                    f"Delayed trade msg {self.creator=} {self.bkr} {self.exch} {self.oid=} ({filled_qty=} < {prev_filled_qty=})"
-                )
-        return is_updated
+    # TODO:
+    # def on_trade_update(
+    #     self, avg_price, filled_qty, last_traded_px, last_traded_qty
+    # ) -> bool:
+    #     prev_avg_price = self.avg_price if self.avg_price else 0.0
+    #     prev_filled_qty = self.filled_qty
+    #     is_updated = False
+    #     if not filled_qty:
+    #         logger.error(
+    #             f"trade update has {filled_qty=} {self.creator=} {self.bkr} {self.exch} {self.oid=}"
+    #         )
+    #     else:
+    #         if filled_qty > prev_filled_qty:
+    #             is_updated = True
+    #             self.filled_qty = filled_qty
+    #             self.last_traded_qty = self.ltq = filled_qty - prev_filled_qty
+    #             self.remain_qty = self.quantity - filled_qty
+    #             # prev_avg_price * prev_filled_qty + last_traded_qty * last_traded_px = avg_price * filled_qty
+    #             if avg_price:
+    #                 self.avg_price = avg_price
+    #                 # NOTE: derived last_traded_px
+    #                 self.last_traded_px = self.ltp = (
+    #                     avg_price * self.filled_qty - prev_avg_price * prev_filled_qty
+    #                 ) / self.last_traded_qty
+    #             elif last_traded_px:
+    #                 self.last_traded_px = self.ltp = last_traded_px
+    #                 # NOTE: derived avg_price
+    #                 self.avg_price = (
+    #                     prev_avg_price * prev_filled_qty + self.ltq * last_traded_px
+    #                 ) / self.filled_qty
+    #             else:
+    #                 # NOTE: assumed avg_price and last_traded_px to be order price
+    #                 self.avg_price = self.ltp = self.price
+    #             self.trades.append({"px": self.ltp, "qty": self.ltq})
+    #         elif filled_qty < prev_filled_qty:
+    #             logger.warning(
+    #                 f"Delayed trade msg {self.creator=} {self.bkr} {self.exch} {self.oid=} ({filled_qty=} < {prev_filled_qty=})"
+    #             )
+    #     return is_updated
 
     def get_status(self, mode: Literal["abbrev", "detailed", "standard"] = "standard"):
         """Returns order status in differet modes.
@@ -307,14 +355,14 @@ class BaseOrder(BaseModel):
             for status in self._status:
                 if status is None:
                     continue
-                status_str = type(status).__name__.split("OrderStatus")[0]
+                status_str = type(status).__name__
                 readable_o_status.append(status_str + " " + status.name)
             if readable_o_status:
                 return " | ".join(readable_o_status)
         elif mode == "standard":
             for status in self._status:
-                if (status is not None and type(status) is not CancelOrderStatus) or (
-                    status == CancelOrderStatus.CANCELLED
+                if (status is not None and type(status) is not OrderStatus.Cancel) or (
+                    status == OrderStatus.Cancel.CANCELLED
                 ):
                     o_status = status.name
             return o_status
@@ -327,9 +375,9 @@ class BaseOrder(BaseModel):
         side_str = "BUY" if self.side == 1 else "SELL"
         return (
             f"Strategy={self.creator}|Broker={self.bkr}|Exchange={self.exch}|Account={self.acc}|Product={self.pdt}\n"
-            f"OrderType={self.type}|TimeInForce={self.tif}|IsReduceOnly={self.is_reduce_only}\n"
+            f"OrderType={self.type}|TimeInForce={self.tif}|IsReduceOnly={self.reduce_only}\n"
             f"Side={side_str}|Price={self.price}|Quantity={self.quantity}\n"
-            f"AveragePrice={self.avg_px}|FilledQuantity={self.filled_qty}\n"
+            f"AveragePrice={self.avg_price}|FilledQuantity={self.filled_qty}\n"
             f"TriggerPrice={self.trigger_px}|TargetPrice={self.target_px}\n"
             f"AmendPrice={self.amend_px}|AmendQuantity={self.amend_qty}"
         )
@@ -342,11 +390,11 @@ class BaseOrder(BaseModel):
         return (
             f"{self.creator}|{self.venue}|{self.acc}|{self.pdt}|{self.oid}|{self.eoid}|"
             f"{self.type}|{self.tif}|{status_abbrev}|{self.size}@{self.price}|"
-            f"filled={filled_size}@{self.avg_px}|"
+            f"filled={filled_size}@{self.avg_price}|"
             f"last={last_traded_size}@{self.ltp}|"
             f"amend={amend_size}@{self.amend_px}|"
             f"trigger={self.trigger_px}|target={self.target_px}|"
-            f"is_reduce_only={self.is_reduce_only}"
+            f"reduce_only={self.reduce_only}"
         )
 
     def __eq__(self, other: Any) -> bool:

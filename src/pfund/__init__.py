@@ -7,12 +7,10 @@ if TYPE_CHECKING:
     import pfund_plot as plot
     import pfund.hub as hub
 
-    from pfund.brokers.crypto.broker import CryptoBroker
-    from pfund.brokers.crypto.exchanges import Bybit
-    from pfund.brokers.ibkr.broker import (
+    from pfund.venues.bybit.venue import Bybit
+    from pfund.venues.ibkr.venue import (
+        InteractiveBrokers,
         InteractiveBrokers as IB,
-    )
-    from pfund.brokers.ibkr.broker import (
         InteractiveBrokers as IBKR,
     )
     from pfund._backtest.typing import PolarsBacktestDataFrame, PandasBacktestDataFrame
@@ -31,7 +29,6 @@ if TYPE_CHECKING:
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.engines.trade_engine import TradeEngine
     from pfund.utils.aliases import ALIASES as alias  # noqa: N811
-    # from pfund.brokers.broker_defi import DeFiBroker
 
 from pfund.config import configure, configure_logging, get_config
 
@@ -121,12 +118,8 @@ def __getattr__(name: str):
         from pfund.components.indicators.talib_indicator import TalibIndicator
 
         return TalibIndicator
-    elif name == "CryptoBroker":
-        from pfund.brokers.crypto.broker import CryptoBroker
-
-        return CryptoBroker
     elif name in ("InteractiveBrokers", "IBKR", "IB"):
-        from pfund.brokers.ibkr.broker import InteractiveBrokers
+        from pfund.venues.ibkr.venue import InteractiveBrokers
 
         return InteractiveBrokers
     # elif name == "DeFiBroker":
@@ -134,7 +127,7 @@ def __getattr__(name: str):
 
     #     return DeFiBroker
     elif name == "Bybit":
-        from pfund.brokers.crypto.exchanges import Bybit
+        from pfund.venues.bybit import Bybit
 
         return Bybit
     # elif name == "Binance":
@@ -152,22 +145,18 @@ __all__ = (
     "alias",
     "plot",
     "hub",
-    # configs
     "configure",
     "get_config",
     "configure_logging",
     "DataConfig",
-    # engines
     "BacktestEngine",
     "TradeEngine",
     "SandboxEngine",
     "TradeEngineSettings",
     "SandboxEngineSettings",
     "BacktestEngineSettings",
-    # backtest
     "PolarsBacktestDataFrame",
     "PandasBacktestDataFrame",
-    # components
     "Strategy",
     "Model",
     "Feature",
@@ -175,12 +164,9 @@ __all__ = (
     "SklearnModel",
     "Indicator",
     "TalibIndicator",
-    # brokers
+    "InteractiveBrokers",
     "IBKR",
     "IB",
-    "CryptoBroker",
-    # "DeFiBroker",
-    # exchanges
     "Bybit",
     # "Binance",
     # "OKX",

@@ -10,9 +10,6 @@ if TYPE_CHECKING:
     from sklearn.model_selection import TimeSeriesSplit
     from mtflow.contexts.backtest_context import BacktestContext
 
-    from pfund.brokers.broker_simulated import SimulatedBroker
-    from pfund.brokers.crypto.broker import CryptoBroker
-    from pfund.brokers.ibkr.broker import InteractiveBrokers
     from pfund.components.models.model_base import BaseModel
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.datas.data_bar import BarData
@@ -20,15 +17,11 @@ if TYPE_CHECKING:
     from pfund.engines.engine_context import DataRangeDict
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.typing import FeatureT, IndicatorT, ModelT, StrategyT
-    from pfund.utils.dataset_splitter import (
+    from pfund.datas.dataset_splitter import (
         CrossValidatorDatasetPeriods,
         DatasetPeriods,
         DatasetSplitsDict,
     )
-
-    class SimulatedCryptoBroker(SimulatedBroker, CryptoBroker): ...
-
-    class SimulatedInteractiveBrokers(SimulatedBroker, InteractiveBrokers): ...
 
     BacktesteeName: TypeAlias = str
 
@@ -43,6 +36,7 @@ from pfund.enums import BacktestMode, Environment
 
 
 class BacktestEngine(BaseEngine):
+    settings: BacktestEngineSettings
     strategies: dict[str, BaseStrategy]
 
     def __init__(
@@ -84,10 +78,6 @@ class BacktestEngine(BaseEngine):
         self._context.settings.backtest_mode = BacktestMode[mode.upper()]
 
     @property
-    def settings(self) -> BacktestEngineSettings:
-        return cast("BacktestEngineSettings", self._context.settings)
-
-    @property
     def backtest_mode(self) -> BacktestMode:
         return self.settings.backtest_mode
 
@@ -105,7 +95,7 @@ class BacktestEngine(BaseEngine):
         from pfund.components.strategies.strategy_backtest import BacktestStrategy
 
         dummy_strategy_name = _DummyStrategy.__name__
-        if dummy_strategy_name in self.strategies:
+        if dummy_strategy_name in self._strategies:
             raise Exception(
                 "adding another strategy is not allowed during model backtesting (i.e. engine.add_model(...) has been called)"
             )
@@ -138,12 +128,12 @@ class BacktestEngine(BaseEngine):
 
         dummy_strategy_name = _DummyStrategy.__name__
         only_dummy_strategy_exists = (
-            dummy_strategy_name in self.strategies and len(self.strategies) == 1
+            dummy_strategy_name in self._strategies and len(self._strategies) == 1
         )
         assert not only_dummy_strategy_exists, (
             "Please use strategy.add_model(...) instead of engine.add_model(...) when a strategy is already created"
         )
-        if dummy_strategy_name not in self.strategies:
+        if dummy_strategy_name not in self._strategies:
             strategy = self.add_strategy(
                 _DummyStrategy(), resolution, name=dummy_strategy_name
             )
@@ -208,7 +198,7 @@ class BacktestEngine(BaseEngine):
         backtest_results: dict[BacktesteeName, list[IntoDataFrame]] = {}
 
         try:
-            for strategy in self.strategies.values():
+            for strategy in self._strategies.values():
                 is_model_backtesting = strategy.name == _DummyStrategy.__name__
                 if is_model_backtesting:
                     # dummy strategy has exactly one model
@@ -424,7 +414,7 @@ class BacktestEngine(BaseEngine):
                 "volume": v,
                 "is_incremental": False,
                 "msg_ts": None,
-                "extra_data": {},
+                "extra": {},
             }
             databoy._update_bar(data, update)
 
