@@ -6,7 +6,6 @@ if TYPE_CHECKING:
     from pfund.enums import TradingVenue
 
 import math
-import time
 import logging
 from uuid import uuid4
 from decimal import Decimal, ROUND_HALF_UP
@@ -15,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validat
 
 from pfund.entities import Trade, Quantity
 from pfund.utils import trim_trailing_zeros
-from pfund.enums.order_status import OrderStatus
+from pfund.entities.orders.order_status import OrderStatus
 from pfund.enums import (
     Side,
     OrderType,
@@ -38,6 +37,7 @@ class BaseOrder(BaseModel):
     )
     account: BaseAccount
     product: BaseProduct
+    status: OrderStatus = Field(default_factory=OrderStatus)
     side: Side | Literal["BUY", "SELL", 1, -1]
     quantity: Quantity = Field(gt=0.0)
     price: Decimal | None = Field(default=None, gt=0.0)
@@ -87,10 +87,6 @@ class BaseOrder(BaseModel):
             self.trigger_price = self._round_to_tick(
                 self.trigger_price, rounding="nearest"
             )
-        # TODO
-        # self._status = [None] * 4
-        # self._status_reasons = {}  # { MainOrderStatus: reason}
-        # self.timestamps = {}  # { MainOrderStatus.SUBMITTED: ts }
 
     @field_validator("side", mode="before")
     @classmethod
@@ -183,6 +179,12 @@ class BaseOrder(BaseModel):
         return self.amend_quantity
 
     @property
+    def amend_size(self) -> Quantity | None:
+        if self.amend_quantity is None:
+            return None
+        return self.amend_quantity * Side(self.side)
+
+    @property
     def px(self) -> Decimal | None:
         return self.price
 
@@ -259,20 +261,34 @@ class BaseOrder(BaseModel):
     def is_traded(self) -> bool:
         return bool(self.trades)
 
+    def is_partially_filled(self) -> bool:
+        return self.filled_qty < self.qty
+
+    is_partial = is_partially_filled
+
     def is_filled(self):
         return self.filled_qty == self.qty
 
-    def is_amending(self):
-        return self._status[OrderStatus.Amend.position] == OrderStatus.Amend.SUBMITTED
-
-    def is_cancelling(self):
-        return self._status[OrderStatus.Cancel.position] == OrderStatus.Cancel.SUBMITTED
+    def is_submitted(self):
+        return self.status.is_submitted()
 
     def is_opened(self):
-        return self._status[OrderStatus.Main.position] == OrderStatus.Main.OPENED
+        return self.status.is_opened()
 
     def is_closed(self):
-        return not self.is_opened()
+        return self.status.is_closed()
+
+    def is_cancelling(self):
+        return self.status.is_cancelling()
+
+    def is_cancelled(self):
+        return self.status.is_cancelled()
+
+    def is_amending(self):
+        return self.status.is_amending()
+
+    def is_amended(self):
+        return self.status.is_amended()
 
     def amend(self, *, price: Decimal | None = None, quantity: Quantity | None = None):
         if price is None and quantity is None:
@@ -281,22 +297,9 @@ class BaseOrder(BaseModel):
             self.amend_quantity = self._round_to_lot(quantity)
         if price is not None:
             self.amend_price = self._round_to_tick(price, rounding="passive")
-        # TODO: self.on_status_update(OrderStatus.Amend.SUBMITTED) once the status machine is wired
 
     def add_trade(self, trade: Trade):
         self.trades.append(trade)
-
-    def on_status_update(self, status, ts=None, reason="") -> bool:
-        is_updated = False
-        prev_status = self._status
-        status_type = type(status)
-        self._status[status_type.position] = status
-        self._status_reasons[status_type] = reason
-        self.timestamps[status] = ts or time.time()
-        if prev_status != self._status:
-            is_updated = True
-            logger.debug(repr(self))
-        return is_updated
 
     # TODO:
     # def on_trade_update(
@@ -338,63 +341,27 @@ class BaseOrder(BaseModel):
     #             )
     #     return is_updated
 
-    def get_status(self, mode: Literal["abbrev", "detailed", "standard"] = "standard"):
-        """Returns order status in differet modes.
-        Args:
-            mode:
-                1. if mode='abbrev', returns sth like 'O---', which is an abbreviation of 4 types of order statuses
-                2. if mode='detailed', it converts the abbreviation into human-readable string, e.g. 'OPENED,PARTIAL,SUBMITTED,AMENDED'
-                3. if mode='standard', returns only the crucial info: CREATED/OPENED/PARTIAL/FILLED/CLOSED/CANCELLED
-        """
-        if mode == "abbrev":
-            return "".join(
-                [status.name[0] if status else "-" for status in self._status]
-            )
-        elif mode == "detailed":
-            readable_o_status = []
-            for status in self._status:
-                if status is None:
-                    continue
-                status_str = type(status).__name__
-                readable_o_status.append(status_str + " " + status.name)
-            if readable_o_status:
-                return " | ".join(readable_o_status)
-        elif mode == "standard":
-            for status in self._status:
-                if (status is not None and type(status) is not OrderStatus.Cancel) or (
-                    status == OrderStatus.Cancel.CANCELLED
-                ):
-                    o_status = status.name
-            return o_status
-
-    def print_status(self):
-        readable_o_status = self.get_status(mode="detailed")
-        print(f"Order Status(id={self.id}): {readable_o_status}")
-
     def __str__(self):
-        side_str = "BUY" if self.side == 1 else "SELL"
         return (
-            f"Strategy={self.creator}|Broker={self.bkr}|Exchange={self.exch}|Account={self.acc}|Product={self.pdt}\n"
-            f"OrderType={self.type}|TimeInForce={self.tif}|IsReduceOnly={self.reduce_only}\n"
-            f"Side={side_str}|Price={self.price}|Quantity={self.quantity}\n"
-            f"AveragePrice={self.avg_price}|FilledQuantity={self.filled_qty}\n"
-            f"TriggerPrice={self.trigger_px}|TargetPrice={self.target_px}\n"
-            f"AmendPrice={self.amend_px}|AmendQuantity={self.amend_qty}"
+            f"Creator={self.creator} | Venue={self.venue} | Account={self.account.name} | Product={self.product.name}\n"
+            f"OrderKey={self.key} | OrderID={self.id} | OrderStatus={self.status}\n"
+            f"OrderType={self.type} | TimeInForce={self.tif} | ReduceOnly={self.reduce_only}\n"
+            f"Side={Side(self.side).name} | Price={self.price} | Quantity={self.quantity}\n"
+            f"AveragePrice={self.avg_price} | FilledQuantity={self.filled_qty}\n"
+            f"TriggerPrice={self.trigger_px} | TargetPrice={self.target_px}\n"
+            f"AmendPrice={self.amend_px} | AmendQuantity={self.amend_qty}"
         )
 
     def __repr__(self):
-        filled_size = self.filled_qty * self.side
-        last_traded_size = self.ltq * self.side
-        amend_size = self.amend_qty * self.side
-        status_abbrev = self.get_status()
         return (
-            f"{self.creator}|{self.venue}|{self.acc}|{self.pdt}|{self.oid}|{self.eoid}|"
-            f"{self.type}|{self.tif}|{status_abbrev}|{self.size}@{self.price}|"
-            f"filled={filled_size}@{self.avg_price}|"
-            f"last={last_traded_size}@{self.ltp}|"
-            f"amend={amend_size}@{self.amend_px}|"
-            f"trigger={self.trigger_px}|target={self.target_px}|"
-            f"reduce_only={self.reduce_only}"
+            f"{self.creator}|{self.venue}|{self.account.name}|{self.product.name}|"
+            f"{self.key}|{self.id}|{repr(self.status)}|"
+            f"{self.type}|{self.tif}|{self.size}@{self.price}|"
+            f"filled={self.filled_size}@{self.avg_price}|"
+            f"last={self.lts}@{self.ltp}|"
+            f"amend={self.amend_size}@{self.amend_price}|"
+            f"trigger={self.trigger_price}|target={self.target_price}|"
+            f"reduce_only={self.reduce_only}|remark={self.remark}"
         )
 
     def __eq__(self, other: Any) -> bool:

@@ -1,4 +1,12 @@
+from typing import NamedTuple, Literal
+
 from decimal import Decimal
+
+
+# used to tell if a timestamp is from the venue or created by pfund internally
+class Timestamp(NamedTuple):
+    value: float
+    source: Literal["venue", "pfund"]
 
 
 def trim_trailing_zeros(value: Decimal) -> Decimal:

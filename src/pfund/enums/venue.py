@@ -4,11 +4,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pfund.venues.venue_base import BaseVenue
-    from pfund.entities.accounts.account_base import BaseAccount
-    from pfund.entities.orders.order_base import BaseOrder
-    from pfund.entities.products.product_base import BaseProduct
 
-import importlib
 from enum import StrEnum
 
 
@@ -28,15 +24,3 @@ class TradingVenue(StrEnum):
             return Bybit
         else:
             raise ValueError(f"Unknown venue: {self}")
-
-    @property
-    def product_class(self) -> type[BaseProduct]:
-        if self == TradingVenue.IBKR:
-            class_name = f"{self}Product"
-        else:
-            class_name = f"{self.capitalize()}Product"
-        Product = getattr(
-            importlib.import_module(f"pfund.entities.products.product_{self.lower()}"),
-            class_name,
-        )
-        return Product
