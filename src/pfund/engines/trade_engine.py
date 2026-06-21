@@ -20,10 +20,11 @@ from threading import Thread
 
 from pfeed.enums import DataCategory
 
+from pfund.enums import Environment
 from pfund.engines.base_engine import BaseEngine
 from pfund.engines.managers.order_manager import OrderManager
 from pfund.engines.managers.portfolio_manager import PortfolioManager
-from pfund.enums import Environment
+from pfund.engines.managers.risk_manager import RiskManager
 
 
 class TradeEngine(BaseEngine):
@@ -53,6 +54,7 @@ class TradeEngine(BaseEngine):
         self._zmq_thread: Thread | None = None
         self._order_manager = OrderManager()
         self._portfolio_manager = PortfolioManager()
+        self._risk_manager = RiskManager()
 
     @property
     def order_manager(self) -> OrderManager:
@@ -65,6 +67,12 @@ class TradeEngine(BaseEngine):
         return self._portfolio_manager
 
     pm = portfolio_manager
+
+    @property
+    def risk_manager(self) -> RiskManager:
+        return self._risk_manager
+
+    rm = risk_manager
 
     # TODO: include descriptions
     def show_zmq_graph(self):

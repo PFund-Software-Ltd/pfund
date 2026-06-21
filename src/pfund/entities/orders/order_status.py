@@ -11,7 +11,7 @@ class OrderStatus:
     class Main(StrEnum):
         BLOCKED = B = "BLOCKED"  # blocked by internal checking, e.g. risk management
         SUBMITTED = S = "SUBMITTED"
-        OPENED = O = "OPENED"
+        ACTIVE = A = "ACTIVE"
         CLOSED = C = "CLOSED"
         REJECTED = R = "REJECTED"  # rejected by the external trading venue
         MISSED = M = (
@@ -48,8 +48,8 @@ class OrderStatus:
     def is_submitted(self) -> bool:
         return self.main == OrderStatus.Main.SUBMITTED
 
-    def is_opened(self) -> bool:
-        return self.main == OrderStatus.Main.OPENED
+    def is_active(self) -> bool:
+        return self.main == OrderStatus.Main.ACTIVE
 
     def is_closed(self) -> bool:
         return self.main == OrderStatus.Main.CLOSED

@@ -6,7 +6,6 @@ if TYPE_CHECKING:
     from pfund.enums import TradingVenue
 
 import math
-import logging
 from uuid import uuid4
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -23,7 +22,6 @@ from pfund.enums import (
 
 
 StrategyName: TypeAlias = str
-logger = logging.getLogger("pfund.order_manager")
 
 
 class BaseOrder(BaseModel):
@@ -272,8 +270,8 @@ class BaseOrder(BaseModel):
     def is_submitted(self):
         return self.status.is_submitted()
 
-    def is_opened(self):
-        return self.status.is_opened()
+    def is_active(self):
+        return self.status.is_active()
 
     def is_closed(self):
         return self.status.is_closed()
