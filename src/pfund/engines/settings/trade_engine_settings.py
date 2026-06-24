@@ -6,12 +6,6 @@ from pfund.engines.settings.base_engine_settings import BaseEngineSettings
 from pfund.utils.ray_dict import RayCompatibleDict
 
 
-DEFAULT_CANCEL_ALL_AT: dict[str, bool] = {
-    "start": False,
-    "stop": False,
-}
-
-
 class TradeEngineSettings(BaseEngineSettings):
     # e.g. url='tcp://localhost'
     zmq_urls: RayCompatibleDict = Field(default_factory=RayCompatibleDict)
@@ -25,22 +19,10 @@ class TradeEngineSettings(BaseEngineSettings):
         want to stream data manually. e.g. configure the trade engines to share the same data engine from pfeed.
         """,
     )
-    cancel_all_at: dict[str, bool] = Field(default_factory=dict)
-    # force refetching market configs
-    refetch_market_configs: bool = Field(default=False)
-    # renew market configs every x days
-    renew_market_configs_every_x_days: int = Field(default=7)
-    # Always use the WebSocket API for actions like placing or canceling orders, even if REST is available.
-    websocket_first: bool = Field(default=True)
-    # Swap live data for EOD data (live data is the recorded data and EOD data is the data from a data provider)
-    swap_live_for_eod: bool = Field(default=True)
-
-    @model_validator(mode="after")
-    def _merge_defaults(self):
-        # keep any user‑provided value, fill only the missing ones
-        for k, v in DEFAULT_CANCEL_ALL_AT.items():
-            self.cancel_all_at.setdefault(k, v)
-        return self
+    swap_live_for_eod: bool = Field(
+        default=True,
+        description="When True, replace recorded live data with the provider's cleaned end-of-day data once available.",
+    )
 
     @field_validator("auto_stream", mode="after")
     @classmethod

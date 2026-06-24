@@ -14,11 +14,9 @@ from pfund_kit.utils.text import to_uppercase
 
 from pfund.enums import (
     Environment,
-    PrivateDataChannel,
-    PublicDataChannel,
+    DataChannel,
     TradingVenue,
 )
-from pfund.venues.adapter import Adapter
 from pfund.venues.venue_base import BaseVenue
 from pfund.venues.ibkr.order import InteractiveBrokersOrder
 from pfund.venues.ibkr.product import InteractiveBrokersProduct
@@ -29,7 +27,6 @@ from pfund.venues.ibkr.position import InteractiveBrokersPosition
 
 class InteractiveBrokers(BaseVenue, ABC):
     name: ClassVar[TradingVenue] = TradingVenue.IBKR
-    # adapter: ClassVar[Adapter] = Adapter(name)
     Order: ClassVar[type[BaseOrder]] = InteractiveBrokersOrder
     Product: ClassVar[type[BaseProduct]] = InteractiveBrokersProduct
     Account: ClassVar[type[BaseAccount]] = InteractiveBrokersAccount
@@ -40,7 +37,7 @@ class InteractiveBrokers(BaseVenue, ABC):
         from pfund.venues.ibkr.api import InteractiveBrokersAPI
 
         super().__init__(env)
-        # self._api = InteractiveBrokersAPI(self._env)
+        # self.api = InteractiveBrokersAPI(self._env)
 
     # def _add_default_private_channels(self):
     #     for channel in list(PrivateDataChannel.__members__) + [
@@ -51,10 +48,10 @@ class InteractiveBrokers(BaseVenue, ABC):
 
     # def add_public_channel(
     #     self,
-    #     channel: PublicDataChannel | FullDataChannel,
+    #     channel: DataChannel | FullDataChannel,
     #     data: TimeBasedData | None = None,
     # ):
-    #     if channel.lower() in PublicDataChannel.__members__:
+    #     if channel.lower() in DataChannel.__members__:
     #         assert data is not None, "data object is required for public channels"
     #         channel: FullDataChannel = self._api._create_public_channel(
     #             data.product, data.resolution
@@ -74,6 +71,19 @@ class InteractiveBrokers(BaseVenue, ABC):
     #     port: int | None = None,
     #     client_id: int | None = None,
     # ) -> InteractiveBrokersAccount:
+    # TODO: check if requires real connection (in SANDBOX trading, check if its using real data)
+    # if self._requires_real_connection():
+    # if account.port is None:
+    # raise ValueError(
+    #     f"{self.venue} port must be provided, please set "
+    #     + f"`{self.venue}_{self._env}_PORT` in .env.{self._env.lower()} file, "
+    #     + "or in strategy.add_account(..., port=...).\n"
+    #     + "You can find your default socket port in Trader Workstation (TWS):\n"
+    #     + "    Settings icon (top right) -> API -> Settings -> Socket port\n"
+    #     + "or in IB Gateway:\n"
+    #     + "    Configure -> Settings -> API -> Settings -> Socket port"
+    # )
+    # TODO: when its sandbox trading, suppress the warning of auto-assigned client_id
     #     if name not in self.accounts:
     #         account = InteractiveBrokersAccount(
     #             env=self._env, name=name, host=host, port=port, client_id=client_id
@@ -123,7 +133,7 @@ class InteractiveBrokers(BaseVenue, ABC):
     #         #     raise ValueError(
     #         #         f"The symbol '{product.symbol}' is not found in the market configurations. "
     #         #         f"It might be delisted, or your market configurations could be outdated. "
-    #         #         f"Please set 'refetch_market_configs=True' in TradeEngine's settings to refetch the latest market configurations."
+    #         #         f"Please set 'refetch_markets=True' in TradeEngine's settings to refetch the latest market configurations."
     #         #     )
     #         self._products[product.exchange][product.name] = product
     #         self._api.add_product(product)

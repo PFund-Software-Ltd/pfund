@@ -6,11 +6,11 @@ from typing import Any
 from pfeed.enums import DataSource
 from pydantic import model_validator
 
-from pfund.venues._crypto.product import CryptoProduct
+from pfund.entities import BaseProduct
 from pfund.enums import AssetTypeModifier, CryptoAssetType
 
 
-class BybitProduct(CryptoProduct):
+class BybitProduct(BaseProduct):
     class Category(StrEnum):
         LINEAR = "LINEAR"
         INVERSE = "INVERSE"
@@ -18,7 +18,6 @@ class BybitProduct(CryptoProduct):
         OPTION = "OPTION"
 
     source: DataSource = DataSource.BYBIT
-    exchange: CryptoExchange = CryptoExchange.BYBIT
     category: Category | None = None
 
     def _derive_product_category(self):
@@ -39,7 +38,7 @@ class BybitProduct(CryptoProduct):
     # TODO: move to BaseProduct and add back SUPPORTED_ASSET_TYPES to CryptoExchange?
     @model_validator(mode="after")
     def _validate_asset_type(self):
-        from pfund.brokers.crypto.exchanges import Bybit
+        from pfund.venues.bybit import Bybit
 
         if str(self.asset_type) not in Bybit.SUPPORTED_ASSET_TYPES:
             raise ValueError(f"Invalid asset type: {self.asset_type}")
@@ -53,10 +52,10 @@ class BybitProduct(CryptoProduct):
             return super()._create_name()
 
     def _create_symbol(self):
-        from pfund.brokers.crypto.exchanges import Bybit
+        from pfund.venues.bybit import Bybit
 
-        ebase_asset = Bybit.adapter(self.base_asset, group="asset")
-        equote_asset = Bybit.adapter(self.quote_asset, group="asset")
+        ebase_asset = Bybit.adapter(self.base_asset, group="assets")
+        equote_asset = Bybit.adapter(self.quote_asset, group="assets")
         if self.asset_type == CryptoAssetType.PERP:
             if equote_asset == "USDC":
                 symbol = ebase_asset + "PERP"

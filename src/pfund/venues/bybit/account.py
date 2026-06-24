@@ -1,5 +1,5 @@
-from pfund.venues._crypto.account import CryptoAccount
+from pfund.entities.accounts import APIKeyAccount
 
 
-class BybitAccount(CryptoAccount):
+class BybitAccount(APIKeyAccount):
     pass

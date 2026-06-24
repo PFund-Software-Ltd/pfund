@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from pfund.components.models.model_base import BaseModel
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.entities.products.product_base import BaseProduct
+    from pfund.entities.accounts.account_base import BaseAccount
 
 Component: TypeAlias = "BaseStrategy | BaseModel | BaseFeature | BaseIndicator"
 ComponentT = TypeVar("ComponentT", bound="Component")
@@ -16,6 +17,7 @@ ModelT = TypeVar("ModelT", bound="BaseModel")
 FeatureT = TypeVar("FeatureT", bound="BaseFeature")
 IndicatorT = TypeVar("IndicatorT", bound="BaseIndicator")
 ProductT = TypeVar("ProductT", bound="BaseProduct")
+AccountT = TypeVar("AccountT", bound="BaseAccount")
 
 
 EngineName: TypeAlias = str

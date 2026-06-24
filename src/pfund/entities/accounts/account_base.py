@@ -1,11 +1,5 @@
 from __future__ import annotations
-from typing import Any, ClassVar, TYPE_CHECKING, TypeAlias
-
-if TYPE_CHECKING:
-    from pfund.typing import ProductName, Currency
-    from pfund.entities import BasePosition, BaseBalance, BaseOrder
-
-    SubmittedOrOpenedOrder: TypeAlias = BaseOrder
+from typing import Any, ClassVar
 
 from pfund.enums import Environment, TradingVenue
 
@@ -31,9 +25,6 @@ class BaseAccount:
         self._env = Environment[env.upper()]
         self._venue = TradingVenue[venue.upper()]
         self.name: str = self._normalize_name(name)
-        self._balances: dict[Currency, BaseBalance] = {}
-        self._orders: dict[ProductName, list[SubmittedOrOpenedOrder]] = {}
-        self._positions: dict[ProductName, BasePosition] = {}
 
     @property
     def env(self) -> Environment:
@@ -60,33 +51,3 @@ class BaseAccount:
 
     def __hash__(self):
         return hash((self._env, self._venue, self.name))
-
-    def get_balance(self, currency: Currency) -> BaseBalance | None:
-        return self._balances.get(currency, None)
-
-    def get_order(self, product: ProductName) -> list[SubmittedOrOpenedOrder]:
-        return self._orders.get(product, [])
-
-    def get_position(self, product: ProductName) -> BasePosition | None:
-        return self._positions.get(product, None)
-
-    def update_balance(self, balance: BaseBalance):
-        self._balances[balance.currency] = balance
-
-    def add_order(self, order: SubmittedOrOpenedOrder):
-        product_name = order.product.name
-        if product_name not in self._orders:
-            self._orders[product_name] = []
-        if order not in self._orders[product_name]:
-            self._orders[product_name].append(order)
-
-    def remove_order(self, order: SubmittedOrOpenedOrder):
-        product_name = order.product.name
-        if product_name in self._orders and order in self._orders[product_name]:
-            self._orders[product_name].remove(order)
-            if not self._orders[product_name]:
-                del self._orders[product_name]
-
-    def update_position(self, position: BasePosition):
-        product_name = position.product.name
-        self._positions[product_name] = position

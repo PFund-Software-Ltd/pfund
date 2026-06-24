@@ -7,12 +7,7 @@ from pfund.enums.asset_type import (
 )
 from pfund.enums.backtest_mode import BacktestMode
 from pfund.enums.component_type import ComponentType, ModelComponentType
-from pfund.enums.data_channel import (
-    DataChannelType,
-    PFundDataChannel,
-    PrivateDataChannel,
-    PublicDataChannel,
-)
+from pfund.enums.data_channel import DataChannel
 from pfund.enums.database import Database
 from pfund.enums.datalake import DataLake
 from pfund.enums.env import Environment
@@ -35,7 +30,6 @@ __all__ = [
     "ComponentType",
     "CryptoAssetType",
     "CryptoMonthCode",
-    "DataChannelType",
     "Database",
     "DataLake",
     "Environment",
@@ -44,9 +38,7 @@ __all__ = [
     "OptionType",
     "Side",
     "OrderType",
-    "PFundDataChannel",
-    "PrivateDataChannel",
-    "PublicDataChannel",
+    "DataChannel",
     "RunMode",
     "SourceType",
     "TimeInForce",

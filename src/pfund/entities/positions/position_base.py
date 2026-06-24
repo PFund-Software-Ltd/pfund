@@ -6,7 +6,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, computed_field
 
-from pfund.entities import BaseProduct, Quantity
+from pfund.entities import BaseProduct
+from pfund.entities.trades.quantity import Quantity
 from pfund.enums import PositionMode, Side, TradingVenue
 
 

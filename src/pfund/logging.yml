@@ -17,7 +17,15 @@ loggers:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
-  pfund.bybit:
+  pfund.order_manager:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  pfund.portfolio_manager:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  pfund.risk_manager:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
@@ -25,11 +33,23 @@ loggers:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
-  pfund.order_manager:
+  pfund.alpaca:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
-  pfund.portfolio_manager:
+  pfund.hyperliquid:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  pfund.binance:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  pfund.bybit:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  pfund.okx:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False

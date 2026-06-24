@@ -1,30 +1,30 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
-    from pfund.entities.products.product_base import BaseProduct
-    from pfund.typing import tEnvironment
+    from pfund.entities import BaseProduct, BaseAccount, BaseOrder
+    from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 
-from pathlib import Path
-
-from pfund.venues._crypto.exchange import CryptoExchange
+from pfund.enums import TradingVenue, Environment
+from pfund.venues.binance.product import BinanceProduct
+from pfund.venues.binance.account import BinanceAccount
+from pfund.venues.binance.order import BinanceOrder
+from pfund.venues.exchange_crypto import CryptoExchange
 
 
 class Binance(CryptoExchange):
-    SUPPORT_PLACE_BATCH_ORDERS = True
-    SUPPORT_CANCEL_BATCH_ORDERS = True
+    name: ClassVar[TradingVenue] = TradingVenue.BINANCE
+    Product: ClassVar[type[BaseProduct]] = BinanceProduct
+    Account: ClassVar[type[BaseAccount]] = BinanceAccount
+    Order: ClassVar[type[BaseOrder]] = BinanceOrder
 
-    USE_WS_PLACE_ORDER = True
-    USE_WS_CANCEL_ORDER = True
+    def __init__(
+        self, env: Environment | str, settings: TradeEngineSettings | None = None
+    ):
+        from pfund.venues.binance.rest_api import BinanceRESTfulAPI
+        from pfund.venues.binance.ws_api import BinanceWebSocketAPI
 
-    # TODO
-    # MAX_NUM_OF_PLACE_BATCH_ORDERS = ...
-    # MAX_NUM_OF_CANCEL_BATCH_ORDERS = ...
-
-    def __init__(self, env: tEnvironment, fetch_market_configs=False):
-        exch = Path(__file__).parent.name
-        super().__init__(env, exch, fetch_market_configs=fetch_market_configs)
-
-    def create_external_product_name(self, product: BaseProduct) -> str:
-        pass
+        super().__init__(env=env, settings=settings)
+        self.rest_api = BinanceRESTfulAPI(env=self._env)
+        self.ws_api = BinanceWebSocketAPI(env=self._env)

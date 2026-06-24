@@ -1,9 +1,20 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypedDict
 
 if TYPE_CHECKING:
     from pfund.entities import BaseProduct, BaseAccount
     from pfund.enums import TradingVenue
+
+    # TODO
+    class OrderUpdate(TypedDict):
+        source: Literal[
+            "response",  # e.g. place_orders/cancel_orders RESTful API response
+            "order_event",  # e.g. order update from websocket
+            "trade_event",  # e.g. trade update from websocket
+            "get_trade_history",  # update from a specific reconciliation method
+            "get_active_orders",  # update from a specific reconciliation method
+        ]
+
 
 import math
 from uuid import uuid4
@@ -11,7 +22,8 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
-from pfund.entities import Trade, Quantity
+from pfund.entities.trades.trade import Trade
+from pfund.entities.trades.quantity import Quantity
 from pfund.utils import trim_trailing_zeros
 from pfund.entities.orders.order_status import OrderStatus
 from pfund.enums import (
@@ -21,6 +33,7 @@ from pfund.enums import (
 )
 
 
+OrderKey: TypeAlias = str  # order key = client order id
 StrategyName: TypeAlias = str
 
 
@@ -64,7 +77,7 @@ class BaseOrder(BaseModel):
     )
     order_type: OrderType | str = OrderType.LIMIT
     time_in_force: TimeInForce | str = TimeInForce.GTC
-    key: str = Field(
+    key: OrderKey = Field(
         default="",
         description="""
         your own identifier for the order, set by you when placing it (auto-generated if omitted).

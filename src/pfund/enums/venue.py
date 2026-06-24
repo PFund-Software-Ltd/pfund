@@ -10,7 +10,11 @@ from enum import StrEnum
 
 class TradingVenue(StrEnum):
     IBKR = "IBKR"
+    ALPACA = "ALPACA"
+    HYPERLIQUID = "HYPERLIQUID"
+    BINANCE = "BINANCE"
     BYBIT = "BYBIT"
+    OKX = "OKX"
 
     @property
     def venue_class(self) -> type[BaseVenue]:

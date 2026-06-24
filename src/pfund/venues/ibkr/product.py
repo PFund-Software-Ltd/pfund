@@ -57,9 +57,9 @@ class InteractiveBrokersProduct(BaseProduct):
         adapter = IBKR.adapter
         contract = Contract()
         contract.exchange = self.exchange
-        contract.symbol = adapter(self.base_asset, group="asset")
-        contract.currency = adapter(self.quote_asset, group="asset")
-        contract.secType = adapter(str(self.asset_type), group="asset_type")
+        contract.symbol = adapter(self.base_asset, group="assets")
+        contract.currency = adapter(self.quote_asset, group="assets")
+        contract.secType = adapter(str(self.asset_type), group="asset_types")
         if self.is_stock() or self.is_etf():
             default_exchange = DEFAULT_EXCHANGES[str(self.asset_type)]
             is_exchange_specified = self.exchange != default_exchange

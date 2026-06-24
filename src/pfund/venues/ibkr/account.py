@@ -22,9 +22,6 @@ class InteractiveBrokersAccount(BaseAccount):
         cls._default_client_id += 1
         return cls._default_client_id
 
-    def _requires_real_connection(self):
-        return self._env != Environment.BACKTEST
-
     def __init__(
         self,
         env: Environment,
@@ -47,28 +44,17 @@ class InteractiveBrokersAccount(BaseAccount):
         self._client_id = client_id or os.getenv(f"{self.venue}_CLIENT_ID")
         if self._port:
             self._port = int(self._port)
-        else:
-            if self._requires_real_connection():
-                raise ValueError(
-                    f"{self.venue} port must be provided, please set "
-                    + f"`{self.venue}_{self._env}_PORT` in .env.{self._env.lower()} file, "
-                    + "or in strategy.add_account(..., port=...).\n"
-                    + "You can find your default socket port in Trader Workstation (TWS):\n"
-                    + "    Settings icon (top right) -> API -> Settings -> Socket port\n"
-                    + "or in IB Gateway:\n"
-                    + "    Configure -> Settings -> API -> Settings -> Socket port"
-                )
+
         if self._client_id:
             self._client_id = int(self._client_id)
         else:
-            if self._requires_real_connection():
-                self._client_id = self._next_default_client_id()
-                warnings.warn(
-                    f"{self.venue} client_id not set, auto-assigned {self._client_id}\n"
-                    + f"set env var `{self.venue}_CLIENT_ID` or strategy.add_account(..., client_id=...) to assign it",
-                    category=UserWarning,
-                    stacklevel=2,
-                )
+            self._client_id = self._next_default_client_id()
+            warnings.warn(
+                f"{self.venue} client_id not set, auto-assigned {self._client_id}\n"
+                + f"set env var `{self.venue}_CLIENT_ID` or strategy.add_account(..., client_id=...) to assign it",
+                category=UserWarning,
+                stacklevel=2,
+            )
 
     @property
     def host(self):

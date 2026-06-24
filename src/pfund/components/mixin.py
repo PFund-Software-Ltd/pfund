@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
     from sklearn.base import BaseEstimator
 
-    from pfund.brokers.broker_base import BaseBroker
+    from pfund.venues.venue_base import BaseVenue
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.indicators.indicator_base import BaseIndicator
     from pfund.components.models.model_base import BaseModel
@@ -45,7 +45,7 @@ from pfund.datas.data_config import DataConfig
 from pfund.datas.databoy import DataBoy
 from pfund.datas.resolution import Resolution
 from pfund.datas.stores.trading_store import TradingStore
-from pfund.enums import Broker, ComponentType, Environment, RunMode, TradingVenue
+from pfund.enums import ComponentType, Environment, RunMode, TradingVenue
 from pfund.utils.decorators import ray_method
 
 
@@ -562,15 +562,18 @@ class ComponentMixin:
 
     def _add_product(
         self,
-        venue: TradingVenue | str,
+        venue: TradingVenue | str | type[BaseVenue],
         basis: str,
         exchange: str = "",
         symbol: str = "",
         name: str = "",
         **specs: Any,
     ) -> BaseProduct:
-        venue = TradingVenue[venue.upper()]
-        VenueClass = venue.venue_class
+        if isinstance(venue, str):
+            venue = TradingVenue[venue.upper()]
+            VenueClass = venue.venue_class
+        else:
+            VenueClass = venue
         product = VenueClass.create_product(
             basis=basis, exchange=exchange, name=name, symbol=symbol, **specs
         )
@@ -596,7 +599,7 @@ class ComponentMixin:
 
     def add_data(
         self,
-        venue: TradingVenue | str,
+        venue: TradingVenue | str | type[BaseVenue],
         product: str,
         resolutions: list[Resolution | str] | None = None,
         exchange: str = "",
@@ -607,6 +610,11 @@ class ComponentMixin:
     ) -> list[MarketData]:
         """
         Args:
+            venue: trading venue, e.g. 'ibkr', 'bybit'.
+            Also accepts a custom subclass for adding venue-specific functions,
+            e.g. CustomIBKR where:
+                class CustomIBKR(pf.IBKR):
+                    ...
             exchange: useful for TradFi brokers (e.g. IB), to specify the exchange (e.g. 'NASDAQ')
             symbol: useful for TradFi brokers (e.g. IB), to specify the symbol (e.g. 'AAPL')
             product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP

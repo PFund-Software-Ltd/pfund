@@ -12,17 +12,19 @@ if TYPE_CHECKING:
 
 from pathlib import Path
 
-from pfund.brokers.crypto.exchanges.binance.rest_api_inverse import RESTfulAPIInverse
-from pfund.brokers.crypto.exchanges.binance.rest_api_linear import RESTfulAPILinear
-from pfund.brokers.crypto.exchanges.binance.rest_api_option import RESTfulAPIOption
-from pfund.brokers.crypto.exchanges.binance.rest_api_spot import RESTfulAPISpot
-from pfund._apis.rest_api_base import BaseRESTfulAPI
+from pfund.venues.binance._rest_apis import (
+    RESTfulAPILinear,
+    RESTfulAPIInverse,
+    RESTfulAPIOption,
+    RESTfulAPISpot,
+)
+from pfund.venues._apis.rest_api_base import BaseRESTfulAPI
 from pfund.enums import CeFiProductType, Environment
 
 
 # TODO: "portfolio margin" is not supported yet, can only do it when its included in the testnet
 # so we might need to create a new class RESTfulAPIPortfolio for it
-class RESTfulAPI(BaseRESTfulAPI):
+class BinanceRESTfulAPI(BaseRESTfulAPI):
     URLS = {}
     PUBLIC_ENDPOINTS = {}
     PRIVATE_ENDPOINTS = {}

@@ -25,6 +25,7 @@ class AllAssetType(StrEnum):
     FUND = "FUND"  # mutual fund
     BOND = "BOND"
     INDEX = "INDEX"
+    OUTCOME = "OUTCOME"
 
     @property
     def Mixin(self):
@@ -68,6 +69,10 @@ class CryptoAssetType(StrEnum):
     OPTION = OPT = AllAssetType.OPTION
     CRYPTOCURRENCY = CRYPTO = SPOT = AllAssetType.CRYPTO
     INDEX = AllAssetType.INDEX
+
+
+class PredictionMarketAssetType(StrEnum):
+    OUTCOME = AllAssetType.OUTCOME
 
 
 # EXTEND

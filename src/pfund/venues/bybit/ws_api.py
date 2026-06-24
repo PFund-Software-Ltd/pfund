@@ -7,15 +7,15 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable
 
     from pfund.brokers.crypto.exchanges.bybit.ws_api_base import BybitWebSocketAPI
-    from pfund._apis.ws_api_base import Message, WebSocketName
+    from pfund.venues._apis.ws_api_base import Message, WebSocketName
     from pfund.datas.resolution import Resolution
-    from pfund.venues._crypto.account import CryptoAccount
+    from pfund.venues._crypto.account_api import CryptoAccount
     from pfund.enums import Environment
     from pfund.typing import FullDataChannel
 
 import asyncio
 
-from pfund._apis.ws_api_base import BaseWebSocketAPI
+from pfund.venues._apis.ws_api_base import BaseWebSocketAPI
 from pfund.venues.bybit.product import BybitProduct
 from pfund.enums import CryptoExchange
 
@@ -27,27 +27,27 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
 
     EXCHANGE: ClassVar[CryptoExchange] = CryptoExchange.BYBIT
 
-    def __init__(self, env: Environment | tEnvironment):
+    def __init__(self, env: Environment):
         super().__init__(env)
         self._apis: dict[ProductCategory, BybitWebSocketAPI] = {
-            ProductCategory.LINEAR: self._get_api_class("linear")(env),
-            ProductCategory.INVERSE: self._get_api_class("inverse")(env),
-            ProductCategory.SPOT: self._get_api_class("spot")(env),
-            ProductCategory.OPTION: self._get_api_class("option")(env),
+            ProductCategory.LINEAR: self.get_api_class("linear")(env),
+            ProductCategory.INVERSE: self.get_api_class("inverse")(env),
+            ProductCategory.SPOT: self.get_api_class("spot")(env),
+            ProductCategory.OPTION: self.get_api_class("option")(env),
         }
 
     @staticmethod
-    def _get_api_class(category: ProductCategory | str) -> type[BybitWebSocketAPI]:
-        from pfund.brokers.crypto.exchanges.bybit.ws_api_inverse import (
+    def get_api_class(category: ProductCategory | str) -> type[BybitWebSocketAPI]:
+        from pfund.venues.bybit._ws_apis.ws_api_inverse import (
             BybitInverseWebSocketAPI,
         )
-        from pfund.brokers.crypto.exchanges.bybit.ws_api_linear import (
+        from pfund.venues.bybit._ws_apis.ws_api_linear import (
             BybitLinearWebSocketAPI,
         )
-        from pfund.brokers.crypto.exchanges.bybit.ws_api_option import (
+        from pfund.venues.bybit._ws_apis.ws_api_option import (
             BybitOptionWebSocketAPI,
         )
-        from pfund.brokers.crypto.exchanges.bybit.ws_api_spot import (
+        from pfund.venues.bybit._ws_apis.ws_api_spot import (
             BybitSpotWebSocketAPI,
         )
 

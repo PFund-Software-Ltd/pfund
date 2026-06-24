@@ -22,9 +22,6 @@ from pfeed.enums import DataCategory
 
 from pfund.enums import Environment
 from pfund.engines.base_engine import BaseEngine
-from pfund.engines.managers.order_manager import OrderManager
-from pfund.engines.managers.portfolio_manager import PortfolioManager
-from pfund.engines.managers.risk_manager import RiskManager
 
 
 class TradeEngine(BaseEngine):
@@ -52,27 +49,6 @@ class TradeEngine(BaseEngine):
         self._worker: ZeroMQ | None = None
         self._data_engine: DataEngine | None = None
         self._zmq_thread: Thread | None = None
-        self._order_manager = OrderManager()
-        self._portfolio_manager = PortfolioManager()
-        self._risk_manager = RiskManager()
-
-    @property
-    def order_manager(self) -> OrderManager:
-        return self._order_manager
-
-    om = order_manager
-
-    @property
-    def portfolio_manager(self) -> PortfolioManager:
-        return self._portfolio_manager
-
-    pm = portfolio_manager
-
-    @property
-    def risk_manager(self) -> RiskManager:
-        return self._risk_manager
-
-    rm = risk_manager
 
     # TODO: include descriptions
     def show_zmq_graph(self):

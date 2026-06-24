@@ -135,27 +135,6 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             "model": self.model.__class__.__name__,
         }
 
-    def add_data(
-        self,
-        venue: TradingVenue | str,
-        product: str,
-        exchange: str = "",
-        symbol: str = "",
-        product_name: str = "",
-        data_config: DataConfig | None = None,
-        **product_specs: Any,
-    ) -> list[MarketData]:
-        datas: list[MarketData] = super().add_data(
-            venue=venue,
-            product=product,
-            exchange=exchange,
-            symbol=symbol,
-            product_name=product_name,
-            data_config=data_config,
-            **product_specs,
-        )
-        return datas
-
     def _assert_functions_signatures(self):
         from pfund_kit.utils.function import get_function_args_and_kwargs
 

@@ -29,7 +29,8 @@ import narwhals as nw
 
 from pfund.components.mixin import ComponentMixin
 from pfund.components.strategies.strategy_meta import MetaStrategy
-from pfund.enums import Broker, TradingVenue
+from pfund.enums import TradingVenue
+from pfund.managers import OrderManager, PortfolioManager, RiskManager
 
 
 class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
@@ -37,6 +38,9 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         self._df_form: Literal["wide", "long"] = "long"
         self.accounts: dict[AccountName, BaseAccount] = {}
         self.strategies: dict[str, BaseStrategy] = {}
+        self._order_manager = OrderManager()
+        self._portfolio_manager = PortfolioManager()
+        self._risk_manager = RiskManager()
         self.__mixin_post_init__(
             *args, **kwargs
         )  # calls ComponentMixin.__mixin_post_init__()
@@ -44,6 +48,24 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     @abstractmethod
     def trade(self):
         pass
+
+    @property
+    def order_manager(self) -> OrderManager:
+        return self._order_manager
+
+    om = order_manager
+
+    @property
+    def portfolio_manager(self) -> PortfolioManager:
+        return self._portfolio_manager
+
+    pm = portfolio_manager
+
+    @property
+    def risk_manager(self) -> RiskManager:
+        return self._risk_manager
+
+    rm = risk_manager
 
     # TODO: load strategy's signal_df from parquet
     def load(self):

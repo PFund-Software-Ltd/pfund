@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
-    from pfund._apis.ws_api_base import Message, WebSocketName
+    from pfund.venues._apis.ws_api_base import Message, WebSocketName
     from pfund.datas.resolution import Resolution
     from pfund.venues.ibkr.account import InteractiveBrokersAccount
     from pfund.venues.ibkr.product import InteractiveBrokersProduct
@@ -20,22 +20,20 @@ if TYPE_CHECKING:
 import logging
 from collections import defaultdict
 
-from pfund.venues.ibkr._client import InteractiveBrokersClient as IBClient
-from pfund.venues.ibkr._wrapper import InteractiveBrokersWrapper as IBWrapper
-from pfund.venues.ibkr._wrapper import *
-from pfund._apis.ws_api_base import BaseWebSocketAPI
+from pfund.venues.ibkr._ibapi.client import InteractiveBrokersClient as IBClient
+from pfund.venues.ibkr._ibapi.wrapper import InteractiveBrokersWrapper as IBWrapper
+from pfund.venues.ibkr._ibapi.wrapper import *
+from pfund.venues._apis.ws_api_base import BaseWebSocketAPI
 from pfund.datas.timeframe import Timeframe
 from pfund.enums import (
-    DataChannelType,
     Environment,
-    PrivateDataChannel,
-    PublicDataChannel,
+    DataChannel,
     TraditionalAssetType,
 )
 
 
 # this is similar to ws_api_base.py for crypto exchanges
-class InteractiveBrokersAPI(IBClient, IBWrapper, BaseWebSocketAPI):
+class InteractiveBrokersAPI(BaseWebSocketAPI, IBClient, IBWrapper):
     SUPPORTED_ORDERBOOK_LEVELS = [1, 2]
     SUPPORTED_RESOLUTIONS = {
         Timeframe.TICK: [1],
@@ -144,7 +142,7 @@ class InteractiveBrokersAPI(IBClient, IBWrapper, BaseWebSocketAPI):
         """
         self.add_product(product)
         if resolution.is_quote():
-            channel = PublicDataChannel.orderbook
+            channel = DataChannel.orderbook
             echannel = self._adapter(channel.value, group="channel")
             orderbook_level = resolution.orderbook_level
             # TODO: how to handle orderbook_depth when received the orderbook data? shouldn't send the whole orderbook to engine's data object
@@ -157,11 +155,11 @@ class InteractiveBrokersAPI(IBClient, IBWrapper, BaseWebSocketAPI):
             # TODO
             # if 'num_rows' in kwargs:  # `num_rows` is a params in IB's reqMktDepth(...)
         elif resolution.is_tick():
-            channel = PublicDataChannel.tradebook
+            channel = DataChannel.tradebook
             echannel = self._adapter(channel.value, group="channel")
             full_channel = ".".join([echannel, product.symbol])
         elif resolution.is_bar():
-            channel = PublicDataChannel.candlestick
+            channel = DataChannel.candlestick
             echannel = self._adapter(channel.value, group="channel")
             period, timeframe = resolution.period, resolution.timeframe
             if timeframe not in self.SUPPORTED_RESOLUTIONS:

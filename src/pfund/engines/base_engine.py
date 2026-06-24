@@ -17,11 +17,10 @@ if TYPE_CHECKING:
     from pfund.entities import BaseAccount, BaseProduct
     from pfund.typing import StrategyT, ComponentName
 
-import datetime
 import logging
 
 from pfeed.enums import DataCategory
-from pfund_kit.style import RichColor, TextStyle, cprint
+from pfund_kit.style import cprint
 from pfund_kit.utils.singleton import SingletonMeta
 from pfund.enums import (
     ComponentType,
@@ -29,17 +28,7 @@ from pfund.enums import (
     RunMode,
     TradingVenue,
 )
-
-
-ENV_COLORS = {
-    # 'yellow': 'bold yellow on #ffffe0',
-    # 'magenta': 'bold magenta on #fff0ff',
-    # 'TRAIN': 'bold cyan on #d0ffff',
-    Environment.BACKTEST: TextStyle.BOLD + RichColor.BLUE,
-    Environment.SANDBOX: TextStyle.BOLD + RichColor.GREY0,
-    Environment.PAPER: TextStyle.BOLD + RichColor.RED,
-    Environment.LIVE: TextStyle.BOLD + RichColor.GREEN,
-}
+from pfund.managers import OrderManager, PortfolioManager, RiskManager
 
 
 class BaseEngine(metaclass=SingletonMeta):
@@ -86,10 +75,13 @@ class BaseEngine(metaclass=SingletonMeta):
         self._strategies: dict[
             ComponentName, BaseStrategy | ActorProxy[BaseStrategy]
         ] = {}
+        self._order_manager = OrderManager()
+        self._portfolio_manager = PortfolioManager()
+        self._risk_manager = RiskManager()
         self.results: dict[str, Any] | None = None
         cprint(
-            f"{self.env} {self.name} is running (data_range=({self.data_start}, {self.data_end}))",
-            style=ENV_COLORS[self.env],
+            f"{self.env} {self.name} is running (data_range=({self._context.data_start}, {self._context.data_end}))",
+            style=self.env._color,
         )
 
     @property
@@ -109,12 +101,22 @@ class BaseEngine(metaclass=SingletonMeta):
         return self._context.settings
 
     @property
-    def data_start(self) -> datetime.date:
-        return self._context.data_start
+    def order_manager(self) -> OrderManager:
+        return self._order_manager
+
+    om = order_manager
 
     @property
-    def data_end(self) -> datetime.date:
-        return self._context.data_end
+    def portfolio_manager(self) -> PortfolioManager:
+        return self._portfolio_manager
+
+    pm = portfolio_manager
+
+    @property
+    def risk_manager(self) -> RiskManager:
+        return self._risk_manager
+
+    rm = risk_manager
 
     def is_running(self) -> bool:
         return self._is_running
@@ -209,6 +211,12 @@ class BaseEngine(metaclass=SingletonMeta):
         self._logger.debug(f"added product {product.symbol}")
 
     def _add_account(self, account: BaseAccount):
+        for existing_venue in self._venues.values():
+            if (existing := existing_venue.accounts.get(account.name)) is not None:
+                raise ValueError(
+                    f'account name "{account.name}" is already used by {existing!r}; '
+                    + "account names must be unique across the engine"
+                )
         venue: BaseVenue = self._add_venue(account.venue)
         account = venue.add_account(**account.to_dict())
         self._logger.debug(f"added account {account}")

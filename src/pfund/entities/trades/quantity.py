@@ -2,12 +2,24 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
+    from pydantic import GetCoreSchemaHandler
+    from pydantic_core import CoreSchema
     from pfund.entities import BaseProduct
 
 from decimal import Decimal
 
 
 class Quantity(Decimal):
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls, source_type: Any, handler: GetCoreSchemaHandler
+    ) -> CoreSchema:
+        # pydantic has a built-in schema for Decimal but not its subclasses; validate
+        # as a Decimal (so field constraints like gt= still apply) then coerce into Quantity.
+        from pydantic_core import core_schema
+
+        return core_schema.no_info_after_validator_function(cls, handler(Decimal))
+
     # Arithmetic on a Decimal subclass returns a plain Decimal, dropping the
     # subclass. Override the basic operators so Quantity stays closed under them
     # (e.g. quantity + quantity, side * quantity, abs(size) all remain Quantity).
