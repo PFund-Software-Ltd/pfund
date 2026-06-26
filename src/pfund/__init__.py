@@ -7,12 +7,15 @@ if TYPE_CHECKING:
     import pfund_plot as plot
     import pfund.hub as hub
 
-    from pfund.venues.bybit.venue import Bybit
-    from pfund.venues.ibkr.venue import (
+    from pfund.venues.ibkr import (
         InteractiveBrokers,
         InteractiveBrokers as IB,
         InteractiveBrokers as IBKR,
     )
+    from pfund.venues.hyperliquid import Hyperliquid
+    from pfund.venues.bybit import Bybit
+    from pfund.venues.binance import Binance
+    from pfund.venues.okx import OKX
     from pfund._backtest.typing import PolarsBacktestDataFrame, PandasBacktestDataFrame
     from pfund.components.features.feature_base import BaseFeature as Feature
     from pfund.components.indicators.indicator_base import BaseIndicator as Indicator
@@ -119,25 +122,25 @@ def __getattr__(name: str):
 
         return TalibIndicator
     elif name in ("InteractiveBrokers", "IBKR", "IB"):
-        from pfund.venues.ibkr.venue import InteractiveBrokers
+        from pfund.venues.ibkr import InteractiveBrokers
 
         return InteractiveBrokers
-    # elif name == "DeFiBroker":
-    #     from pfund.brokers.broker_defi import DeFiBroker
+    elif name == "Hyperliquid":
+        from pfund.venues.hyperliquid import Hyperliquid
 
-    #     return DeFiBroker
+        return Hyperliquid
+    elif name == "Binance":
+        from pfund.venues.binance import Binance
+
+        return Binance
     elif name == "Bybit":
         from pfund.venues.bybit import Bybit
 
         return Bybit
-    # elif name == "Binance":
-    #     from pfund.brokers.crypto.exchanges import Binance
+    elif name == "OKX":
+        from pfund.venues.okx import OKX
 
-    #     return Binance
-    # elif name.upper() == "OKX":
-    #     from pfund.brokers.crypto.exchanges import OKX
-
-    #     return OKX
+        return OKX
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
@@ -167,9 +170,10 @@ __all__ = (
     "InteractiveBrokers",
     "IBKR",
     "IB",
+    "Hyperliquid",
+    "Binance",
     "Bybit",
-    # "Binance",
-    # "OKX",
+    "OKX",
 )
 
 

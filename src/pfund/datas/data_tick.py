@@ -16,12 +16,12 @@ class TickData(MarketData):
         self,
         product: BaseProduct,
         resolution: Resolution,
-        data_config: DataConfig | None = None,
+        config: DataConfig | None = None,
     ):
         super().__init__(
             product=product,
             resolution=resolution,
-            data_config=data_config,
+            config=config,
         )
         self._price = self._volume = 0.0
         assert 0 < self.period <= 1, (

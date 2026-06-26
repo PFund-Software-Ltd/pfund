@@ -23,9 +23,9 @@ class MarketData(TimeBasedData, ABC):
         self,
         product: BaseProduct,
         resolution: Resolution,
-        data_config: DataConfig | None = None,
+        config: DataConfig | None = None,
     ):
-        super().__init__(data_config=data_config)
+        super().__init__(config=config)
         if self.config.data_source is None:
             self.config.data_source = product.source
         self.product: BaseProduct = product

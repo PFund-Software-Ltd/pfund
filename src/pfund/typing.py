@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, TypeAlias, TypeVar
+from typing import TYPE_CHECKING, Literal, TypeAlias, TypeVar, NamedTuple
 
 if TYPE_CHECKING:
+    from pfund.entities.products.asset_type import AssetType
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.indicators.indicator_base import BaseIndicator
     from pfund.components.models.model_base import BaseModel
@@ -18,6 +19,11 @@ FeatureT = TypeVar("FeatureT", bound="BaseFeature")
 IndicatorT = TypeVar("IndicatorT", bound="BaseIndicator")
 ProductT = TypeVar("ProductT", bound="BaseProduct")
 AccountT = TypeVar("AccountT", bound="BaseAccount")
+
+
+class ProductKey(NamedTuple):
+    symbol: str
+    asset_type: AssetType
 
 
 EngineName: TypeAlias = str

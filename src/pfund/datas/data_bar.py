@@ -229,12 +229,12 @@ class BarData(MarketData):
         self,
         product: BaseProduct,
         resolution: Resolution,
-        data_config: DataConfig | None = None,
+        config: DataConfig | None = None,
     ):
         super().__init__(
             product=product,
             resolution=resolution,
-            data_config=data_config,
+            config=config,
         )
         self._bar = Bar(resolution, shift=self.config.shift.get(resolution, 0))
         # NOTE: stale_bar_timeout / skip_first_bar are normally pre-populated by

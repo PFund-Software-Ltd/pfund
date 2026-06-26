@@ -1,28 +1,26 @@
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from pfund.entities.products.asset_type import AssetType
-from pfund.enums.asset_type import ASSET_TYPE_ALIASES
 
 
 class ProductBasis(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
 
     basis: str
-    base_asset: str | None = None
-    quote_asset: str | None = None
+    base_asset: str = ""
+    quote_asset: str = ""
     asset_type: AssetType | None = None
 
-    @staticmethod
-    def _standardize_asset_type_string(asset_type: str) -> str:
-        asset_types_and_modifiers = asset_type.split("-")
-        standardized_asset_types_and_modifiers = [
-            ASSET_TYPE_ALIASES.get(atm.upper(), atm)
-            for atm in asset_types_and_modifiers
-        ]
-        standardized_asset_type = "-".join(standardized_asset_types_and_modifiers)
-        return standardized_asset_type
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_string(cls, data: Any) -> Any:
+        # allow a bare string (e.g. "BTC_USDT_PERP") to be used wherever a
+        # ProductBasis is expected, by treating it as the `basis` field
+        if isinstance(data, str):
+            return {"basis": data.upper()}
+        return data
 
     @field_validator("basis", mode="before")
     @classmethod
@@ -56,7 +54,7 @@ class ProductBasis(BaseModel):
 
     def model_post_init(self, __context: Any):
         base_asset, quote_asset, asset_type = self.basis.split("_")
-        asset_type = AssetType(value=self._standardize_asset_type_string(asset_type))
+        asset_type = AssetType(value=asset_type)
         object.__setattr__(self, "base_asset", base_asset)
         object.__setattr__(self, "quote_asset", quote_asset)
         object.__setattr__(self, "asset_type", asset_type)  # Required when frozen=True

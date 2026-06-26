@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from decimal import Decimal
 from typing import Any, ClassVar
 
 from pfeed.enums import DataSource
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from pfund.typing import ProductKey
+from pfund.entities.markets.market_base import BaseMarket
 from pfund.entities.products.asset_type import AssetType
 from pfund.entities.products.product_basis import ProductBasis
 from pfund.enums import TradingVenue
@@ -19,7 +20,7 @@ class BaseProduct(BaseModel):
     source: DataSource
     venue: TradingVenue | None = None
     exchange: str | None = None
-    basis: ProductBasis | str
+    basis: ProductBasis
     specs: dict[str, Any] = Field(
         default_factory=dict,
         description="specifications that make a product unique, e.g. for options, specs are strike_price, expiration_date, etc.",
@@ -36,15 +37,9 @@ class BaseProduct(BaseModel):
         default="",
         description="unique product name, if not provided, venue + symbol will be used",
     )
-    tick_size: Decimal | None = None
-    lot_size: Decimal | None = None
-
-    @field_validator("basis", mode="before")
-    @classmethod
-    def _create_product_basis(cls, basis: ProductBasis | str):
-        if isinstance(basis, str):
-            basis = ProductBasis(basis=basis.upper())
-        return basis
+    market: BaseMarket | None = Field(
+        default=None, description="market this product belongs to"
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -77,18 +72,35 @@ class BaseProduct(BaseModel):
             data[field_name] = provided_specs[field_name]
         return data
 
+    @model_validator(mode="after")
+    def _validate_asset_type(self):
+        if self.venue is None:
+            return self
+        VenueClass = self.venue.venue_class
+        if str(self.asset_type) not in VenueClass.METADATA.asset_types:
+            raise ValueError(f"Invalid asset type: {self.asset_type}")
+        return self
+
     def model_post_init(self, __context: Any):
         # calls __mixin_post_init__ in e.g. StockMixin if exists
         if hasattr(self, "__mixin_post_init__"):
-            self.__mixin_post_init__()
+            self.__mixin_post_init__()  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
         self.specs = self._create_specs()
-        self.symbol = self.symbol or self._create_symbol()
+        self.symbol = self._create_symbol()
         self.name = self.name or self._create_name()
         if self.venue is None and self.source in TradingVenue.__members__:
             self.venue = TradingVenue[self.source]
 
+    @property
+    def key(self) -> ProductKey:
+        return ProductKey(symbol=self.symbol, asset_type=self.asset_type)
+
     def _create_name(self) -> str:
         return "_".join([str(self.source), self.symbol])
+
+    # Override this method to customize the symbol creation logic
+    def _create_symbol(self) -> str:
+        return self.symbol
 
     @property
     def base_asset(self) -> str:
@@ -104,6 +116,7 @@ class BaseProduct(BaseModel):
 
     @property
     def asset_type(self) -> AssetType:
+        assert self.basis.asset_type, "asset_type is None"
         return self.basis.asset_type
 
     type = asset_type
@@ -113,22 +126,30 @@ class BaseProduct(BaseModel):
         return self.basis.asset_pair
 
     @classmethod
-    def get_required_specs(cls) -> set[str]:
-        """Gets required specifications"""
-        return {
-            field_name
-            for field_name, field in cls.model_fields.items()
-            if field.is_required() and field_name not in BaseProduct.model_fields
-        }
+    def get_allowed_specs(cls) -> set[str]:
+        """
+        Gets all spec field names (required + optional) contributed by asset-type mixins,
+        i.e. all model fields except those defined by BaseProduct and the venue-specific
+        Product subclass (e.g. BybitProduct's `category`). Mixins are plain classes, so any
+        field owned by a BaseProduct subclass in the MRO is a non-spec field.
+        """
+        non_spec_fields: set[str] = set()
+        for class_ in cls.__mro__:
+            if (
+                class_ is not cls
+                and isinstance(class_, type)
+                and issubclass(class_, BaseProduct)
+            ):
+                non_spec_fields |= set(class_.model_fields)
+        return set(cls.model_fields) - non_spec_fields
 
     @classmethod
-    def get_allowed_specs(cls) -> set[str]:
-        """Gets all specification field names (required + optional) contributed by subclasses/mixins."""
-        from pfund.venues._crypto.product_base import CryptoProduct
-
-        excluded = set(BaseProduct.model_fields) | set(CryptoProduct.model_fields)
+    def get_required_specs(cls) -> set[str]:
+        """Gets spec fields that must be provided (no default)."""
         return {
-            field_name for field_name in cls.model_fields if field_name not in excluded
+            field_name
+            for field_name in cls.get_allowed_specs()
+            if cls.model_fields[field_name].is_required()
         }
 
     def to_dict(self) -> dict[str, Any]:
@@ -136,16 +157,7 @@ class BaseProduct(BaseModel):
 
     def _create_specs(self) -> dict[str, Any]:
         """Create specifications that make a product unique"""
-        from pfund.venues._crypto.product_base import CryptoProduct
-
-        # TODO: add DeFiProduct
-        specification_fields = [
-            field
-            for field in self.__class__.model_fields
-            if field not in BaseProduct.model_fields
-            and field not in CryptoProduct.model_fields
-        ]
-        return {field: getattr(self, field) for field in specification_fields}
+        return {field: getattr(self, field) for field in self.get_allowed_specs()}
 
     def is_inverse(self) -> bool:
         return self.asset_type.is_inverse()
@@ -193,6 +205,7 @@ class BaseProduct(BaseModel):
             [
                 f"source={self.source}",
                 f"basis={self.basis}",
+                f"name={self.name}",
                 *[f"{k}={v}" for k, v in sorted(self.specs.items())],
             ]
         )
@@ -200,11 +213,7 @@ class BaseProduct(BaseModel):
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, BaseProduct):
             return False
-        return (
-            self.source == other.source
-            and self.symbol == other.symbol
-            and self.asset_type == other.asset_type
-        )
+        return self.source == other.source and self.key == other.key
 
     def __hash__(self) -> int:
-        return hash((self.source, self.symbol, self.asset_type))
+        return hash((self.source, self.key))

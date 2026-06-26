@@ -10,8 +10,8 @@ from pfund.datas.data_config import DataConfig
 class BaseData:
     category: ClassVar[DataCategory]
 
-    def __init__(self, data_config: DataConfig | None = None):
-        self.config: DataConfig = data_config or DataConfig()
+    def __init__(self, config: DataConfig | None = None):
+        self.config: DataConfig = config or DataConfig()
         self.extra: dict[str, Any] = {}
 
     @property
@@ -25,7 +25,7 @@ class BaseData:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "data_config": self.config.model_dump(),
+            "config": self.config.model_dump(),
         }
 
     def update_extra(self, extra: dict[str, Any]):

@@ -100,9 +100,11 @@ class BybitRESTfulAPI(BaseRESTfulAPI):
     async def get_markets(self, category: BybitProduct.Category) -> Result:
         category = BybitProduct.Category[category.upper()]
         params = {"category": category.lower()}
+        # EXTEND: handle other attributes in BaseMarket (market_base.py), e.g. min_quantity, min_leverage etc.
         schema: Schema = {
             "@data": ("result", "list"),
             "data": {
+                # NOTE: these dict keys should match the BybitMarketc
                 "symbol": ["symbol"],
                 "base_asset": (
                     "baseCoin",

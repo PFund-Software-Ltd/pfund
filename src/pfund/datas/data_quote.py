@@ -19,12 +19,12 @@ class QuoteData(MarketData):
         self,
         product: BaseProduct,
         resolution: Resolution,
-        data_config: DataConfig | None = None,
+        config: DataConfig | None = None,
     ):
         super().__init__(
             product=product,
             resolution=resolution,
-            data_config=data_config,
+            config=config,
         )
         self._orderbook_depth: int = resolution.period
         self._orderbook_level: int | None = resolution.orderbook_level

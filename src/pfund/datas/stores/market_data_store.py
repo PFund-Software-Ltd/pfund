@@ -101,7 +101,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         self,
         product: BaseProduct,
         resolution: Resolution,
-        data_config: DataConfig,
+        config: DataConfig,
     ) -> MarketData:
         data = self.get_data(product.name, resolution)
         if data is not None:
@@ -109,7 +109,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         data = self.create_data(
             product=product,
             resolution=resolution,
-            data_config=data_config,
+            config=config,
         )
         self._datas[product.name][repr(resolution)] = data
         return data
@@ -148,26 +148,26 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         self,
         product: BaseProduct,
         resolutions: list[Resolution | str] | None = None,
-        data_config: DataConfig | None = None,
+        config: DataConfig | None = None,
     ) -> list[MarketData]:
-        data_config = self._resolve_data_config(
+        config = self._resolve_data_config(
             product=product,
             resolutions=resolutions or [],
-            data_config=data_config or DataConfig(),
+            data_config=config or DataConfig(),
         )
 
         # mutually bind data_resampler and data_resamplee
-        for resamplee_resolution, resampler_resolution in data_config.resample.items():
-            data_resamplee = self._add_data(product, resamplee_resolution, data_config)
-            data_resampler = self._add_data(product, resampler_resolution, data_config)
+        for resamplee_resolution, resampler_resolution in config.resample.items():
+            data_resamplee = self._add_data(product, resamplee_resolution, config)
+            data_resampler = self._add_data(product, resampler_resolution, config)
             data_resamplee.bind_resampler(data_resampler)
             self._logger.debug(
                 f"{product.name} resolution={resampler_resolution} is used to resample {resamplee_resolution} data"
             )
 
         datas: list[MarketData] = [
-            self._add_data(product, resolution, data_config)
-            for resolution in data_config.data_resolutions
+            self._add_data(product, resolution, config)
+            for resolution in config.data_resolutions
         ]
         return datas
 
@@ -175,7 +175,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         self,
         product: BaseProduct,
         resolution: Resolution,
-        data_config: DataConfig,
+        config: DataConfig,
     ) -> MarketData:
         if resolution.is_quote():
             DataClass = QuoteData
@@ -185,9 +185,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             DataClass = BarData
         else:
             raise ValueError(f"Unsupported resolution: {resolution}")
-        return DataClass(
-            product=product, resolution=resolution, data_config=data_config
-        )
+        return DataClass(product=product, resolution=resolution, data_config=config)
 
     # TODO
     def update_quote(self, update: QuoteUpdate):

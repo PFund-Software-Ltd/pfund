@@ -1,13 +1,31 @@
 from __future__ import annotations
 
 import re
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from pfund.datas.timeframe import Timeframe
+
+if TYPE_CHECKING:
+    from pydantic import GetCoreSchemaHandler
+    from pydantic_core import CoreSchema
 
 
 class Resolution:
     DEFAULT_ORDERBOOK_LEVEL: ClassVar[int] = 1
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls, source_type: Any, handler: GetCoreSchemaHandler
+    ) -> CoreSchema:
+        from pydantic_core import core_schema
+
+        def _validate(value: Resolution | str) -> Resolution:
+            return value if isinstance(value, Resolution) else cls(value)
+
+        return core_schema.no_info_plain_validator_function(
+            _validate,
+            serialization=core_schema.plain_serializer_function_ser_schema(repr),
+        )
 
     def __init__(self, resolution: Resolution | str):
         """

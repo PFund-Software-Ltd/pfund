@@ -80,6 +80,7 @@ build-backend = "uv_build"
 # typeCheckingMode = "basic"
 reportAny = false
 reportExplicitAny = false
+reportIncompatibleVariableOverride = false
 reportIncompatibleMethodOverride = false
 reportUnreachable = false
 reportRedeclaration = false

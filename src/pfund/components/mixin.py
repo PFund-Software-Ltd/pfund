@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from sklearn.base import BaseEstimator
 
     from pfund.venues.venue_base import BaseVenue
+    from pfund.venues.venue_config import VenueConfig
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.indicators.indicator_base import BaseIndicator
     from pfund.components.models.model_base import BaseModel
@@ -562,18 +563,15 @@ class ComponentMixin:
 
     def _add_product(
         self,
-        venue: TradingVenue | str | type[BaseVenue],
+        venue: TradingVenue | str,
         basis: str,
         exchange: str = "",
         symbol: str = "",
         name: str = "",
         **specs: Any,
     ) -> BaseProduct:
-        if isinstance(venue, str):
-            venue = TradingVenue[venue.upper()]
-            VenueClass = venue.venue_class
-        else:
-            VenueClass = venue
+        venue = TradingVenue[venue.upper()]
+        VenueClass = venue.venue_class
         product = VenueClass.create_product(
             basis=basis, exchange=exchange, name=name, symbol=symbol, **specs
         )
@@ -582,7 +580,7 @@ class ComponentMixin:
         else:
             existing_product = self.products[product.name]
             assert existing_product == product, (
-                f"{product.name=} is already used by {existing_product}, cannot use it for {product}"
+                f"product name '{product.name}' is already used"
             )
         return self.products[product.name]
 
@@ -599,22 +597,18 @@ class ComponentMixin:
 
     def add_data(
         self,
-        venue: TradingVenue | str | type[BaseVenue],
+        venue: TradingVenue | str,
         product: str,
         resolutions: list[Resolution | str] | None = None,
         exchange: str = "",
         symbol: str = "",
         product_name: str = "",
-        data_config: DataConfig | None = None,
+        config: DataConfig | None = None,
         **product_specs: Any,
     ) -> list[MarketData]:
         """
         Args:
             venue: trading venue, e.g. 'ibkr', 'bybit'.
-            Also accepts a custom subclass for adding venue-specific functions,
-            e.g. CustomIBKR where:
-                class CustomIBKR(pf.IBKR):
-                    ...
             exchange: useful for TradFi brokers (e.g. IB), to specify the exchange (e.g. 'NASDAQ')
             symbol: useful for TradFi brokers (e.g. IB), to specify the symbol (e.g. 'AAPL')
             product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
@@ -640,7 +634,7 @@ class ComponentMixin:
         datas: list[MarketData] = self.market_data_store.add_data(
             product=product,
             resolutions=resolutions,
-            data_config=data_config,
+            config=config,
         )
         return datas
 

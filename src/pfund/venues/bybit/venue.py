@@ -1,33 +1,48 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 if TYPE_CHECKING:
-    from pfund.entities import BaseProduct, BaseAccount, BaseOrder
-    from pfund.venues.adapter_base import BaseAdapter
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
-    from pfund.venues._apis.rest_api_base import Result
+    from pfund.venues._apis.typing import Result
 
-import asyncio
 import datetime
 from decimal import Decimal
 
+from pfund.typing import ProductKey
 from pfund.datas.timeframe import Timeframe
+from pfund.venues.venue_base import BaseVenue
 from pfund.venues.venue_metadata import VenueMetadata
-from pfund.venues.exchange_crypto import CryptoExchange
-from pfund.venues.bybit.product import BybitProduct
-from pfund.venues.bybit.account import BybitAccount
-from pfund.venues.bybit.order import BybitOrder
 from pfund.venues.bybit.adapter import BybitAdapter
+from pfund.venues.bybit.config import BybitConfig
+from pfund.venues.bybit.market import BybitMarket
+from pfund.venues.bybit.account import BybitAccount
+from pfund.venues.bybit.balance import BybitBalance
+from pfund.venues.bybit.order import BybitOrder
+from pfund.venues.bybit.product import BybitProduct
+from pfund.venues.bybit.position import BybitPosition
+from pfund.entities.products.asset_type import AssetType
 from pfund.enums import AssetTypeModifier, CryptoAssetType, TradingVenue, Environment
 
 
-class Bybit(CryptoExchange):
+class Bybit(
+    BaseVenue[
+        BybitConfig,
+        BybitMarket,
+        BybitAccount,
+        BybitBalance,
+        BybitOrder,
+        BybitProduct,
+        BybitPosition,
+    ]
+):
     name: ClassVar[TradingVenue] = TradingVenue.BYBIT
-    adapter: ClassVar[BaseAdapter] = BybitAdapter()
-    Order: ClassVar[type[BaseOrder]] = BybitOrder
-    Product: ClassVar[type[BaseProduct]] = BybitProduct
-    Account: ClassVar[type[BaseAccount]] = BybitAccount
+    adapter: ClassVar[BybitAdapter] = BybitAdapter()
+    Config: ClassVar[type[BybitConfig]] = BybitConfig
+    Market: ClassVar[type[BybitMarket]] = BybitMarket
+    Order: ClassVar[type[BybitOrder]] = BybitOrder
+    Product: ClassVar[type[BybitProduct]] = BybitProduct
+
     METADATA: ClassVar[VenueMetadata] = VenueMetadata(
         asset_types=[
             CryptoAssetType.FUTURE,
@@ -76,38 +91,61 @@ class Bybit(CryptoExchange):
     )
 
     def __init__(
-        self, env: Environment | str, settings: TradeEngineSettings | None = None
+        self,
+        env: Literal[
+            Environment.SANDBOX,
+            Environment.PAPER,
+            Environment.LIVE,
+            "SANDBOX",
+            "PAPER",
+            "LIVE",
+        ],
+        config: BybitConfig | None = None,
+        settings: TradeEngineSettings | None = None,
     ):
         from pfund.venues.bybit.rest_api import BybitRESTfulAPI
         # from pfund.venues.bybit.ws_api import BybitWebSocketAPI
 
-        super().__init__(env=env, settings=settings)
+        super().__init__(env=env, config=config, settings=settings)
         self.rest_api = BybitRESTfulAPI(env=self._env)
         # self.ws_api = BybitWebSocketAPI(env=self._env)
 
-    """
-    Functions using REST API
-    TODO EXTEND
-    """
+    async def get_markets_async(
+        self,
+        category: BybitProduct.Category
+        | Literal["LINEAR", "OPTION", "SPOT", "OPTION"]
+        | None = None,
+    ) -> dict[ProductKey, BybitMarket]:
+        if category is None:
+            categories = [category for category in BybitProduct.Category]
+        else:
+            categories = [BybitProduct.Category[category.upper()]]
+        markets: dict[ProductKey, BybitMarket] = {}
+        for category in categories:
+            result: Result = await self.rest_api.get_markets(category=category)
+            data = result["response"]["data"]
+            if not isinstance(data, list):
+                raise RuntimeError(
+                    f"unexpected data for category {category}: "
+                    + f"expected list, got {type(data).__name__}"
+                )
+            for data_per_market in data:
+                market = BybitMarket(**data_per_market)
+                product_key = ProductKey(
+                    symbol=market.symbol, asset_type=AssetType(value=market.asset_type)
+                )
+                markets[product_key] = market
+        return markets
 
-    # async def aget_markets(
-    #     self, category: tProductCategory = ""
-    # ) -> dict[ProductCategory, Result]:
-    #     categories = (
-    #         [ProductCategory[category.upper()]]
-    #         if category
-    #         else [category for category in ProductCategory]
-    #     )
-    #     markets: dict[ProductCategory, Result] = {}
-    #     for category in categories:
-    #         result: Result = await self._rest_api.get_markets(category=category)
-    #         markets[category] = result
-    #     return markets
+    aget_markets = get_markets_async
 
-    # def get_markets(
-    #     self, category: tProductCategory = ""
-    # ) -> dict[ProductCategory, Result]:
-    #     return asyncio.run(self.aget_markets(category=category))
+    def get_markets(
+        self,
+        category: BybitProduct.Category
+        | Literal["LINEAR", "OPTION", "SPOT", "OPTION"]
+        | None = None,
+    ) -> dict[ProductKey, BybitMarket]:
+        return self._run_async(self.aget_markets(category=category))
 
     # def get_balances(
     #     self, account: CryptoAccount, ccy: str = "", **kwargs

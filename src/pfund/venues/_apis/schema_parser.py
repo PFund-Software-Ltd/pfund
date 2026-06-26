@@ -4,7 +4,7 @@ from collections.abc import Sequence, Callable
 
 from pydantic import validate_call
 
-from pfund.venues._apis.typing import RawPayload, Schema
+from pfund.venues._apis.typing import RawPayload, Schema, ResponseData
 
 from pfund.errors import ParseAPIResponseError
 
@@ -171,7 +171,7 @@ class SchemaParser:
     def convert(
         payload: RawPayload | dict[str, Any] | list[dict[str, Any]],
         schema: Schema | dict[str, Any],
-    ) -> dict[str, Any] | list[dict[str, Any]]:
+    ) -> ResponseData:
         if isinstance(payload, dict):
             return SchemaParser._parse(payload, schema)
         elif isinstance(payload, list):

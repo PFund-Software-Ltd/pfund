@@ -1,13 +1,14 @@
+# pyright: reportAttributeAccessIssue=false
 from __future__ import annotations
+from typing import cast
 
 from enum import StrEnum
-from typing import Any
+from datetime import date
 
 from pfeed.enums import DataSource
-from pydantic import model_validator
 
 from pfund.entities import BaseProduct
-from pfund.enums import AssetTypeModifier, CryptoAssetType
+from pfund.enums import AssetTypeModifier, CryptoAssetType, OptionType
 
 
 class BybitProduct(BaseProduct):
@@ -18,7 +19,6 @@ class BybitProduct(BaseProduct):
         OPTION = "OPTION"
 
     source: DataSource = DataSource.BYBIT
-    category: Category | None = None
 
     def _derive_product_category(self):
         if self.asset_type == CryptoAssetType.CRYPTO:
@@ -31,21 +31,12 @@ class BybitProduct(BaseProduct):
             category = self.Category.LINEAR
         return category
 
-    def model_post_init(self, __context: Any):
-        self.category = self._derive_product_category()
-        super().model_post_init(__context)
-
-    # TODO: move to BaseProduct and add back SUPPORTED_ASSET_TYPES to CryptoExchange?
-    @model_validator(mode="after")
-    def _validate_asset_type(self):
-        from pfund.venues.bybit import Bybit
-
-        if str(self.asset_type) not in Bybit.SUPPORTED_ASSET_TYPES:
-            raise ValueError(f"Invalid asset type: {self.asset_type}")
-        return self
+    @property
+    def category(self) -> Category:
+        return self._derive_product_category()
 
     def _create_name(self) -> str:
-        if self.is_spot() or self.is_perpetual():
+        if self.is_crypto() or self.is_perpetual():
             # NOTE: spots and perpetuals have duplicated symbols, e.g. BTCUSDT, use basis instead to make them unique
             return "_".join([str(self.source), str(self.basis)])
         else:
@@ -69,13 +60,14 @@ class BybitProduct(BaseProduct):
         elif self.asset_type == CryptoAssetType.CRYPTO:
             symbol = ebase_asset + equote_asset
         elif self.asset_type == CryptoAssetType.FUT:
+            expiration = cast(date, self.expiration)
             # symbol = e.g. BTC-13DEC24
             if equote_asset == "USDC":
-                expiration = self.expiration.strftime("%d%b%y").upper()
+                expiration = expiration.strftime("%d%b%y").upper()
                 symbol = "-".join([ebase_asset, expiration])
             # symbol = e.g. BTCUSDT-22AUG25
             elif equote_asset == "USDT":
-                expiration = self.expiration.strftime("%d%b%y").upper()
+                expiration = expiration.strftime("%d%b%y").upper()
                 symbol = "-".join([ebase_asset + equote_asset, expiration])
             else:
                 raise ValueError(
@@ -88,8 +80,9 @@ class BybitProduct(BaseProduct):
             )
             symbol = ebase_asset + equote_asset + self.contract_code
         elif self.asset_type == CryptoAssetType.OPT:
-            expiration = self.expiration.strftime("%d%b%y")
-            option_type = self.option_type[0]
+            expiration = cast(date, self.expiration)
+            expiration = expiration.strftime("%d%b%y")
+            option_type = cast(OptionType, self.option_type)[0]
             strike_price = str(self.strike_price)
             symbol = "-".join([ebase_asset, expiration, strike_price, option_type])
         else:

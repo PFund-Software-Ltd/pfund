@@ -34,11 +34,16 @@ class RequestData(TypedDict, total=True):
     params: dict[str, Any] | None
 
 
+class ResponseData(TypedDict, total=True, extra_items=Any):
+    # "data" is the key defined in schema
+    data: dict[str, Any] | list[dict[str, Any]] | None
+
+
 class Result(TypedDict, total=True):
     success: bool
     error: str
     venue: TradingVenue
     request: RequestData
     account: AccountName | None
-    data: dict[str, Any] | list[dict[str, Any]] | None
+    response: ResponseData
     raw_payload: RawPayload | None

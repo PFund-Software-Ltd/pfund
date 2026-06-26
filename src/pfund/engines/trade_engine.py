@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
+
 if TYPE_CHECKING:
     from mtflow.contexts.trade_context import TradeContext
     from pfeed.engine import DataEngine
@@ -20,7 +21,7 @@ from threading import Thread
 
 from pfeed.enums import DataCategory
 
-from pfund.enums import Environment
+from pfund.enums import Environment, TradingVenue
 from pfund.engines.base_engine import BaseEngine
 
 

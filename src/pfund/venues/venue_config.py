@@ -1,32 +1,38 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from pfund.enums import DataChannel
 
 
 class VenueConfig(BaseModel):
-    cancel_all_at_start: bool = False
-    cancel_all_at_reconnection: bool = False
-    cancel_all_at_stop: bool = False
-    # force refetching market configs
-    refetch_markets: bool = Field(default=False)
-    # renew market configs every x days
-    renew_markets_every_x_days: int = Field(default=7)
-    # Always use the Stream API (e.g. WebSocket API) for actions like placing or canceling orders, even if RESTful API is available.
-    stream_api_first: bool = Field(default=True)
-    subscribed_private_channels: list[
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    cancel_all_at: list[Literal["start", "reconnect", "stop"]] = Field(
+        default=["start", "reconnect", "stop"],
+    )
+    refetch_markets: bool = Field(
+        default=False,
+        description="refetch markets.yml on startup.",
+    )
+    stream_api_first: bool = Field(
+        default=True,
+        description="Always use the Stream API (e.g. WebSocket API) for actions such as placing or canceling orders, even if RESTful API is available.",
+    )
+    private_channels: list[
         Literal[
             DataChannel.balance,
             DataChannel.position,
             DataChannel.order,
             DataChannel.trade,
         ]
+        | Literal["balance", "position", "order", "trade"]
     ] = Field(
         default=[
             DataChannel.balance,
             DataChannel.position,
             DataChannel.order,
             DataChannel.trade,
-        ]
+        ],
+        description="private channels to subscribe to.",
     )

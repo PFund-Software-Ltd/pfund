@@ -1,58 +1,121 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, ClassVar, Any
+from typing import TYPE_CHECKING, ClassVar, Any, Generic, Literal, TypeVar, cast
 
 if TYPE_CHECKING:
-    from pfund.typing import AccountName, ProductName, Currency
+    from pfund_kit.utils.yaml import YAMLDocument
+    from pfund.typing import AccountName, ProductName, Currency, ProductKey
     from pfund.entities import (
         BaseAccount,
         BaseProduct,
         BaseBalance,
         BasePosition,
         BaseOrder,
+        BaseMarket,
     )
-    from pfund.datas.resolution import Resolution
+    from pfund.venues.venue_config import VenueConfig
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.venues.adapter_base import BaseAdapter
-    from pfund.enums import AllAssetType
 
+import sys
+import asyncio
 import logging
 from abc import ABC, abstractmethod
+from pathlib import Path
 from threading import Thread
+from collections.abc import Coroutine
+from functools import cached_property
 
-from pfund.venues.venue_config import VenueConfig
+from pfund.typing import ProductKey
+from pfund.entities.products.asset_type import AssetType
 from pfund.venues.venue_metadata import VenueMetadata
 from pfund.enums import Environment, TradingVenue
 
 
-class BaseVenue(ABC):
+ConfigT = TypeVar("ConfigT", bound="VenueConfig")
+MarketT = TypeVar("MarketT", bound="BaseMarket")
+AccountT = TypeVar("AccountT", bound="BaseAccount")
+BalanceT = TypeVar("BalanceT", bound="BaseBalance")
+OrderT = TypeVar("OrderT", bound="BaseOrder")
+ProductT = TypeVar("ProductT", bound="BaseProduct")
+PositionT = TypeVar("PositionT", bound="BasePosition")
+
+
+class BaseVenue(
+    ABC, Generic[ConfigT, MarketT, AccountT, BalanceT, OrderT, ProductT, PositionT]
+):
     name: ClassVar[TradingVenue]
     adapter: ClassVar[BaseAdapter]
+    Config: ClassVar[type[VenueConfig]]
+    Market: ClassVar[type[BaseMarket]]
     Order: ClassVar[type[BaseOrder]]
     Product: ClassVar[type[BaseProduct]]
-    Account: ClassVar[type[BaseAccount]]
+
     METADATA: ClassVar[VenueMetadata]
-    CONFIG_FILENAME: ClassVar[str] = "config.toml"
-    MARKETS_FILENAME: ClassVar[str] = "markets.yml"
+
+    class _Markets:
+        """Local cache of the venue's supported markets, persisted to markets.yml.
+
+        A market is a product the venue supports, keyed by product name and carrying
+        its trading info (e.g. tick size, lot size). Loaded from disk on startup, or
+        refetched from the venue and dumped when config.refetch_markets is set.
+        """
+
+        FILENAME: ClassVar[str] = "markets.yml"
+
+        @property
+        def file_path(self) -> Path:
+            from pfund.config import get_config
+
+            return get_config().data_path / self.FILENAME
 
     def __init__(
-        self, env: Environment | str, settings: TradeEngineSettings | None = None
+        self,
+        env: Literal[
+            Environment.SANDBOX,
+            Environment.PAPER,
+            Environment.LIVE,
+            "SANDBOX",
+            "PAPER",
+            "LIVE",
+        ],
+        config: ConfigT | None = None,
+        settings: TradeEngineSettings | None = None,
     ):
-        self._env = Environment[env.upper()]
+        environment = Environment[env.upper()]
+        if environment not in (
+            Environment.SANDBOX,
+            Environment.PAPER,
+            Environment.LIVE,
+        ):
+            raise ValueError(f"environment {env} is not supported")
+        self._env: Literal[Environment.SANDBOX, Environment.PAPER, Environment.LIVE] = (
+            environment
+        )
         self._logger: logging.Logger = logging.getLogger(f"pfund.{self.name.lower()}")
+        self._config: ConfigT = config or cast(ConfigT, self.Config())
         self._settings: TradeEngineSettings | None = settings
-        self._accounts: dict[AccountName, BaseAccount] = {}
-        self._products: dict[ProductName, BaseProduct] = {}
-        self.config: VenueConfig = self._load_config()
+        self._accounts: dict[AccountName, AccountT] = {}
+        self._products: dict[ProductName, ProductT] = {}
 
-    def _load_config(self) -> VenueConfig:
-        pass
+    def _run_async(self, coro: Coroutine[Any, Any, Any]) -> Any:
+        """Drive an async-native venue method from a synchronous context.
 
-    # TODO: load markets.yml, also use it to set product tick_size, lot_size, fees etc.
-    def _load_markets(self):
-        pass
-
-    def configure(self, persist: bool = False) -> VenueConfig:
-        pass
+        Safe to call from sync code (scripts, REPL, notebooks). Raises RuntimeError
+        if called from within a running event loop, since asyncio.run() cannot be
+        nested — call the async variant (e.g. get_markets_async()) there instead.
+        """
+        method_name = sys._getframe(1).f_code.co_name
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            # no running event loop -> safe to drive the coroutine with asyncio.run()
+            return asyncio.run(coro)
+        else:
+            coro.close()  # avoid "coroutine was never awaited" RuntimeWarning
+            raise RuntimeError(
+                f"Cannot call {method_name}() from within a running event loop.\n"
+                + f"Did you mean to call {method_name}_async()?"
+            )
 
     def start(self):
         pass
@@ -60,7 +123,54 @@ class BaseVenue(ABC):
     def stop(self):
         pass
 
-    # TODO
+    @abstractmethod
+    def get_markets(self, *args: Any, **kwargs: Any) -> dict[ProductKey, MarketT]:
+        pass
+
+    @cached_property
+    def markets(self) -> dict[ProductKey, MarketT]:
+        return (
+            self._load_markets()
+            if not self._config.refetch_markets
+            else self._dump_markets()
+        )
+
+    def _load_markets(self) -> dict[ProductKey, MarketT]:
+        """Load markets.yml from disk."""
+        from pfund_kit.utils.yaml import load
+
+        file_path = self._Markets().file_path
+        if not file_path.exists():
+            return self._dump_markets()
+        document: YAMLDocument = load(file_path) or {}
+        markets: dict[ProductKey, MarketT] = {}
+        for market_data in document.values():
+            market = self.Market(**market_data)
+            key = ProductKey(
+                symbol=market.symbol, asset_type=AssetType(market.asset_type)
+            )
+            markets[key] = market
+        return markets
+
+    def _dump_markets(self) -> dict[ProductKey, MarketT]:
+        """Dump get_markets() result to markets.yml."""
+        from pfund_kit.utils.yaml import dump
+
+        markets: dict[ProductKey, MarketT] = self.get_markets()
+        document = {
+            f"{key.symbol}.{key.asset_type.value}": market.model_dump()
+            for key, market in markets.items()
+        }
+        if document:
+            dump(document, self._Markets().file_path)
+        return markets
+
+    def refresh_markets(self) -> dict[ProductKey, MarketT]:
+        """Drop the cached markets and reload."""
+        markets = self._dump_markets()
+        self.__dict__["markets"] = markets  # warm the cached_property
+        return markets
+
     # @abstractmethod
     # def add_product(self, *args: Any, **kwargs: Any) -> BaseProduct: ...
 
@@ -68,9 +178,9 @@ class BaseVenue(ABC):
     # def add_account(self, *args: Any, **kwargs: Any) -> BaseAccount: ...
 
     def add_balance(
-        self, veune: TradingVenue, acc: AccountName, ccy: Currency
-    ) -> CryptoBalance:
-        exch = CryptoExchange[veune.upper()]
+        self, venue: TradingVenue, acc: AccountName, ccy: Currency
+    ) -> BalanceT:
+        venue = TradingVenue[venue.upper()]
         ccy = ccy.upper()
         if not (balance := self.get_balances(exch, acc=acc, ccy=ccy)):
             balance = CryptoBalance(ccy=ccy)
@@ -78,9 +188,10 @@ class BaseVenue(ABC):
         return balance
 
     def add_position(
-        self, exch: CryptoExchange, acc: str, pdt: ProductName
-    ) -> CryptoPosition:
-        exch, pdt = exch.upper(), pdt.upper()
+        self, venue: TradingVenue, acc: str, pdt: ProductName
+    ) -> PositionT:
+        venue = TradingVenue[venue.upper()]
+        pdt = pdt.upper()
         if not (position := self.get_positions(exch, acc=acc, pdt=pdt)):
             account = self.get_account(exch, acc)
             product = self.add_product(exch, pdt=pdt)
@@ -175,7 +286,7 @@ class BaseVenue(ABC):
         name: str = "",
         symbol: str = "",
         **specs: Any,
-    ) -> BaseProduct:
+    ) -> ProductT:
         from pfeed.enums import DataSource
         from pfund.entities.products import ProductFactory
 
@@ -190,7 +301,7 @@ class BaseVenue(ABC):
         return self._env
 
     @property
-    def account(self) -> BaseAccount | None:
+    def account(self) -> AccountT | None:
         num_accounts = len(self._accounts)
         if num_accounts < 1:
             return None
@@ -200,27 +311,27 @@ class BaseVenue(ABC):
             return list(self._accounts.values())[0]
 
     @property
-    def accounts(self) -> dict[AccountName, BaseAccount]:
+    def accounts(self) -> dict[AccountName, AccountT]:
         return self._accounts
 
     @property
-    def products(self):
+    def products(self) -> dict[ProductName, ProductT]:
         return self._products
 
-    def get_account(self, name: AccountName) -> BaseAccount:
+    def get_account(self, name: AccountName) -> AccountT:
         return self.accounts[name]
 
-    def get_product(self, name: ProductName) -> BaseProduct:
+    def get_product(self, name: ProductName) -> ProductT:
         return self.products[name]
 
     # TODO: api call
-    def get_balances(self, name: AccountName) -> dict[Currency, BaseBalance]: ...
+    def get_balances(self, name: AccountName) -> dict[Currency, BalanceT]: ...
 
     # TODO: api call
-    def get_positions(self, name: AccountName) -> dict[ProductName, BasePosition]: ...
+    def get_positions(self, name: AccountName) -> dict[ProductName, PositionT]: ...
 
     # TODO: api call
-    def get_orders(self, name: AccountName) -> dict[ProductName, list[BaseOrder]]: ...
+    def get_orders(self, name: AccountName) -> dict[ProductName, list[OrderT]]: ...
 
     # def _add_default_private_channels(self):
     #     for channel in PrivateDataChannel:

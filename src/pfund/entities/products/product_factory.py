@@ -36,6 +36,8 @@ def ProductFactory(source: DataSource | str, basis: str) -> type[BaseProduct]:
     else:
         Product = source.product_class
     asset_type = ProductBasis(basis=basis.upper()).asset_type
+    if asset_type is None:
+        raise ValueError(f"asset type is None for product basis {basis}")
     mixins: list[type] = []
     for t in asset_type:
         if t in AssetTypeModifier.__members__:

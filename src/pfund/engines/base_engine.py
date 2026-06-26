@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from pfeed.sources.pfund.engine_feed import PFundEngineFeed
 
     from pfund.venues.venue_base import BaseVenue
+    from pfund.venues.venue_config import VenueConfig
     from pfund.components.actor_proxy import ActorProxy
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.datas.data_base import BaseData
@@ -71,10 +72,10 @@ class BaseEngine(metaclass=SingletonMeta):
         )
         self._is_running = False
         self._feed: PFundEngineFeed = pe.PFund().engine_feed
-        self._venues: dict[TradingVenue, BaseVenue] = {}
         self._strategies: dict[
             ComponentName, BaseStrategy | ActorProxy[BaseStrategy]
         ] = {}
+        self._venues: dict[TradingVenue, BaseVenue] = {}
         self._order_manager = OrderManager()
         self._portfolio_manager = PortfolioManager()
         self._risk_manager = RiskManager()
@@ -185,22 +186,59 @@ class BaseEngine(metaclass=SingletonMeta):
     def get_strategy(self, name: str) -> BaseStrategy | ActorProxy[BaseStrategy]:
         return self._strategies[name]
 
-    def _add_venue(self, venue: TradingVenue) -> BaseVenue:
-        venue = TradingVenue[venue.upper()]
-        if venue not in self._venues:
+    def add_venue(
+        self,
+        venue: TradingVenue | str | type[BaseVenue],
+        config: VenueConfig | None = None,
+    ) -> BaseVenue:
+        """Add trading venue
+        Args:
+            venue: trading venue, e.g. 'ibkr', 'bybit'.
+            Also accepts a custom subclass for adding venue-specific functions,
+            e.g. CustomIBKR where:
+                class CustomIBKR(pf.IBKR):
+                    ...
+        """
+        if isinstance(venue, str):
+            venue = TradingVenue[venue.upper()]
             VenueClass = venue.venue_class
-            venue = VenueClass(env=self.env, settings=self.settings)
-            self._venues[venue] = venue
-            self._logger.debug(f"added trading venue {venue}")
+        else:
+            UserVenueClass = venue  # custom venue class provided by the user
+            if not hasattr(UserVenueClass, "name") or not isinstance(
+                UserVenueClass.name, TradingVenue
+            ):
+                raise ValueError(
+                    f"{UserVenueClass} is not an invalid class supported by pfund"
+                )
+            PFundVenueClass = UserVenueClass.name.venue_class
+            if not issubclass(UserVenueClass, PFundVenueClass):
+                raise ValueError(
+                    f"{UserVenueClass} is not a subclass of {PFundVenueClass}"
+                )
+            VenueClass = UserVenueClass
+        if venue not in self._venues:
+            trading_venue = VenueClass(
+                env=self.env, config=config, settings=self.settings
+            )
+            self._venues[trading_venue] = trading_venue
+            self._logger.debug(f"added {trading_venue=}")
+        elif config is not None:
+            raise ValueError(f"{venue} already exists and cannot be configured")
         return self._venues[venue]
 
-    def get_venue(self, venue: TradingVenue) -> BaseVenue:
+    def get_venue(self, venue: TradingVenue | str) -> BaseVenue:
         return self._venues[TradingVenue[venue.upper()]]
 
     get_trading_venue = get_venue
 
     def _add_product(self, product: BaseProduct):
-        venue: BaseVenue = self._add_venue(product.source)
+        for existing_venue in self._venues.values():
+            if (existing := existing_venue.products.get(product.name)) is not None:
+                raise ValueError(
+                    f'product name "{product.name}" is already used by {existing!r}; '
+                    + "product names must be unique across the engine"
+                )
+        venue: BaseVenue = self.add_venue(product.source)
         venue.add_product(
             exch=product.exchange,
             basis=str(product.basis),
@@ -217,7 +255,7 @@ class BaseEngine(metaclass=SingletonMeta):
                     f'account name "{account.name}" is already used by {existing!r}; '
                     + "account names must be unique across the engine"
                 )
-        venue: BaseVenue = self._add_venue(account.venue)
+        venue: BaseVenue = self.add_venue(account.venue)
         account = venue.add_account(**account.to_dict())
         self._logger.debug(f"added account {account}")
 

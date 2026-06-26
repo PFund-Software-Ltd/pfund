@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 if TYPE_CHECKING:
     from pfund.entities import BaseProduct, BaseOrder, BaseAccount
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund.typing import AccountName, Currency, FullDataChannel, ProductName
+    from pfund.typing import AccountName, Currency, FullDataChannel, ProductKey
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 
 from abc import ABC
@@ -28,8 +28,6 @@ from pfund.venues.ibkr.position import InteractiveBrokersPosition
 class InteractiveBrokers(BaseVenue, ABC):
     name: ClassVar[TradingVenue] = TradingVenue.IBKR
     Order: ClassVar[type[BaseOrder]] = InteractiveBrokersOrder
-    Product: ClassVar[type[BaseProduct]] = InteractiveBrokersProduct
-    Account: ClassVar[type[BaseAccount]] = InteractiveBrokersAccount
 
     def __init__(
         self, env: Environment | str, settings: TradeEngineSettings | None = None
@@ -38,6 +36,10 @@ class InteractiveBrokers(BaseVenue, ABC):
 
         super().__init__(env)
         # self.api = InteractiveBrokersAPI(self._env)
+
+    def get_markets(self) -> dict[ProductKey, IBKRMarket]:
+        """IB has no get_markets endpoint, returns an empty dict."""
+        return {}
 
     # def _add_default_private_channels(self):
     #     for channel in list(PrivateDataChannel.__members__) + [

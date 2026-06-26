@@ -1,13 +1,15 @@
 from functools import cached_property
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from pfund.enums.asset_type import (
+    ASSET_TYPE_ALIASES,
     AllAssetType,
     AssetTypeModifier,
     CryptoAssetType,
     TraditionalAssetType,
+    PredictionMarketAssetType,
 )
 
 
@@ -18,6 +20,27 @@ class AssetType(BaseModel):
 
     value: str  # e.g. 'STOCK'/'STK', 'INVERSE-FUTURE'/'IFUT', 'CRYPTO' etc.
 
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_string(cls, data: Any) -> Any:
+        # allow a bare string (e.g. "PERP") to be used wherever an
+        # AssetType is expected, by treating it as the `value` field
+        if isinstance(data, str):
+            return {"value": data.upper()}
+        return data
+
+    @staticmethod
+    def _standardize_asset_type_string(asset_type_string: str) -> str:
+        """
+        Expand aliases (e.g. 'IPERP' -> 'INVERSE-PERPETUAL') into their canonical hyphenated form.
+        """
+        asset_types_and_modifiers = asset_type_string.split("-")
+        standardized_asset_types_and_modifiers = [
+            ASSET_TYPE_ALIASES.get(atm.upper(), atm)
+            for atm in asset_types_and_modifiers
+        ]
+        return "-".join(standardized_asset_types_and_modifiers)
+
     @staticmethod
     def _parse_asset_type_string_to_tuple(
         asset_type_string: str,
@@ -25,22 +48,24 @@ class AssetType(BaseModel):
         """
         Convert asset type string (e.g. 'INVERSE-FUTURE') to tuple of AssetTypeModifier and AssetType (e.g. (AssetTypeModifier.INVERSE, AssetType.FUTURE)).
         """
-        asset_types_and_modifiers = asset_type_string.split("-")
-        for i, atm in enumerate(asset_types_and_modifiers):
+        asset_type_string = AssetType._standardize_asset_type_string(asset_type_string)
+        parsed: list[AssetTypeModifier | AllAssetType] = []
+        for atm in asset_type_string.split("-"):
             if atm in AssetTypeModifier.__members__:
-                asset_types_and_modifiers[i] = AssetTypeModifier[atm]
-            # NOTE: some aliases are not in AllAssetType, e.g. 'SPOT' only exists in CryptoAssetType
+                parsed.append(AssetTypeModifier[atm])
             elif atm in AllAssetType.__members__:
-                asset_types_and_modifiers[i] = AllAssetType[atm]
+                parsed.append(AllAssetType[atm])
+            # NOTE: some aliases are not in AllAssetType, e.g. 'SPOT' only exists in CryptoAssetType.
+            # The sub-enums' values are AllAssetType members, so normalize to AllAssetType.
             elif atm in TraditionalAssetType.__members__:
-                asset_types_and_modifiers[i] = TraditionalAssetType[atm]
+                parsed.append(AllAssetType(TraditionalAssetType[atm]))
             elif atm in CryptoAssetType.__members__:
-                asset_types_and_modifiers[i] = CryptoAssetType[atm]
-            elif atm in DeFiAssetType.__members__:
-                asset_types_and_modifiers[i] = DeFiAssetType[atm]
+                parsed.append(AllAssetType(CryptoAssetType[atm]))
+            elif atm in PredictionMarketAssetType.__members__:
+                parsed.append(AllAssetType(PredictionMarketAssetType[atm]))
             else:
                 raise ValueError(f"Invalid asset type: {atm}")
-        return tuple(asset_types_and_modifiers)
+        return tuple(parsed)
 
     @field_validator("value", mode="after")
     @classmethod

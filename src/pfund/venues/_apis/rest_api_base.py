@@ -207,7 +207,7 @@ class BaseRESTfulAPI(ABC):
             "error": "",
             "venue": self.venue,
             "account": account.name if account else None,
-            "data": None,
+            "response": None,
             "request": {
                 "endpoint_name": endpoint_name,
                 "url": str(request.url),
@@ -258,7 +258,7 @@ class BaseRESTfulAPI(ABC):
                 endpoint_name, payload
             )
             if result["success"]:
-                result["data"] = SchemaParser.convert(payload, schema)
+                result["response"] = SchemaParser.convert(payload, schema)
             else:
                 result["error"] = self._extract_error(endpoint_name, payload)
         except Exception as exc:

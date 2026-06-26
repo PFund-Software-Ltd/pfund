@@ -11466,7 +11466,7 @@ packages:
 - pypi: ./
   name: pfund
   version: 0.0.19
-  sha256: df8372bbc1b1e6c8664a040536f3bad8483c37f889fdcc936726a23f7916a70a
+  sha256: 43560cc9bb01f262d36dd9cbbd2845b7fb2cc86aca3a3ffeb9f22f24b4f010fb
   requires_dist:
   - pfund-kit>=0.1.11
   - pfeed>=0.0.16

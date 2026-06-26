@@ -11,8 +11,8 @@ from pfund.datas.data_base import BaseData
 
 
 class TimeBasedData(BaseData):
-    def __init__(self, data_config: DataConfig | None = None):
-        super().__init__(data_config=data_config)
+    def __init__(self, config: DataConfig | None = None):
+        super().__init__(config=config)
         self._ts: float | None = None
         self._msg_ts: float | None = None
 
