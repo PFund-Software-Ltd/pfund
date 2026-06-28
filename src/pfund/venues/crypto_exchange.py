@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from pfund.venues._apis.ws_api_base import BaseWebSocketAPI
 
 import time
+import asyncio
 from abc import ABC, abstractmethod
 
 from pfund.venues.venue_base import (
@@ -113,9 +114,9 @@ class CryptoExchange(
         return self.ws_api._create_private_channel(channel)
 
     # TODO:
-    def place_orders(self):
-        # asyncio.run_coroutine_threadsafe(self._connect(), self._loop)  # ws + rest warmup
+    def place_orders(self, orders: list[OrderT]) -> None:
         pass
+        # asyncio.run_coroutine_threadsafe(self.rest_api.function(), self.loop)
 
     # # REVIEW
     # @staticmethod

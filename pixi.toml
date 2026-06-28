@@ -28,7 +28,7 @@ py313 = ["py313", "test", "optional"]
 [pypi-dependencies]
 pfund-kit = ">=0.1.11"
 pfeed = ">=0.0.16"
-apscheduler = ">=3.11.2"
+apscheduler = ">=3.11.3"
 httpx2 = { version = ">=2.5.0", extras = ["http2"] }
 websockets = ">=16.0.0"
 

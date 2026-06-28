@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypedDict
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypedDict, ClassVar
 
 if TYPE_CHECKING:
     from pfund.entities import BaseProduct, BaseAccount
@@ -20,8 +20,16 @@ import math
 from uuid import uuid4
 from decimal import Decimal, ROUND_HALF_UP
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
+from pfund.entities.orders.trailing_stop import TrailingStop
 from pfund.entities.trades.trade import Trade
 from pfund.entities.trades.quantity import Quantity
 from pfund.utils import trim_trailing_zeros
@@ -39,6 +47,7 @@ StrategyName: TypeAlias = str
 
 class BaseOrder(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
+    TrailingStop: ClassVar[type[TrailingStop]] = TrailingStop
 
     creator: StrategyName | Literal["USER"] = Field(
         description="""
@@ -63,6 +72,15 @@ class BaseOrder(BaseModel):
         description="""
         price level that activates a conditional order (stop/take-profit);
         when touched, the order converts into a market or limit order.
+        For a trailing stop this is the CURRENT stop level, recomputed as the
+        market moves (by the venue natively, or by the simulator in backtest).
+        """,
+    )
+    trailing_stop: TrailingStop | None = Field(
+        default=None,
+        description="""
+        the trailing rule (offset only); when set, trigger_price is produced
+        by this rule rather than supplied directly. Direction comes from side.
         """,
     )
     trades: list[Trade] = Field(default_factory=list)
@@ -98,6 +116,15 @@ class BaseOrder(BaseModel):
             self.trigger_price = self._round_to_tick(
                 self.trigger_price, rounding="nearest"
             )
+        if self.trailing_stop is not None:
+            if self.trailing_stop.amount is not None:
+                self.trailing_stop.amount = self._round_to_tick(
+                    self.trailing_stop.amount, rounding="nearest"
+                )
+            if self.trailing_stop.limit_offset is not None:
+                self.trailing_stop.limit_offset = self._round_to_tick(
+                    self.trailing_stop.limit_offset, rounding="nearest"
+                )
 
     @field_validator("side", mode="before")
     @classmethod
@@ -123,6 +150,41 @@ class BaseOrder(BaseModel):
         if isinstance(value, str):
             return TimeInForce[value.upper()]
         raise ValueError(f"Invalid time_in_force: {value}")
+
+    @model_validator(mode="after")
+    def _validate_trailing_stop(self) -> BaseOrder:
+        if self.trailing_stop is None:
+            return self
+
+        # TODO: trailing stop is not supported yet — it requires implementing the
+        # trailing mechanics in BOTH the simulated venue (backtest, sandbox env) and live trading.
+        # Until then, fail loudly rather than silently send an unsupported order.
+        raise NotImplementedError("trailing_stop is not supported yet")
+
+        if self.order_type not in (OrderType.STOP_MARKET, OrderType.STOP_LIMIT):
+            raise ValueError(
+                "trailing_stop requires order_type STOP_MARKET or STOP_LIMIT; "
+                + f"got {self.order_type}"
+            )
+        if self.trigger_price is not None:
+            raise ValueError(
+                "trigger_price cannot be provided with trailing_stop; "
+                + "it is produced by the trailing rule as the market moves"
+            )
+        if self.price is not None:
+            raise ValueError(
+                "price cannot be provided with trailing_stop; "
+                + "the limit price is produced on activation (trigger -/+ limit_offset)"
+            )
+        if (
+            self.order_type == OrderType.STOP_LIMIT
+            and self.trailing_stop.limit_offset is None
+        ):
+            raise ValueError(
+                "trailing_stop with order_type STOP_LIMIT requires limit_offset; "
+                + "it sets the limit price (trigger -/+ limit_offset) on activation"
+            )
+        return self
 
     @staticmethod
     def _generate_key() -> str:

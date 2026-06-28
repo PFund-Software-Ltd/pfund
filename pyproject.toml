@@ -26,7 +26,7 @@ requires-python = ">=3.11"
 dependencies = [
     "pfund-kit>=0.1.11",
     'pfeed>=0.0.16',
-    "apscheduler>=3.11.2",
+    "apscheduler>=3.11.3",
     "httpx2[http2]>=2.5.0",
     "websockets>=16.0.0 ; sys_platform != 'emscripten'",
 ]
