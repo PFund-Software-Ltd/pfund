@@ -51,9 +51,9 @@ class Hyperliquid(
         config: HyperliquidConfig | None = None,
         settings: TradeEngineSettings | None = None,
     ):
-        from pfund.venues.hyperliquid.rest_api import HyperliquidRESTfulAPI
+        from pfund.venues.hyperliquid.rest_api import HyperliquidRestAPI
         from pfund.venues.hyperliquid.ws_api import HyperliquidWebSocketAPI
 
         super().__init__(env=env, config=config, settings=settings)
-        self.rest_api = HyperliquidRESTfulAPI(env=self._env)
+        self.rest_api = HyperliquidRestAPI(env=self._env)
         self.ws_api = HyperliquidWebSocketAPI(env=self._env)

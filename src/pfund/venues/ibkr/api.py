@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
-    from pfund.venues._apis.ws_api_base import Message, WebSocketName
+    from pfund.venues._apis.typing import ResponseData
+    from pfund.venues._apis.ws_api_base import RawMessage, WebSocketName
     from pfund.datas.resolution import Resolution
     from pfund.venues.ibkr.account import InteractiveBrokersAccount
     from pfund.venues.ibkr.product import InteractiveBrokersProduct
@@ -77,8 +78,6 @@ class InteractiveBrokersAPI(BaseWebSocketAPI, IBClient, IBWrapper):
         self.account = None
         self._ib_params_for_channels_subscription = {}
 
-        self._sub_num = self._num_subscribed = 0
-
         self._background_task_freq = 10  # in seconds
         self._background_thread = None
 
@@ -89,7 +88,9 @@ class InteractiveBrokersAPI(BaseWebSocketAPI, IBClient, IBWrapper):
 
     def set_callback(
         self,
-        callback: Callable[[WebSocketName, Message], Awaitable[None] | None],
+        callback: Callable[
+            [WebSocketName, RawMessage | ResponseData], Awaitable[None] | None
+        ],
         raw_msg: bool = False,
     ):
         """
@@ -186,7 +187,6 @@ class InteractiveBrokersAPI(BaseWebSocketAPI, IBClient, IBWrapper):
         # TODO
         # ib_params = self._ib_params_for_channels_subscription[full_channel]
         for channel in channels:
-            self._sub_num += 1
             if channel_type == DataChannelType.public:
                 pass
                 # if channel == 'kline':
@@ -223,8 +223,7 @@ class InteractiveBrokersAPI(BaseWebSocketAPI, IBClient, IBWrapper):
                     self._request_account_summary(**ib_params)
 
     def _unsubscribe(self):
-        self._sub_num = 0
-        self._num_subscribed = 0
+        pass
 
     def _update_orderbook(
         self, req_id, position: int, operation: int, side: int, px, qty, **kwargs

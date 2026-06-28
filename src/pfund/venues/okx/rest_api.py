@@ -1,5 +1,5 @@
-from pfund.venues._apis.rest_api_base import BaseRESTfulAPI, RequestMethod
+from pfund.venues._apis.rest_api_base import BaseRestAPI, RequestMethod
 
 
-class OKXRESTfulAPI(BaseRESTfulAPI):
+class OKXRestAPI(BaseRestAPI):
     pass

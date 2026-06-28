@@ -1,135 +1,112 @@
 from __future__ import annotations
-
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import TYPE_CHECKING, Any, Literal, Generic, ClassVar, cast, TypeVar
 
 if TYPE_CHECKING:
-    from pathlib import Path
+    from http import HTTPMethod
+    from httpx2._types import QueryParamTypes, RequestData
+    from pfund.typing import FullDataChannel
+    from pfund.datas.resolution import Resolution
+    from pfund.venues.venue_config import VenueConfig
+    from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
+    from pfund.venues._apis.rest_api_base import BaseRestAPI
+    from pfund.venues._apis.ws_api_base import BaseWebSocketAPI
 
-    from pfund.venues._apis.rest_api_base import Result
-    from pfund.datas.data_time_based import TimeBasedData
-    from pfund.entities.accounts import APIKeyAccount
-    from pfund.typing import AccountName, FullDataChannel
+import time
+from abc import ABC, abstractmethod
 
-    ProductCategory: TypeAlias = str
-
-
-import datetime
-import os
-from abc import abstractmethod
-from collections import defaultdict
-from functools import reduce
-
-from pfund.enums import DataChannel
-from pfund.venues.venue_base import BaseVenue
+from pfund.venues.venue_base import (
+    BaseVenue,
+    ConfigT,
+    MarketT,
+    AccountT,
+    BalanceT,
+    OrderT,
+    ProductT,
+    PositionT,
+)
+from pfund.enums import Environment, PrivateDataChannel
 
 
-class CryptoExchange(BaseVenue):
-    accounts: dict[AccountName, APIKeyAccount]
+RestAPITypeVar = TypeVar("RestAPITypeVar", bound="BaseRestAPI")
+WebSocketAPITypeVar = TypeVar("WebSocketAPITypeVar", bound="BaseWebSocketAPI[Any, Any]")
 
-    # @classmethod
-    # def create_product(
-    #     cls, basis: str, name: str = "", symbol: str = "", **specs: Any
-    # ) -> CryptoProduct:
-    #     from pfeed.enums import DataSource
 
-    #     from pfund.entities.products import ProductFactory
+class CryptoExchangeSigner(ABC, Generic[AccountT]):
+    @property
+    def nonce(self) -> int:
+        return int(time.time() * 1000)
 
-    #     source = DataSource[cls.NAME.upper()]
-    #     Product = ProductFactory(source=source, basis=basis)
-    #     return Product(basis=basis, name=name, symbol=symbol, specs=specs)
+    @abstractmethod
+    def sign_rest_api(
+        self,
+        account: AccountT,
+        method: HTTPMethod,
+        url: str,
+        *,
+        params: QueryParamTypes | None = None,
+        json: Any | None = None,
+        data: RequestData | None = None,
+        headers: dict[str, str],
+    ) -> None: ...
 
-    # def get_product(self, name: str) -> CryptoProduct:
-    #     """
-    #     Args:
-    #         name: product name (product.name)
-    #     """
-    #     return self._products[name]
+    @abstractmethod
+    def sign_ws_api(self, account: AccountT) -> Any: ...
 
-    # def get_account(self, name: str) -> CryptoAccount:
-    #     return self._accounts[name]
 
-    # def add_account(
-    #     self,
-    #     venue: TradingVenue,
-    #     name: AccountName = "",
-    #     key: str = "",
-    #     secret: str = "",
-    # ) -> CryptoAccount:
-    #     exch = CryptoExchange[venue.upper()]
-    #     exchange = self.add_exchange(exch)
-    #     if name not in self._accounts[exchange.name]:
-    #         account = CryptoAccount(
-    #             env=self._env, exchange=exch, name=name, key=key, secret=secret
-    #         )
-    #         if account.name not in self._accounts:
-    #             self._accounts[account.name] = account
-    #             self._ws_api.add_account(account)
-    #         else:
-    #             raise ValueError(f"account name {account.name} has already been added")
-    #         self._accounts[exchange.name][account.name] = account
-    #     else:
-    #         raise ValueError(f"account name {name} has already been added")
-    #     return account
+class CryptoExchange(
+    BaseVenue[ConfigT, MarketT, AccountT, BalanceT, OrderT, ProductT, PositionT],
+    Generic[
+        RestAPITypeVar,
+        WebSocketAPITypeVar,
+        ConfigT,
+        MarketT,
+        AccountT,
+        BalanceT,
+        OrderT,
+        ProductT,
+        PositionT,
+    ],
+):
+    """Crypto exchange that follows the standard pattern of using REST and WebSocket APIs."""
 
-    # def add_product(
-    #     self,
-    #     exch: CryptoExchange,
-    #     basis: str,
-    #     name: ProductName = "",
-    #     symbol: str = "",
-    #     **specs: Any,
-    # ) -> CryptoProduct:
-    #     """
-    #     Args:
-    #         name: product name (product.name)
-    #     """
-    #     exchange: BaseExchange = self.add_exchange(exch)
-    #     # create another product object to get a correct product name
-    #     product: CryptoProduct = exchange.create_product(
-    #         basis, name=name, symbol=symbol, **specs
-    #     )
-    #     if product.name not in self._products[exchange.name]:
-    #         if product.name not in self._products:
-    #             self._products[product.name] = product
-    #             self._ws_api.add_product(product)
-    #             self.adapter.add_mapping(str(product.type), product.name, product.symbol)
-    #         else:
-    #             existing_product: CryptoProduct = self.get_product(product.name)
-    #             # assert products are the same with the same name
-    #             if existing_product == product:
-    #                 product = existing_product
-    #             else:
-    #                 raise ValueError(
-    #                     f"product name {product.name} has already been used for {existing_product}"
-    #                 )
-    #         self._products[exchange.name][product.name] = product
-    #     else:
-    #         existing_product: CryptoProduct = self.get_product(exch, product.name)
-    #         # assert products are the same with the same name
-    #         if existing_product == product:
-    #             product = existing_product
-    #         else:
-    #             raise ValueError(
-    #                 f"product name {name} has already been used for {existing_product}"
-    #             )
-    #     return product
+    RestAPI: ClassVar[type[BaseRestAPI]]
+    WebSocketAPI: ClassVar[type[BaseWebSocketAPI[Any, Any]]]
 
-    # def add_public_channel(
-    #     self,
-    #     channel: DataChannel | FullDataChannel,
-    #     data: TimeBasedData | None = None,
-    # ):
-    #     if channel.lower() in DataChannel.__members__:
-    #         assert data is not None, "data object is required for public channels"
-    #         channel: FullDataChannel = self._ws_api._create_public_channel(
-    #             data.product, data.resolution
-    #         )
-    #     self._ws_api.add_channel(channel, channel_type="public")
+    def __init__(
+        self,
+        env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"],
+        config: VenueConfig | None = None,
+        settings: TradeEngineSettings | None = None,
+    ):
+        if config and type(config) is not self.Config:
+            raise ValueError(f"config must be of type {self.Config}")
+        super().__init__(env=env, config=cast(ConfigT, config), settings=settings)
+        self.rest_api = cast("RestAPITypeVar", self.RestAPI(env=self.env))
+        self.ws_api = cast("WebSocketAPITypeVar", self.WebSocketAPI(env=self.env))
 
-    # def add_private_channel(self, channel: PrivateDataChannel | FullDataChannel):
-    #     if channel.lower() in PrivateDataChannel.__members__:
-    #         channel: FullDataChannel = self._ws_api._create_private_channel(channel)
-    #     self._ws_api.add_channel(channel, channel_type="private")
+    def _add_product(self, product: ProductT) -> None:
+        super()._add_product(product)
+        self.ws_api._add_product(product)
+
+    def _add_account(self, account: AccountT) -> None:
+        super()._add_account(account)
+        self.ws_api._add_account(account)
+
+    def add_channel(
+        self,
+        channel: FullDataChannel,
+        *,
+        channel_type: Literal["public", "private"] = "public",
+    ) -> None:
+        self.ws_api.add_channel(channel, channel_type=channel_type)
+
+    def _create_market_data_channel(
+        self, product: ProductT, resolution: Resolution
+    ) -> FullDataChannel:
+        return self.ws_api._create_market_data_channel(product, resolution)
+
+    def _create_private_channel(self, channel: PrivateDataChannel) -> FullDataChannel:
+        return self.ws_api._create_private_channel(channel)
 
     # # REVIEW
     # @staticmethod
@@ -163,20 +140,6 @@ class CryptoExchange(BaseVenue):
     #             trade_adj["filled_qty"] = trade_adj["ltq"]
     #         trades_combined.append(trade_adj)
     #     return trades_combined
-
-    # """
-    # ************************************************
-    # API Calls
-    # ************************************************
-    # """
-
-    # @abstractmethod
-    # async def aget_markets(self, *args, **kwargs):
-    #     pass
-
-    # @abstractmethod
-    # def get_markets(self, *args, **kwargs):
-    #     pass
 
     # # TODO: update to get rid of step_into()
     # def get_orders(

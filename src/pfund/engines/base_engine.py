@@ -1,17 +1,18 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportArgumentType=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 if TYPE_CHECKING:
     from mtflow.contexts.base_context import BaseContext
     from pfeed.sources.pfund.engine_feed import PFundEngineFeed
 
-    from pfund.venues.venue_base import BaseVenue
-    from pfund.venues.venue_config import VenueConfig
     from pfund.components.actor_proxy import ActorProxy
+    from pfund.venues.venue_base import AnyVenue
+    from pfund.venues.venue_config import VenueConfig
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.datas.data_base import BaseData
+    from pfund.datas.data_market import MarketData
     from pfund.datas.resolution import Resolution
     from pfund.engines.engine_context import DataRangeDict
     from pfund.engines.settings.base_engine_settings import BaseEngineSettings
@@ -20,16 +21,17 @@ if TYPE_CHECKING:
 
 import logging
 
-from pfeed.enums import DataCategory
 from pfund_kit.style import cprint
 from pfund_kit.utils.singleton import SingletonMeta
+from pfeed.enums import DataCategory
+
+from pfund.managers import OrderManager, PortfolioManager, RiskManager
 from pfund.enums import (
     ComponentType,
     Environment,
-    RunMode,
     TradingVenue,
+    RunMode,
 )
-from pfund.managers import OrderManager, PortfolioManager, RiskManager
 
 
 class BaseEngine(metaclass=SingletonMeta):
@@ -75,15 +77,10 @@ class BaseEngine(metaclass=SingletonMeta):
         self._strategies: dict[
             ComponentName, BaseStrategy | ActorProxy[BaseStrategy]
         ] = {}
-        self._venues: dict[TradingVenue, BaseVenue] = {}
+        self._venues: dict[TradingVenue, AnyVenue] = {}
         self._order_manager = OrderManager()
         self._portfolio_manager = PortfolioManager()
         self._risk_manager = RiskManager()
-        self.results: dict[str, Any] | None = None
-        cprint(
-            f"{self.env} {self.name} is running (data_range=({self._context.data_start}, {self._context.data_end}))",
-            style=self.env._color,
-        )
 
     @property
     def env(self) -> Environment:
@@ -121,6 +118,44 @@ class BaseEngine(metaclass=SingletonMeta):
 
     def is_running(self) -> bool:
         return self._is_running
+
+    def _add_product(self, product: BaseProduct):
+        for _venue in self._venues.values():
+            if (existing := _venue.products.get(product.name)) is not None:
+                raise ValueError(
+                    f'product name "{product.name}" is already used by {existing!r}; '
+                    + "product names must be unique across the engine"
+                )
+        venue: AnyVenue = self.add_venue(product.source)
+        venue._add_product(product)
+
+    def _add_account(self, account: BaseAccount):
+        for _venue in self._venues.values():
+            if (existing := _venue.accounts.get(account.name)) is not None:
+                raise ValueError(
+                    f'account name "{account.name}" is already used by {existing!r}; '
+                    + "account names must be unique across the engine"
+                )
+        venue: AnyVenue = self.add_venue(account.venue)
+        venue._add_account(account)
+
+    def add_venue(
+        self, venue: TradingVenue | str, config: VenueConfig | None = None
+    ) -> AnyVenue:
+        venue = TradingVenue[venue.upper()]
+        if venue not in self._venues:
+            VenueClass = venue.venue_class
+            self._venues[venue] = VenueClass(
+                env=self.env, config=config, settings=self.settings
+            )
+            self._logger.debug(f"added trading venue {venue}")
+        elif config is not None:
+            raise ValueError(f"{venue} already exists and cannot be configured")
+        return self._venues[venue]
+
+    def get_venue(self, venue: TradingVenue | str) -> AnyVenue:
+        venue = TradingVenue[venue.upper()]
+        return self._venues[venue]
 
     def add_strategy(
         self,
@@ -186,99 +221,24 @@ class BaseEngine(metaclass=SingletonMeta):
     def get_strategy(self, name: str) -> BaseStrategy | ActorProxy[BaseStrategy]:
         return self._strategies[name]
 
-    def add_venue(
-        self,
-        venue: TradingVenue | str | type[BaseVenue],
-        config: VenueConfig | None = None,
-    ) -> BaseVenue:
-        """Add trading venue
-        Args:
-            venue: trading venue, e.g. 'ibkr', 'bybit'.
-            Also accepts a custom subclass for adding venue-specific functions,
-            e.g. CustomIBKR where:
-                class CustomIBKR(pf.IBKR):
-                    ...
-        """
-        if isinstance(venue, str):
-            venue = TradingVenue[venue.upper()]
-            VenueClass = venue.venue_class
-        else:
-            UserVenueClass = venue  # custom venue class provided by the user
-            if not hasattr(UserVenueClass, "name") or not isinstance(
-                UserVenueClass.name, TradingVenue
-            ):
-                raise ValueError(
-                    f"{UserVenueClass} is not an invalid class supported by pfund"
-                )
-            PFundVenueClass = UserVenueClass.name.venue_class
-            if not issubclass(UserVenueClass, PFundVenueClass):
-                raise ValueError(
-                    f"{UserVenueClass} is not a subclass of {PFundVenueClass}"
-                )
-            VenueClass = UserVenueClass
-        if venue not in self._venues:
-            trading_venue = VenueClass(
-                env=self.env, config=config, settings=self.settings
-            )
-            self._venues[trading_venue] = trading_venue
-            self._logger.debug(f"added {trading_venue=}")
-        elif config is not None:
-            raise ValueError(f"{venue} already exists and cannot be configured")
-        return self._venues[venue]
-
-    def get_venue(self, venue: TradingVenue | str) -> BaseVenue:
-        return self._venues[TradingVenue[venue.upper()]]
-
-    get_trading_venue = get_venue
-
-    def _add_product(self, product: BaseProduct):
-        for existing_venue in self._venues.values():
-            if (existing := existing_venue.products.get(product.name)) is not None:
-                raise ValueError(
-                    f'product name "{product.name}" is already used by {existing!r}; '
-                    + "product names must be unique across the engine"
-                )
-        venue: BaseVenue = self.add_venue(product.source)
-        venue.add_product(
-            exch=product.exchange,
-            basis=str(product.basis),
-            name=product.name,
-            symbol=product.symbol,
-            **product.specs,
-        )
-        self._logger.debug(f"added product {product.symbol}")
-
-    def _add_account(self, account: BaseAccount):
-        for existing_venue in self._venues.values():
-            if (existing := existing_venue.accounts.get(account.name)) is not None:
-                raise ValueError(
-                    f'account name "{account.name}" is already used by {existing!r}; '
-                    + "account names must be unique across the engine"
-                )
-        venue: BaseVenue = self.add_venue(account.venue)
-        account = venue.add_account(**account.to_dict())
-        self._logger.debug(f"added account {account}")
-
-    def _get_all_datas(self) -> set[BaseData]:
-        datas: list[BaseData] = []
-        for strategy in self._strategies.values():
-            datas.extend(strategy.get_datas())
-            for component in strategy.get_components():
-                datas.extend(component.get_datas())
-        return set(datas)
-
     def _gather(self):
+        datas: list[BaseData] = []
+
         for strategy in self._strategies.values():
             strategy: BaseStrategy | ActorProxy[BaseStrategy]
             strategy._gather()
 
-            accounts: list[BaseAccount] = strategy.get_accounts()
-            for account in accounts:
+            datas.extend(strategy.get_datas())
+            for component in strategy.get_components():
+                datas.extend(component.get_datas())
+
+            for account in strategy.get_accounts():
                 self._add_account(account)
 
-        for data in self._get_all_datas():
+        for data in set(datas):
             if data.category == DataCategory.MARKET_DATA:
-                self._add_product(data.product)
+                market_data = cast("MarketData", data)
+                self._add_product(market_data.product)
             else:
                 raise NotImplementedError(f"Unhandled data type: {type(data)}")
 
@@ -291,6 +251,10 @@ class BaseEngine(metaclass=SingletonMeta):
             self._context.set_project_name(ctx.run.project)
             self._context.set_run_name(ctx.run.id)
         self._logger.debug(f"Running {self.name}...")
+        cprint(
+            f"{self.env} {self.name} is running (data_range=({self._context.data_start}, {self._context.data_end}))",
+            style=self.env._color,
+        )
         self._is_running = True
         self._gather()
         for venue in self._venues.values():

@@ -68,6 +68,7 @@ class BacktestEngine(BaseEngine):
             data_range=data_range,
             settings=settings,
         )
+        self.results: dict[str, Any] | None = None
         # TODO
         # dataset_splitter=DatasetSplitter(
         #     dataset_start=self.data_start,

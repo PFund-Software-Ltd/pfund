@@ -127,9 +127,16 @@ class BaseAdapter(BaseModel):
         mapping = self._mappings[group]
         return mapping[key] if strict else mapping.get(key, key)
 
+    def add_mapping(self, group: str, internal: Any, external: Any) -> None:
+        """Add dynamic mappings for a given group."""
+        if group not in self._mappings:
+            self._mappings[group] = {}
+        self._mappings[group][internal] = external
+        self._mappings[group][external] = internal
+
     def __contains__(self, item: Any) -> bool:
         return any(item in mapping for mapping in self._mappings.values())
 
     def __len__(self) -> int:
         """Number of one-sided mappings, e.g. (a: b, b: a) counts as 1."""
-        return sum(len(getattr(self, group)) for group in self._mappings)
+        return sum(len(mapping) for mapping in self._mappings.values()) // 2

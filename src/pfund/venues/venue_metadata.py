@@ -12,7 +12,7 @@ ProductCategory: TypeAlias = str
 
 class VenueMetadata(BaseModel):
     asset_types: list[AllAssetType | str]
-    stream_resolutions: (
+    stream_resolution_periods: (
         dict[Timeframe, list[int]] | dict[ProductCategory, dict[Timeframe, list[int]]]
     ) = Field(
         description="streaming data resolutions supported by the venue's API (e.g. websocket API)"

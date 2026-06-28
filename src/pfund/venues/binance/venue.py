@@ -52,9 +52,9 @@ class Binance(
         config: BinanceConfig | None = None,
         settings: TradeEngineSettings | None = None,
     ):
-        from pfund.venues.binance.rest_api import BinanceRESTfulAPI
+        from pfund.venues.binance.rest_api import BinanceRestAPI
         from pfund.venues.binance.ws_api import BinanceWebSocketAPI
 
         super().__init__(env=env, config=config, settings=settings)
-        self.rest_api = BinanceRESTfulAPI(env=self._env)
+        self.rest_api = BinanceRestAPI(env=self._env)
         self.ws_api = BinanceWebSocketAPI(env=self._env)

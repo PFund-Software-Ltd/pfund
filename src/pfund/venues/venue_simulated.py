@@ -1,10 +1,12 @@
-# pyright: reportUninitializedInstanceVariable=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportArgumentType=false
+# pyright: reportUninitializedInstanceVariable=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportArgumentType=false, reportGeneralTypeIssues=false
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
+from typing_extensions import override
 
 if TYPE_CHECKING:
-    from pfund.venues.venue_base import BaseVenue
+    from pfund.typing import FullDataChannel
+    from pfund.venues.venue_base import AnyVenue
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.entities import (
         BaseAccount,
@@ -20,19 +22,21 @@ from decimal import Decimal
 from pfund.enums import Environment, TradingVenue
 
 
-def SimulatedTradingVenueFactory(venue: TradingVenue | str) -> type[BaseVenue]:
+def SimulatedVenueFactory(venue: TradingVenue | str) -> type[AnyVenue]:
     from pfund.enums import TradingVenue
+    from pfund.venues.venue_base import BaseVenue
 
     VenueClass = TradingVenue[venue.upper()].venue_class
     return type(
         "Simulated" + VenueClass.__name__,
-        (SimulatedTradingVenue, VenueClass),
+        (SimulatedVenue, VenueClass),
         {"__module__": __name__},
     )
 
 
 # TODO: how to add margin calls?
-class SimulatedTradingVenue:
+# TODO: handle stop orders
+class SimulatedVenue:  # maybe don't inherit from BaseVenue at all?
     # NOTE: host, port, client_id are required for using PAPER/LIVE trading data feeds in SANDBOX trading
     WHITELISTED_ACCOUNT_FIELDS: ClassVar[list[str]] = [
         "_env",
@@ -58,6 +62,10 @@ class SimulatedTradingVenue:
     _settings: BacktestEngineSettings
     _products: dict[TradingVenue, dict[ProductName, BaseProduct]]
     _accounts: dict[TradingVenue, dict[AccountName, BaseAccount]]
+
+    @override
+    def _add_private_channel(self, channel: FullDataChannel) -> None:
+        raise ValueError("private channels cannot be created in SANDBOX env")
 
     # TODO
     def _safety_check(self):

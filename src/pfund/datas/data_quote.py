@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 from pfund.datas.data_market import MarketData
 from pfund.datas.orderbook import OrderBook
 
+
 Price: TypeAlias = float
 Size: TypeAlias = float
 

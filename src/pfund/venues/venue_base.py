@@ -1,9 +1,25 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, ClassVar, Any, Generic, Literal, TypeVar, cast
+from typing import (
+    TYPE_CHECKING,
+    ClassVar,
+    Any,
+    Generic,
+    Literal,
+    TypeVar,
+    cast,
+    TypeAlias,
+)
 
 if TYPE_CHECKING:
     from pfund_kit.utils.yaml import YAMLDocument
-    from pfund.typing import AccountName, ProductName, Currency, ProductKey
+    from pfund.typing import (
+        AccountName,
+        ProductName,
+        Currency,
+        ProductKey,
+        FullDataChannel,
+    )
+    from pfund.datas.resolution import Resolution
     from pfund.entities import (
         BaseAccount,
         BaseProduct,
@@ -21,14 +37,13 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from threading import Thread
 from collections.abc import Coroutine
 from functools import cached_property
 
 from pfund.typing import ProductKey
 from pfund.entities.products.asset_type import AssetType
 from pfund.venues.venue_metadata import VenueMetadata
-from pfund.enums import Environment, TradingVenue
+from pfund.enums import Environment, TradingVenue, PrivateDataChannel
 
 
 ConfigT = TypeVar("ConfigT", bound="VenueConfig")
@@ -38,6 +53,7 @@ BalanceT = TypeVar("BalanceT", bound="BaseBalance")
 OrderT = TypeVar("OrderT", bound="BaseOrder")
 ProductT = TypeVar("ProductT", bound="BaseProduct")
 PositionT = TypeVar("PositionT", bound="BasePosition")
+AnyVenue: TypeAlias = "BaseVenue[Any, Any, Any, Any, Any, Any, Any]"
 
 
 class BaseVenue(
@@ -48,49 +64,21 @@ class BaseVenue(
     Config: ClassVar[type[VenueConfig]]
     Market: ClassVar[type[BaseMarket]]
     Order: ClassVar[type[BaseOrder]]
+    Account: ClassVar[type[BaseAccount]]
     Product: ClassVar[type[BaseProduct]]
 
     METADATA: ClassVar[VenueMetadata]
-
-    class _Markets:
-        """Local cache of the venue's supported markets, persisted to markets.yml.
-
-        A market is a product the venue supports, keyed by product name and carrying
-        its trading info (e.g. tick size, lot size). Loaded from disk on startup, or
-        refetched from the venue and dumped when config.refetch_markets is set.
-        """
-
-        FILENAME: ClassVar[str] = "markets.yml"
-
-        @property
-        def file_path(self) -> Path:
-            from pfund.config import get_config
-
-            return get_config().data_path / self.FILENAME
+    MARKETS_FILENAME: ClassVar[str] = "markets.yml"
 
     def __init__(
         self,
-        env: Literal[
-            Environment.SANDBOX,
-            Environment.PAPER,
-            Environment.LIVE,
-            "SANDBOX",
-            "PAPER",
-            "LIVE",
-        ],
+        env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"],
         config: ConfigT | None = None,
         settings: TradeEngineSettings | None = None,
     ):
-        environment = Environment[env.upper()]
-        if environment not in (
-            Environment.SANDBOX,
-            Environment.PAPER,
-            Environment.LIVE,
-        ):
-            raise ValueError(f"environment {env} is not supported")
-        self._env: Literal[Environment.SANDBOX, Environment.PAPER, Environment.LIVE] = (
-            environment
-        )
+        self._env = Environment[env.upper()]
+        if self._env.is_simulated():
+            raise ValueError(f"environment {self._env} is not supported")
         self._logger: logging.Logger = logging.getLogger(f"pfund.{self.name.lower()}")
         self._config: ConfigT = config or cast(ConfigT, self.Config())
         self._settings: TradeEngineSettings | None = settings
@@ -117,9 +105,16 @@ class BaseVenue(
                 + f"Did you mean to call {method_name}_async()?"
             )
 
-    def start(self):
-        pass
+    @property
+    def env(self) -> Literal[Environment.PAPER, Environment.LIVE]:
+        return cast(Literal[Environment.PAPER, Environment.LIVE], self._env)
 
+    # TODO
+    def start(self):
+        for channel in self._config.private_channels:
+            self._add_private_channel(PrivateDataChannel[channel.lower()])
+
+    # TODO
     def stop(self):
         pass
 
@@ -135,21 +130,28 @@ class BaseVenue(
             else self._dump_markets()
         )
 
+    @property
+    def _markets_yml_file_path(self) -> Path:
+        from pfund.config import get_config
+
+        return get_config().data_path / self.MARKETS_FILENAME
+
     def _load_markets(self) -> dict[ProductKey, MarketT]:
         """Load markets.yml from disk."""
         from pfund_kit.utils.yaml import load
 
-        file_path = self._Markets().file_path
+        file_path = self._markets_yml_file_path
         if not file_path.exists():
             return self._dump_markets()
         document: YAMLDocument = load(file_path) or {}
         markets: dict[ProductKey, MarketT] = {}
-        for market_data in document.values():
+        for market_data in document.values():  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
             market = self.Market(**market_data)
             key = ProductKey(
-                symbol=market.symbol, asset_type=AssetType(market.asset_type)
+                symbol=market.symbol,
+                asset_type=AssetType(market.asset_type),  # pyright: ignore[reportCallIssue]
             )
-            markets[key] = market
+            markets[key] = market  # pyright: ignore[reportArgumentType]
         return markets
 
     def _dump_markets(self) -> dict[ProductKey, MarketT]:
@@ -162,42 +164,84 @@ class BaseVenue(
             for key, market in markets.items()
         }
         if document:
-            dump(document, self._Markets().file_path)
+            dump(document, self._markets_yml_file_path)
         return markets
 
     def refresh_markets(self) -> dict[ProductKey, MarketT]:
         """Drop the cached markets and reload."""
         markets = self._dump_markets()
-        self.__dict__["markets"] = markets  # warm the cached_property
+        self.__dict__["markets"] = (
+            markets  # warm the cached_property  # pyright: ignore[reportIndexIssue]
+        )
         return markets
 
-    # @abstractmethod
-    # def add_product(self, *args: Any, **kwargs: Any) -> BaseProduct: ...
+    def _add_product(self, product: ProductT) -> None:
+        if product.name not in self._products:
+            self._products[product.name] = product
+            self._logger.debug(
+                f"added product name={product.name} symbol={product.symbol}"
+            )
+        else:
+            raise ValueError(f"product name {product.name} is already registered")
 
-    # @abstractmethod
-    # def add_account(self, *args: Any, **kwargs: Any) -> BaseAccount: ...
+    def _add_account(self, account: AccountT) -> None:
+        if account.name not in self._accounts:
+            self._accounts[account.name] = account
+            self._logger.debug(f"added account name={account.name}")
+        else:
+            raise ValueError(f"account name {account.name} is already registered")
 
-    def add_balance(
-        self, venue: TradingVenue, acc: AccountName, ccy: Currency
-    ) -> BalanceT:
-        venue = TradingVenue[venue.upper()]
-        ccy = ccy.upper()
-        if not (balance := self.get_balances(exch, acc=acc, ccy=ccy)):
-            balance = CryptoBalance(ccy=ccy)
-            self._logger.debug(f"added {balance}")
-        return balance
+    @abstractmethod
+    def add_channel(
+        self,
+        channel: FullDataChannel,
+        *,
+        channel_type: Literal["public", "private"] = "public",
+    ) -> None: ...
 
-    def add_position(
-        self, venue: TradingVenue, acc: str, pdt: ProductName
-    ) -> PositionT:
-        venue = TradingVenue[venue.upper()]
-        pdt = pdt.upper()
-        if not (position := self.get_positions(exch, acc=acc, pdt=pdt)):
-            account = self.get_account(exch, acc)
-            product = self.add_product(exch, pdt=pdt)
-            position = CryptoPosition(account, product)
-            self._logger.debug(f"added {position}")
-        return position
+    @abstractmethod
+    def _create_market_data_channel(
+        self, product: ProductT, resolution: Resolution
+    ) -> FullDataChannel: ...
+
+    @abstractmethod
+    def _create_private_channel(
+        self, channel: PrivateDataChannel
+    ) -> FullDataChannel: ...
+
+    def _add_market_data_channel(
+        self, product: ProductT, resolution: Resolution
+    ) -> None:
+        full_channel: FullDataChannel = self._create_market_data_channel(
+            product, resolution
+        )
+        self.add_channel(full_channel, channel_type="public")
+
+    def _add_private_channel(self, channel: PrivateDataChannel) -> None:
+        full_channel: FullDataChannel = self._create_private_channel(channel)
+        self.add_channel(full_channel, channel_type="private")
+
+    # def add_balance(
+    #     self, venue: TradingVenue, acc: AccountName, ccy: Currency
+    # ) -> BalanceT:
+    #     venue = TradingVenue[venue.upper()]
+    #     ccy = ccy.upper()
+    #     if not (balance := self.get_balances(exch, acc=acc, ccy=ccy)):
+    #         balance = CryptoBalance(ccy=ccy)
+    #         self._logger.debug(f"added {balance}")
+    #     return balance
+
+    # def add_position(
+    #     self, venue: TradingVenue, acc: str, pdt: ProductName
+    # ) -> PositionT:
+    #     venue = TradingVenue[venue.upper()]
+    #     pdt = pdt.upper()
+    #     if not (position := self.get_positions(exch, acc=acc, pdt=pdt)):
+    #         account = self.get_account(exch, acc)
+    #         product = self.add_product(exch, pdt=pdt)
+    #         position = CryptoPosition(account, product)
+    #         self._logger.debug(f"added {position}")
+    #     return position
 
     # TODO
     # def place_orders(self, orders: list[BaseOrder], threaded: bool=True, **kwargs: Any) -> list[BaseOrder]: ...
@@ -288,17 +332,18 @@ class BaseVenue(
         **specs: Any,
     ) -> ProductT:
         from pfeed.enums import DataSource
-        from pfund.entities.products import ProductFactory
+        from pfund.entities.products import ProductFactory, ProductBasis
 
         source = DataSource[cls.name.upper()]
-        Product = ProductFactory(source=source, basis=basis)
+        Product = cast("type[ProductT]", ProductFactory(source=source, basis=basis))
         return Product(
-            basis=basis, exchange=exchange, name=name, symbol=symbol, specs=specs
+            source=source,
+            basis=ProductBasis(basis=basis),
+            exchange=exchange,
+            name=name,
+            symbol=symbol,
+            specs=specs,
         )
-
-    @property
-    def env(self) -> Environment:
-        return self._env
 
     @property
     def account(self) -> AccountT | None:
@@ -332,10 +377,6 @@ class BaseVenue(
 
     # TODO: api call
     def get_orders(self, name: AccountName) -> dict[ProductName, list[OrderT]]: ...
-
-    # def _add_default_private_channels(self):
-    #     for channel in PrivateDataChannel:
-    #         self.add_channel(channel, channel_type="private")
 
     # def start(self):
     #     # TODO: check if all product names and account names are unique

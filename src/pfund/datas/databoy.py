@@ -69,6 +69,8 @@ class DataBoy:
             self._deliver(data)
 
     # FIXME: move to market_data_store
+    # TODO: also check if there has been no data update for a product for a certain period of time
+    #     it could happen when theres connectivity issues or the data source is down etc.
     def schedule_jobs(self, scheduler: BackgroundScheduler):
         for data, timeout in self.market_data_store._stale_bar_timeouts.items():
             scheduler.add_job(

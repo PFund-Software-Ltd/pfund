@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     )
     from pfund.entities import BaseAccount
     from pfund.venues.adapter_base import BaseAdapter
-    from pfund.venues._apis.signers.base import BaseSigner
+    from pfund.venues.crypto_exchange import CryptoExchangeSigner
     from pfund.venues._apis.typing import Schema, Result, RawPayload, EndpointName
 
     URL: TypeAlias = str
@@ -32,22 +32,16 @@ from httpx2 import AsyncClient, HTTPStatusError, RequestError
 from pfund_kit.utils.yaml import load, dump
 
 from pfund.enums import Environment, TradingVenue
-from pfund.errors import (
-    AccountInSimulatedEnvDuringAPICallError,
-    ParseAPIResponseError,
-    PrivateAPICallInSandboxEnvError,
-)
+from pfund.errors import ResponseParseError
 from pfund.venues._apis.schema_parser import SchemaParser
 
 
-class BaseRESTfulAPI(ABC):
+class BaseRestAPI(ABC):
     venue: ClassVar[TradingVenue]
-    adapter: ClassVar[BaseAdapter]
-    _signer: ClassVar[BaseSigner[Any]]
+    _signer: ClassVar[CryptoExchangeSigner[Any]]
     VERSION: ClassVar[str | None] = None  # e.g. "v5" for str
-    URLS: ClassVar[
-        dict[Literal[Environment.SANDBOX, Environment.PAPER, Environment.LIVE], URL]
-    ] = {}
+    URLS: ClassVar[dict[Literal[Environment.PAPER, Environment.LIVE], URL]] = {}
+    # NOTE: EndpointName should match with function names
     PUBLIC_ENDPOINTS: ClassVar[dict[EndpointName, Endpoint]] = {}
     PRIVATE_ENDPOINTS: ClassVar[dict[EndpointName, Endpoint]] = {}
 
@@ -71,7 +65,7 @@ class BaseRESTfulAPI(ABC):
 
         def load(self) -> dict[EndpointName, Record]:
             return cast(
-                "dict[EndpointName, BaseRESTfulAPI._Samples.Record]",
+                "dict[EndpointName, BaseRestAPI._Samples.Record]",
                 load(self.file_path) or {},
             )
 
@@ -88,17 +82,13 @@ class BaseRESTfulAPI(ABC):
 
     def __init__(
         self,
-        env: Literal[Environment.SANDBOX, Environment.PAPER, Environment.LIVE],
+        env: Literal[Environment.PAPER, Environment.LIVE],
         dev_mode: bool = False,
     ):
         self._env = Environment[env.upper()]
+        if self._env.is_simulated():
+            raise ValueError(f"environment {self._env} is not supported")
         self._logger = logging.getLogger(f"pfund.{self.venue.lower()}")
-        if self._env == Environment.SANDBOX:
-            self._logger.warning(
-                f"{self._env} environment will be using LIVE data for public endpoints"
-            )
-        elif self._env == Environment.BACKTEST:
-            raise ValueError("BACKTEST environment is not supported")
         self._dev_mode = dev_mode
         if self._dev_mode:
             self.samples = self._Samples(self.venue)
@@ -107,8 +97,12 @@ class BaseRESTfulAPI(ABC):
                 + "This mode is intended ONLY for internal development.\n"
                 + "It should NEVER be used in production or by end users."
             )
-        self._url: URL = self.URLS[self._env]
+        self._url: URL = self.URLS[self.env]
         self._client = AsyncClient()
+
+    @property
+    def env(self) -> Literal[Environment.PAPER, Environment.LIVE]:
+        return cast(Literal[Environment.PAPER, Environment.LIVE], self._env)
 
     @abstractmethod
     def _is_success(self, endpoint_name: EndpointName, payload: RawPayload) -> bool: ...
@@ -132,6 +126,11 @@ class BaseRESTfulAPI(ABC):
     @property
     def nonce(self) -> int:
         return int(time.time() * 1000)
+
+    @property
+    def adapter(self) -> BaseAdapter:
+        VenueClass = self.venue.venue_class
+        return VenueClass.adapter
 
     def _build_request(
         self,
@@ -159,7 +158,7 @@ class BaseRESTfulAPI(ABC):
             # the isinstance check narrows to dict but can't inspect key/value types;
             # we require str keys/values for signing, so assert that to the type checker.
             headers = cast("dict[str, str]", headers)
-            self._signer.sign(
+            self._signer.sign_rest_api(
                 account=account,
                 method=method,
                 url=url,
@@ -183,10 +182,6 @@ class BaseRESTfulAPI(ABC):
         if endpoint_name in self.PUBLIC_ENDPOINTS:
             endpoint = self.PUBLIC_ENDPOINTS[endpoint_name]
         elif endpoint_name in self.PRIVATE_ENDPOINTS:
-            if self._env == Environment.SANDBOX:
-                raise PrivateAPICallInSandboxEnvError(
-                    f'"{endpoint_name}" is a private endpoint and cannot be called in SANDBOX environment'
-                )
             endpoint = self.PRIVATE_ENDPOINTS[endpoint_name]
         else:
             raise ValueError(
@@ -207,7 +202,7 @@ class BaseRESTfulAPI(ABC):
             "error": "",
             "venue": self.venue,
             "account": account.name if account else None,
-            "response": None,
+            "response": {"data": None},
             "request": {
                 "endpoint_name": endpoint_name,
                 "url": str(request.url),
@@ -229,13 +224,6 @@ class BaseRESTfulAPI(ABC):
         headers: HeaderTypes | None = None,
         cookies: CookieTypes | None = None,
     ) -> Result:
-        # the endpoint name is the calling method (e.g. "get_markets"), one frame up.
-        # endpoint methods are named to match their PUBLIC/PRIVATE_ENDPOINTS key, so we
-        # read it off the stack instead of making every endpoint pass it in by hand.
-        if self._env.is_simulated() and account is not None:
-            raise AccountInSimulatedEnvDuringAPICallError(
-                f"Simulated environment {self._env} can only access public endpoints, account should NOT be provided"
-            )
         endpoint_name: EndpointName = sys._getframe(1).f_code.co_name
         endpoint = self.get_endpoint(endpoint_name)
         request: Request = self._build_request(
@@ -263,7 +251,7 @@ class BaseRESTfulAPI(ABC):
                 result["error"] = self._extract_error(endpoint_name, payload)
         except Exception as exc:
             expected = (
-                ParseAPIResponseError,
+                ResponseParseError,
                 JSONDecodeError,
                 RequestError,
                 HTTPStatusError,

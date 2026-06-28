@@ -1,15 +1,15 @@
+# pyright: reportUnknownParameterType=false
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable
+    from collections.abc import Awaitable, Callable
 
-    from pfund.brokers.crypto.exchanges.bybit.ws_api_base import BybitWebSocketAPI
-    from pfund.venues._apis.ws_api_base import Message, WebSocketName
+    from pfund.venues._apis.typing import ResponseData
+    from pfund.venues._apis.ws_api_base import RawMessage, WebSocketName
+    from pfund.venues.bybit._ws_apis.ws_api_base import BybitBaseWebSocketAPI
     from pfund.datas.resolution import Resolution
-    from pfund.venues._crypto.account_api import CryptoAccount
     from pfund.enums import Environment
     from pfund.typing import FullDataChannel
 
@@ -17,55 +17,62 @@ import asyncio
 
 from pfund.venues._apis.ws_api_base import BaseWebSocketAPI
 from pfund.venues.bybit.product import BybitProduct
-from pfund.enums import CryptoExchange
+from pfund.venues.bybit.account import BybitAccount
+from pfund.enums import TradingVenue
 
-ProductCategory = BybitProduct.Category
 
-
-class BybitWebSocketAPI(BaseWebSocketAPI):
+class BybitWebSocketAPI(BaseWebSocketAPI[BybitAccount, BybitProduct]):
     """A facade for the Bybit websocket API."""
 
-    EXCHANGE: ClassVar[CryptoExchange] = CryptoExchange.BYBIT
+    venue: ClassVar[TradingVenue] = TradingVenue.BYBIT
 
-    def __init__(self, env: Environment):
-        super().__init__(env)
-        self._apis: dict[ProductCategory, BybitWebSocketAPI] = {
-            ProductCategory.LINEAR: self.get_api_class("linear")(env),
-            ProductCategory.INVERSE: self.get_api_class("inverse")(env),
-            ProductCategory.SPOT: self.get_api_class("spot")(env),
-            ProductCategory.OPTION: self.get_api_class("option")(env),
+    def __init__(
+        self,
+        env: Literal[Environment.PAPER, Environment.LIVE],
+        data_mode: bool = False,
+    ):
+        super().__init__(env=env, data_mode=data_mode)
+        self._apis: dict[BybitProduct.Category, BybitBaseWebSocketAPI] = {
+            BybitProduct.Category.LINEAR: self.get_api_class("linear")(
+                env=env, data_mode=data_mode
+            ),
+            BybitProduct.Category.INVERSE: self.get_api_class("inverse")(
+                env=env, data_mode=data_mode
+            ),
+            BybitProduct.Category.SPOT: self.get_api_class("spot")(
+                env=env, data_mode=data_mode
+            ),
+            BybitProduct.Category.OPTION: self.get_api_class("option")(
+                env=env, data_mode=data_mode
+            ),
         }
 
     @staticmethod
-    def get_api_class(category: ProductCategory | str) -> type[BybitWebSocketAPI]:
-        from pfund.venues.bybit._ws_apis.ws_api_inverse import (
+    def get_api_class(
+        category: BybitProduct.Category | str,
+    ) -> type[BybitBaseWebSocketAPI]:
+        from pfund.venues.bybit._ws_apis import (
             BybitInverseWebSocketAPI,
-        )
-        from pfund.venues.bybit._ws_apis.ws_api_linear import (
             BybitLinearWebSocketAPI,
-        )
-        from pfund.venues.bybit._ws_apis.ws_api_option import (
             BybitOptionWebSocketAPI,
-        )
-        from pfund.venues.bybit._ws_apis.ws_api_spot import (
             BybitSpotWebSocketAPI,
         )
 
-        category = ProductCategory[category.upper()]
+        category = BybitProduct.Category[category.upper()]
         return {
-            ProductCategory.LINEAR: BybitLinearWebSocketAPI,
-            ProductCategory.INVERSE: BybitInverseWebSocketAPI,
-            ProductCategory.SPOT: BybitSpotWebSocketAPI,
-            ProductCategory.OPTION: BybitOptionWebSocketAPI,
+            BybitProduct.Category.LINEAR: BybitLinearWebSocketAPI,
+            BybitProduct.Category.INVERSE: BybitInverseWebSocketAPI,
+            BybitProduct.Category.SPOT: BybitSpotWebSocketAPI,
+            BybitProduct.Category.OPTION: BybitOptionWebSocketAPI,
         }[category]
 
-    def get_api(self, category: ProductCategory | str | None = None):
+    def get_api(self, category: BybitProduct.Category | str | None = None):
         # for some actions that are not specific to a product category, just use the first api
         # e.g. connecting to private channels
         if category is None:
             return list(self._apis.values())[0]
         else:
-            return self._apis[ProductCategory[category.upper()]]
+            return self._apis[BybitProduct.Category[category.upper()]]
 
     async def _subscribe(self, *args: Any, **kwargs: Any):
         raise NotImplementedError(
@@ -97,39 +104,36 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
             "this method should not be called in this Websocket Facade class"
         )
 
-    def _create_public_channel(
+    def _create_market_data_channel(
         self, product: BybitProduct, resolution: Resolution
     ) -> str:
         api = self.get_api(product.category)
-        return api._create_public_channel(product, resolution)
-
-    def set_logger(self, name: str):
-        super().set_logger(name)
-        for api in self._apis.values():
-            api.set_logger(name)
+        return api._create_market_data_channel(product, resolution)
 
     def set_callback(
         self,
-        callback: Callable[[WebSocketName, Message], Awaitable[None] | None],
+        callback: Callable[
+            [WebSocketName, RawMessage | ResponseData], Awaitable[None] | None
+        ],
         raw_msg: bool = False,
     ):
         for api in self._apis.values():
             api.set_callback(callback, raw_msg=raw_msg)
 
-    def add_account(self, account: CryptoAccount) -> CryptoAccount:
+    def _add_account(self, account: BybitAccount) -> None:
         api = self.get_api()
-        return api.add_account(account)
+        return api._add_account(account)
 
-    def add_product(self, product: BybitProduct) -> BybitProduct:
+    def _add_product(self, product: BybitProduct) -> None:
         api = self.get_api(product.category)
-        return api.add_product(product)
+        return api._add_product(product)
 
     def add_channel(
         self,
         channel: FullDataChannel,
         *,
         channel_type: Literal["public", "private"],
-        category: ProductCategory | str | None = None,
+        category: BybitProduct.Category | str | None = None,
     ):
         api = self.get_api(category)
         api.add_channel(channel, channel_type=channel_type)
@@ -139,8 +143,12 @@ class BybitWebSocketAPI(BaseWebSocketAPI):
             async with asyncio.TaskGroup() as task_group:
                 for api in self._apis.values():
                     task_group.create_task(api.connect())
-        except asyncio.CancelledError:
-            self._logger.warning(f"{self.exch} connect() was cancelled")
+        except* asyncio.CancelledError:
+            # re-raise so cooperative cancellation propagates to the caller
+            self._logger.warning(f"{self.venue} connect() was cancelled")
+            raise
+        except* Exception:
+            self._logger.exception(f"{self.venue} connect() failed")
 
     async def disconnect(self, reason: str = ""):
         async with asyncio.TaskGroup() as task_group:

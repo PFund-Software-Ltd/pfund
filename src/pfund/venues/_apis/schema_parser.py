@@ -6,7 +6,7 @@ from pydantic import validate_call
 
 from pfund.venues._apis.typing import RawPayload, Schema, ResponseData
 
-from pfund.errors import ParseAPIResponseError
+from pfund.errors import ResponseParseError
 
 
 # --- extraction-rule vocabulary (parser-internal) ---
@@ -164,7 +164,7 @@ class SchemaParser:
                     output[key] = rule
             return output
         except Exception as exc:
-            raise ParseAPIResponseError(f"Failed to parse api response: {exc}")
+            raise ResponseParseError(f"Failed to parse api response: {exc}")
 
     @staticmethod
     @validate_call
@@ -177,6 +177,6 @@ class SchemaParser:
         elif isinstance(payload, list):
             return [SchemaParser._parse(item, schema) for item in payload]
         else:
-            raise ParseAPIResponseError(
+            raise ResponseParseError(
                 f'Unhandled API response type "{type(payload)}":\n{payload}'
             )

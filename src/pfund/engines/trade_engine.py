@@ -1,7 +1,7 @@
 # pyright: reportArgumentType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 
 if TYPE_CHECKING:
@@ -21,7 +21,7 @@ from threading import Thread
 
 from pfeed.enums import DataCategory
 
-from pfund.enums import Environment, TradingVenue
+from pfund.enums import Environment
 from pfund.engines.base_engine import BaseEngine
 
 
@@ -31,7 +31,7 @@ class TradeEngine(BaseEngine):
     def __init__(
         self,
         *,
-        env: Environment | Literal["SANDBOX", "PAPER", "LIVE"] = Environment.SANDBOX,
+        env: Environment | Literal["PAPER", "LIVE"] = Environment.PAPER,
         name: str = "engine",
         data_range: str
         | Resolution
@@ -41,15 +41,20 @@ class TradeEngine(BaseEngine):
         settings: TradeEngineSettings | None = None,
     ):
         super().__init__(
-            env=Environment[env.upper()],
+            env=env,
             name=name,
             data_range=data_range,
             settings=settings,
         )
+        self._assert_env()
         self._proxy: ZeroMQ | None = None
         self._worker: ZeroMQ | None = None
         self._data_engine: DataEngine | None = None
         self._zmq_thread: Thread | None = None
+
+    def _assert_env(self):
+        if self.env not in (Environment.PAPER, Environment.LIVE):
+            raise ValueError(f"environment {self.env} is not supported")
 
     # TODO: include descriptions
     def show_zmq_graph(self):

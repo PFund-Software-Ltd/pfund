@@ -29,7 +29,7 @@ py313 = ["py313", "test", "optional"]
 pfund-kit = ">=0.1.11"
 pfeed = ">=0.0.16"
 apscheduler = ">=3.11.2"
-httpx2 = { version = ">=2.4.0", extras = ["http2"] }
+httpx2 = { version = ">=2.5.0", extras = ["http2"] }
 websockets = ">=16.0.0"
 
 [feature.optional.system-requirements]
@@ -49,7 +49,7 @@ scikit-learn = ">=1.9.0"
 torch = ">=2.12.1"
 safetensors = ">=0.8.0"
 jax = ">=0.10.2"
-orbax-checkpoint = ">=0.12.0"
+orbax-checkpoint = ">=0.12.1"
 ta-lib = ">=0.6.8"
 # [feature.optional.dependencies]
 # ta-lib = ">=0.6.4"

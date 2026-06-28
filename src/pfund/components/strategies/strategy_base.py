@@ -2,18 +2,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal, overload
 
+
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
 
     from pfund.components.actor_proxy import ActorProxy
     from pfund.entities.accounts.account_base import BaseAccount
-    from pfund.venues._crypto.account_base import CryptoAccount
-    from pfund.entities.accounts.account_ibkr import InteractiveBrokersAccount
+    from pfund.entities.accounts.account_api import APIKeyAccount
+    from pfund.venues.ibkr.account import InteractiveBrokersAccount as IBKRAccount
     from pfund.entities.balances.balance_base import BaseBalance
-    from pfund.entities.balances.balance_ibkr import InteractiveBrokersBalance
     from pfund.entities.orders.order_base import BaseOrder
     from pfund.entities.positions.position_base import BasePosition
-    from pfund.entities.positions.position_ibkr import InteractiveBrokersPosition
     from pfund.entities.products.product_base import BaseProduct
     from pfund.enums import TradingVenue, Side
     from pfund.typing import (
@@ -130,17 +129,17 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         name: str = "",
         key: str = "",
         secret: str = "",
-    ) -> CryptoAccount: ...
+    ) -> APIKeyAccount: ...
 
     @overload
     def add_account(
         self,
-        venue: Literal[Broker.IBKR, "IBKR", "ibkr"],
+        venue: Literal[TradingVenue.IBKR, "IBKR"],
         name: str = "",
         host: str = "",
         port: int | None = None,
         client_id: int | None = None,
-    ) -> InteractiveBrokersAccount: ...
+    ) -> IBKRAccount: ...
 
     def add_account(
         self, venue: TradingVenue | str, name: str = "", **kwargs: Any

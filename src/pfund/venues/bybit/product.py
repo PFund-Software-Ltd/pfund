@@ -5,8 +5,6 @@ from typing import cast
 from enum import StrEnum
 from datetime import date
 
-from pfeed.enums import DataSource
-
 from pfund.entities import BaseProduct
 from pfund.enums import AssetTypeModifier, CryptoAssetType, OptionType
 
@@ -17,8 +15,6 @@ class BybitProduct(BaseProduct):
         INVERSE = "INVERSE"
         SPOT = "SPOT"
         OPTION = "OPTION"
-
-    source: DataSource = DataSource.BYBIT
 
     def _derive_product_category(self):
         if self.asset_type == CryptoAssetType.CRYPTO:

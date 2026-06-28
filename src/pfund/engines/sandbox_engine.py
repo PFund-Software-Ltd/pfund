@@ -31,3 +31,8 @@ class SandboxEngine(TradeEngine):
             data_range=data_range,
             settings=settings,
         )
+
+    def _assert_env(self):
+        pass
+
+    # TODO: override feed.stream(), opt in for replay etc.

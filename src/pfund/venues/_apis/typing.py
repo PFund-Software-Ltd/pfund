@@ -20,6 +20,7 @@ class Endpoint(NamedTuple):
 Schema = TypedDict(
     "Schema",
     {
+        "ts": NotRequired[Sequence[str]],
         "@data": NotRequired[Sequence[str]],
         "data": Required[dict[str, Any]],
     },
@@ -34,9 +35,11 @@ class RequestData(TypedDict, total=True):
     params: dict[str, Any] | None
 
 
-class ResponseData(TypedDict, total=True, extra_items=Any):
+class ResponseData(TypedDict, total=False, extra_items=Any):
     # "data" is the key defined in schema
-    data: dict[str, Any] | list[dict[str, Any]] | None
+    ts: NotRequired[float]
+    channel: NotRequired[str]  # for streaming only  (e.g. websocket channel)
+    data: Required[dict[str, Any] | list[dict[str, Any]] | None]
 
 
 class Result(TypedDict, total=True):

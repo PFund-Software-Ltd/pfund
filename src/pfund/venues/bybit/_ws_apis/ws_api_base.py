@@ -1,45 +1,48 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 if TYPE_CHECKING:
-    from pfeed.feeds.streaming_feed_mixin import ParsedMessage
-
-    from pfund.venues._apis.ws_api_base import Message
+    from pfund.typing import FullDataChannel
+    from pfund.venues._apis.typing import ResponseData, Schema
+    from pfund.venues._apis.ws_api_base import RawMessage
     from pfund.datas.resolution import Resolution
-    from pfund.venues._crypto.account_api import CryptoAccount
     from pfund.enums import Environment
 
-import hmac
 import inspect
 import os
-import time
 from decimal import Decimal
 from pprint import pformat
 
 from msgspec import json
 
-from pfund.venues._apis.ws_api_base import BaseWebSocketAPI, NamedWebSocket
+from pfund.venues._apis.ws_api_base import (
+    BaseWebSocketAPI,
+    NamedWebSocket,
+    WebSocketName,
+)
 from pfund.datas.timeframe import Timeframe
 from pfund.venues.bybit.product import BybitProduct
-from pfund.enums import CryptoExchange, DataChannelType, DataChannel
+from pfund.venues.bybit.account import BybitAccount
+from pfund.venues.bybit.signer import BybitSigner
+from pfund.enums import TradingVenue, DataChannel, DataChannelType
 from pfund.venues._apis.schema_parser import SchemaParser
 
 
-ProductCategory = BybitProduct.Category
+class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitAccount, BybitProduct]):
+    venue: ClassVar[TradingVenue] = TradingVenue.BYBIT
+    _signer: ClassVar[BybitSigner] = BybitSigner()
 
-
-class BybitBaseWebSocketAPI(BaseWebSocketAPI):
-    EXCHANGE: ClassVar[CryptoExchange] = CryptoExchange.BYBIT
-    CATEGORY: ClassVar[BybitProduct.Category]
     VERSION: ClassVar[str] = "v5"
     URLS: ClassVar[dict[Environment, dict[DataChannelType, str]]] = {}
+
+    CATEGORY: ClassVar[BybitProduct.Category]
     # it defines the maximum number of arguments allowed in the 'args' list of a WebSocket message: {'op': '...', 'args': [...]}
     PUBLIC_CHANNEL_ARGS_LIMIT: ClassVar[int] = os.sys.maxsize  # pyright: ignore[reportUnknownMemberType,reportAttributeAccessIssue, reportUnknownVariableType]
 
     def _create_ws_name(self, account_name: str = ""):
         if not account_name:
-            return "_".join([self.exch, self.CATEGORY, "ws"]).lower()
+            return "_".join([self.venue, self.CATEGORY, "ws"]).lower()
         else:
             return "_".join([account_name, "ws"]).lower()
 
@@ -66,34 +69,30 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI):
         return batched_channels
 
     async def _subscribe(
-        self, ws: NamedWebSocket, channels: list[str], channel_type: DataChannelType
+        self,
+        ws: NamedWebSocket,
+        channels: list[FullDataChannel],
+        channel_type: DataChannelType,
     ):
         batched_channels = self._split_channels_into_batches(channels, channel_type)
         for _channels in batched_channels:
             # number of subscription is per msg, not per channel
-            self._sub_num += 1
             await self._send(ws, msg={"op": "subscribe", "args": _channels})
 
     async def _unsubscribe(
-        self, ws: NamedWebSocket, channels: list[str], channel_type: DataChannelType
+        self,
+        ws: NamedWebSocket,
+        channels: list[FullDataChannel],
+        channel_type: DataChannelType,
     ):
         batched_channels = self._split_channels_into_batches(channels, channel_type)
         for _channels in batched_channels:
             # number of subscription is per msg instead of per channel
-            self._sub_num -= 1
             await self._send(ws, msg={"op": "unsubscribe", "args": _channels})
 
-    async def _authenticate(self, ws: NamedWebSocket, account: CryptoAccount):
-        expires = int((time.time() + 1) * 1000)
-        signature = hmac.new(
-            bytes(account._secret, "utf-8"),
-            bytes(f"GET/realtime{expires}", "utf-8"),
-            digestmod="sha256",
-        ).hexdigest()
-        # param = f"api_key={account.key}&expires={expires}&signature={signature}"
-        # private_url_extension = '?' + param
+    async def _authenticate(self, ws: NamedWebSocket, account: BybitAccount):
         self._logger.debug(f"{ws.name} authenticates")
-        msg = {"op": "auth", "args": [account._key, expires, signature]}
+        msg = {"op": "auth", "args": self._signer.sign_ws_api(account)}
         await self._send(ws, msg)
 
     async def _ping(self):
@@ -101,9 +100,9 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI):
         for ws in self._websockets.values():
             await self._send(ws, msg)
 
-    async def _on_message(self, ws_name: str, raw_msg: bytes):
+    async def _on_message(self, ws_name: WebSocketName, raw_msg: bytes):
         try:
-            msg: dict = json.decode(raw_msg)
+            msg: dict[str, Any] = json.decode(raw_msg)
             self._logger.debug(f"{ws_name} {msg=}")
 
             if "op" in msg:
@@ -113,7 +112,7 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI):
                     if op == "auth":
                         self._is_authenticated[ws_name] = True
                     elif op == "subscribe":
-                        self._num_subscribed += 1
+                        pass
                     else:
                         self._logger.warning(f"{ws_name} unhandled msg {msg}")
                 # REVIEW: check if the current ping-pong is correct
@@ -122,62 +121,69 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI):
                 else:
                     self._logger.error(f"{ws_name} unsuccessful msg {msg}")
             elif "topic" in msg:
-                pass
+                if not self._callback_raw_msg:
+                    msg: ResponseData = self._parse_message(msg)
             else:
                 self._logger.warning(f"{ws_name} unhandled msg {msg}")
 
-            if not self._callback_raw_msg and "topic" in msg:
-                msg = self._parse_message(msg)
-            result = self._callback(ws_name, msg)
-            if inspect.isawaitable(result):
-                await result
+            if self._callback:
+                result = self._callback(ws_name, msg)
+                if inspect.isawaitable(result):
+                    await result
 
         except Exception:
             self._logger.exception(f"{ws_name} _on_message exception:")
 
-    def _create_public_channel(self, product: BybitProduct, resolution: Resolution):
+    def _create_market_data_channel(
+        self, product: BybitProduct, resolution: Resolution
+    ):
         """Creates a full public channel name based on the product and resolution"""
-        self.add_product(product)
+        self._add_product(product)
+        metadata = self.venue.venue_class.METADATA
+        supported_orderbook_lvs = cast(
+            dict[BybitProduct.Category, list[int]], metadata.stream_orderbook_levels
+        )
+        supported_orderbook_lvs = supported_orderbook_lvs[product.category]
+        supported_resolutions = cast(
+            dict[BybitProduct.Category, dict[Timeframe, list[int]]],
+            metadata.stream_resolution_periods,
+        )
+        supported_resolutions = supported_resolutions[product.category]
         if resolution.is_quote():
             channel = DataChannel.orderbook
-            echannel = self._adapter(channel.value, group="channel")
+            echannel = self.adapter(channel.value, group="channel")
             orderbook_level = resolution.orderbook_level
             orderbook_depth = resolution.period
-            supported_orderbook_levels = self.SUPPORTED_ORDERBOOK_LEVELS[
-                product.category
-            ]
-            supported_orderbook_depths = self.SUPPORTED_RESOLUTIONS[Timeframe.QUOTE][
-                product.category
-            ]
-            if orderbook_level not in supported_orderbook_levels:
+            supported_orderbook_depths = supported_resolutions[Timeframe.QUOTE]
+            if orderbook_level not in supported_orderbook_lvs:
                 raise NotImplementedError(
-                    f"{self.exch} ({channel}.{product.symbol}) orderbook_level={orderbook_level} is not supported, supported levels: {supported_orderbook_levels}"
+                    f"{self.venue} ({channel}.{product.symbol}) orderbook_level={orderbook_level} is not supported, supported levels: {supported_orderbook_lvs}"
                 )
             if (
                 orderbook_level == 1
                 and orderbook_depth not in supported_orderbook_depths
             ):
                 raise NotImplementedError(
-                    f"{self.exch} ({channel}.{product.symbol}) orderbook_depth={orderbook_depth} is not supported, supported depths: {supported_orderbook_depths}"
+                    f"{self.venue} ({channel}.{product.symbol}) orderbook_depth={orderbook_depth} is not supported, supported depths: {supported_orderbook_depths}"
                 )
             full_channel = ".".join([echannel, str(orderbook_depth), product.symbol])
         elif resolution.is_tick():
             channel = DataChannel.tradebook
-            echannel = self._adapter(channel.value, group="channel")
+            echannel = self.adapter(channel.value, group="channel")
             full_channel = ".".join([echannel, product.symbol])
         elif resolution.is_bar():
             channel = DataChannel.candlestick
-            echannel = self._adapter(channel.value, group="channel")
+            echannel = self.adapter(channel.value, group="channel")
             period = resolution.period
-            if resolution.timeframe not in self.SUPPORTED_RESOLUTIONS:
+            if resolution.timeframe not in supported_resolutions:
                 raise ValueError(
-                    f"{self.exch} ({channel}.{product.symbol}) {resolution=} is not supported, supported resolutions:\n{pformat(self.SUPPORTED_RESOLUTIONS)}"
+                    f"{self.venue} ({channel}.{product.symbol}) {resolution=} is not supported, supported resolutions:\n{pformat(self.SUPPORTED_RESOLUTIONS)}"
                 )
-            elif period not in self.SUPPORTED_RESOLUTIONS[resolution.timeframe]:
+            elif period not in supported_resolutions[resolution.timeframe]:
                 raise ValueError(
-                    f"{self.exch} ({channel}.{product.symbol}) {resolution=} ({period=}) is not supported, supported periods: {self.SUPPORTED_RESOLUTIONS[resolution.timeframe]}"
+                    f"{self.venue} ({channel}.{product.symbol}) {resolution=} ({period=}) is not supported, supported periods: {self.SUPPORTED_RESOLUTIONS[resolution.timeframe]}"
                 )
-            eresolution = self._adapter(repr(resolution), group="resolution")
+            eresolution = self.adapter(repr(resolution), group="resolution")
             full_channel = ".".join([echannel, eresolution, product.symbol])
         else:
             raise NotImplementedError(
@@ -186,12 +192,12 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI):
         return full_channel
 
     @staticmethod
-    def _parse_message(msg: Message) -> ParsedMessage:
+    def _parse_message(msg: RawMessage) -> ResponseData:
         channel: str = msg["topic"]
         if channel.startswith("kline"):
-            return BybitWebSocketAPI._parse_candlestick(msg)
+            return BybitBaseWebSocketAPI._parse_candlestick(msg)
         elif channel.startswith("publicTrade"):
-            return BybitWebSocketAPI._parse_tradebook(msg)
+            return BybitBaseWebSocketAPI._parse_tradebook(msg)
         # TODO: handle orderbook
         # elif channel.startswith('orderbook'):
         #     return BybitWebSocketAPI._parse_orderbook(msg)
@@ -206,13 +212,13 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI):
         #     return self._process_trade_msg(ws_name, msg)
         else:
             raise NotImplementedError(
-                f"{BybitWebSocketAPI.exch} {channel=} is not supported"
+                f"{BybitBaseWebSocketAPI.venue} {channel=} is not supported"
             )
 
     # REVIEW: schema only for linear products?
     @staticmethod
-    def _parse_candlestick(msg: Message) -> ParsedMessage:
-        schema = {
+    def _parse_candlestick(msg: RawMessage) -> ResponseData:
+        schema: Schema = {
             "ts": ("ts",),
             "channel": ["topic"],
             "@data": ["data"],
@@ -241,12 +247,12 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI):
                 },
             },
         }
-        data: ParsedMessage = SchemaParser.convert(msg, schema)
+        data: ResponseData = SchemaParser.convert(msg, schema)
         return data
 
     @staticmethod
-    def _parse_tradebook(msg: Message) -> ParsedMessage:
-        schema = {
+    def _parse_tradebook(msg: RawMessage) -> ResponseData:
+        schema: Schema = {
             "ts": ("ts",),
             "channel": ["topic"],
             "@data": ["data"],
@@ -269,18 +275,18 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI):
                 },
             },
         }
-        data: ParsedMessage = SchemaParser.convert(msg, schema)
+        data: ResponseData = SchemaParser.convert(msg, schema)
         return data
 
     # TODO
     @staticmethod
-    def _parse_orderbook(msg: Message) -> ParsedMessage:
+    def _parse_orderbook(msg: RawMessage) -> ResponseData:
         pass
 
     def _process_orderbook_l2_msg(self, ws_name, full_channel, msg):
         quote = {"ts": None, "data": {"bids": None, "asks": None}, "extra": {}}
         echannel, orderbook_depth, epdt = full_channel.split(".")
-        pdt = self._adapter(epdt, group=ws_name)
+        pdt = self.adapter(epdt, group=ws_name)
         data = msg["data"]
         seq_num = int(data["seq"])
         msg_type = msg["type"]
@@ -347,12 +353,12 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI):
         quote["data"]["asks"] = tuple((px, asks_l2[px]) for px in ask_pxs)
         zmq = self._get_zmq(ws_name)
         if zmq:
-            zmq_msg = (1, 1, (self.bkr, self.exch, pdt, quote))
+            zmq_msg = (1, 1, (self.bkr, self.venue, pdt, quote))
             zmq.send(*zmq_msg)
         else:
             data = {
                 "bkr": self.bkr,
-                "exch": self.exch,
+                "exch": self.venue,
                 "pdt": pdt,
                 "channel": "orderbook",
                 "data": quote,

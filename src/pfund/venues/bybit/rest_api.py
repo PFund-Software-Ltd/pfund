@@ -4,8 +4,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar, Any
 
 if TYPE_CHECKING:
-    from pfund.venues.adapter_base import BaseAdapter
-    from pfund.entities.accounts.account_api import APIKeyAccount
     from pfund.venues._apis.typing import Schema, Result
 
     BybitRawPayload = dict[str, Any]
@@ -14,22 +12,18 @@ import datetime
 from decimal import Decimal
 from http import HTTPMethod
 
-from pfund.venues.bybit.adapter import BybitAdapter
 from pfund.venues.bybit.signer import BybitSigner
 from pfund.venues.bybit.product import BybitProduct
 from pfund.venues._apis.typing import Endpoint, EndpointName
-from pfund.venues._apis.signers.base import BaseSigner
-from pfund.venues._apis.rest_api_base import BaseRESTfulAPI
+from pfund.venues._apis.rest_api_base import BaseRestAPI
 from pfund.enums import TradingVenue, CryptoAssetType, Environment, OptionType
 
 
-class BybitRESTfulAPI(BaseRESTfulAPI):
+class BybitRestAPI(BaseRestAPI):
     venue: ClassVar[TradingVenue] = TradingVenue.BYBIT
-    adapter: ClassVar[BaseAdapter] = BybitAdapter()
-    _signer: ClassVar[BaseSigner[APIKeyAccount]] = BybitSigner()
+    _signer: ClassVar[BybitSigner] = BybitSigner()
     VERSION: ClassVar[str | None] = "v5"
     URLS = {
-        Environment.SANDBOX: "https://api.bybit.com",
         Environment.PAPER: "https://api-testnet.bybit.com",
         Environment.LIVE: "https://api.bybit.com",
     }

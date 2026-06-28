@@ -46,9 +46,9 @@ class OKX(
         config: OKXConfig | None = None,
         settings: TradeEngineSettings | None = None,
     ):
-        from pfund.venues.okx.rest_api import OKXRESTfulAPI
+        from pfund.venues.okx.rest_api import OKXRestAPI
         from pfund.venues.okx.ws_api import OKXWebSocketAPI
 
         super().__init__(env=env, config=config, settings=settings)
-        self.rest_api = OKXRESTfulAPI(env=self._env)
+        self.rest_api = OKXRestAPI(env=self._env)
         self.ws_api = OKXWebSocketAPI(env=self._env)

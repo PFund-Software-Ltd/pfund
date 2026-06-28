@@ -14,6 +14,12 @@ class SandboxEngineSettings(TradeEngineSettings):
     initial_positions: dict[TradingVenue | str, dict[ProductName, Decimal]] = Field(
         default_factory=dict
     )
+    close_positions_at_end: bool = Field(
+        default=True,
+        description="""
+        Close positions at the end of the simulation, i.e. engine.end()
+        """,
+    )
 
     @field_validator("initial_balances", "initial_positions", mode="before")
     @classmethod

@@ -3,7 +3,7 @@ from typing import ClassVar
 from pfund.venues.bybit._ws_apis.ws_api_base import BybitBaseWebSocketAPI
 from pfund.datas.timeframe import Timeframe
 from pfund.venues.bybit.product import BybitProduct
-from pfund.enums import DataChannelType, Environment
+from pfund.enums import Environment, DataChannelType
 
 
 class BybitOptionWebSocketAPI(BybitBaseWebSocketAPI):

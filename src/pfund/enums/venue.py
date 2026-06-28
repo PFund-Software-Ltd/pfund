@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from pfund.venues.venue_base import BaseVenue
+    from pfund.venues.venue_base import AnyVenue
 
 from enum import StrEnum
 
@@ -17,7 +17,7 @@ class TradingVenue(StrEnum):
     OKX = "OKX"
 
     @property
-    def venue_class(self) -> type[BaseVenue]:
+    def venue_class(self) -> type[AnyVenue]:
         if self == TradingVenue.IBKR:
             from pfund.venues.ibkr.venue import InteractiveBrokers
 
