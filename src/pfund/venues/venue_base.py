@@ -37,6 +37,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
+from threading import Thread
 from collections.abc import Coroutine
 from functools import cached_property
 
@@ -84,6 +85,14 @@ class BaseVenue(
         self._settings: TradeEngineSettings | None = settings
         self._accounts: dict[AccountName, AccountT] = {}
         self._products: dict[ProductName, ProductT] = {}
+        if self.METADATA.requires_asyncio_loop:
+            self._loop: asyncio.AbstractEventLoop | None = asyncio.new_event_loop()
+            self._loop_thread: Thread | None = Thread(
+                target=self._run_loop, name=f"{self.name}_loop", daemon=True
+            )
+        else:
+            self._loop: asyncio.AbstractEventLoop | None = None
+            self._loop_thread: Thread | None = None
 
     def _run_async(self, coro: Coroutine[Any, Any, Any]) -> Any:
         """Drive an async-native venue method from a synchronous context.
@@ -105,18 +114,30 @@ class BaseVenue(
                 + f"Did you mean to call {method_name}_async()?"
             )
 
+    def _run_loop(self):
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_forever()  # NOTE: blocking
+
     @property
     def env(self) -> Literal[Environment.PAPER, Environment.LIVE]:
         return cast(Literal[Environment.PAPER, Environment.LIVE], self._env)
 
-    # TODO
+    @property
+    def loop(self) -> asyncio.AbstractEventLoop:
+        assert self._loop is not None, "there is no asyncio loop"
+        return self._loop
+
     def start(self):
         for channel in self._config.private_channels:
             self._add_private_channel(PrivateDataChannel[channel.lower()])
+        if self._loop_thread:
+            self._loop_thread.start()
 
-    # TODO
     def stop(self):
-        pass
+        if self._loop:
+            self._loop.call_soon_threadsafe(self._loop.stop)
+        if self._loop_thread:
+            self._loop_thread.join(timeout=5)
 
     @abstractmethod
     def get_markets(self, *args: Any, **kwargs: Any) -> dict[ProductKey, MarketT]:
@@ -170,8 +191,8 @@ class BaseVenue(
     def refresh_markets(self) -> dict[ProductKey, MarketT]:
         """Drop the cached markets and reload."""
         markets = self._dump_markets()
-        self.__dict__["markets"] = (
-            markets  # warm the cached_property  # pyright: ignore[reportIndexIssue]
+        self.__dict__["markets"] = (  # pyright: ignore[reportIndexIssue]
+            markets  # warm the cached_property
         )
         return markets
 

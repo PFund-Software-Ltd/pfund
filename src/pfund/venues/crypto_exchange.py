@@ -80,6 +80,10 @@ class CryptoExchange(
     ):
         if config and type(config) is not self.Config:
             raise ValueError(f"config must be of type {self.Config}")
+        if not self.METADATA.requires_asyncio_loop:
+            raise ValueError(
+                f"{self.name} requires an asyncio loop, did you forget to set requires_asyncio_loop=True in METADATA?"
+            )
         super().__init__(env=env, config=cast(ConfigT, config), settings=settings)
         self.rest_api = cast("RestAPITypeVar", self.RestAPI(env=self.env))
         self.ws_api = cast("WebSocketAPITypeVar", self.WebSocketAPI(env=self.env))
@@ -107,6 +111,11 @@ class CryptoExchange(
 
     def _create_private_channel(self, channel: PrivateDataChannel) -> FullDataChannel:
         return self.ws_api._create_private_channel(channel)
+
+    # TODO:
+    def place_orders(self):
+        # asyncio.run_coroutine_threadsafe(self._connect(), self._loop)  # ws + rest warmup
+        pass
 
     # # REVIEW
     # @staticmethod

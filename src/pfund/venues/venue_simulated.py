@@ -67,6 +67,23 @@ class SimulatedVenue:  # maybe don't inherit from BaseVenue at all?
     def _add_private_channel(self, channel: FullDataChannel) -> None:
         raise ValueError("private channels cannot be created in SANDBOX env")
 
+    def _add_product(self, product: BaseProduct) -> None:
+        if product.name not in self._products:
+            self._products[product.name] = product
+            self._logger.debug(
+                f"added product name={product.name} symbol={product.symbol}"
+            )
+        else:
+            raise ValueError(f"product name {product.name} is already registered")
+
+    # TODO: whitelist account fields
+    def _add_account(self, account: BaseAccount) -> None:
+        if account.name not in self._accounts:
+            self._accounts[account.name] = account
+            self._logger.debug(f"added account name={account.name}")
+        else:
+            raise ValueError(f"account name {account.name} is already registered")
+
     # TODO
     def _safety_check(self):
         # TODO: add a function to override all the existing functions in live broker

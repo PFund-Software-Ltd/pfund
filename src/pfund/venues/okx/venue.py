@@ -6,7 +6,9 @@ if TYPE_CHECKING:
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 
 from pfund.datas.timeframe import Timeframe
-from pfund.venues.venue_base import BaseVenue
+from pfund.venues.crypto_exchange import CryptoExchange
+from pfund.venues.okx.rest_api import OKXRestAPI
+from pfund.venues.okx.ws_api import OKXWebSocketAPI
 from pfund.venues.venue_metadata import VenueMetadata
 from pfund.venues.okx.adapter import OKXAdapter
 from pfund.venues.okx.config import OKXConfig
@@ -20,35 +22,30 @@ from pfund.enums import TradingVenue, Environment, AssetTypeModifier, CryptoAsse
 
 
 class OKX(
-    BaseVenue[
-        OKXConfig, OKXMarket, OKXAccount, OKXBalance, OKXOrder, OKXProduct, OKXPosition
+    CryptoExchange[
+        OKXRestAPI,
+        OKXWebSocketAPI,
+        OKXConfig,
+        OKXMarket,
+        OKXAccount,
+        OKXBalance,
+        OKXOrder,
+        OKXProduct,
+        OKXPosition,
     ]
 ):
     name: ClassVar[TradingVenue] = TradingVenue.OKX
     adapter: ClassVar[OKXAdapter] = OKXAdapter()
+
+    RestAPI: ClassVar[type[OKXRestAPI]] = OKXRestAPI
+    WSAPI: ClassVar[type[OKXWebSocketAPI]] = OKXWebSocketAPI
+
     Config: ClassVar[type[OKXConfig]] = OKXConfig
     Market: ClassVar[type[OKXMarket]] = OKXMarket
     Order: ClassVar[type[OKXOrder]] = OKXOrder
+    Account: ClassVar[type[OKXAccount]] = OKXAccount
     Product: ClassVar[type[OKXProduct]] = OKXProduct
 
-    METADATA: ClassVar[VenueMetadata] = VenueMetadata()
-
-    def __init__(
-        self,
-        env: Literal[
-            Environment.SANDBOX,
-            Environment.PAPER,
-            Environment.LIVE,
-            "SANDBOX",
-            "PAPER",
-            "LIVE",
-        ],
-        config: OKXConfig | None = None,
-        settings: TradeEngineSettings | None = None,
-    ):
-        from pfund.venues.okx.rest_api import OKXRestAPI
-        from pfund.venues.okx.ws_api import OKXWebSocketAPI
-
-        super().__init__(env=env, config=config, settings=settings)
-        self.rest_api = OKXRestAPI(env=self._env)
-        self.ws_api = OKXWebSocketAPI(env=self._env)
+    METADATA: ClassVar[VenueMetadata] = VenueMetadata(
+        requires_asyncio_loop=True,
+    )

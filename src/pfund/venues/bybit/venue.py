@@ -50,6 +50,7 @@ class Bybit(
     Product: ClassVar[type[BybitProduct]] = BybitProduct
 
     METADATA: ClassVar[VenueMetadata] = VenueMetadata(
+        requires_asyncio_loop=True,
         asset_types=[
             CryptoAssetType.FUTURE,
             CryptoAssetType.PERPETUAL,

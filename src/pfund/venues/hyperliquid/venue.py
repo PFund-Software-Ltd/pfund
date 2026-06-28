@@ -5,7 +5,9 @@ if TYPE_CHECKING:
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 
 from pfund.datas.timeframe import Timeframe
-from pfund.venues.venue_base import BaseVenue
+from pfund.venues.crypto_exchange import CryptoExchange
+from pfund.venues.hyperliquid.rest_api import HyperliquidRestAPI
+from pfund.venues.hyperliquid.ws_api import HyperliquidWebSocketAPI
 from pfund.venues.venue_metadata import VenueMetadata
 from pfund.venues.hyperliquid.adapter import HyperliquidAdapter
 from pfund.venues.hyperliquid.config import HyperliquidConfig
@@ -19,7 +21,9 @@ from pfund.enums import TradingVenue, Environment, AssetTypeModifier, CryptoAsse
 
 
 class Hyperliquid(
-    BaseVenue[
+    CryptoExchange[
+        HyperliquidRestAPI,
+        HyperliquidWebSocketAPI,
         HyperliquidConfig,
         HyperliquidMarket,
         HyperliquidAccount,
@@ -31,29 +35,16 @@ class Hyperliquid(
 ):
     name: ClassVar[TradingVenue] = TradingVenue.HYPERLIQUID
     adapter: ClassVar[HyperliquidAdapter] = HyperliquidAdapter()
+
+    RestAPI: ClassVar[type[HyperliquidRestAPI]] = HyperliquidRestAPI
+    WebSocketAPI: ClassVar[type[HyperliquidWebSocketAPI]] = HyperliquidWebSocketAPI
+
     Config: ClassVar[type[HyperliquidConfig]] = HyperliquidConfig
     Market: ClassVar[type[HyperliquidMarket]] = HyperliquidMarket
     Order: ClassVar[type[HyperliquidOrder]] = HyperliquidOrder
+    Account: ClassVar[type[HyperliquidAccount]] = HyperliquidAccount
     Product: ClassVar[type[HyperliquidProduct]] = HyperliquidProduct
 
-    METADATA: ClassVar[VenueMetadata] = VenueMetadata()
-
-    def __init__(
-        self,
-        env: Literal[
-            Environment.SANDBOX,
-            Environment.PAPER,
-            Environment.LIVE,
-            "SANDBOX",
-            "PAPER",
-            "LIVE",
-        ],
-        config: HyperliquidConfig | None = None,
-        settings: TradeEngineSettings | None = None,
-    ):
-        from pfund.venues.hyperliquid.rest_api import HyperliquidRestAPI
-        from pfund.venues.hyperliquid.ws_api import HyperliquidWebSocketAPI
-
-        super().__init__(env=env, config=config, settings=settings)
-        self.rest_api = HyperliquidRestAPI(env=self._env)
-        self.ws_api = HyperliquidWebSocketAPI(env=self._env)
+    METADATA: ClassVar[VenueMetadata] = VenueMetadata(
+        requires_asyncio_loop=True,
+    )

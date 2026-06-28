@@ -41,6 +41,12 @@ class InteractiveBrokers(BaseVenue, ABC):
         """IB has no get_markets endpoint, returns an empty dict."""
         return {}
 
+    # async def place_orders(self, ...):
+    #     resp = await self._loop.run_in_executor(
+    #         None,                                    # None = default ThreadPoolExecutor
+    #         lambda: requests.post(url, json=payload) # a *sync* callable
+    #     )
+
     # def _add_default_private_channels(self):
     #     for channel in list(PrivateDataChannel.__members__) + [
     #         "account_update",

@@ -444,47 +444,6 @@ class BaseWebSocketAPI(ABC, Generic[AccountT, ProductT]):
                 self._last_quote_nums[pdt] = seq_num
             return True
 
-    # def _process_tradebook_msg(self, ws_name, msg, pdt, schema):
-    #     ticks = []
-    #     res = msg[schema["result"]]
-    #     res_type = type(res)
-    #     ts_adj = schema["ts_adj"]
-    #     msg_ts = (
-    #         float(step_into(msg, schema["ts"])) * ts_adj if "ts" in schema else None
-    #     )
-    #     if res_type is list:
-    #         for trade in res:
-    #             tick = {"ts": msg_ts, "data": {}, "extra": {}}
-    #             for k, (ek, *sequence) in schema["data"].items():
-    #                 initial_value = self.adapter(step_into(trade, ek))
-    #                 v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
-    #                 tick["data"][k] = v
-    #                 if k == "ts":
-    #                     tick["data"][k] *= ts_adj
-    #             for k, (ek, *sequence) in schema.get("extra", {}).items():
-    #                 initial_value = step_into(trade, ek)
-    #                 v = reduce(lambda v, f: f(v) if v else v, sequence, initial_value)
-    #                 tick["extra"][k] = v
-    #             ticks.append(tick)
-    #     else:
-    #         raise NotImplementedError(
-    #             f"{self.exch} ws trade msg {res_type=} is not supported"
-    #         )
-    #     zmq = self._get_zmq(ws_name)
-    #     if zmq:
-    #         for tick in ticks:
-    #             zmq_msg = (1, 2, (self._bkr, self.exch, pdt, tick))
-    #             zmq.send(*zmq_msg)
-    #     else:
-    #         data = {
-    #             "bkr": self._bkr,
-    #             "exch": self.exch,
-    #             "pdt": pdt,
-    #             "channel": "tradebook",
-    #             "data": ticks,
-    #         }
-    #         return data
-
     # def _process_position_msg(self, ws_name, msg, schema) -> dict:
     #     acc = ws_name
     #     positions = {"ts": None, "data": defaultdict(dict)}

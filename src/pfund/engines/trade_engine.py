@@ -180,7 +180,7 @@ class TradeEngine(BaseEngine):
         import zmq
         from pfeed.streaming.zeromq import ZeroMQ
 
-        # pull from component orders
+        # pull from component, e.g. orders
         self._worker = ZeroMQ(
             name=self.name + "_worker", logger=self._logger, receiver_type=zmq.PULL
         )
@@ -218,6 +218,7 @@ class TradeEngine(BaseEngine):
         for strategy in self._strategies.values():
             if strategy.is_remote() or _has_any_remote_component(strategy):
                 return True
+
         if self._data_engine:
             return any(
                 data.config.num_stream_workers is not None
@@ -260,6 +261,31 @@ class TradeEngine(BaseEngine):
 
                     # TEMP
                     print("worker recv:", channel, topic, data, msg_ts)
+
+                    # `data` carries which account/venue + the order(s) the strategy wants placed.
+                    # 1. resolve the venue that owns this account/product
+                    # venue = self.get_venue(data["venue"])
+
+                    # 2. (optional) optimistically mark SUBMITTED in OM now, so order state
+                    #    exists locally before the exchange ack streams back over ws.
+                    # self._order_manager.update_orders(...)
+
+                    # 3. fire place_orders WITHOUT blocking the loop.
+                    #    place_orders is a coroutine on the venue's asyncio loop (venue thread).
+                    #    run_coroutine_threadsafe schedules it there from THIS (sync) thread and
+                    #    returns a concurrent.futures.Future right away — we never call .result(),
+                    #    so the loop keeps polling.
+                    # fut = asyncio.run_coroutine_threadsafe(
+                    #     venue.place_orders(account, orders), venue.loop
+                    # )
+
+                    # 4. do NOT read the result here. ack / reject / fill all come back later
+                    #    over venue ws -> zmq PUSH -> _worker.recv() (this same branch), routed by
+                    #    `channel`, then republished to strategies via _proxy (XPUB).
+                    #    only attach a callback to surface *scheduling/send* errors, not outcomes:
+                    # fut.add_done_callback(
+                    #     lambda f: f.exception() and self._logger.error(...)
+                    # )
 
                 # TODO: publish orders, positions, balances etc. to components
                 # self._proxy.send(...)
