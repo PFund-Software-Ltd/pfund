@@ -48,6 +48,12 @@ StrategyName: TypeAlias = str
 class BaseOrder(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
     TrailingStop: ClassVar[type[TrailingStop]] = TrailingStop
+    # Some venues (most crypto REST/WS APIs) never send a separate "pending"
+    # acknowledgement — they jump straight from our local SUBMITTED to a terminal
+    # report. Set True on those venue subclasses to treat SUBMITTED as PENDING, so
+    # is_cancelling()/is_amending() and the derived FIX status reflect the in-flight
+    # request instead of waiting on an ack that will never arrive.
+    SUBMITTED_AS_PENDING: ClassVar[bool] = False
 
     creator: StrategyName | Literal["USER"] = Field(
         description="""
@@ -313,11 +319,11 @@ class BaseOrder(BaseModel):
 
     @property
     def tick_size(self) -> Decimal | None:
-        return self.product.tick_size
+        return self.product.market.tick_size if self.product.market else None
 
     @property
     def lot_size(self) -> Decimal | None:
-        return self.product.lot_size
+        return self.product.market.lot_size if self.product.market else None
 
     @property
     def tif(self):
@@ -345,6 +351,9 @@ class BaseOrder(BaseModel):
     def is_submitted(self):
         return self.status.is_submitted()
 
+    def is_pending(self):
+        return self.status.is_pending()
+
     def is_active(self):
         return self.status.is_active()
 
@@ -352,13 +361,13 @@ class BaseOrder(BaseModel):
         return self.status.is_closed()
 
     def is_cancelling(self):
-        return self.status.is_cancelling()
+        return self.status.is_cancelling(include_submitted=self.SUBMITTED_AS_PENDING)
 
     def is_cancelled(self):
         return self.status.is_cancelled()
 
     def is_amending(self):
-        return self.status.is_amending()
+        return self.status.is_amending(include_submitted=self.SUBMITTED_AS_PENDING)
 
     def is_amended(self):
         return self.status.is_amended()
@@ -417,7 +426,7 @@ class BaseOrder(BaseModel):
     def __str__(self):
         return (
             f"Creator={self.creator} | Venue={self.venue} | Account={self.account.name} | Product={self.product.name}\n"
-            f"OrderKey={self.key} | OrderID={self.id} | OrderStatus={self.status}\n"
+            f"OrderKey={self.key} | OrderID={self.id} | FIXStatus={self.status.FIX} | OrderStatus={self.status}\n"
             f"OrderType={self.type} | TimeInForce={self.tif} | ReduceOnly={self.reduce_only}\n"
             f"Side={Side(self.side).name} | Price={self.price} | Quantity={self.quantity}\n"
             f"AveragePrice={self.avg_price} | FilledQuantity={self.filled_qty}\n"
@@ -428,7 +437,7 @@ class BaseOrder(BaseModel):
     def __repr__(self):
         return (
             f"{self.creator}|{self.venue}|{self.account.name}|{self.product.name}|"
-            f"{self.key}|{self.id}|{repr(self.status)}|"
+            f"{self.key}|{self.id}|{self.status.FIX}|{repr(self.status)}|"
             f"{self.type}|{self.tif}|{self.size}@{self.price}|"
             f"filled={self.filled_size}@{self.avg_price}|"
             f"last={self.lts}@{self.ltp}|"

@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, ClassVar, Any
 
 if TYPE_CHECKING:
     from pfund.venues._apis.typing import Schema, Result
+    from pfund.venues.bybit.account import BybitAccount
 
     BybitRawPayload = dict[str, Any]
 
@@ -90,6 +91,10 @@ class BybitRestAPI(BaseRestAPI):
         if ms <= 0:
             return None
         return datetime.datetime.fromtimestamp(ms / 1000, tz=datetime.UTC)
+
+    @staticmethod
+    def _convert_ms_to_seconds(ms: int) -> float:
+        return ms / 1000
 
     async def get_markets(self, category: BybitProduct.Category) -> Result:
         category = BybitProduct.Category[category.upper()]

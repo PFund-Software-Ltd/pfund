@@ -25,6 +25,7 @@ from pfund.enums.time_in_force import TimeInForce
 from pfund.enums.venue import TradingVenue
 from pfund.enums.position_mode import PositionMode
 from pfund.enums.side import Side
+from pfund.enums.margin_mode import MarginMode
 
 
 __all__ = [
@@ -53,4 +54,5 @@ __all__ = [
     "TradingVenue",
     "TraditionalAssetType",
     "PositionMode",
+    "MarginMode",
 ]

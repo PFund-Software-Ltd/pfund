@@ -1,3 +1,4 @@
+# pyright: reportUnusedParameter=false
 from __future__ import annotations
 from typing import (
     TYPE_CHECKING,
@@ -41,6 +42,7 @@ from threading import Thread
 from collections.abc import Coroutine
 from functools import cached_property
 
+from pfund.errors import NotSupportedByVenueError
 from pfund.typing import ProductKey
 from pfund.entities.products.asset_type import AssetType
 from pfund.venues.venue_metadata import VenueMetadata
@@ -139,9 +141,8 @@ class BaseVenue(
         if self._loop_thread:
             self._loop_thread.join(timeout=5)
 
-    @abstractmethod
     def get_markets(self, *args: Any, **kwargs: Any) -> dict[ProductKey, MarketT]:
-        pass
+        raise NotSupportedByVenueError(f"{self.name} does not support get_markets")
 
     @cached_property
     def markets(self) -> dict[ProductKey, MarketT]:
@@ -202,6 +203,14 @@ class BaseVenue(
             self._logger.debug(
                 f"added product name={product.name} symbol={product.symbol}"
             )
+            try:
+                product.market = self.markets[product.key]
+            except NotSupportedByVenueError:
+                pass
+            except KeyError:
+                self._logger.error(
+                    f"no market found for product key={product.key} in {self._markets_yml_file_path}"
+                )
         else:
             raise ValueError(f"product name {product.name} is already registered")
 

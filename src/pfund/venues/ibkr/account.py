@@ -24,7 +24,7 @@ class InteractiveBrokersAccount(BaseAccount):
 
     def __init__(
         self,
-        env: Environment,
+        env: Environment | str,
         name: str = "",
         host: str = "",
         port: int | None = None,

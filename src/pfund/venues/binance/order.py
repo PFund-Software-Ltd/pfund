@@ -36,4 +36,6 @@ class BinanceTrailingStop(TrailingStop):
 
 class BinanceOrder(BaseOrder):
     TrailingStop: ClassVar[type[BinanceTrailingStop]] = BinanceTrailingStop
+    SUBMITTED_AS_PENDING: ClassVar[bool] = True
+
     trailing_stop: BinanceTrailingStop | None = Field(default=None)

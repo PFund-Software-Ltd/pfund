@@ -36,4 +36,6 @@ class BybitTrailingStop(TrailingStop):
 
 class BybitOrder(BaseOrder):
     TrailingStop: ClassVar[type[BybitTrailingStop]] = BybitTrailingStop
+    SUBMITTED_AS_PENDING: ClassVar[bool] = True
+
     trailing_stop: BybitTrailingStop | None = Field(default=None)

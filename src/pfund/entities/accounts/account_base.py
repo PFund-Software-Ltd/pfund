@@ -21,7 +21,9 @@ class BaseAccount:
             name += "_account"
         return name
 
-    def __init__(self, env: Environment, venue: TradingVenue, name: str = ""):
+    def __init__(
+        self, env: Environment | str, venue: TradingVenue | str, name: str = ""
+    ):
         self._env = Environment[env.upper()]
         self._venue = TradingVenue[venue.upper()]
         self.name: str = self._normalize_name(name)

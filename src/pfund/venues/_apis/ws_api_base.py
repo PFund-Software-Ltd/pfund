@@ -62,7 +62,7 @@ class BaseWebSocketAPI(ABC, Generic[AccountT, ProductT]):
 
     def __init__(
         self,
-        env: Literal[Environment.PAPER, Environment.LIVE],
+        env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"],
         data_mode: bool = False,
     ):
         """

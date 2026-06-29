@@ -1,4 +1,4 @@
-from typing import Any, NamedTuple, Required, NotRequired, TypeAlias
+from typing import Any, NamedTuple, Required, NotRequired, TypeAlias, Callable
 from typing_extensions import TypedDict  # need it to use "extra_items"
 
 from http import HTTPMethod
@@ -10,6 +10,7 @@ from pfund.enums import TradingVenue
 
 EndpointName: TypeAlias = str
 RawPayload: TypeAlias = dict[str, Any] | list[dict[str, Any]]
+ParsingSequence: TypeAlias = Sequence[str | Callable[..., Any]]
 
 
 class Endpoint(NamedTuple):
@@ -20,8 +21,8 @@ class Endpoint(NamedTuple):
 Schema = TypedDict(
     "Schema",
     {
-        "ts": NotRequired[Sequence[str]],
-        "@data": NotRequired[Sequence[str]],
+        "ts": NotRequired[ParsingSequence],
+        "@data": NotRequired[ParsingSequence],
         "data": Required[dict[str, Any]],
     },
     extra_items=Any,

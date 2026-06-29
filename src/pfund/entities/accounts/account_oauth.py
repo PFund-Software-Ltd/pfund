@@ -16,8 +16,8 @@ class OAuthAccount(BaseAccount):
 
     def __init__(
         self,
-        env: Environment,
-        venue: TradingVenue,
+        env: Environment | str,
+        venue: TradingVenue | str,
         name: str = "",
         token: str = "",
     ):

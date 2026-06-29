@@ -82,7 +82,7 @@ class BaseRestAPI(ABC):
 
     def __init__(
         self,
-        env: Literal[Environment.PAPER, Environment.LIVE],
+        env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"],
         dev_mode: bool = False,
     ):
         self._env = Environment[env.upper()]
@@ -224,6 +224,15 @@ class BaseRestAPI(ABC):
         headers: HeaderTypes | None = None,
         cookies: CookieTypes | None = None,
     ) -> Result:
+        if account:
+            if account.env != self._env:
+                raise ValueError(
+                    f"Account environment {account.env} does not match RestAPI environment {self._env}"
+                )
+            if account.venue != self.venue:
+                raise ValueError(
+                    f"Account venue {account.venue} does not match RestAPI venue {self.venue}"
+                )
         endpoint_name: EndpointName = sys._getframe(1).f_code.co_name
         endpoint = self.get_endpoint(endpoint_name)
         request: Request = self._build_request(

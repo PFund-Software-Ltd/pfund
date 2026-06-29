@@ -14,7 +14,9 @@ from pfund.enums import TradingVenue
 
 class BaseProduct(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(
-        arbitrary_types_allowed=True, extra="forbid"
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        extra="forbid",
     )
 
     source: DataSource

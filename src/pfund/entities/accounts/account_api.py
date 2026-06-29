@@ -7,8 +7,8 @@ from pfund.enums import Environment, TradingVenue
 class APIKeyAccount(BaseAccount):
     def __init__(
         self,
-        env: Environment,
-        venue: TradingVenue,
+        env: Environment | str,
+        venue: TradingVenue | str,
         name: str = "",
         key: str = "",
         secret: str = "",
