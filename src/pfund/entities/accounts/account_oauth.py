@@ -1,4 +1,8 @@
-import os
+from __future__ import annotations
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from pfund.engines.engine_context import EngineContext
 
 from pfund.entities.accounts.account_base import BaseAccount
 from pfund.enums import Environment, TradingVenue
@@ -22,7 +26,12 @@ class OAuthAccount(BaseAccount):
         token: str = "",
     ):
         super().__init__(env=env, venue=venue, name=name)
-        self._token = token or os.getenv(f"{self.venue}_ACCESS_TOKEN", "")
+        self._token: str = token
+
+    def _load_env_vars_from_context(self, context: EngineContext):
+        self._token = self._token or cast(
+            str, context.get_env(f"{self.venue}_ACCESS_TOKEN", "")
+        )
         if self._env in [Environment.PAPER, Environment.LIVE]:
             if not self._token:
                 raise ValueError(

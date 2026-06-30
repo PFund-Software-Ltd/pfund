@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 import math
 from uuid import uuid4
 from decimal import Decimal, ROUND_HALF_UP
+import builtins
 
 from pydantic import (
     BaseModel,
@@ -47,7 +48,8 @@ StrategyName: TypeAlias = str
 
 class BaseOrder(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
-    TrailingStop: ClassVar[type[TrailingStop]] = TrailingStop
+    # NOTE: use builtins.type to avoid collision with property "type"
+    TrailingStop: ClassVar[builtins.type[TrailingStop]] = TrailingStop
     # Some venues (most crypto REST/WS APIs) never send a separate "pending"
     # acknowledgement — they jump straight from our local SUBMITTED to a terminal
     # report. Set True on those venue subclasses to treat SUBMITTED as PENDING, so

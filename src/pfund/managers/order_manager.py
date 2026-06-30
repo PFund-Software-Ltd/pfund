@@ -23,6 +23,7 @@ class OrderCounter:
 
 
 class OrderManager:
+    # TODO: manage trades (BaseTrade) as well
     def __init__(self):
         self._logger = logging.getLogger("pfund.order_manager")
         self._submitted_orders: dict[OrderKey, BaseOrder] = {}

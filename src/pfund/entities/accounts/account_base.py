@@ -1,5 +1,8 @@
 from __future__ import annotations
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pfund.engines.engine_context import EngineContext
 
 from pfund.enums import Environment, TradingVenue
 
@@ -17,16 +20,34 @@ class BaseAccount:
 
     def _normalize_name(self, name: str) -> str:
         name = name or self._get_default_name()
+        if self._venue.lower() not in name.lower():
+            name = f"{self._venue.lower()}_" + name
         if "account" not in name.lower():
             name += "_account"
         return name
 
     def __init__(
-        self, env: Environment | str, venue: TradingVenue | str, name: str = ""
+        self,
+        env: Environment | str,
+        venue: TradingVenue | str,
+        name: str = "",
+        currency: str = "USD",
     ):
+        """
+        Args:
+            env: The environment the account is in.
+            venue: The trading venue of the account.
+            name: The name of the account.
+            currency: The currency of the account total balance.
+        """
         self._env = Environment[env.upper()]
         self._venue = TradingVenue[venue.upper()]
         self.name: str = self._normalize_name(name)
+        VenueClass = self._venue.venue_class
+        self._balance = VenueClass.Balance(currency=currency)
+
+    def _load_env_vars_from_context(self, context: EngineContext):  # pyright: ignore[reportUnusedParameter]
+        pass
 
     @property
     def env(self) -> Environment:

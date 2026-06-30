@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 if TYPE_CHECKING:
     from pfund.typing import FullDataChannel
     from pfund.venues._apis.typing import ResponseData, Schema
-    from pfund.venues._apis.ws_api_base import RawMessage
+    from pfund.venues._apis.ws_api_base import RawMessage, WebSocketName
     from pfund.datas.resolution import Resolution
     from pfund.enums import Environment
 
@@ -16,11 +16,7 @@ from pprint import pformat
 
 from msgspec import json
 
-from pfund.venues._apis.ws_api_base import (
-    BaseWebSocketAPI,
-    NamedWebSocket,
-    WebSocketName,
-)
+from pfund.venues._apis.ws_api_base import BaseWebSocketAPI, NamedWebSocket
 from pfund.datas.timeframe import Timeframe
 from pfund.venues.bybit.product import BybitProduct
 from pfund.venues.bybit.account import BybitAccount

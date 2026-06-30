@@ -58,7 +58,7 @@ class DualPosition(BasePosition):
         self._snapshot = PositionSnapshot(
             size=net_size,
             avg_price=avg_price,
-            liq_price=None,  # each side keeps its own; net liquidation is undefined in DUAL mode
+            liquidation_price=None,  # each side keeps its own; net liquidation is undefined in DUAL mode
             unrealized_pnl=self._combine_pnl("unrealized_pnl"),
             realized_pnl=self._combine_pnl("realized_pnl"),
         )

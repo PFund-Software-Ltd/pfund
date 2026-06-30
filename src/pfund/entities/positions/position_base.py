@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import ClassVar, TypedDict
+from typing import ClassVar
 
 import time
 from decimal import Decimal
@@ -11,31 +11,18 @@ from pfund.entities.trades.quantity import Quantity
 from pfund.enums import PositionMode, Side, TradingVenue
 
 
-class PositionUpdate(TypedDict, total=False):
-    size: Quantity
-    avg_price: Decimal | None
-    liq_price: Decimal | None
-    unrealized_pnl: Decimal | None
-    realized_pnl: Decimal | None
-
-
 class PositionSnapshot(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
 
     updated_at: float = Field(default_factory=time.time)
     size: Quantity = Field(default=Quantity(0))
-    avg_price: Decimal | None = Field(
-        default=None, ge=0, description="Average price of the position"
-    )
-    liq_price: Decimal | None = Field(
-        default=None, ge=0, description="Liquidation price of the position"
-    )
-    unrealized_pnl: Decimal | None = Field(
-        default=None, description="Unrealized PnL of the position"
-    )
-    realized_pnl: Decimal | None = Field(
-        default=None, description="Realized PnL of the position"
-    )
+    avg_price: Decimal | None = Field(default=None, ge=0)
+    mark_price: Decimal | None = Field(default=None, ge=0)
+    liquidation_price: Decimal | None = Field(default=None, ge=0)
+    initial_margin: Decimal | None = Field(default=None)
+    maintenance_margin: Decimal | None = Field(default=None)
+    unrealized_pnl: Decimal | None = Field(default=None)
+    realized_pnl: Decimal | None = Field(default=None)
 
 
 class BasePosition(BaseModel):
@@ -70,11 +57,25 @@ class BasePosition(BaseModel):
 
     @computed_field
     @property
+    def mark_price(self) -> Decimal | None:
+        return self._snapshot.mark_price
+
+    mark_px = mark_price
+
+    @computed_field
+    @property
     def avg_price(self) -> Decimal:
         assert self._snapshot.avg_price is not None, "avg_price is None"
         return self._snapshot.avg_price
 
     entry_price = entry_px = avg_px = avg_price
+
+    @computed_field
+    @property
+    def liquidation_price(self) -> Decimal | None:
+        return self._snapshot.liquidation_price
+
+    liq_price = liq_px = liquidation_px = liquidation_price
 
     @property
     def updated_at(self) -> float:
@@ -105,7 +106,7 @@ class BasePosition(BaseModel):
 
     rpnl = realized_pnl
 
-    def on_snapshot_update(self, update: PositionUpdate) -> None:
+    def on_snapshot_update(self, update: PositionSnapshot) -> None:
         self._snapshot = self._Snapshot.model_validate(update)
 
     # TODO
@@ -144,13 +145,14 @@ class BasePosition(BaseModel):
     def __str__(self):
         return (
             f"Venue={self.venue} | Product={self.product}\n"
-            f"Size={self.size} | AveragePrice={self._snapshot.avg_price} | LiquidationPrice={self._snapshot.liq_price}\n"
+            f"Size={self.size} | AveragePrice={self._snapshot.avg_price}"
+            f"MarkPrice={self.mark_price} | LiquidationPrice={self.liquidation_price}\n"
             f"UnrealizedPnL={self.unrealized_pnl} | RealizedPnL={self.realized_pnl}"
         )
 
     def __repr__(self):
         return (
-            f"{self.venue} | {self.product}\n"
-            f"{self.size}@{self._snapshot.avg_price} (liquidate@{self._snapshot.liq_price})\n"
+            f"{self.venue} | {self.product} | {self.size}@{self._snapshot.avg_price}\n"
+            f"mark={self.mark_price} | liquidate={self.liquidation_price}\n"
             f"upnl={self.unrealized_pnl} | rpnl={self.realized_pnl}"
         )

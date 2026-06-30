@@ -12,7 +12,6 @@ if TYPE_CHECKING:
     from pfund.venues._apis.ws_api_base import BaseWebSocketAPI
 
 import time
-import asyncio
 from abc import ABC, abstractmethod
 
 from pfund.venues.venue_base import (

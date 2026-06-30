@@ -1,4 +1,8 @@
-import os
+from __future__ import annotations
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from pfund.engines.engine_context import EngineContext
 
 from pfund.entities.accounts.account_base import BaseAccount
 from pfund.enums import Environment, TradingVenue
@@ -14,8 +18,14 @@ class APIKeyAccount(BaseAccount):
         secret: str = "",
     ):
         super().__init__(env=env, venue=venue, name=name)
-        self._key = key or os.getenv(f"{self.venue}_API_KEY", "")
-        self._secret = secret or os.getenv(f"{self.venue}_API_SECRET", "")
+        self._key: str = key
+        self._secret: str = secret
+
+    def _load_env_vars_from_context(self, context: EngineContext):
+        self._key = self._key or cast(str, context.get_env(f"{self.venue}_API_KEY", ""))
+        self._secret = self._secret or cast(
+            str, context.get_env(f"{self.venue}_API_SECRET", "")
+        )
         if self._env in [Environment.PAPER, Environment.LIVE]:
             if not self._key or not self._secret:
                 raise ValueError(

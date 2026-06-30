@@ -122,43 +122,12 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def get_accounts(self) -> list[BaseAccount]:
         return list(self.accounts.values())
 
-    @overload
-    def add_account(
-        self,
-        venue: TradingVenue | str,
-        name: str = "",
-        key: str = "",
-        secret: str = "",
-    ) -> APIKeyAccount: ...
-
-    @overload
-    def add_account(
-        self,
-        venue: Literal[TradingVenue.IBKR, "IBKR"],
-        name: str = "",
-        host: str = "",
-        port: int | None = None,
-        client_id: int | None = None,
-    ) -> IBKRAccount: ...
-
-    def add_account(
-        self, venue: TradingVenue | str, name: str = "", **kwargs: Any
-    ) -> BaseAccount:
-        venue = TradingVenue[venue.upper()]
-        VenueClass = venue.venue_class
-        account: BaseAccount = VenueClass.create_account(
-            name=name or self.name, **kwargs
-        )
+    def add_account(self, account: BaseAccount) -> BaseAccount:
         if not self.is_top_component():
             raise ValueError(f"Sub-strategy '{self.name}' cannot add accounts")
-
+        account._load_env_vars_from_context(self.context)
         self.accounts[account.name] = account
-        self.positions[account.name] = {}
-        self.balances[account.name] = {}
-        self.orders[account.name] = []
-        # TODO make maxlen a variable in config
-        # self.trades[account.name] = deque(maxlen=10)
-        self.logger.debug(f'added {venue} account "{account.name}"')
+        self.logger.debug(f'added {account.venue} account "{account.name}"')
         return account
 
     # FIXME: update, refer to or reuse _add_component() in component_mixin.py

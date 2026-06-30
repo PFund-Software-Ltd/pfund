@@ -42,9 +42,11 @@ class Binance(
 
     Config: ClassVar[type[BinanceConfig]] = BinanceConfig
     Market: ClassVar[type[BinanceMarket]] = BinanceMarket
-    Order: ClassVar[type[BinanceOrder]] = BinanceOrder
     Account: ClassVar[type[BinanceAccount]] = BinanceAccount
+    Balance: ClassVar[type[BinanceBalance]] = BinanceBalance
+    Order: ClassVar[type[BinanceOrder]] = BinanceOrder
     Product: ClassVar[type[BinanceProduct]] = BinanceProduct
+    Position: ClassVar[type[BinancePosition]] = BinancePosition
 
     METADATA: ClassVar[VenueMetadata] = VenueMetadata(
         requires_asyncio_loop=True,

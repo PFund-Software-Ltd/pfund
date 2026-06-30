@@ -42,9 +42,11 @@ class OKX(
 
     Config: ClassVar[type[OKXConfig]] = OKXConfig
     Market: ClassVar[type[OKXMarket]] = OKXMarket
-    Order: ClassVar[type[OKXOrder]] = OKXOrder
     Account: ClassVar[type[OKXAccount]] = OKXAccount
+    Balance: ClassVar[type[OKXBalance]] = OKXBalance
+    Order: ClassVar[type[OKXOrder]] = OKXOrder
     Product: ClassVar[type[OKXProduct]] = OKXProduct
+    Position: ClassVar[type[OKXPosition]] = OKXPosition
 
     METADATA: ClassVar[VenueMetadata] = VenueMetadata(
         requires_asyncio_loop=True,

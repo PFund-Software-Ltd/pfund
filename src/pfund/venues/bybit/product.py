@@ -1,6 +1,7 @@
 # pyright: reportAttributeAccessIssue=false
 from __future__ import annotations
 from typing import cast
+from typing_extensions import override
 
 from enum import StrEnum
 from datetime import date
@@ -38,7 +39,8 @@ class BybitProduct(BaseProduct):
         else:
             return super()._create_name()
 
-    def _create_symbol(self):
+    @override
+    def _create_symbol(self) -> str:
         from pfund.venues.bybit import Bybit
 
         ebase_asset = Bybit.adapter(self.base_asset, group="assets")

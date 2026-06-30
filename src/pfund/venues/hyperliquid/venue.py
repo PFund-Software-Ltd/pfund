@@ -41,9 +41,11 @@ class Hyperliquid(
 
     Config: ClassVar[type[HyperliquidConfig]] = HyperliquidConfig
     Market: ClassVar[type[HyperliquidMarket]] = HyperliquidMarket
-    Order: ClassVar[type[HyperliquidOrder]] = HyperliquidOrder
     Account: ClassVar[type[HyperliquidAccount]] = HyperliquidAccount
+    Balance: ClassVar[type[HyperliquidBalance]] = HyperliquidBalance
+    Order: ClassVar[type[HyperliquidOrder]] = HyperliquidOrder
     Product: ClassVar[type[HyperliquidProduct]] = HyperliquidProduct
+    Position: ClassVar[type[HyperliquidPosition]] = HyperliquidPosition
 
     METADATA: ClassVar[VenueMetadata] = VenueMetadata(
         requires_asyncio_loop=True,

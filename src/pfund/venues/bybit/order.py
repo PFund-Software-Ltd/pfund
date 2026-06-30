@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import ClassVar
+import builtins
 
 from decimal import Decimal
 
@@ -35,7 +36,8 @@ class BybitTrailingStop(TrailingStop):
 
 
 class BybitOrder(BaseOrder):
-    TrailingStop: ClassVar[type[BybitTrailingStop]] = BybitTrailingStop
+    # NOTE: use builtins.type to avoid collision with property "type"
+    TrailingStop: ClassVar[builtins.type[BybitTrailingStop]] = BybitTrailingStop
     SUBMITTED_AS_PENDING: ClassVar[bool] = True
 
     trailing_stop: BybitTrailingStop | None = Field(default=None)

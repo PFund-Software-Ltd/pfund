@@ -8,8 +8,6 @@ if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
     from sklearn.base import BaseEstimator
 
-    from pfund.venues.venue_base import BaseVenue
-    from pfund.venues.venue_config import VenueConfig
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.indicators.indicator_base import BaseIndicator
     from pfund.components.models.model_base import BaseModel

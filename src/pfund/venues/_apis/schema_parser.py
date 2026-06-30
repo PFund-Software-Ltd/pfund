@@ -19,8 +19,10 @@ from pfund.errors import ResponseParseError
 Extractor: TypeAlias = str
 Transformer: TypeAlias = Callable[[Any], Any]
 FieldPath: TypeAlias = Sequence["Extractor | Transformer"]
-# the value of an "@key": the path of dict keys locating a nested schema's source
-SourcePath: TypeAlias = Sequence[str]
+# the value of an "@key": the path locating a nested schema's source. Like a
+# FieldPath, it mixes Extractors (dict keys to descend) and Transformers
+# (callables applied to the current value), e.g. ('result', 'list', lambda x: x[0]).
+SourcePath: TypeAlias = Sequence["Extractor | Transformer"]
 
 
 # OPTIMIZE
@@ -110,6 +112,42 @@ class SchemaParser:
     """
 
     @staticmethod
+    def _descend(obj: Any, key: str) -> Any:
+        """Descend one key into a dict, yielding None for an absent key or a
+        null/non-dict parent. Shared by field-path and nested-schema source-path
+        traversal so both tolerate missing/null envelope keys identically —
+        exchanges routinely drop or null these on empty or degraded responses.
+        """
+        return obj[key] if isinstance(obj, dict) and key in obj else None
+
+    @staticmethod
+    def _walk(value: Any, path: "FieldPath | SourcePath") -> Any:
+        """Walk a path left-to-right as a pipeline: string Extractors descend one
+        dict key (via _descend), callable Transformers are applied to the current
+        value. A missing/null intermediate short-circuits to None before any
+        downstream transformer runs. Shared by field-path (Case 1) and nested-schema
+        source-path (Case 2) traversal so both honor Extractors *and* Transformers
+        identically.
+        """
+        for step in path:
+            if isinstance(step, str):
+                extractor: Extractor = step
+                value = SchemaParser._descend(value, extractor)
+                # missing/null intermediate -> None; stop before any
+                # downstream transformer runs on it
+                if value is None:
+                    return None
+            elif isinstance(step, dict):
+                raise ValueError(
+                    f"dict is not allowed for extractor or transformer: {step}"
+                )
+            else:
+                # NOTE: it doesn't have to be a function, e.g. it could be an operation like float()
+                transformer: Transformer = step
+                value = transformer(value)
+        return value
+
+    @staticmethod
     @validate_call
     def _parse(
         msg: RawPayload | dict[str, Any], schema: Schema | dict[str, Any]
@@ -125,28 +163,7 @@ class SchemaParser:
                 # Case 1: field path — extractors (str keys) and/or transformers (callables)
                 if isinstance(rule, (list, tuple)):
                     field_path: FieldPath = rule
-                    value: Any = msg
-                    for extractor_or_transformer in field_path:
-                        if isinstance(extractor_or_transformer, str):
-                            extractor: Extractor = extractor_or_transformer
-                            assert isinstance(value, dict), (
-                                f"Value is not a dict: {value}"
-                            )
-                            # Graceful handling: Set None for missing keys (schema fields may not apply to all data types)
-                            if extractor in value:
-                                value = value[extractor]
-                            else:
-                                value = None
-                                break
-                        elif isinstance(extractor_or_transformer, dict):
-                            raise ValueError(
-                                f"dict is not allowed for extractor or transformer: {extractor_or_transformer}"
-                            )
-                        else:
-                            # NOTE: it doesn't have to be a function, e.g. it could be an operation like float()
-                            transformer: Transformer = extractor_or_transformer
-                            value = transformer(value)
-                    output[key] = value
+                    output[key] = SchemaParser._walk(msg, field_path)
                 # Case 2: nested schema (dict), located via its "@key" source path
                 elif isinstance(rule, dict):
                     nested_schema = rule
@@ -155,10 +172,12 @@ class SchemaParser:
                         f'"{source_key}" must be defined for nested schema "{key}"'
                     )
                     source_path: SourcePath = schema[source_key]
-                    source: Any = msg
-                    for p in source_path:
-                        source = source[p]
-                    output[key] = SchemaParser.convert(source, nested_schema)
+                    source: Any = SchemaParser._walk(msg, source_path)
+                    output[key] = (
+                        None
+                        if source is None
+                        else SchemaParser.convert(source, nested_schema)
+                    )
                 # Case 3: hardcoded value
                 else:
                     output[key] = rule

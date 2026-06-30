@@ -45,9 +45,11 @@ class Bybit(
 
     Config: ClassVar[type[BybitConfig]] = BybitConfig
     Market: ClassVar[type[BybitMarket]] = BybitMarket
-    Order: ClassVar[type[BybitOrder]] = BybitOrder
     Account: ClassVar[type[BybitAccount]] = BybitAccount
+    Balance: ClassVar[type[BybitBalance]] = BybitBalance
+    Order: ClassVar[type[BybitOrder]] = BybitOrder
     Product: ClassVar[type[BybitProduct]] = BybitProduct
+    Position: ClassVar[type[BybitPosition]] = BybitPosition
 
     METADATA: ClassVar[VenueMetadata] = VenueMetadata(
         requires_asyncio_loop=True,

@@ -251,16 +251,24 @@ class BaseRestAPI(ABC):
             payload: RawPayload = response.json()
             result["request"]["status_code"] = response.status_code
             result["raw_payload"] = payload
-            result["success"] = response.is_success and self._is_success(
+            is_response_success = response.is_success
+            result["success"] = is_response_success and self._is_success(
                 endpoint_name, payload
             )
             if result["success"]:
                 result["response"] = SchemaParser.convert(payload, schema)
             else:
-                result["error"] = self._extract_error(endpoint_name, payload)
+                error = self._extract_error(endpoint_name, payload)
+                if not is_response_success:
+                    http_error = f"HTTP {response.status_code} {response.reason_phrase}"
+                    error = f"{error} ({http_error})" if error else http_error
+                result["error"] = error
+        except ResponseParseError:
+            result["success"] = False
+            result["error"] = "Response parse error"
+            self._logger.exception(f'REST API "{endpoint_name}" parse error:')
         except Exception as exc:
             expected = (
-                ResponseParseError,
                 JSONDecodeError,
                 RequestError,
                 HTTPStatusError,

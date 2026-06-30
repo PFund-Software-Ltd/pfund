@@ -66,9 +66,11 @@ class BaseVenue(
     adapter: ClassVar[BaseAdapter]
     Config: ClassVar[type[VenueConfig]]
     Market: ClassVar[type[BaseMarket]]
-    Order: ClassVar[type[BaseOrder]]
     Account: ClassVar[type[BaseAccount]]
+    Balance: ClassVar[type[BaseBalance]]
+    Order: ClassVar[type[BaseOrder]]
     Product: ClassVar[type[BaseProduct]]
+    Position: ClassVar[type[BasePosition]]
 
     METADATA: ClassVar[VenueMetadata]
     MARKETS_FILENAME: ClassVar[str] = "markets.yml"
@@ -96,30 +98,6 @@ class BaseVenue(
             self._loop: asyncio.AbstractEventLoop | None = None
             self._loop_thread: Thread | None = None
 
-    def _run_async(self, coro: Coroutine[Any, Any, Any]) -> Any:
-        """Drive an async-native venue method from a synchronous context.
-
-        Safe to call from sync code (scripts, REPL, notebooks). Raises RuntimeError
-        if called from within a running event loop, since asyncio.run() cannot be
-        nested — call the async variant (e.g. get_markets_async()) there instead.
-        """
-        method_name = sys._getframe(1).f_code.co_name
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            # no running event loop -> safe to drive the coroutine with asyncio.run()
-            return asyncio.run(coro)
-        else:
-            coro.close()  # avoid "coroutine was never awaited" RuntimeWarning
-            raise RuntimeError(
-                f"Cannot call {method_name}() from within a running event loop.\n"
-                + f"Did you mean to call {method_name}_async()?"
-            )
-
-    def _run_loop(self):
-        asyncio.set_event_loop(self.loop)
-        self.loop.run_forever()  # NOTE: blocking
-
     @property
     def env(self) -> Literal[Environment.PAPER, Environment.LIVE]:
         return cast(Literal[Environment.PAPER, Environment.LIVE], self._env)
@@ -128,21 +106,6 @@ class BaseVenue(
     def loop(self) -> asyncio.AbstractEventLoop:
         assert self._loop is not None, "there is no asyncio loop"
         return self._loop
-
-    def start(self):
-        for channel in self._config.private_channels:
-            self._add_private_channel(PrivateDataChannel[channel.lower()])
-        if self._loop_thread:
-            self._loop_thread.start()
-
-    def stop(self):
-        if self._loop:
-            self._loop.call_soon_threadsafe(self._loop.stop)
-        if self._loop_thread:
-            self._loop_thread.join(timeout=5)
-
-    def get_markets(self, *args: Any, **kwargs: Any) -> dict[ProductKey, MarketT]:
-        raise NotSupportedByVenueError(f"{self.name} does not support get_markets")
 
     @cached_property
     def markets(self) -> dict[ProductKey, MarketT]:
@@ -157,6 +120,9 @@ class BaseVenue(
         from pfund.config import get_config
 
         return get_config().data_path / self.MARKETS_FILENAME
+
+    def get_markets(self, *args: Any, **kwargs: Any) -> dict[ProductKey, MarketT]:
+        raise NotSupportedByVenueError(f"{self.name} does not support get_markets")
 
     def _load_markets(self) -> dict[ProductKey, MarketT]:
         """Load markets.yml from disk."""
@@ -197,30 +163,6 @@ class BaseVenue(
         )
         return markets
 
-    def _add_product(self, product: ProductT) -> None:
-        if product.name not in self._products:
-            self._products[product.name] = product
-            self._logger.debug(
-                f"added product name={product.name} symbol={product.symbol}"
-            )
-            try:
-                product.market = self.markets[product.key]
-            except NotSupportedByVenueError:
-                pass
-            except KeyError:
-                self._logger.error(
-                    f"no market found for product key={product.key} in {self._markets_yml_file_path}"
-                )
-        else:
-            raise ValueError(f"product name {product.name} is already registered")
-
-    def _add_account(self, account: AccountT) -> None:
-        if account.name not in self._accounts:
-            self._accounts[account.name] = account
-            self._logger.debug(f"added account name={account.name}")
-        else:
-            raise ValueError(f"account name {account.name} is already registered")
-
     @abstractmethod
     def add_channel(
         self,
@@ -250,6 +192,89 @@ class BaseVenue(
     def _add_private_channel(self, channel: PrivateDataChannel) -> None:
         full_channel: FullDataChannel = self._create_private_channel(channel)
         self.add_channel(full_channel, channel_type="private")
+
+    @classmethod
+    def create_product(
+        cls,
+        basis: str,
+        exchange: str = "",
+        name: str = "",
+        symbol: str = "",
+        **specs: Any,
+    ) -> ProductT:
+        from pfeed.enums import DataSource
+        from pfund.entities.products import ProductFactory, ProductBasis
+
+        source = DataSource[cls.name.upper()]
+        Product = cast("type[ProductT]", ProductFactory(source=source, basis=basis))
+        return Product(
+            source=source,
+            basis=ProductBasis(basis=basis),
+            exchange=exchange,
+            name=name,
+            symbol=symbol,
+            specs=specs,
+        )
+
+    def _add_product(self, product: ProductT) -> None:
+        if product.name not in self._products:
+            self._products[product.name] = product
+            self._logger.debug(
+                f"added product name={product.name} symbol={product.symbol}"
+            )
+            try:
+                product.market = self.markets[product.key]
+            except NotSupportedByVenueError:
+                pass
+            except KeyError:
+                self._logger.error(
+                    f"no market found for product key={product.key} in {self._markets_yml_file_path}"
+                )
+        else:
+            raise ValueError(f"product name {product.name} is already registered")
+
+    def _add_account(self, account: AccountT) -> None:
+        if account.name not in self._accounts:
+            self._accounts[account.name] = account
+            self._logger.debug(f"added account name={account.name}")
+        else:
+            raise ValueError(f"account name {account.name} is already registered")
+
+    def _run_async(self, coro: Coroutine[Any, Any, Any]) -> Any:
+        """Drive an async-native venue method from a synchronous context.
+
+        Safe to call from sync code (scripts, REPL, notebooks). Raises RuntimeError
+        if called from within a running event loop, since asyncio.run() cannot be
+        nested — call the async variant (e.g. get_markets_async()) there instead.
+        """
+        method_name = sys._getframe(1).f_code.co_name
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            # no running event loop -> safe to drive the coroutine with asyncio.run()
+            return asyncio.run(coro)
+        else:
+            coro.close()  # avoid "coroutine was never awaited" RuntimeWarning
+            raise RuntimeError(
+                f"Cannot call {method_name}() from within a running event loop.\n"
+                + f"Did you mean to call {method_name}_async()?"
+            )
+
+    def _run_loop(self):
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_forever()  # NOTE: blocking
+
+    def start(self):
+        for channel in self._config.private_channels:
+            self._add_private_channel(PrivateDataChannel[channel.lower()])
+        if self._loop_thread:
+            self._loop_thread.start()
+
+    def stop(self):
+        if self._loop:
+            self._loop.call_soon_threadsafe(self._loop.stop)
+        if self._loop_thread:
+            self._loop_thread.join(timeout=5)
 
     # def add_balance(
     #     self, venue: TradingVenue, acc: AccountName, ccy: Currency
@@ -346,34 +371,6 @@ class BaseVenue(
 
     # @abstractmethod
     # def cancel_all_orders(self, threaded: bool=True, reason: str | None=None): ...
-
-    # TODO： assert account name to be unique
-    # @classmethod
-    # @abstractmethod
-    # def create_account(cls, name: str = "", **kwargs: Any) -> BaseAccount: ...
-
-    @classmethod
-    def create_product(
-        cls,
-        basis: str,
-        exchange: str = "",
-        name: str = "",
-        symbol: str = "",
-        **specs: Any,
-    ) -> ProductT:
-        from pfeed.enums import DataSource
-        from pfund.entities.products import ProductFactory, ProductBasis
-
-        source = DataSource[cls.name.upper()]
-        Product = cast("type[ProductT]", ProductFactory(source=source, basis=basis))
-        return Product(
-            source=source,
-            basis=ProductBasis(basis=basis),
-            exchange=exchange,
-            name=name,
-            symbol=symbol,
-            specs=specs,
-        )
 
     @property
     def account(self) -> AccountT | None:

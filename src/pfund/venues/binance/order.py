@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import ClassVar
 
 from decimal import Decimal
+import builtins
 
 from pydantic import Field, model_validator
 
@@ -35,7 +36,8 @@ class BinanceTrailingStop(TrailingStop):
 
 
 class BinanceOrder(BaseOrder):
-    TrailingStop: ClassVar[type[BinanceTrailingStop]] = BinanceTrailingStop
+    # NOTE: use builtins.type to avoid collision with property "type"
+    TrailingStop: ClassVar[builtins.type[BinanceTrailingStop]] = BinanceTrailingStop
     SUBMITTED_AS_PENDING: ClassVar[bool] = True
 
     trailing_stop: BinanceTrailingStop | None = Field(default=None)

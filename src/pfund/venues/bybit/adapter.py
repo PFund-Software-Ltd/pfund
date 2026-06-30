@@ -6,6 +6,7 @@ from pfund.venues.adapter_base import (
     OrderStatusRepr,
 )
 from pfund.enums import (
+    MarginMode,
     CryptoAssetType,
     AssetTypeModifier,
     OptionType,
@@ -26,6 +27,11 @@ class BybitAdapter(BaseAdapter):
     sides: dict[Side, ExternalName] = {
         Side.BUY: "Buy",
         Side.SELL: "Sell",
+    }
+    margin_modes: dict[MarginMode, ExternalName] = {
+        MarginMode.ISOLATED: "ISOLATED_MARGIN",
+        MarginMode.CROSS: "REGULAR_MARGIN",
+        MarginMode.PORTFOLIO: "PORTFOLIO_MARGIN",
     }
     order_statuses: dict[OrderStatusRepr, ExternalName] = {
         "S---": "Submitted",

@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, ConfigDict, PrivateAttr, field_validator
 from pfund.typing import Currency
 from pfund.datas.resolution import Resolution
 from pfund.enums import (
+    MarginMode,
     AllAssetType,
     OptionType,
     OrderType,
@@ -35,6 +36,7 @@ class BaseAdapter(BaseModel):
     sides: dict[Side, ExternalName] = Field(
         default_factory=dict, description="e.g. side BUY -> Buy"
     )
+    margin_modes: dict[MarginMode, ExternalName] = Field(default_factory=dict)
     order_types: dict[OrderType, ExternalName] = Field(
         default_factory=dict, description="e.g. order type LIMIT -> Limit"
     )
@@ -59,6 +61,13 @@ class BaseAdapter(BaseModel):
         if not isinstance(sides, dict):
             return sides
         return {Side(k): v for k, v in sides.items()}
+
+    @field_validator("margin_modes", mode="before")
+    @classmethod
+    def _validate_margin_modes(cls, margin_modes: Any) -> Any:
+        if not isinstance(margin_modes, dict):
+            return margin_modes
+        return {MarginMode(k): v for k, v in margin_modes.items()}
 
     @field_validator("order_types", mode="before")
     @classmethod

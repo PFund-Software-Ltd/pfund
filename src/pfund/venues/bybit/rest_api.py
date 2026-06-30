@@ -93,8 +93,8 @@ class BybitRestAPI(BaseRestAPI):
         return datetime.datetime.fromtimestamp(ms / 1000, tz=datetime.UTC)
 
     @staticmethod
-    def _convert_ms_to_seconds(ms: int) -> float:
-        return ms / 1000
+    def _convert_ms_to_seconds(ms: int | str) -> float:
+        return int(ms) / 1000
 
     async def get_markets(self, category: BybitProduct.Category) -> Result:
         category = BybitProduct.Category[category.upper()]
@@ -139,4 +139,31 @@ class BybitRestAPI(BaseRestAPI):
                 lambda symbol: Decimal(symbol.split("-")[2]),
             )
         result: Result = await self._request(schema, params=params)
+        return result
+
+    async def get_balances(self, account: BybitAccount) -> Result:
+        params = {"accountType": account.type}
+        schema: Schema = {
+            "ts": ("time", self._convert_ms_to_seconds),
+            "@data": ("result", "list", lambda x: x[0]),  # the account-level dict
+            "data": {
+                "@account": (),  # the account dict is at the same level as "@data", nothing to unpack
+                "account": {
+                    "cash": ("totalWalletBalance",),
+                    "equity": ("totalEquity",),
+                    "available": ("totalAvailableBalance",),
+                    "initial_margin": ("totalInitialMargin",),
+                    "maintenance_margin": ("totalMaintenanceMargin",),
+                },
+                "@balances": ("coin",),  # the per-currency list
+                "balances": {
+                    "asset": ("coin",),
+                    "cash": ("walletBalance",),
+                    "equity": ("equity",),
+                    "locked": ("locked",),
+                    "unrealized_pnl": ("unrealisedPnl",),
+                },
+            },
+        }
+        result: Result = await self._request(schema, account=account, params=params)
         return result

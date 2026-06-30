@@ -86,7 +86,7 @@ class EngineContext:
         # this dict is the source of truth for this engine's env vars; reads go
         # through get_env. Since it's per-engine and never enters os.environ, two
         # engines with different envs can't collide, so no prefix is needed.
-        return dict(dotenv_values(env_file_path))
+        return dict(dotenv_values(env_file_path))  # pyright: ignore[reportReturnType]
 
     def _parse_data_range(
         self,
@@ -150,16 +150,13 @@ class EngineContext:
         data = {self.env: settings.model_dump()}
         toml.dump(data, settings_file_path, mode="update", auto_inline=True)
 
-    def get_env(self, key: str) -> str | None:
+    def get_env(self, key: str, default: str | None = None) -> str | None:
         """Get an env var for this engine's env, or None if unset.
 
         Reads from the per-engine dict loaded once at context init (the source of
         truth for this engine's env vars); never touches os.environ.
-
-        Example:
-            ctx.get_env('BYBIT_API_KEY')
         """
-        return self._env_vars.get(key)
+        return self._env_vars.get(key, default)
 
     def set_project_name(self, name: str):
         self.project_name = name
