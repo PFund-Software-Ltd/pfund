@@ -36,12 +36,12 @@ class DualPosition(BasePosition):
     def is_empty(self) -> bool:
         return self.long.is_empty() and self.short.is_empty()
 
-    def on_snapshot_update(self, side: Side, update: PositionUpdate) -> None:
+    def on_update(self, side: Side, update: PositionUpdate) -> None:
         # route to the per-side leg, then derive the net snapshot
         if side is Side.LONG:
-            self.long.on_snapshot_update(update)
+            self.long.on_update(update)
         elif side is Side.SHORT:
-            self.short.on_snapshot_update(update)
+            self.short.on_update(update)
         else:
             raise ValueError(
                 f"{self.mode} mode requires a side (LONG/SHORT), got {side!r}"

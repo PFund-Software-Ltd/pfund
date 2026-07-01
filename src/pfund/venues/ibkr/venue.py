@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 if TYPE_CHECKING:
     from pfund.entities import BaseProduct, BaseOrder, BaseAccount
     from pfund.datas.data_time_based import TimeBasedData
-    from pfund.typing import AccountName, Currency, FullDataChannel, ProductKey
+    from pfund.typing import AccountName, Currency, FullDataChannel
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 
 from abc import ABC

@@ -14,11 +14,9 @@ if TYPE_CHECKING:
     from pfund.entities import BaseAccount
     from pfund.venues.adapter_base import BaseAdapter
     from pfund.venues.crypto_exchange import CryptoExchangeSigner
-    from pfund.venues._apis.typing import Schema, Result, RawPayload, EndpointName
+    from pfund.venues._apis.typing import Schema, Result, RawResponse, EndpointName
 
     URL: TypeAlias = str
-
-from pfund.venues._apis.typing import Endpoint
 
 import logging
 import sys
@@ -27,10 +25,12 @@ from datetime import datetime, UTC
 from abc import ABC, abstractmethod
 from json import JSONDecodeError
 from pathlib import Path
+from http import HTTPMethod
 
 from httpx2 import AsyncClient, HTTPStatusError, RequestError
 from pfund_kit.utils.yaml import load, dump
 
+from pfund.venues._apis.typing import Endpoint
 from pfund.enums import Environment, TradingVenue
 from pfund.errors import ResponseParseError
 from pfund.venues._apis.schema_parser import SchemaParser
@@ -52,7 +52,7 @@ class BaseRestAPI(ABC):
 
         class Record(TypedDict):
             recorded_at: str  # ISO-8601 UTC, when the sample was recorded
-            payload: RawPayload
+            payload: RawResponse
 
         def __init__(self, venue: TradingVenue):
             self._venue = venue
@@ -72,7 +72,7 @@ class BaseRestAPI(ABC):
         def get(self, endpoint_name: EndpointName) -> Record | None:
             return self.load().get(endpoint_name)
 
-        def dump(self, endpoint_name: EndpointName, payload: RawPayload):
+        def dump(self, endpoint_name: EndpointName, payload: RawResponse):
             samples = self.load()
             samples[endpoint_name] = {
                 "recorded_at": datetime.now(UTC).isoformat(),
@@ -105,12 +105,17 @@ class BaseRestAPI(ABC):
         return cast(Literal[Environment.PAPER, Environment.LIVE], self._env)
 
     @abstractmethod
-    def _is_success(self, endpoint_name: EndpointName, payload: RawPayload) -> bool: ...
+    def _is_success(
+        self, endpoint_name: EndpointName, payload: RawResponse
+    ) -> bool: ...
 
     @abstractmethod
     def _extract_error(
-        self, endpoint_name: EndpointName, payload: RawPayload
+        self, endpoint_name: EndpointName, payload: RawResponse
     ) -> str: ...
+
+    @abstractmethod
+    async def get_balances(self, account: BaseAccount) -> Result: ...
 
     def __getstate__(self) -> dict[str, Any]:
         # NOTE: drop the unpicklable client so the object survives Ray/cloudpickle;
@@ -131,6 +136,10 @@ class BaseRestAPI(ABC):
     def adapter(self) -> BaseAdapter:
         VenueClass = self.venue.venue_class
         return VenueClass.adapter
+
+    @staticmethod
+    def _convert_ms_to_seconds(ms: int | str) -> float:
+        return int(ms) / 1000
 
     def _build_request(
         self,
@@ -209,13 +218,77 @@ class BaseRestAPI(ABC):
                 "status_code": None,
                 "params": dict(request.url.params) or None,
             },
-            "raw_payload": None,
+            "raw_response": None,
         }
+
+    async def request(
+        self,
+        method: HTTPMethod | str,
+        endpoint_path: str,
+        *,
+        schema: Schema | None = None,
+        account: BaseAccount | None = None,
+        params: QueryParamTypes | None = None,
+        json: Any | None = None,
+        data: RequestData | None = None,
+        content: RequestContent | None = None,
+        headers: HeaderTypes | None = None,
+        cookies: CookieTypes | None = None,
+    ) -> Result | Response:
+        """Call an arbitrary venue endpoint not registered in PUBLIC_ENDPOINTS/PRIVATE_ENDPOINTS.
+
+        The named API methods (e.g. ``place_order``, ``get_positions``) resolve their
+        ``Endpoint`` by looking it up in the endpoint registries. This is the dynamic
+        escape hatch for endpoints that don't have a first-class method yet: the
+        ``Endpoint`` is built on the fly from ``method`` + ``endpoint_path`` instead.
+
+        Two modes, selected by ``schema``:
+          - schema given: routed through ``_request``, parsed/validated against the
+            schema and returned as a structured ``Result`` (same path as named methods).
+          - schema omitted: the raw httpx ``Response`` is returned untouched for the
+            caller to handle.
+
+        Args:
+            method: HTTP method, as an ``HTTPMethod`` or a case-insensitive string.
+            endpoint_path: URL path appended to the venue base URL (e.g. "/v5/order/create").
+            schema: parse the response into a ``Result`` when provided; otherwise return
+                the raw ``Response``.
+            account: when provided, the request is signed for that account (private endpoint).
+            params, json, data, content, headers, cookies: forwarded to the underlying request.
+        """
+        endpoint = Endpoint(method=HTTPMethod[method.upper()], path=endpoint_path)
+        if schema:
+            result: Result = await self._request(
+                schema=schema,
+                endpoint=endpoint,
+                account=account,
+                params=params,
+                json=json,
+                data=data,
+                content=content,
+                headers=headers,
+                cookies=cookies,
+            )
+            return result
+        else:
+            request: Request = self._build_request(
+                endpoint=endpoint,
+                account=account,
+                params=params,
+                json=json,
+                data=data,
+                content=content,
+                headers=headers,
+                cookies=cookies,
+            )
+            response: Response = await self._client.send(request)
+            return response
 
     async def _request(
         self,
         schema: Schema,
         *,
+        endpoint: Endpoint | None = None,
         account: BaseAccount | None = None,
         params: QueryParamTypes | None = None,
         json: Any | None = None,
@@ -224,6 +297,21 @@ class BaseRestAPI(ABC):
         headers: HeaderTypes | None = None,
         cookies: CookieTypes | None = None,
     ) -> Result:
+        """Build, send, and parse a request into a structured ``Result``.
+
+        ``endpoint`` resolution has two modes:
+          - endpoint is None (named-method path): the caller is a named API method
+            (e.g. ``place_order``) that doesn't pass an endpoint. We recover its name
+            from the calling frame (``sys._getframe(1).f_code.co_name``) and look it up
+            in the registries via ``get_endpoint``. This relies on the convention that
+            an endpoint's registry key matches the method name (see PUBLIC/PRIVATE_ENDPOINTS).
+            NOTE: this is frame-name coupling — an intervening frame (decorator, wrapper)
+            between the named method and this call would break the lookup.
+          - endpoint given (dynamic path): callers like ``request`` build the ``Endpoint``
+            themselves for endpoints with no first-class method, bypassing the registry.
+            ``endpoint_name`` is set to the path here since there's no registry key; it is
+            used for logging/samples only, not for control flow.
+        """
         if account:
             if account.env != self._env:
                 raise ValueError(
@@ -233,8 +321,11 @@ class BaseRestAPI(ABC):
                 raise ValueError(
                     f"Account venue {account.venue} does not match RestAPI venue {self.venue}"
                 )
-        endpoint_name: EndpointName = sys._getframe(1).f_code.co_name
-        endpoint = self.get_endpoint(endpoint_name)
+        if endpoint is None:
+            endpoint_name: EndpointName = sys._getframe(1).f_code.co_name
+            endpoint = self.get_endpoint(endpoint_name)
+        else:
+            endpoint_name = endpoint.path
         request: Request = self._build_request(
             endpoint=endpoint,
             account=account,
@@ -248,9 +339,9 @@ class BaseRestAPI(ABC):
         result: Result = self._create_result(endpoint_name, request, account=account)
         try:
             response: Response = await self._client.send(request)
-            payload: RawPayload = response.json()
+            payload: RawResponse = response.json()
             result["request"]["status_code"] = response.status_code
-            result["raw_payload"] = payload
+            result["raw_response"] = payload
             is_response_success = response.is_success
             result["success"] = is_response_success and self._is_success(
                 endpoint_name, payload
@@ -278,6 +369,9 @@ class BaseRestAPI(ABC):
             else:
                 self._logger.exception(f'Unhandled REST API "{endpoint_name}" error:')
         finally:
-            if self._dev_mode and result["raw_payload"] is not None:
-                self.samples.dump(endpoint_name, result["raw_payload"])
+            self._logger.debug(
+                f'REST API "{endpoint_name}" raw response: {result["raw_response"]}'
+            )
+            if self._dev_mode and result["raw_response"] is not None:
+                self.samples.dump(endpoint_name, result["raw_response"])
         return result

@@ -18,6 +18,12 @@ import asyncio
 from pfund.venues._apis.ws_api_base import BaseWebSocketAPI
 from pfund.venues.bybit.product import BybitProduct
 from pfund.venues.bybit.account import BybitAccount
+from pfund.venues.bybit._ws_apis import (
+    BybitInverseWebSocketAPI,
+    BybitLinearWebSocketAPI,
+    BybitOptionWebSocketAPI,
+    BybitSpotWebSocketAPI,
+)
 from pfund.enums import TradingVenue
 
 
@@ -25,6 +31,12 @@ class BybitWebSocketAPI(BaseWebSocketAPI[BybitAccount, BybitProduct]):
     """A facade for the Bybit websocket API."""
 
     venue: ClassVar[TradingVenue] = TradingVenue.BYBIT
+    APIS: ClassVar[dict[BybitProduct.Category, type[BybitBaseWebSocketAPI]]] = {
+        BybitProduct.Category.LINEAR: BybitLinearWebSocketAPI,
+        BybitProduct.Category.INVERSE: BybitInverseWebSocketAPI,
+        BybitProduct.Category.SPOT: BybitSpotWebSocketAPI,
+        BybitProduct.Category.OPTION: BybitOptionWebSocketAPI,
+    }
 
     def __init__(
         self,
@@ -33,38 +45,9 @@ class BybitWebSocketAPI(BaseWebSocketAPI[BybitAccount, BybitProduct]):
     ):
         super().__init__(env=env, data_mode=data_mode)
         self._apis: dict[BybitProduct.Category, BybitBaseWebSocketAPI] = {
-            BybitProduct.Category.LINEAR: self.get_api_class("linear")(
-                env=env, data_mode=data_mode
-            ),
-            BybitProduct.Category.INVERSE: self.get_api_class("inverse")(
-                env=env, data_mode=data_mode
-            ),
-            BybitProduct.Category.SPOT: self.get_api_class("spot")(
-                env=env, data_mode=data_mode
-            ),
-            BybitProduct.Category.OPTION: self.get_api_class("option")(
-                env=env, data_mode=data_mode
-            ),
+            category: API(env=env, data_mode=data_mode)
+            for category, API in self.APIS.items()
         }
-
-    @staticmethod
-    def get_api_class(
-        category: BybitProduct.Category | str,
-    ) -> type[BybitBaseWebSocketAPI]:
-        from pfund.venues.bybit._ws_apis import (
-            BybitInverseWebSocketAPI,
-            BybitLinearWebSocketAPI,
-            BybitOptionWebSocketAPI,
-            BybitSpotWebSocketAPI,
-        )
-
-        category = BybitProduct.Category[category.upper()]
-        return {
-            BybitProduct.Category.LINEAR: BybitLinearWebSocketAPI,
-            BybitProduct.Category.INVERSE: BybitInverseWebSocketAPI,
-            BybitProduct.Category.SPOT: BybitSpotWebSocketAPI,
-            BybitProduct.Category.OPTION: BybitOptionWebSocketAPI,
-        }[category]
 
     def get_api(self, category: BybitProduct.Category | str | None = None):
         # for some actions that are not specific to a product category, just use the first api
@@ -120,13 +103,13 @@ class BybitWebSocketAPI(BaseWebSocketAPI[BybitAccount, BybitProduct]):
         for api in self._apis.values():
             api.set_callback(callback, raw_msg=raw_msg)
 
-    def _add_account(self, account: BybitAccount) -> None:
+    def add_account(self, account: BybitAccount) -> None:
         api = self.get_api()
-        return api._add_account(account)
+        return api.add_account(account)
 
-    def _add_product(self, product: BybitProduct) -> None:
+    def add_product(self, product: BybitProduct) -> None:
         api = self.get_api(product.category)
-        return api._add_product(product)
+        return api.add_product(product)
 
     def add_channel(
         self,
@@ -138,17 +121,10 @@ class BybitWebSocketAPI(BaseWebSocketAPI[BybitAccount, BybitProduct]):
         api = self.get_api(category)
         api.add_channel(channel, channel_type=channel_type)
 
-    async def connect(self):
-        try:
-            async with asyncio.TaskGroup() as task_group:
-                for api in self._apis.values():
-                    task_group.create_task(api.connect())
-        except* asyncio.CancelledError:
-            # re-raise so cooperative cancellation propagates to the caller
-            self._logger.warning(f"{self.venue} connect() was cancelled")
-            raise
-        except* Exception:
-            self._logger.exception(f"{self.venue} connect() failed")
+    async def _connect(self):
+        async with asyncio.TaskGroup() as task_group:
+            for api in self._apis.values():
+                task_group.create_task(api._connect())
 
     async def disconnect(self, reason: str = ""):
         async with asyncio.TaskGroup() as task_group:

@@ -73,7 +73,7 @@ repository = "https://github.com/PFund-Software-Ltd/pfund"
 documentation = "https://pfund.pfund.ai/doc"
 
 [build-system]
-requires = ["uv_build>=0.11.25,<0.12.0"]
+requires = ["uv_build>=0.11.26,<0.12.0"]
 build-backend = "uv_build"
 
 [tool.pyright]

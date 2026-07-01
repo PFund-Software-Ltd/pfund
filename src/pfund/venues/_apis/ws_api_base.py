@@ -25,14 +25,16 @@ if TYPE_CHECKING:
     RawMessage: TypeAlias = dict[str, Any]
     Price: TypeAlias = float
 
+import time
+import queue
 import asyncio
 import logging
-import time
 from abc import ABC, abstractmethod
 from collections import defaultdict
 
 from msgspec import json
 from websockets.asyncio.client import ClientConnection as WebSocket
+from pfund_kit.utils import classproperty
 
 from pfund.errors import WebSocketTimeoutError
 from pfund.enums import Environment, TradingVenue, DataChannelType, PrivateDataChannel
@@ -99,14 +101,18 @@ class BaseWebSocketAPI(ABC, Generic[AccountT, ProductT]):
         self._is_running = False
         self._last_ping_ts = time.time()
 
+        self._queue: queue.Queue[Any] | None = None
+
     @property
     def env(self) -> Literal[Environment.PAPER, Environment.LIVE]:
         return cast(Literal[Environment.PAPER, Environment.LIVE], self._env)
 
-    @property
-    def adapter(self) -> BaseAdapter:
-        VenueClass = self.venue.venue_class
-        return VenueClass.adapter
+    @classproperty
+    def adapter(cls) -> BaseAdapter:
+        return cls.venue.venue_class.adapter
+
+    def _set_queue(self, queue: queue.Queue[Any]) -> None:
+        self._queue = queue
 
     @abstractmethod
     async def _subscribe(
@@ -148,11 +154,25 @@ class BaseWebSocketAPI(ABC, Generic[AccountT, ProductT]):
         if self._data_mode:
             raise ValueError("private channels cannot be created in data mode")
         channel = PrivateDataChannel[channel.lower()]
-        return self.adapter(channel, group="channels")
+        return str(self.adapter(channel, group="channels"))
 
     @abstractmethod
-    def _parse_message(self, msg: dict[str, Any]) -> dict[str, Any]:
+    def _parse_message(
+        self, ws_name: WebSocketName, msg: dict[str, Any]
+    ) -> dict[str, Any]:
         pass
+
+    @property
+    def name(self) -> str:
+        return self.venue
+
+    @staticmethod
+    def _convert_ms_to_seconds(ms: int | str) -> float:
+        return int(ms) / 1000
+
+    @classmethod
+    def _convert_channel(cls, channel: str) -> str:
+        return cls.adapter(channel, group="channels")
 
     def set_callback(
         self,
@@ -173,15 +193,19 @@ class BaseWebSocketAPI(ABC, Generic[AccountT, ProductT]):
     def _get_url(self, channel_type: DataChannelType) -> str:
         return self.URLS[self.env][DataChannelType[channel_type.lower()]]
 
-    def _add_account(self, account: AccountT) -> None:
+    def add_account(self, account: AccountT) -> None:
         if self._data_mode:
             raise ValueError("accounts cannot be added in data mode")
+        if account.env != self.env:
+            raise ValueError(
+                f"account env {account.env} does not match websocket env {self.env}"
+            )
         if account.name not in self._accounts:
             self._accounts[account.name] = account
         else:
             raise ValueError(f"account name {account.name} has already been registered")
 
-    def _add_product(self, product: ProductT) -> None:
+    def add_product(self, product: ProductT) -> None:
         if product.name not in self._products:
             self._products[product.name] = product
             self.adapter.add_mapping(
@@ -202,9 +226,9 @@ class BaseWebSocketAPI(ABC, Generic[AccountT, ProductT]):
 
     def _create_ws_name(self, account_name: str = ""):
         if not account_name:
-            return "_".join([self.venue, "ws"]).lower()
+            return "_".join([self.name, "ws"])
         else:
-            return "_".join([account_name, "ws"]).lower()
+            return "_".join([account_name, "ws"])
 
     def _get_ws(self, ws_name: WebSocketName) -> NamedWebSocket | None:
         return self._websockets.get(ws_name, None)
@@ -278,6 +302,18 @@ class BaseWebSocketAPI(ABC, Generic[AccountT, ProductT]):
         task.add_done_callback(self._conn_tasks.discard)
 
     async def connect(self):
+        # error boundary, inherited by every venue (and venue facades like Bybit's
+        # multi-category connect). Subclasses override _connect() with the work, never
+        # this wrapper, so the try/except is written exactly once.
+        try:
+            await self._connect()
+        except* asyncio.CancelledError:
+            self._logger.warning(f"{self.name} connect() was cancelled")
+            raise
+        except* Exception:
+            self._logger.exception(f"{self.name} connect() failed")
+
+    async def _connect(self):
         for channel_type, channels in self._channels.items():
             if not channels:
                 continue
@@ -295,8 +331,8 @@ class BaseWebSocketAPI(ABC, Generic[AccountT, ProductT]):
             self._is_running = True
             await self._run_background_tasks()
         else:
-            self._logger.warning(
-                f"{self.venue} has no channels to subscribe to, nothing to connect to"
+            self._logger.debug(
+                f"{self.name} has no channels to subscribe to, nothing to connect"
             )
 
     async def _handshake(self, ws_name: WebSocketName, url: str) -> WebSocket | None:
@@ -328,7 +364,7 @@ class BaseWebSocketAPI(ABC, Generic[AccountT, ProductT]):
 
         ws_name = self._create_ws_name(account_name=account.name if account else "")
         if self._callback is None:
-            self._logger.warning(f"websocket {ws_name} has no callback set")
+            self._logger.debug(f"websocket {ws_name} has no callback set")
 
         if account is None:
             channel_type = DataChannelType.public
@@ -423,26 +459,48 @@ class BaseWebSocketAPI(ABC, Generic[AccountT, ProductT]):
         except Exception:
             self._logger.exception(f"{ws.name} _send() exception:")
 
-    def _validate_sequence_num(
-        self,
-        ws_name: str,
-        pdt: str,
-        seq_num: int,
-        type_: Literal["quote", "position"] = "quote",
-    ) -> bool:
-        if type_ == "quote":
-            last_seq_num = self._last_quote_nums[pdt]
-        else:
-            raise NotImplementedError(f"sequence number {type_=} is not supported")
+    def _emit_balance_update(
+        self, ws_name: WebSocketName, response: ResponseData
+    ) -> None:
+        VenueClass = self.venue.venue_class
+        ts, data = VenueClass._extract_ts_and_data_from_response_data(
+            response, dtype=dict, ts_required=True
+        )
+        if data is None:
+            return None
+        account_name = ws_name.replace("_ws", "")
+        if account_name not in self._accounts:
+            self._logger.error(
+                f"account {account_name} not found, existing accounts: {list(self._accounts.keys())}"
+            )
+            return None
+        account = self._accounts[account_name]
+        update = VenueClass._build_balance_update(
+            ts, data, account.name, source="websocket"
+        )
+        if self._queue:
+            self._queue.put(update)
 
-        if seq_num <= last_seq_num:
-            self._logger.error(f"{pdt} {type_=} {seq_num=} <= {last_seq_num=}")
-            self.disconnect(ws_name, reason=f"wrong {type_}_num")
-            return False
-        else:
-            if type_ == "quote":
-                self._last_quote_nums[pdt] = seq_num
-            return True
+    # def _validate_sequence_num(
+    #     self,
+    #     ws_name: str,
+    #     pdt: str,
+    #     seq_num: int,
+    #     type_: Literal["quote", "position"] = "quote",
+    # ) -> bool:
+    #     if type_ == "quote":
+    #         last_seq_num = self._last_quote_nums[pdt]
+    #     else:
+    #         raise NotImplementedError(f"sequence number {type_=} is not supported")
+
+    #     if seq_num <= last_seq_num:
+    #         self._logger.error(f"{pdt} {type_=} {seq_num=} <= {last_seq_num=}")
+    #         self.disconnect(ws_name, reason=f"wrong {type_}_num")
+    #         return False
+    #     else:
+    #         if type_ == "quote":
+    #             self._last_quote_nums[pdt] = seq_num
+    #         return True
 
     # def _process_position_msg(self, ws_name, msg, schema) -> dict:
     #     acc = ws_name

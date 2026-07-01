@@ -1,3 +1,4 @@
+# pyright: reportUnknownLambdaType=false
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar, cast
@@ -36,11 +37,17 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitAccount, BybitProduct]):
     # it defines the maximum number of arguments allowed in the 'args' list of a WebSocket message: {'op': '...', 'args': [...]}
     PUBLIC_CHANNEL_ARGS_LIMIT: ClassVar[int] = os.sys.maxsize  # pyright: ignore[reportUnknownMemberType,reportAttributeAccessIssue, reportUnknownVariableType]
 
-    def _create_ws_name(self, account_name: str = ""):
-        if not account_name:
-            return "_".join([self.venue, self.CATEGORY, "ws"]).lower()
+    @property
+    def name(self) -> str:
+        return f"{self.venue}_{self.CATEGORY}"
+
+    def _unwrap_single(self, x: list[Any]) -> Any:
+        """Unwrap a single-item list into its single item."""
+        if len(x) != 1:
+            self._logger.error(f"Expected a single item, got {len(x)}: {x}")
+            return None
         else:
-            return "_".join([account_name, "ws"]).lower()
+            return x[0]
 
     def _split_channels_into_batches(
         self, channels: list[str], channel_type: DataChannelType
@@ -118,7 +125,7 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitAccount, BybitProduct]):
                     self._logger.error(f"{ws_name} unsuccessful msg {msg}")
             elif "topic" in msg:
                 if not self._callback_raw_msg:
-                    msg: ResponseData = self._parse_message(msg)
+                    msg: ResponseData = self._parse_message(ws_name, msg)
             else:
                 self._logger.warning(f"{ws_name} unhandled msg {msg}")
 
@@ -134,7 +141,7 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitAccount, BybitProduct]):
         self, product: BybitProduct, resolution: Resolution
     ):
         """Creates a full public channel name based on the product and resolution"""
-        self._add_product(product)
+        self.add_product(product)
         metadata = self.venue.venue_class.METADATA
         supported_orderbook_lvs = cast(
             dict[BybitProduct.Category, list[int]], metadata.stream_orderbook_levels
@@ -187,36 +194,38 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitAccount, BybitProduct]):
             )
         return full_channel
 
-    @staticmethod
-    def _parse_message(msg: RawMessage) -> ResponseData:
+    def _parse_message(self, ws_name: WebSocketName, msg: RawMessage) -> ResponseData:
         channel: str = msg["topic"]
         if channel.startswith("kline"):
-            return BybitBaseWebSocketAPI._parse_candlestick(msg)
+            return self._parse_candlestick(msg)
         elif channel.startswith("publicTrade"):
-            return BybitBaseWebSocketAPI._parse_tradebook(msg)
+            return self._parse_tradebook(msg)
         # TODO: handle orderbook
         # elif channel.startswith('orderbook'):
         #     return BybitWebSocketAPI._parse_orderbook(msg)
-        # TODO: handle private channels
-        # elif channel == 'position':
+        elif channel == "wallet":
+            return self._parse_balance(ws_name, msg)
+        elif channel == "position":
+            pass
         #     return self._process_position_msg(ws_name, msg)
-        # elif channel == 'wallet':
-        #     return self._process_balance_msg(ws_name, msg)
-        # elif channel == 'order':
+        elif channel == "order":
+            pass
         #     return self._process_order_msg(ws_name, msg)
-        # elif channel == 'execution':
+        elif channel == "execution":
+            pass
         #     return self._process_trade_msg(ws_name, msg)
         else:
-            raise NotImplementedError(
-                f"{BybitBaseWebSocketAPI.venue} {channel=} is not supported"
-            )
+            raise NotImplementedError(f"{self.name} {channel=} is not supported")
 
-    # REVIEW: schema only for linear products?
     @staticmethod
     def _parse_candlestick(msg: RawMessage) -> ResponseData:
         schema: Schema = {
             "ts": ("ts",),
-            "channel": ["topic"],
+            "channel": (
+                "topic",
+                BybitBaseWebSocketAPI._convert_channel,
+                str,  # convert DataChannel back to normal str
+            ),
             "@data": ["data"],
             "data": {
                 "start_ts": (
@@ -236,7 +245,7 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitAccount, BybitProduct]):
                 "low": ("low", float),
                 "close": ("close", float),
                 "volume": ("volume", float),
-                "is_incremental": ("confirm", lambda x: not x),  # pyright: ignore[reportUnknownLambdaType]
+                "is_incremental": ("confirm", lambda x: not x),
                 "@extra": [],  # extra is a self-defined field, empty list = no need to parse it from anything
                 "extra": {
                     "turnover": ("turnover", float),
@@ -250,7 +259,11 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitAccount, BybitProduct]):
     def _parse_tradebook(msg: RawMessage) -> ResponseData:
         schema: Schema = {
             "ts": ("ts",),
-            "channel": ["topic"],
+            "channel": (
+                "topic",
+                BybitBaseWebSocketAPI._convert_channel,
+                str,  # convert DataChannel back to normal str
+            ),
             "@data": ["data"],
             "data": {
                 "ts": (
@@ -361,6 +374,53 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitAccount, BybitProduct]):
             }
             return data
 
+    def _parse_balance(self, ws_name: WebSocketName, msg: RawMessage) -> ResponseData:
+        schema: Schema = {
+            "ts": ("creationTime", self._convert_ms_to_seconds),
+            "channel": (
+                "topic",
+                lambda channel: str(self.adapter(channel, group="channels")),
+            ),
+            "@data": ("data", self._unwrap_single),
+            "data": {
+                "@account": (),
+                "account": {
+                    "cash": ("totalWalletBalance",),
+                    "equity": ("totalEquity",),
+                    "available": ("totalAvailableBalance",),
+                    "initial_margin": ("totalInitialMargin",),
+                    "maintenance_margin": ("totalMaintenanceMargin",),
+                },
+                "@balances": ("coin",),
+                "balances": {
+                    "currency": (
+                        "coin",
+                        lambda asset: self.adapter(asset, group="assets"),
+                    ),
+                    "cash": ("walletBalance",),
+                    "equity": ("equity",),
+                    "locked": ("locked",),
+                    "unrealized_pnl": ("unrealisedPnl",),
+                },
+            },
+        }
+        response: ResponseData = SchemaParser.convert(msg, schema)
+        # use 'locked' to calculate 'available'
+        data = response["data"]
+        if isinstance(data, dict) and "balances" in data:
+            data["balances"] = [
+                {
+                    **{k: v for k, v in balance.items() if k != "locked"},
+                    "available": str(
+                        Decimal(balance["cash"]) - Decimal(balance["locked"])
+                    ),
+                }
+                for balance in data["balances"]
+            ]
+        if self._queue:
+            self._emit_balance_update(ws_name, response)
+        return response
+
     def _process_position_msg(self, ws_name, msg):
         schema = {
             "result": "data",
@@ -379,23 +439,6 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitAccount, BybitProduct]):
             },
         }
         return super()._process_position_msg(ws_name, msg, schema)
-
-    def _process_balance_msg(self, ws_name, msg):
-        schema = {
-            "result": ["data", 0, "coin"],  # HACK
-            "ts": "creationTime",
-            "ts_adj": 1 / 10**3,
-            "ccy": "coin",
-            "data": {
-                "wallet": ("walletBalance", str, Decimal),
-                "available": ("availableToWithdraw", str, Decimal),
-                "margin": ("equity", str, Decimal),
-            },
-        }
-        # NOTE: need to make sure msg['data'] has only one element so that the HACK ['data', 0, 'coin'] above can work
-
-        assert len(msg["data"]) == 1
-        return super()._process_balance_msg(ws_name, msg, schema)
 
     def _process_order_msg(self, ws_name, msg):
         schema = {

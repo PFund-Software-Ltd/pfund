@@ -11,26 +11,24 @@ from pfund.entities.trades.quantity import Quantity
 from pfund.enums import PositionMode, Side, TradingVenue
 
 
-class PositionSnapshot(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
-
-    updated_at: float = Field(default_factory=time.time)
-    size: Quantity = Field(default=Quantity(0))
-    avg_price: Decimal | None = Field(default=None, ge=0)
-    mark_price: Decimal | None = Field(default=None, ge=0)
-    liquidation_price: Decimal | None = Field(default=None, ge=0)
-    initial_margin: Decimal | None = Field(default=None)
-    maintenance_margin: Decimal | None = Field(default=None)
-    unrealized_pnl: Decimal | None = Field(default=None)
-    realized_pnl: Decimal | None = Field(default=None)
-
-
 class BasePosition(BaseModel):
+    class Snapshot(BaseModel):
+        model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
+
+        updated_at: float = Field(default_factory=time.time)
+        size: Quantity = Field(default=Quantity(0))
+        avg_price: Decimal | None = Field(default=None, ge=0)
+        mark_price: Decimal | None = Field(default=None, ge=0)
+        liquidation_price: Decimal | None = Field(default=None, ge=0)
+        initial_margin: Decimal | None = Field(default=None)
+        maintenance_margin: Decimal | None = Field(default=None)
+        unrealized_pnl: Decimal | None = Field(default=None)
+        realized_pnl: Decimal | None = Field(default=None)
+
     model_config: ClassVar[ConfigDict] = ConfigDict(
         arbitrary_types_allowed=True, extra="forbid"
     )
-    _Snapshot: ClassVar[type[PositionSnapshot]] = PositionSnapshot
-    _snapshot: PositionSnapshot = PrivateAttr(default_factory=PositionSnapshot)
+    _snapshot: Snapshot = PrivateAttr(default_factory=Snapshot)
 
     mode: PositionMode = Field(default=PositionMode.NORMAL)
     product: BaseProduct
@@ -106,8 +104,8 @@ class BasePosition(BaseModel):
 
     rpnl = realized_pnl
 
-    def on_snapshot_update(self, update: PositionSnapshot) -> None:
-        self._snapshot = self._Snapshot.model_validate(update)
+    def on_update(self, update: Snapshot) -> None:
+        self._snapshot = self.Snapshot.model_validate(update)
 
     # TODO
     # def on_trade_update(self, order: BaseOrder):

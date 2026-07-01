@@ -1,12 +1,10 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, TypeAlias, TypedDict
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from pfund.enums import TradingVenue
     from pfund.typing import AccountName, ProductName, Currency
-    from pfund.entities import BaseBalance, BasePosition
-    from pfund.entities.positions.position_base import PositionUpdate
-    from pfund.entities.balances.balance_base import BalanceUpdate
+    from pfund.entities.balances.balance_base import BaseBalance, BalanceUpdate
+    from pfund.entities.positions.position_base import BasePosition
 
 
 import logging
@@ -18,28 +16,49 @@ class PortfolioManager:
         self._positions: dict[AccountName, dict[ProductName, BasePosition]] = {}
         self._balances: dict[AccountName, dict[Currency, BaseBalance]] = {}
 
-    def update_positions(self, update: PositionUpdate):
+    @property
+    def balances(self) -> dict[AccountName, dict[Currency, BaseBalance]]:
+        return self._balances
+
+    @property
+    def positions(self) -> dict[AccountName, dict[ProductName, BasePosition]]:
+        return self._positions
+
+    def on_balance_update(self, update: BalanceUpdate[Any]):
+        if update.source == "get_balances":
+            self.reconcile_balances()
+        else:
+            self.update_balances(update.account, update.snapshots)
+
+    def on_position_update(self, update: PositionUpdate[Any]):
+        if update.source == "get_positions":
+            self.reconcile_positions()
+        else:
+            self.update_positions(update.account, update.snapshots)
+
+    # TODO: check if the update ts is newer than the existing snapshot
+    def update_balances(
+        self, account: AccountName, snapshots: dict[Currency, BaseBalance.Snapshot]
+    ):
+        for currency, snapshot in snapshots.items():
+            self._balances[account][currency].on_update(snapshot)
+
+    # TODO: check if the update ts is newer than the existing snapshot
+    def update_positions(
+        self, account: AccountName, snapshots: dict[ProductName, BasePosition.Snapshot]
+    ):
+        if account not in self._positions:
+            self._positions[account] = {}
+        positions = self._positions[account]
+        for product, snapshot in snapshots.items():
+            if product not in positions:
+                positions[product] = BasePosition()
+            positions[product].on_update(snapshot)
+
+    # TODO
+    def reconcile_positions(self):
         pass
 
-    def update_balances(self, update: BalanceUpdate):
+    # TODO
+    def reconcile_balances(self):
         pass
-
-    # TODO: also reconcile with strategies
-    # def reconcile_positions(self):
-    #     def work():
-    #         for exch in self._accounts:
-    #             for acc in self._accounts[exch]:
-    #                 self.get_positions(exch, acc, is_api_call=True)
-
-    #     func = inspect.stack()[0][3]
-    #     Thread(target=work, name=func + "_thread", daemon=True).start()
-
-    # TODO: also reconcile with strategies
-    # def reconcile_balances(self):
-    #     def work():
-    #         for exch in self._accounts:
-    #             for acc in self._accounts[exch]:
-    #                 self.get_balances(exch, acc, is_api_call=True)
-
-    #     func = inspect.stack()[0][3]
-    #     Thread(target=work, name=func + "_thread", daemon=True).start()

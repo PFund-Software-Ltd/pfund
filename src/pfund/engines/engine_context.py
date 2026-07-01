@@ -38,7 +38,6 @@ class EngineContext:
 
         self.env = env
         self.name = name
-        self._env_vars = self._load_env_vars()
         self.run_mode = self._detect_run_mode()
         self.project_name = self.DEFAULT_PROJECT_NAME
         self.run_name = self.DEFAULT_RUN_NAME
@@ -73,20 +72,6 @@ class EngineContext:
         if settings.persist:
             self._save_settings(settings)
         return settings
-
-    def _load_env_vars(self) -> dict[str, str]:
-        from dotenv import dotenv_values, find_dotenv
-
-        # load env vars manually to avoid loading into os.environ
-        # NOTE: this allows multiple engines with different envs in the same process
-        env_filename = f".env.{self.env.lower()}"
-        env_file_path = find_dotenv(
-            filename=env_filename, usecwd=True, raise_error_if_not_found=False
-        )
-        # this dict is the source of truth for this engine's env vars; reads go
-        # through get_env. Since it's per-engine and never enters os.environ, two
-        # engines with different envs can't collide, so no prefix is needed.
-        return dict(dotenv_values(env_file_path))  # pyright: ignore[reportReturnType]
 
     def _parse_data_range(
         self,
@@ -149,14 +134,6 @@ class EngineContext:
         settings_file_path = self.pfund_config.get_settings_file_path(self.name)
         data = {self.env: settings.model_dump()}
         toml.dump(data, settings_file_path, mode="update", auto_inline=True)
-
-    def get_env(self, key: str, default: str | None = None) -> str | None:
-        """Get an env var for this engine's env, or None if unset.
-
-        Reads from the per-engine dict loaded once at context init (the source of
-        truth for this engine's env vars); never touches os.environ.
-        """
-        return self._env_vars.get(key, default)
 
     def set_project_name(self, name: str):
         self.project_name = name

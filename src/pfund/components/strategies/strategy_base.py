@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, overload
+from typing import TYPE_CHECKING, Any, Literal
 
 
 if TYPE_CHECKING:
@@ -8,13 +8,11 @@ if TYPE_CHECKING:
 
     from pfund.components.actor_proxy import ActorProxy
     from pfund.entities.accounts.account_base import BaseAccount
-    from pfund.entities.accounts.account_api import APIKeyAccount
-    from pfund.venues.ibkr.account import InteractiveBrokersAccount as IBKRAccount
     from pfund.entities.balances.balance_base import BaseBalance
     from pfund.entities.orders.order_base import BaseOrder
     from pfund.entities.positions.position_base import BasePosition
     from pfund.entities.products.product_base import BaseProduct
-    from pfund.enums import TradingVenue, Side
+    from pfund.enums import Side
     from pfund.typing import (
         AccountName,
         Component,
@@ -28,7 +26,6 @@ import narwhals as nw
 
 from pfund.components.mixin import ComponentMixin
 from pfund.components.strategies.strategy_meta import MetaStrategy
-from pfund.enums import TradingVenue
 from pfund.managers import OrderManager, PortfolioManager, RiskManager
 
 
@@ -90,24 +87,8 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def get_components(self) -> list[Component | ActorProxy[Component]]:
         return [*self.strategies.values(), *super().get_components()]
 
-    @overload
-    def get_position(self, account: CryptoAccount, pdt: str) -> BasePosition | None: ...
-
-    @overload
-    def get_position(
-        self, account: InteractiveBrokersAccount, pdt: str
-    ) -> InteractiveBrokersPosition | None: ...
-
     def get_position(self, account: BaseAccount, pdt: str) -> BasePosition | None:
         return self.positions[account].get(pdt, None)
-
-    @overload
-    def get_balance(self, account: CryptoAccount, ccy: str) -> BaseBalance | None: ...
-
-    @overload
-    def get_balance(
-        self, account: InteractiveBrokersAccount, ccy: str
-    ) -> InteractiveBrokersBalance | None: ...
 
     def get_balance(self, account: BaseAccount, ccy: str) -> BaseBalance | None:
         return self.balances[account].get(ccy, None)
@@ -125,7 +106,10 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def add_account(self, account: BaseAccount) -> BaseAccount:
         if not self.is_top_component():
             raise ValueError(f"Sub-strategy '{self.name}' cannot add accounts")
-        account._load_env_vars_from_context(self.context)
+        if account.env != self.env:
+            raise ValueError(
+                f"account env {account.env} does not match strategy env {self.env}"
+            )
         self.accounts[account.name] = account
         self.logger.debug(f'added {account.venue} account "{account.name}"')
         return account

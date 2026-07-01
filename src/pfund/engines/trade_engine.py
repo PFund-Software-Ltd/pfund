@@ -1,8 +1,7 @@
 # pyright: reportArgumentType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, cast
-
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from mtflow.contexts.trade_context import TradeContext
@@ -11,17 +10,22 @@ if TYPE_CHECKING:
     from pfeed.streaming.zeromq import ZeroMQ
 
     from pfund.typing import Component
+    from pfund.entities import BaseAccount
+    from pfund.venues.venue_base import AnyVenue
+    from pfund.venues.venue_config import VenueConfig
     from pfund.datas.resolution import Resolution
     from pfund.engines.engine_context import DataRangeDict
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 
-import logging
 import time
+import queue
+import logging
 from threading import Thread
 
+from apscheduler.schedulers.background import BackgroundScheduler
 from pfeed.enums import DataCategory
 
-from pfund.enums import Environment
+from pfund.enums import Environment, TradingVenue
 from pfund.engines.base_engine import BaseEngine
 
 
@@ -51,6 +55,9 @@ class TradeEngine(BaseEngine):
         self._worker: ZeroMQ | None = None
         self._data_engine: DataEngine | None = None
         self._zmq_thread: Thread | None = None
+        self._queue: queue.Queue[Any] = queue.Queue()
+        self._scheduler: BackgroundScheduler = BackgroundScheduler()
+        self._schedule_jobs(self._scheduler)
 
     def _assert_env(self):
         if self.env not in (Environment.PAPER, Environment.LIVE):
@@ -227,7 +234,7 @@ class TradeEngine(BaseEngine):
             )
         return False
 
-    def _run_zmq_loop(self):
+    def _run_engine_loop(self):
         from pfeed.streaming.zeromq import ZeroMQDataChannel
 
         self._setup_proxy()
@@ -262,40 +269,62 @@ class TradeEngine(BaseEngine):
                     # TEMP
                     print("worker recv:", channel, topic, data, msg_ts)
 
-                    # `data` carries which account/venue + the order(s) the strategy wants placed.
-                    # 1. resolve the venue that owns this account/product
-                    # venue = self.get_venue(data["venue"])
+                    venue = self.get_venue(...)
+                    if venue._requires_asyncio_loop():
+                        venue._run_coroutine_threadsafe(
+                            func=venue.place_orders,
+                            args=(...,),
+                            kwargs={...},
+                        )
+                    else:
+                        venue.place_orders(...)  # non-blocking
 
-                    # 2. (optional) optimistically mark SUBMITTED in OM now, so order state
-                    #    exists locally before the exchange ack streams back over ws.
-                    # self._order_manager.update_orders(...)
+                # drain the queue completely
+                while True:
+                    try:
+                        msg = self._queue.get_nowait()
+                        # self._portfolio_manager.on_balance_update(...)
 
-                    # 3. fire place_orders WITHOUT blocking the loop.
-                    #    place_orders is a coroutine on the venue's asyncio loop (venue thread).
-                    #    run_coroutine_threadsafe schedules it there from THIS (sync) thread and
-                    #    returns a concurrent.futures.Future right away — we never call .result(),
-                    #    so the loop keeps polling.
-                    # fut = asyncio.run_coroutine_threadsafe(
-                    #     venue.place_orders(account, orders), venue.loop
-                    # )
+                        # TODO: publish orders, positions, balances etc. to components
+                        self._proxy.send(
+                            channel, topic, data=update.model_dump(mode="json")
+                        )
+                    except queue.Empty:
+                        break
 
-                    # 4. do NOT read the result here. ack / reject / fill all come back later
-                    #    over venue ws -> zmq PUSH -> _worker.recv() (this same branch), routed by
-                    #    `channel`, then republished to strategies via _proxy (XPUB).
-                    #    only attach a callback to surface *scheduling/send* errors, not outcomes:
-                    # fut.add_done_callback(
-                    #     lambda f: f.exception() and self._logger.error(...)
-                    # )
-
-                # TODO: publish orders, positions, balances etc. to components
-                # self._proxy.send(...)
             except Exception:
-                self._logger.exception(f"Exception in {self.name} _run_zmq_loop():")
+                self._logger.exception(f"Exception in {self.name} _run_engine_loop():")
             except KeyboardInterrupt:
                 self._logger.warning("KeyboardInterrupt received, ending ZMQ loop")
                 break
         self._proxy.terminate()
         self._worker.terminate()
+
+    def _schedule_jobs(self, scheduler: BackgroundScheduler):
+        scheduler.add_job(self._get_trading_states, "interval", seconds=10)
+
+    def _get_trading_states(self):
+        THROTTLE = 0.5  # seconds between endpoint types, to not hammer the venue
+
+        def _fetch(venue: AnyVenue, method: str, account: BaseAccount):
+            func = getattr(venue, method)
+            if venue._requires_asyncio_loop():
+                venue._run_coroutine_threadsafe(func, args=(account,))
+            else:
+                func(account)  # non-blocking
+
+        pairs = [(v, a) for v in self._venues.values() for a in v.accounts.values()]
+        for fetch in ("get_balances", "get_positions", "get_orders", "get_trades"):
+            for venue, account in pairs:
+                _fetch(venue, fetch, account)
+            time.sleep(THROTTLE)
+
+    def add_venue(
+        self, venue: TradingVenue | str, config: VenueConfig | None = None
+    ) -> AnyVenue:
+        trading_venue = super().add_venue(venue=venue, config=config)
+        trading_venue._set_queue(self._queue)
+        return trading_venue
 
     def run(self, ctx: TradeContext | None = None):
         try:
@@ -303,9 +332,11 @@ class TradeEngine(BaseEngine):
                 self._setup_data_engine()
             is_using_zmq = self._is_using_zmq()
             if is_using_zmq:
-                self._zmq_thread = Thread(target=self._run_zmq_loop, daemon=True)
+                self._zmq_thread = Thread(target=self._run_engine_loop, daemon=True)
                 self._zmq_thread.start()
             super().run(ctx=ctx)
+            self._get_trading_states()
+            self._scheduler.start()
             if self._data_engine:
                 self._data_engine.run()  # blocking call
             else:
@@ -323,6 +354,7 @@ class TradeEngine(BaseEngine):
 
     def end(self):
         super().end()
+        self._scheduler.shutdown(wait=False)
         if self._data_engine:
             self._data_engine.end()
         if self._zmq_thread and self._zmq_thread.is_alive():

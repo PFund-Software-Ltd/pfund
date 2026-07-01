@@ -1,15 +1,19 @@
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar, NamedTuple
 
 from pfeed.enums import DataSource
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from pfund.typing import ProductKey
 from pfund.entities.markets.market_base import BaseMarket
 from pfund.entities.products.asset_type import AssetType
 from pfund.entities.products.product_basis import ProductBasis
 from pfund.enums import TradingVenue
+
+
+class ProductKey(NamedTuple):
+    symbol: str
+    asset_type: AssetType
 
 
 class BaseProduct(BaseModel):

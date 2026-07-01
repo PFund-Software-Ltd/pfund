@@ -28,10 +28,12 @@ class Binance(
         BinanceConfig,
         BinanceMarket,
         BinanceAccount,
-        BinanceBalance,
-        BinanceOrder,
         BinanceProduct,
+        BinanceOrder,
+        BinanceBalance,
+        BinanceBalance.Snapshot,
         BinancePosition,
+        BinancePosition.Snapshot,
     ]
 ):
     name: ClassVar[TradingVenue] = TradingVenue.BINANCE

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 if TYPE_CHECKING:
     from pfund.venues._apis.typing import Result
 
-from pfund.typing import ProductKey
+from pfund.entities.products import ProductKey
 from pfund.datas.timeframe import Timeframe
 from pfund.venues.crypto_exchange import CryptoExchange
 from pfund.venues.bybit.rest_api import BybitRestAPI
@@ -31,10 +31,12 @@ class Bybit(
         BybitConfig,
         BybitMarket,
         BybitAccount,
-        BybitBalance,
-        BybitOrder,
         BybitProduct,
+        BybitOrder,
+        BybitBalance,
+        BybitBalance.Snapshot,
         BybitPosition,
+        BybitPosition.Snapshot,
     ]
 ):
     name: ClassVar[TradingVenue] = TradingVenue.BYBIT

@@ -9,7 +9,7 @@ from pfund.enums import TradingVenue
 
 
 EndpointName: TypeAlias = str
-RawPayload: TypeAlias = dict[str, Any] | list[dict[str, Any]]
+RawResponse: TypeAlias = dict[str, Any] | list[dict[str, Any]]
 ParsingSequence: TypeAlias = Sequence[str | Callable[..., Any]]
 
 
@@ -50,4 +50,4 @@ class Result(TypedDict, total=True):
     request: RequestData
     account: AccountName | None
     response: ResponseData
-    raw_payload: RawPayload | None
+    raw_response: RawResponse | None

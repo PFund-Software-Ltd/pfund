@@ -28,10 +28,12 @@ class OKX(
         OKXConfig,
         OKXMarket,
         OKXAccount,
-        OKXBalance,
-        OKXOrder,
         OKXProduct,
+        OKXOrder,
+        OKXBalance,
+        OKXBalance.Snapshot,
         OKXPosition,
+        OKXPosition.Snapshot,
     ]
 ):
     name: ClassVar[TradingVenue] = TradingVenue.OKX

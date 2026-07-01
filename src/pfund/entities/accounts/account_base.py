@@ -1,8 +1,5 @@
 from __future__ import annotations
-from typing import Any, ClassVar, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pfund.engines.engine_context import EngineContext
+from typing import Any, ClassVar
 
 from pfund.enums import Environment, TradingVenue
 
@@ -18,13 +15,13 @@ class BaseAccount:
     def _get_default_name(self):
         return f"{self.__class__.__name__}-{self._next_id()}"
 
-    def _normalize_name(self, name: str) -> str:
-        name = name or self._get_default_name()
-        if self._venue.lower() not in name.lower():
-            name = f"{self._venue.lower()}_" + name
-        if "account" not in name.lower():
-            name += "_account"
-        return name
+    # def _normalize_name(self, name: str) -> str:
+    #     name = name or self._get_default_name()
+    #     if self._venue.lower() not in name.lower():
+    #         name = f"{self._venue.lower()}_" + name
+    #     if "account" not in name.lower():
+    #         name += "_account"
+    #     return name
 
     def __init__(
         self,
@@ -42,12 +39,10 @@ class BaseAccount:
         """
         self._env = Environment[env.upper()]
         self._venue = TradingVenue[venue.upper()]
-        self.name: str = self._normalize_name(name)
+        self.name: str = name
+        # self.name: str = self._normalize_name(name)
         VenueClass = self._venue.venue_class
         self._balance = VenueClass.Balance(currency=currency)
-
-    def _load_env_vars_from_context(self, context: EngineContext):  # pyright: ignore[reportUnusedParameter]
-        pass
 
     @property
     def env(self) -> Environment:

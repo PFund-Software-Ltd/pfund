@@ -27,10 +27,12 @@ class Hyperliquid(
         HyperliquidConfig,
         HyperliquidMarket,
         HyperliquidAccount,
-        HyperliquidBalance,
-        HyperliquidOrder,
         HyperliquidProduct,
+        HyperliquidOrder,
+        HyperliquidBalance,
+        HyperliquidBalance.Snapshot,
         HyperliquidPosition,
+        HyperliquidPosition.Snapshot,
     ]
 ):
     name: ClassVar[TradingVenue] = TradingVenue.HYPERLIQUID

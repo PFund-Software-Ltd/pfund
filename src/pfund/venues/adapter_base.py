@@ -27,6 +27,10 @@ class BaseAdapter(BaseModel):
         arbitrary_types_allowed=True, extra="forbid"
     )
 
+    products: dict[InternalName, ExternalName] = Field(
+        default_factory=dict,
+        description="product.name -> product.symbol, dynamically added",
+    )
     asset_types: dict[InternalName | AllAssetType, ExternalName] = Field(
         default_factory=dict, description="e.g. asset type PERPETUAL -> LinearPerpetual"
     )

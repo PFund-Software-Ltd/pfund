@@ -263,6 +263,7 @@ class DataBoy:
 
                     # TEMP
                     # print('databoy data_zmq recv:', channel, topic, msg, msg_ts)
+                    # update = BalanceUpdate(**update)
 
                     self._update_data_store(msg)
                 # TODO:

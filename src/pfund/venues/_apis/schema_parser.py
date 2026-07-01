@@ -4,7 +4,7 @@ from collections.abc import Sequence, Callable
 
 from pydantic import validate_call
 
-from pfund.venues._apis.typing import RawPayload, Schema, ResponseData
+from pfund.venues._apis.typing import RawResponse, Schema, ResponseData
 
 from pfund.errors import ResponseParseError
 
@@ -150,7 +150,7 @@ class SchemaParser:
     @staticmethod
     @validate_call
     def _parse(
-        msg: RawPayload | dict[str, Any], schema: Schema | dict[str, Any]
+        msg: RawResponse | dict[str, Any], schema: Schema | dict[str, Any]
     ) -> dict[str, Any]:
         """
         Convert the input message to the desired format according to the schema.
@@ -188,7 +188,7 @@ class SchemaParser:
     @staticmethod
     @validate_call
     def convert(
-        payload: RawPayload | dict[str, Any] | list[dict[str, Any]],
+        payload: RawResponse | dict[str, Any] | list[dict[str, Any]],
         schema: Schema | dict[str, Any],
     ) -> ResponseData:
         if isinstance(payload, dict):

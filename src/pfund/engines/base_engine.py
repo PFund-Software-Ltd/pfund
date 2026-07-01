@@ -127,7 +127,7 @@ class BaseEngine(metaclass=SingletonMeta):
                     + "product names must be unique across the engine"
                 )
         venue: AnyVenue = self.add_venue(product.source)
-        venue._add_product(product)
+        venue.add_product(product)
 
     def _add_account(self, account: BaseAccount):
         for _venue in self._venues.values():
@@ -136,8 +136,12 @@ class BaseEngine(metaclass=SingletonMeta):
                     f'account name "{account.name}" is already used by {existing!r}; '
                     + "account names must be unique across the engine"
                 )
+        if account.env != self.env:
+            raise ValueError(
+                f"account env {account.env} does not match engine env {self.env}"
+            )
         venue: AnyVenue = self.add_venue(account.venue)
-        venue._add_account(account)
+        venue.add_account(account)
 
     def add_venue(
         self, venue: TradingVenue | str, config: VenueConfig | None = None

@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from pfund.venues._apis.typing import Schema, Result
     from pfund.venues.bybit.account import BybitAccount
 
-    BybitRawPayload = dict[str, Any]
+    BybitRawResponse = dict[str, Any]
 
 import datetime
 from decimal import Decimal
@@ -63,13 +63,13 @@ class BybitRestAPI(BaseRestAPI):
     }
 
     def _is_success(
-        self, endpoint_name: EndpointName, payload: BybitRawPayload
+        self, endpoint_name: EndpointName, payload: BybitRawResponse
     ) -> bool:
         """Checks if the returned message means successful based on the exchange's standard"""
         return "retCode" in payload and payload["retCode"] == 0
 
     def _extract_error(
-        self, endpoint_name: EndpointName, payload: BybitRawPayload
+        self, endpoint_name: EndpointName, payload: BybitRawResponse
     ) -> str:
         if "retMsg" in payload:
             return str(payload["retMsg"])
@@ -92,9 +92,13 @@ class BybitRestAPI(BaseRestAPI):
             return None
         return datetime.datetime.fromtimestamp(ms / 1000, tz=datetime.UTC)
 
-    @staticmethod
-    def _convert_ms_to_seconds(ms: int | str) -> float:
-        return int(ms) / 1000
+    def _unwrap_single(self, x: list[Any]) -> Any:
+        """Unwrap a single-item list into its single item."""
+        if len(x) != 1:
+            self._logger.error(f"Expected a single item, got {len(x)}: {x}")
+            return None
+        else:
+            return x[0]
 
     async def get_markets(self, category: BybitProduct.Category) -> Result:
         category = BybitProduct.Category[category.upper()]
@@ -103,7 +107,7 @@ class BybitRestAPI(BaseRestAPI):
         schema: Schema = {
             "@data": ("result", "list"),
             "data": {
-                # NOTE: these dict keys should match the BybitMarketc
+                # NOTE: these dict keys should match the BybitMarket
                 "symbol": ["symbol"],
                 "base_asset": (
                     "baseCoin",
@@ -119,6 +123,7 @@ class BybitRestAPI(BaseRestAPI):
                 ),
                 "tick_size": ("priceFilter", "tickSize", str),
                 "lot_size": ("lotSizeFilter", "qtyStep", str),
+                # NOTE: not all products have expiration (e.g. spot)
                 "expiration": ("deliveryTime", self._parse_expiration),
                 "category": category,
             },
@@ -128,7 +133,7 @@ class BybitRestAPI(BaseRestAPI):
             schema["data"]["asset_type"] = CryptoAssetType.CRYPTO
             schema["data"]["lot_size"] = ["lotSizeFilter", "basePrecision", str]
         elif category == BybitProduct.Category.OPTION:
-            schema["data"]["asset_type"] = CryptoAssetType.OPT
+            schema["data"]["asset_type"] = CryptoAssetType.OPTION
             schema["data"]["option_type"] = (
                 "optionsType",
                 lambda option_type: OptionType[option_type.upper()],
@@ -145,7 +150,7 @@ class BybitRestAPI(BaseRestAPI):
         params = {"accountType": account.type}
         schema: Schema = {
             "ts": ("time", self._convert_ms_to_seconds),
-            "@data": ("result", "list", lambda x: x[0]),  # the account-level dict
+            "@data": ("result", "list", self._unwrap_single),  # the account-level dict
             "data": {
                 "@account": (),  # the account dict is at the same level as "@data", nothing to unpack
                 "account": {
@@ -157,7 +162,10 @@ class BybitRestAPI(BaseRestAPI):
                 },
                 "@balances": ("coin",),  # the per-currency list
                 "balances": {
-                    "asset": ("coin",),
+                    "currency": (
+                        "coin",
+                        lambda asset: self.adapter(asset, group="assets"),
+                    ),
                     "cash": ("walletBalance",),
                     "equity": ("equity",),
                     "locked": ("locked",),
@@ -166,4 +174,16 @@ class BybitRestAPI(BaseRestAPI):
             },
         }
         result: Result = await self._request(schema, account=account, params=params)
+        # use 'locked' to calculate 'available'
+        data = result["response"]["data"]
+        if isinstance(data, dict) and "balances" in data:
+            data["balances"] = [
+                {
+                    **{k: v for k, v in balance.items() if k != "locked"},
+                    "available": str(
+                        Decimal(balance["cash"]) - Decimal(balance["locked"])
+                    ),
+                }
+                for balance in data["balances"]
+            ]
         return result

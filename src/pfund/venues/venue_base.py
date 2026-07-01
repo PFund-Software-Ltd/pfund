@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import (
     TYPE_CHECKING,
     ClassVar,
+    Callable,
     Any,
     Generic,
     Literal,
@@ -17,7 +18,6 @@ if TYPE_CHECKING:
         AccountName,
         ProductName,
         Currency,
-        ProductKey,
         FullDataChannel,
     )
     from pfund.datas.resolution import Resolution
@@ -32,19 +32,23 @@ if TYPE_CHECKING:
     from pfund.venues.venue_config import VenueConfig
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.venues.adapter_base import BaseAdapter
+    from pfund.venues._apis.typing import Result, ResponseData
 
 import sys
+import queue
 import asyncio
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 from threading import Thread
 from collections.abc import Coroutine
+from concurrent.futures import Future
 from functools import cached_property
 
+from pfund.entities.balances.balance_base import BalanceUpdate, BalanceUpdateSource
 from pfund.errors import NotSupportedByVenueError
-from pfund.typing import ProductKey
 from pfund.entities.products.asset_type import AssetType
+from pfund.entities.products.product_base import ProductKey
 from pfund.venues.venue_metadata import VenueMetadata
 from pfund.enums import Environment, TradingVenue, PrivateDataChannel
 
@@ -53,14 +57,28 @@ ConfigT = TypeVar("ConfigT", bound="VenueConfig")
 MarketT = TypeVar("MarketT", bound="BaseMarket")
 AccountT = TypeVar("AccountT", bound="BaseAccount")
 BalanceT = TypeVar("BalanceT", bound="BaseBalance")
+BalanceSnapshotT = TypeVar("BalanceSnapshotT", bound="BaseBalance.Snapshot")
 OrderT = TypeVar("OrderT", bound="BaseOrder")
 ProductT = TypeVar("ProductT", bound="BaseProduct")
 PositionT = TypeVar("PositionT", bound="BasePosition")
-AnyVenue: TypeAlias = "BaseVenue[Any, Any, Any, Any, Any, Any, Any]"
+PositionSnapshotT = TypeVar("PositionSnapshotT", bound="BasePosition.Snapshot")
+DataT = TypeVar("DataT", list[dict[str, Any]], dict[str, Any])
+AnyVenue: TypeAlias = "BaseVenue[Any, Any, Any, Any, Any, Any, Any, Any, Any]"
 
 
 class BaseVenue(
-    ABC, Generic[ConfigT, MarketT, AccountT, BalanceT, OrderT, ProductT, PositionT]
+    ABC,
+    Generic[
+        ConfigT,
+        MarketT,
+        AccountT,
+        ProductT,
+        OrderT,
+        BalanceT,
+        BalanceSnapshotT,
+        PositionT,
+        PositionSnapshotT,
+    ],
 ):
     name: ClassVar[TradingVenue]
     adapter: ClassVar[BaseAdapter]
@@ -89,7 +107,7 @@ class BaseVenue(
         self._settings: TradeEngineSettings | None = settings
         self._accounts: dict[AccountName, AccountT] = {}
         self._products: dict[ProductName, ProductT] = {}
-        if self.METADATA.requires_asyncio_loop:
+        if self._requires_asyncio_loop():
             self._loop: asyncio.AbstractEventLoop | None = asyncio.new_event_loop()
             self._loop_thread: Thread | None = Thread(
                 target=self._run_loop, name=f"{self.name}_loop", daemon=True
@@ -97,6 +115,7 @@ class BaseVenue(
         else:
             self._loop: asyncio.AbstractEventLoop | None = None
             self._loop_thread: Thread | None = None
+        self._queue: queue.Queue[Any] | None = None
 
     @property
     def env(self) -> Literal[Environment.PAPER, Environment.LIVE]:
@@ -106,6 +125,86 @@ class BaseVenue(
     def loop(self) -> asyncio.AbstractEventLoop:
         assert self._loop is not None, "there is no asyncio loop"
         return self._loop
+
+    def _requires_asyncio_loop(self) -> bool:
+        return self.METADATA.requires_asyncio_loop
+
+    def _set_queue(self, queue: queue.Queue[Any]) -> None:
+        """Set the queue for the venue to send data back to the trade engine."""
+        self._queue = queue
+
+    def _log_api_error(
+        self,
+        error: str,
+        account: BaseAccount | None = None,
+        method: str | None = None,
+    ) -> None:
+        """Log a failed venue API call, auto-detecting the calling method's name.
+
+        Shared by get_balances/get_positions/etc. so the failure log line is
+        standardized across endpoints. ``account`` is optional since some
+        endpoints (e.g. public market data) aren't tied to an account. ``method``
+        lets an internal helper pass the real caller's name (its own caller),
+        since ``sys._getframe(1)`` would otherwise resolve to the helper.
+        """
+        method_name = method or sys._getframe(1).f_code.co_name
+        suffix = f" for account={account.name}" if account is not None else ""
+        self._logger.error(f"{method_name} failed{suffix}: {error}")
+
+    def _extract_ts_and_data_from_api_result(
+        self,
+        result: Result,
+        dtype: type[DataT],
+        account: BaseAccount | None = None,
+        ts_required: bool = True,
+    ) -> tuple[float | None, DataT | None]:
+        """Validate a REST `Result` and return its `ts` and `data` payload as `dtype`.
+
+        Strips the `Result` success/error envelope — returning None (logging a
+        standardized error) when the call failed, a transient operational
+        condition callers can early-return on — then delegates the `ts`/`data`
+        extraction to `_extract_ts_and_data_from_response_data`.
+        `data = self._extract_ts_and_data_from_api_result(result, dtype=list)`
+        is statically typed as `list | None`.
+        """
+        method_name = sys._getframe(1).f_code.co_name
+        if not result["success"]:
+            self._log_api_error(result["error"], account=account, method=method_name)
+            return None, None
+        return self._extract_ts_and_data_from_response_data(
+            result["response"],
+            dtype,
+            ts_required=ts_required,
+            _method_name=method_name,
+        )
+
+    @staticmethod
+    def _extract_ts_and_data_from_response_data(
+        response_data: ResponseData,
+        dtype: type[DataT],
+        ts_required: bool = True,
+        _method_name: str | None = None,
+    ) -> tuple[float | None, DataT | None]:
+        """Validate a parsed `ResponseData` and return its `ts` and `data` as `dtype`.
+
+        Shared core: the REST path reaches here through
+        `_extract_ts_and_data_from_api_result` after the `Result` envelope is
+        stripped; ws handlers, which already hold a parsed `ResponseData`, call
+        this directly. Raises `TypeError` when `data` isn't the expected
+        `list`/`dict` shape, since that means our parsing contract is broken (a
+        bug), not a venue hiccup.
+        """
+        method_name = _method_name or sys._getframe(1).f_code.co_name
+        ts = response_data.get("ts")
+        data = response_data["data"]
+        if not isinstance(data, dtype):
+            raise TypeError(
+                f"{method_name} expected data to be a {dtype.__name__} "
+                + f"but got {type(data).__name__}"
+            )
+        if ts_required and ts is None:
+            raise ValueError(f"{method_name} expected ts but got None")
+        return ts, data
 
     @cached_property
     def markets(self) -> dict[ProductKey, MarketT]:
@@ -216,9 +315,49 @@ class BaseVenue(
             specs=specs,
         )
 
-    def _add_product(self, product: ProductT) -> None:
+    @property
+    def account(self) -> AccountT | None:
+        num_accounts = len(self._accounts)
+        if num_accounts < 1:
+            return None
+        elif num_accounts > 1:
+            raise ValueError(f"Expected exactly one account, got {num_accounts}")
+        else:
+            return list(self._accounts.values())[0]
+
+    @property
+    def accounts(self) -> dict[AccountName, AccountT]:
+        return self._accounts
+
+    def get_account(self, name: AccountName) -> AccountT:
+        return self.accounts[name]
+
+    def add_account(self, account: AccountT) -> None:
+        if account.env != self._env:
+            raise ValueError(
+                f"account env {account.env} does not match venue env {self._env}"
+            )
+        if account.name not in self._accounts:
+            self._accounts[account.name] = account
+            self._logger.debug(f"added account name={account.name}")
+        else:
+            raise ValueError(f"account name {account.name} is already registered")
+
+    @property
+    def products(self) -> dict[ProductName, ProductT]:
+        return self._products
+
+    def get_product(self, name: ProductName) -> ProductT:
+        return self.products[name]
+
+    def add_product(self, product: ProductT) -> None:
         if product.name not in self._products:
             self._products[product.name] = product
+            self.adapter.add_mapping(
+                group="products",
+                internal=product.name,
+                external=product.symbol,
+            )
             self._logger.debug(
                 f"added product name={product.name} symbol={product.symbol}"
             )
@@ -233,12 +372,110 @@ class BaseVenue(
         else:
             raise ValueError(f"product name {product.name} is already registered")
 
-    def _add_account(self, account: AccountT) -> None:
-        if account.name not in self._accounts:
-            self._accounts[account.name] = account
-            self._logger.debug(f"added account name={account.name}")
-        else:
-            raise ValueError(f"account name {account.name} is already registered")
+    @abstractmethod
+    async def _get_balances(self, account: AccountT) -> Result:
+        """Venue-specific raw balance fetch (e.g. a signed REST call).
+
+        Returns a parsed ``Result`` whose ``response['data']`` is a dict with:
+          - ``account``: the account-level consolidated balance (a snapshot dict)
+          - ``balances``: a list of per-currency snapshot dicts (each carrying a
+            ``currency`` key)
+        All the shared parsing/snapshotting/dispatch lives in ``get_balances``.
+        """
+        ...
+
+    async def get_balances(
+        self, account: AccountT
+    ) -> BalanceUpdate[BalanceSnapshotT] | None:
+        """Fetch the account's balances: per-currency snapshots + the account total.
+
+        A per-currency "balance" is a holding of a unit of account (USD, USDT, BTC
+        as a wallet coin, ...) — the money you settle in, keyed by ``Currency``;
+        ``account_balance`` is the account-level consolidated total. Neither is
+        directional exposure to a product: instrument holdings like AAPL or a BTC
+        perp live under ``get_positions``, keyed by ``Product``.
+        """
+        result: Result = await self._get_balances(account)
+        ts, data = self._extract_ts_and_data_from_api_result(
+            result, dtype=dict, account=account, ts_required=True
+        )
+        if data is None:
+            return None
+        update = self._build_balance_update(
+            ts, data, account.name, source="get_balances"
+        )
+        if self._queue:
+            self._queue.put(update)
+        return update
+
+    @classmethod
+    def _build_balance_update(
+        cls,
+        ts: float | None,
+        data: dict[str, Any],
+        account_name: AccountName,
+        source: BalanceUpdateSource,
+    ) -> BalanceUpdate[BalanceSnapshotT]:
+        """Assemble a `BalanceUpdate` from an already-extracted `{account, balances}`.
+
+        Shared by the REST `get_balances` and the ws wallet-push path: each
+        currency snapshot is keyed by its ``currency`` (popped from the rest of
+        the snapshot fields), and the optional account-level total is snapshotted
+        separately. Classmethod (uses ``cls.Balance.Snapshot``, no instance
+        state) so the ws api can reach it via ``self.venue.venue_class``. Builds
+        only — the caller is responsible for putting the update on its queue,
+        since REST and ws hold their queues on different objects.
+        """
+        snapshots: dict[Currency, BalanceSnapshotT] = {}
+        account_balance: BalanceSnapshotT | None = None
+        for balance in data["balances"]:
+            currency = balance["currency"]
+            snapshots[currency] = cast(
+                "BalanceSnapshotT",
+                cls.Balance.Snapshot(
+                    updated_at=ts,
+                    **{k: v for k, v in balance.items() if k != "currency"},
+                ),
+            )
+        if "account" in data:
+            account_balance = cast(
+                "BalanceSnapshotT",
+                cls.Balance.Snapshot(updated_at=ts, **data["account"]),
+            )
+        return BalanceUpdate[BalanceSnapshotT](
+            ts=cast(float, ts),
+            account=account_name,
+            snapshots=snapshots,
+            account_balance=account_balance,
+            source=source,
+        )
+
+    # TODO:
+    def get_positions(self, name: AccountName) -> dict[ProductName, PositionT]: ...
+
+    # TODO:
+    def get_orders(self, name: AccountName) -> dict[ProductName, list[OrderT]]: ...
+
+    def _run_coroutine_threadsafe(
+        self,
+        func: Callable[..., Coroutine[Any, Any, Any]],
+        args: tuple[Any, ...] = (),
+        kwargs: dict[str, Any] | None = None,
+    ) -> None:
+        def _callback(future: Future[Any]) -> None:
+            func_name = func.__name__
+            if future.cancelled():
+                self._logger.warning(f"{self.name} {func_name}() was cancelled")
+                return
+            exc = future.exception()
+            if exc is not None:
+                self._logger.error(f"{self.name} {func_name}() failed", exc_info=exc)
+
+        kwargs = kwargs or {}
+        future: Future[Any] = asyncio.run_coroutine_threadsafe(
+            func(*args, **kwargs), self.loop
+        )
+        future.add_done_callback(_callback)
 
     def _run_async(self, coro: Coroutine[Any, Any, Any]) -> Any:
         """Drive an async-native venue method from a synchronous context.
@@ -265,38 +502,24 @@ class BaseVenue(
         self.loop.run_forever()  # NOTE: blocking
 
     def start(self):
-        for channel in self._config.private_channels:
-            self._add_private_channel(PrivateDataChannel[channel.lower()])
+        if self._queue is None:
+            raise ValueError("Queue not set")
         if self._loop_thread:
             self._loop_thread.start()
+        for channel in self._config.private_channels:
+            self._add_private_channel(PrivateDataChannel[channel.lower()])
+        # TODO
+        # if 'start' in self._config.cancel_all_at:
+        #     self.cancel_all_orders(reason="start")
 
     def stop(self):
+        # TODO
+        # if 'stop' in self._config.cancel_all_at:
+        #     self.cancel_all_orders(reason="stop")
         if self._loop:
             self._loop.call_soon_threadsafe(self._loop.stop)
         if self._loop_thread:
             self._loop_thread.join(timeout=5)
-
-    # def add_balance(
-    #     self, venue: TradingVenue, acc: AccountName, ccy: Currency
-    # ) -> BalanceT:
-    #     venue = TradingVenue[venue.upper()]
-    #     ccy = ccy.upper()
-    #     if not (balance := self.get_balances(exch, acc=acc, ccy=ccy)):
-    #         balance = CryptoBalance(ccy=ccy)
-    #         self._logger.debug(f"added {balance}")
-    #     return balance
-
-    # def add_position(
-    #     self, venue: TradingVenue, acc: str, pdt: ProductName
-    # ) -> PositionT:
-    #     venue = TradingVenue[venue.upper()]
-    #     pdt = pdt.upper()
-    #     if not (position := self.get_positions(exch, acc=acc, pdt=pdt)):
-    #         account = self.get_account(exch, acc)
-    #         product = self.add_product(exch, pdt=pdt)
-    #         position = CryptoPosition(account, product)
-    #         self._logger.debug(f"added {position}")
-    #     return position
 
     # TODO
     # def place_orders(self, orders: list[BaseOrder], threaded: bool=True, **kwargs: Any) -> list[BaseOrder]: ...
@@ -372,39 +595,6 @@ class BaseVenue(
     # @abstractmethod
     # def cancel_all_orders(self, threaded: bool=True, reason: str | None=None): ...
 
-    @property
-    def account(self) -> AccountT | None:
-        num_accounts = len(self._accounts)
-        if num_accounts < 1:
-            return None
-        elif num_accounts > 1:
-            raise ValueError(f"Expected exactly one account, got {num_accounts}")
-        else:
-            return list(self._accounts.values())[0]
-
-    @property
-    def accounts(self) -> dict[AccountName, AccountT]:
-        return self._accounts
-
-    @property
-    def products(self) -> dict[ProductName, ProductT]:
-        return self._products
-
-    def get_account(self, name: AccountName) -> AccountT:
-        return self.accounts[name]
-
-    def get_product(self, name: ProductName) -> ProductT:
-        return self.products[name]
-
-    # TODO: api call
-    def get_balances(self, name: AccountName) -> dict[Currency, BalanceT]: ...
-
-    # TODO: api call
-    def get_positions(self, name: AccountName) -> dict[ProductName, PositionT]: ...
-
-    # TODO: api call
-    def get_orders(self, name: AccountName) -> dict[ProductName, list[OrderT]]: ...
-
     # def start(self):
     #     # TODO: check if all product names and account names are unique
     #     self._add_default_private_channels()
@@ -436,26 +626,3 @@ class BaseVenue(
     #     if self._settings.cancel_all_at["stop"]:
     #         self.cancel_all_orders(reason="stop")
     #     self._logger.debug(f"broker {self._name} stopped")
-
-    # def _distribute_msgs(self, channel, topic, info):
-    #     if ...:
-    #         self.add_order(...)
-    #         self._order_manager.update_orders(...)
-    #     elif ...:
-    #         self.add_position(...)
-    #         self._portfolio_manager.update_positions(...)
-    #     elif ...:
-    #         self.add_balance(...)
-    #         self._portfolio_manager.update_balances(...)
-    #     # elif channel == 4:  # from api processes to connection manager
-    #     #     self._connection_manager.handle_msgs(topic, info)
-    #     #     if topic == 3 and self._settings.get('cancel_all_at', {}).get('disconnect', True):  # on disconnected
-    #     #         self.cancel_all_orders(reason='disconnect')
-
-    # def schedule_jobs(self, scheduler: BackgroundScheduler):
-    #     scheduler.add_job(self.reconcile_balances, "interval", seconds=10)
-    #     scheduler.add_job(self.reconcile_positions, "interval", seconds=10)
-    #     scheduler.add_job(self.reconcile_orders, "interval", seconds=10)
-    #     scheduler.add_job(self.reconcile_trades, "interval", seconds=10)
-    #     for manager in [self._order_manager, self._portfolio_manager]:
-    #         manager.schedule_jobs(scheduler)

@@ -1,13 +1,11 @@
 from __future__ import annotations
-from typing import ClassVar, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pfund.engines.engine_context import EngineContext
+from typing import ClassVar
 
 import warnings
 
 from pfund.entities import BaseAccount
 from pfund.enums import Environment, TradingVenue
+from pfund.utils import DotenvStore
 
 
 class InteractiveBrokersAccount(BaseAccount):
@@ -41,24 +39,19 @@ class InteractiveBrokersAccount(BaseAccount):
             name: account code, e.g. DU123456 for paper trading, U123456 for live trading
         """
         super().__init__(env=env, venue=TradingVenue.IBKR, name=name)
-        self._host: str = host
-        self._port: int | None = port
-        self._client_id: int | None = client_id
-
-    def _load_env_vars_from_context(self, context: EngineContext):
-        self._host = (
-            self._host or context.get_env(f"{self.venue}_HOST") or self.DEFAULT_HOST
-        )
-        port = (
-            self._port
-            or context.get_env(f"{self.venue}_{self._env}_PORT")
+        dotenv = DotenvStore(env=self._env)
+        self._host: str = host or dotenv.get(f"{self.venue}_HOST") or self.DEFAULT_HOST
+        self._port = (
+            port
+            or dotenv.get(f"{self.venue}_{self._env}_PORT")
             or self.DEFAULT_PORTS.get(self._env)
         )
-        self._port = int(port) if port else None
+        if self._port:
+            self._port = int(self._port)
 
-        client_id = self._client_id or context.get_env(f"{self.venue}_CLIENT_ID")
-        if client_id:
-            self._client_id = int(client_id)
+        self._client_id = client_id or dotenv.get(f"{self.venue}_CLIENT_ID")
+        if self._client_id:
+            self._client_id = int(self._client_id)
         else:
             self._client_id = self._next_default_client_id()
             warnings.warn(

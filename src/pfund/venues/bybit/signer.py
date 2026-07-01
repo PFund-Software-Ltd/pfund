@@ -40,6 +40,8 @@ class BybitSigner(CryptoExchangeSigner["BybitAccount"]):
             msgspec_json.encode(body).decode()
             if body
             else urllib.parse.urlencode(params)
+            if params
+            else ""
         )
         prehash = timestamp + account.key + self.RECV_WINDOW + payload_str
         signature = hmac_sha256(account.secret, prehash)
