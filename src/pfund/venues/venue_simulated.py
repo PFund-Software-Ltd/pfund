@@ -70,9 +70,7 @@ class SimulatedVenue:  # maybe don't inherit from BaseVenue at all?
     def _add_product(self, product: BaseProduct) -> None:
         if product.name not in self._products:
             self._products[product.name] = product
-            self._logger.debug(
-                f"added product name={product.name} symbol={product.symbol}"
-            )
+            self._logger.debug(f"added {product.desc_str()}")
         else:
             raise ValueError(f"product name {product.name} is already registered")
 

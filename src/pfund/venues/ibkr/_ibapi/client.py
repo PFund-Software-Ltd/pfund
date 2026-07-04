@@ -1,67 +1,47 @@
-"""This class is a wrapper of IB's EClient
-It should be a part of ib_api.py, but for the sake of clarity,
-it is separated to manage functions in IB's EClient.
-It should never be used alone.
-"""
-
+# pyright: reportUninitializedInstanceVariable=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal, Any, TypeAlias
 
 if TYPE_CHECKING:
-    from pfund.brokers.ibkr.api import InteractiveBrokersAPI
-    from pfund.entities.accounts.account_ibkr import InteractiveBrokersAccount
+    from logging import Logger
+    from pfund.venues.ibkr.product import InteractiveBrokersProduct
 
-from threading import Thread
+    RequestId: TypeAlias = int
+
+import asyncio
+from collections import defaultdict
 
 from ibapi.account_summary_tags import *
 from ibapi.client import EClient
+
+from pfund.enums import TradingVenue
 
 
 class InteractiveBrokersClient(EClient):
     _request_id: ClassVar[int] = 1
 
+    venue: TradingVenue
+    _logger: Logger
+
     def __init__(self):
         # pass in InteractiveBrokersAPI() object (child of EWrapper) as EClient needs EWrapper
         super().__init__(self)
-        self._req_id_to_product = {}
+        self._pending_responses: dict[int, asyncio.Future[list[Any]]] = {}
+        # partial responses = accumulation buffer for multi-row replies.
+        # An IB "response" is usually not one callback — it's a stream of callbacks terminated by an *End.
+        self._partial_responses: dict[int, list[Any]] = defaultdict(list)
+
+        self._product_by_req_id: dict[RequestId, InteractiveBrokersProduct] = {}
         self._pdts_requested_market_data = []
 
     @classmethod
-    def _next_request_id(cls):
+    def _next_request_id(cls) -> int:
         cls._request_id += 1
-
-    def connect(self: InteractiveBrokersAPI | InteractiveBrokersClient):
-        # account = self.account
-        # TEMP
-        account: InteractiveBrokersAccount = self._accounts["DU954568_account"]
-
-        super().connect(
-            host=account.host, port=account.port, clientId=account.client_id
-        )
-        self._ib_thread = Thread(
-            name="InteractiveBrokersClientThread", target=self.run, daemon=True
-        )
-        self._ib_thread.start()
-        self._logger.debug(f"{self._bkr} thread started")
-
-        # TODO
-        # if self._wait(self.is_connected, reason='connection'):
-        #     # need to wait for the EReader to get ready; otherwise,
-        #     # if subscribe too early and the subscription failed,
-        #     # it will somehow lead to disconnection from IB
-        #     time.sleep(1)
-        #     self._subscribe()
-        #     # wait for subscription
-        #     self._background_thread = Thread(target=self._run_background_tasks, daemon=True)
-        #     self._background_thread.start()
-
-    def disconnect(self):
-        super().disconnect()
-        self._unsubscribe()
+        return cls._request_id
 
     def _update_request_id_and_corresponding_product(self, product):
-        self._req_id_to_product[self._request_id] = product
+        self._product_by_req_id[self._request_id] = product
         self._next_request_id()
 
     """

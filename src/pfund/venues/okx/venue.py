@@ -50,6 +50,4 @@ class OKX(
     Product: ClassVar[type[OKXProduct]] = OKXProduct
     Position: ClassVar[type[OKXPosition]] = OKXPosition
 
-    METADATA: ClassVar[VenueMetadata] = VenueMetadata(
-        requires_asyncio_loop=True,
-    )
+    METADATA: ClassVar[VenueMetadata] = VenueMetadata()

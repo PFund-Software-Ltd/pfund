@@ -149,9 +149,7 @@ class BaseEngine(metaclass=SingletonMeta):
         venue = TradingVenue[venue.upper()]
         if venue not in self._venues:
             VenueClass = venue.venue_class
-            self._venues[venue] = VenueClass(
-                env=self.env, config=config, settings=self.settings
-            )
+            self._venues[venue] = VenueClass(env=self.env, config=config)
             self._logger.debug(f"added trading venue {venue}")
         elif config is not None:
             raise ValueError(f"{venue} already exists and cannot be configured")

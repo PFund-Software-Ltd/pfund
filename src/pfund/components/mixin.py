@@ -575,6 +575,7 @@ class ComponentMixin:
         )
         if product.name not in self.products:
             self.products[product.name] = product
+            self.logger.debug(f"added {product.desc_str()}")
         else:
             existing_product = self.products[product.name]
             assert existing_product == product, (
@@ -997,6 +998,17 @@ class ComponentMixin:
             data_store.materialize()
         self.store.materialize()
 
+    def _reload_markets(self):
+        """venues might have refetched the latest markets, reload markets from markets.yml"""
+        # NOTE: must use pfund_config from context, config from get_config() could be different from what user has set in Ray Actor
+        pfund_config = self.context.pfund_config
+        for product in self.products.values():
+            if product.venue is None:
+                continue
+            VenueClass = product.venue.venue_class
+            file_path = VenueClass._create_markets_yml_file_path(pfund_config.data_path)
+            product._load_market(file_path)
+
     def _gather(self):
         """Sets up everything before start"""
         # NOTE: use is_gathered to avoid a component being gathered multiple times when it's a shared component
@@ -1008,6 +1020,7 @@ class ComponentMixin:
             self.add_indicators()
             for component in self.components:
                 component._gather()
+            self._reload_markets()
             self._materialize()
             self._is_gathered = True
             self.logger.info(f"'{self.name}' has gathered")

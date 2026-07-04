@@ -48,7 +48,11 @@ class BaseAdapter(BaseModel):
         default_factory=dict,
         description="e.g. order status S--- -> Submitted, for more details, see __repr__ in order_status.py",
     )
-    tifs: dict[TimeInForce, ExternalName] = Field(default_factory=dict)
+    tifs: dict[TimeInForce, ExternalName] = {
+        TimeInForce.GoodTilCancel: "GTC",
+        TimeInForce.FillOrKill: "FOK",
+        TimeInForce.ImmediateOrCancel: "IOC",
+    }
     option_types: dict[OptionType, ExternalName] = Field(
         default_factory=dict, description="e.g. option type CALL -> Call"
     )
@@ -58,48 +62,6 @@ class BaseAdapter(BaseModel):
     channel_resolutions: dict[Resolution | str, ExternalName] = Field(
         default_factory=dict, description="e.g. 1m -> 1"
     )
-
-    @field_validator("sides", mode="before")
-    @classmethod
-    def _validate_sides(cls, sides: Any) -> Any:
-        if not isinstance(sides, dict):
-            return sides
-        return {Side(k): v for k, v in sides.items()}
-
-    @field_validator("margin_modes", mode="before")
-    @classmethod
-    def _validate_margin_modes(cls, margin_modes: Any) -> Any:
-        if not isinstance(margin_modes, dict):
-            return margin_modes
-        return {MarginMode(k): v for k, v in margin_modes.items()}
-
-    @field_validator("order_types", mode="before")
-    @classmethod
-    def _validate_order_types(cls, order_types: Any) -> Any:
-        if not isinstance(order_types, dict):
-            return order_types
-        return {OrderType(k): v for k, v in order_types.items()}
-
-    @field_validator("tifs", mode="before")
-    @classmethod
-    def _validate_tifs(cls, tifs: Any) -> Any:
-        if not isinstance(tifs, dict):
-            return tifs
-        return {TimeInForce(k): v for k, v in tifs.items()}
-
-    @field_validator("option_types", mode="before")
-    @classmethod
-    def _validate_option_types(cls, option_types: Any) -> Any:
-        if not isinstance(option_types, dict):
-            return option_types
-        return {OptionType(k): v for k, v in option_types.items()}
-
-    @field_validator("channels", mode="before")
-    @classmethod
-    def _validate_channels(cls, channels: Any) -> Any:
-        if not isinstance(channels, dict):
-            return channels
-        return {DataChannel(k): v for k, v in channels.items()}
 
     @field_validator("channel_resolutions", mode="before")
     @classmethod

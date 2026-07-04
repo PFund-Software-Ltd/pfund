@@ -270,20 +270,25 @@ class TradeEngine(BaseEngine):
                     print("worker recv:", channel, topic, data, msg_ts)
 
                     venue = self.get_venue(...)
-                    if venue._requires_asyncio_loop():
-                        venue._run_coroutine_threadsafe(
-                            func=venue.place_orders,
-                            args=(...,),
-                            kwargs={...},
-                        )
-                    else:
-                        venue.place_orders(...)  # non-blocking
+                    venue._run_coroutine_threadsafe(
+                        func=venue.place_orders,
+                        args=(...,),
+                        kwargs={...},
+                    )
 
                 # drain the queue completely
                 while True:
                     try:
-                        msg = self._queue.get_nowait()
-                        # self._portfolio_manager.on_balance_update(...)
+                        update = self._queue.get_nowait()
+                        match update:
+                            case BalanceUpdate():
+                                self._portfolio_manager.on_balance_update(update)
+                            case PositionUpdate():
+                                self._portfolio_manager.on_position_update(update)
+                            case OrderUpdate():
+                                self._order_manager.on_order_update(update)
+                            case TradeUpdate():
+                                self._order_manager.on_trade_update(update)
 
                         # TODO: publish orders, positions, balances etc. to components
                         self._proxy.send(
@@ -306,17 +311,14 @@ class TradeEngine(BaseEngine):
     def _get_trading_states(self):
         THROTTLE = 0.5  # seconds between endpoint types, to not hammer the venue
 
-        def _fetch(venue: AnyVenue, method: str, account: BaseAccount):
-            func = getattr(venue, method)
-            if venue._requires_asyncio_loop():
-                venue._run_coroutine_threadsafe(func, args=(account,))
-            else:
-                func(account)  # non-blocking
+        def _fetch(venue: AnyVenue, func_name: str, account: BaseAccount):
+            func = getattr(venue, func_name)
+            venue._run_coroutine_threadsafe(func, args=(account,))
 
         pairs = [(v, a) for v in self._venues.values() for a in v.accounts.values()]
-        for fetch in ("get_balances", "get_positions", "get_orders", "get_trades"):
+        for func_name in ("get_balances", "get_positions", "get_orders", "get_trades"):
             for venue, account in pairs:
-                _fetch(venue, fetch, account)
+                _fetch(venue, func_name, account)
             time.sleep(THROTTLE)
 
     def add_venue(

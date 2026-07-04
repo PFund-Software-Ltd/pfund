@@ -4045,7 +4045,7 @@ requires-dist = [
     { name = "pfeed", specifier = ">=0.0.16" },
     { name = "pfeed", extras = ["core", "duckdb", "yfinance"], marker = "extra == 'core'", specifier = ">=0.0.16" },
     { name = "pfolio", marker = "extra == 'core'", specifier = ">=0.0.4" },
-    { name = "pfund-ibapi", marker = "extra == 'ibkr'", specifier = ">=10.47.1" },
+    { name = "pfund-ibapi", marker = "extra == 'ibkr'", specifier = "==10.47.1" },
     { name = "pfund-kit", specifier = ">=0.1.11" },
     { name = "pfund-plot", extras = ["marimo"], marker = "extra == 'core'", specifier = ">=0.0.5" },
     { name = "safetensors", marker = "extra == 'jax'", specifier = ">=0.8.0" },

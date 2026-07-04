@@ -41,7 +41,7 @@ pfeed = { version = ">=0.0.16", extras = ["core", "duckdb", "yfinance"] }
 pfolio = ">=0.0.4"
 pfund-plot = {version = ">=0.0.5", extras = ["marimo"]}
 # mtflow = ">=0.0.1.dev2"
-pfund-ibapi = ">=10.47.1"
+pfund-ibapi = "==10.47.1"
 alpaca-py = ">=0.43.4"
 hyperliquid-python-sdk = ">=0.24.0"
 joblib = ">=1.5.3"
@@ -63,12 +63,12 @@ pfund-kit = { path = "../pfund-kit", editable = true }
 pfolio = { path = "../pfolio", editable = true }
 mtflow = { path = "../mtflow", editable = true, extras = ['optuna', 'botorch'] }
 afterpython = ">=0.3.16"
-basedpyright = ">=1.39.7"
+basedpyright = ">=1.39.9"
 jupytext = ">=1.19.3"
 jupyterlab = ">=4.5.7"
 graphviz = ">=0.21"
 memray = ">=1.19.3"
-pandas-stubs = ">=2.2.3.250527"
+pandas-stubs = ">=3.0.3.260530"
 pybit = ">=5.16.0"
 flax = ">=0.12.7"
 equinox = ">=0.13.8"
@@ -78,7 +78,7 @@ optax = ">=0.2.8"
 vectorbt = ">=1.0.0"
 backtrader = ">=1.9.78.123"
 backtesting = ">=0.6.5"
-nautilus-trader = ">=1.228.0"
+nautilus-trader = ">=1.230.0"
 lib-pybroker = ">=1.2.12"
 
 [feature.test.pypi-dependencies]

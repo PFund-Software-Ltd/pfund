@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from pfund.venues._apis.typing import Result
 
 from pfund.entities.products import ProductKey
+from pfund.datas.resolution import Resolution
 from pfund.datas.timeframe import Timeframe
 from pfund.venues.crypto_exchange import CryptoExchange
 from pfund.venues.bybit.rest_api import BybitRestAPI
@@ -54,7 +55,7 @@ class Bybit(
     Position: ClassVar[type[BybitPosition]] = BybitPosition
 
     METADATA: ClassVar[VenueMetadata] = VenueMetadata(
-        requires_asyncio_loop=True,
+        has_markets=True,
         asset_types=[
             CryptoAssetType.FUTURE,
             CryptoAssetType.PERPETUAL,
@@ -64,44 +65,42 @@ class Bybit(
             AssetTypeModifier.INVERSE + "-" + CryptoAssetType.FUTURE,
             AssetTypeModifier.INVERSE + "-" + CryptoAssetType.PERPETUAL,
         ],
-        stream_resolution_periods={
+        supported_resolutions={
             BybitProduct.Category.LINEAR: {
-                Timeframe.QUOTE: [1, 50, 200, 500],
+                Resolution("QUOTE_L2"): [1, 50, 200, 500],
+                Resolution("QUOTE_L1"): [1],
                 Timeframe.TICK: [1],
                 Timeframe.MINUTE: [1, 3, 5, 15, 30, 60, 120, 240, 360, 720],
                 Timeframe.DAY: [1],
             },
             BybitProduct.Category.INVERSE: {
-                Timeframe.QUOTE: [1, 50, 200, 500],
+                Resolution("QUOTE_L2"): [1, 50, 200, 500],
+                Resolution("QUOTE_L1"): [1],
                 Timeframe.TICK: [1],
                 Timeframe.MINUTE: [1, 3, 5, 15, 30, 60, 120, 240, 360, 720],
                 Timeframe.DAY: [1],
             },
             BybitProduct.Category.SPOT: {
-                Timeframe.QUOTE: [1, 50],
+                Resolution("QUOTE_L2"): [1, 50],
+                Resolution("QUOTE_L1"): [1],
                 Timeframe.TICK: [1],
                 Timeframe.MINUTE: [1, 3, 5, 15, 30, 60, 120, 240, 360, 720],
                 Timeframe.DAY: [1],
             },
             BybitProduct.Category.OPTION: {
-                Timeframe.QUOTE: [25, 100],
+                Resolution("QUOTE_L2"): [25, 100],
+                # NOTE: option trading doesn't support QUOTE_L1
                 Timeframe.TICK: [1],
                 Timeframe.MINUTE: [1, 3, 5, 15, 30, 60, 120, 240, 360, 720],
                 Timeframe.DAY: [1],
             },
-        },
-        stream_orderbook_levels={
-            BybitProduct.Category.LINEAR: [1, 2],
-            BybitProduct.Category.INVERSE: [1, 2],
-            BybitProduct.Category.SPOT: [1, 2],
-            BybitProduct.Category.OPTION: [2],
         },
         support_place_batch_orders=True,
         support_cancel_batch_orders=True,
         support_amend_batch_orders=True,
     )
 
-    async def get_markets_async(
+    async def get_markets(
         self,
         category: BybitProduct.Category
         | Literal["LINEAR", "OPTION", "SPOT", "OPTION"]
@@ -139,15 +138,13 @@ class Bybit(
             markets.update(markets_per_category)
         return markets
 
-    aget_markets = get_markets_async
-
-    def get_markets(
+    def get_markets_sync(
         self,
         category: BybitProduct.Category
         | Literal["LINEAR", "OPTION", "SPOT", "OPTION"]
         | None = None,
     ) -> dict[ProductKey, BybitMarket]:
-        return self._run_async(self.aget_markets(category=category))
+        return self._run_async(self.get_markets(category=category))
 
     # def get_balances(
     #     self, account: CryptoAccount, ccy: str = "", **kwargs

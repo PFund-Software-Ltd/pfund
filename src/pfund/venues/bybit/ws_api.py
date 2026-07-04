@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 import asyncio
 
 from pfund.venues._apis.ws_api_base import BaseWebSocketAPI
+from pfund.venues.bybit.config import BybitConfig
 from pfund.venues.bybit.product import BybitProduct
 from pfund.venues.bybit.account import BybitAccount
 from pfund.venues.bybit._ws_apis import (
@@ -27,7 +28,7 @@ from pfund.venues.bybit._ws_apis import (
 from pfund.enums import TradingVenue
 
 
-class BybitWebSocketAPI(BaseWebSocketAPI[BybitAccount, BybitProduct]):
+class BybitWebSocketAPI(BaseWebSocketAPI[BybitConfig, BybitAccount, BybitProduct]):
     """A facade for the Bybit websocket API."""
 
     venue: ClassVar[TradingVenue] = TradingVenue.BYBIT

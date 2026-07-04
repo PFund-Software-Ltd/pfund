@@ -40,7 +40,7 @@ core = [
     # TODO: enable when ready
     # 'mtflow>=0.0.1.dev2 ; sys_platform != "emscripten"',
 ]
-ibkr = ["pfund-ibapi>=10.47.1"]
+ibkr = ["pfund-ibapi==10.47.1"]
 alpaca = ["alpaca-py>=0.43.4"]
 hyperliquid = ["hyperliquid-python-sdk>=0.24.0"]
 ta-lib = ["ta-lib>=0.6.8"]

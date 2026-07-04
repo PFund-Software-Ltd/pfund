@@ -7,7 +7,6 @@ if TYPE_CHECKING:
     from pfund.typing import FullDataChannel
     from pfund.venues._apis.typing import ResponseData, Schema
     from pfund.venues._apis.ws_api_base import RawMessage, WebSocketName
-    from pfund.datas.resolution import Resolution
     from pfund.enums import Environment
 
 import inspect
@@ -18,15 +17,17 @@ from pprint import pformat
 from msgspec import json
 
 from pfund.venues._apis.ws_api_base import BaseWebSocketAPI, NamedWebSocket
+from pfund.datas.resolution import Resolution
 from pfund.datas.timeframe import Timeframe
 from pfund.venues.bybit.product import BybitProduct
 from pfund.venues.bybit.account import BybitAccount
 from pfund.venues.bybit.signer import BybitSigner
+from pfund.venues.bybit.config import BybitConfig
 from pfund.enums import TradingVenue, DataChannel, DataChannelType
 from pfund.venues._apis.schema_parser import SchemaParser
 
 
-class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitAccount, BybitProduct]):
+class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitConfig, BybitAccount, BybitProduct]):
     venue: ClassVar[TradingVenue] = TradingVenue.BYBIT
     _signer: ClassVar[BybitSigner] = BybitSigner()
 
@@ -143,50 +144,44 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitAccount, BybitProduct]):
         """Creates a full public channel name based on the product and resolution"""
         self.add_product(product)
         metadata = self.venue.venue_class.METADATA
-        supported_orderbook_lvs = cast(
-            dict[BybitProduct.Category, list[int]], metadata.stream_orderbook_levels
-        )
-        supported_orderbook_lvs = supported_orderbook_lvs[product.category]
         supported_resolutions = cast(
-            dict[BybitProduct.Category, dict[Timeframe, list[int]]],
-            metadata.stream_resolution_periods,
+            dict[BybitProduct.Category, dict[Resolution | Timeframe, list[int]]],
+            metadata.supported_resolutions,
         )
         supported_resolutions = supported_resolutions[product.category]
         if resolution.is_quote():
-            channel = DataChannel.orderbook
-            echannel = self.adapter(channel.value, group="channel")
-            orderbook_level = resolution.orderbook_level
-            orderbook_depth = resolution.period
-            supported_orderbook_depths = supported_resolutions[Timeframe.QUOTE]
-            if orderbook_level not in supported_orderbook_lvs:
-                raise NotImplementedError(
-                    f"{self.venue} ({channel}.{product.symbol}) orderbook_level={orderbook_level} is not supported, supported levels: {supported_orderbook_lvs}"
+            if resolution not in supported_resolutions:
+                raise ValueError(
+                    f"{self.name} {product.symbol} {resolution=} is not supported"
                 )
-            if (
-                orderbook_level == 1
-                and orderbook_depth not in supported_orderbook_depths
-            ):
-                raise NotImplementedError(
-                    f"{self.venue} ({channel}.{product.symbol}) orderbook_depth={orderbook_depth} is not supported, supported depths: {supported_orderbook_depths}"
+            channel = DataChannel.orderbook
+            echannel = self.adapter(channel, group="channels")
+            orderbook_depth = resolution.period
+            supported_orderbook_depths = supported_resolutions[resolution]
+            if orderbook_depth not in supported_orderbook_depths:
+                raise ValueError(
+                    f"{self.name} {product.symbol} {orderbook_depth=} is not supported, {supported_orderbook_depths=}"
                 )
             full_channel = ".".join([echannel, str(orderbook_depth), product.symbol])
         elif resolution.is_tick():
             channel = DataChannel.tradebook
-            echannel = self.adapter(channel.value, group="channel")
+            echannel = self.adapter(channel, group="channels")
             full_channel = ".".join([echannel, product.symbol])
         elif resolution.is_bar():
             channel = DataChannel.candlestick
-            echannel = self.adapter(channel.value, group="channel")
+            echannel = self.adapter(channel, group="channels")
             period = resolution.period
             if resolution.timeframe not in supported_resolutions:
                 raise ValueError(
-                    f"{self.venue} ({channel}.{product.symbol}) {resolution=} is not supported, supported resolutions:\n{pformat(self.SUPPORTED_RESOLUTIONS)}"
+                    f"{self.name} {product.symbol} {resolution=} is not supported, supported resolutions:\n"
+                    + f"{pformat(list(supported_resolutions))}"
                 )
             elif period not in supported_resolutions[resolution.timeframe]:
                 raise ValueError(
-                    f"{self.venue} ({channel}.{product.symbol}) {resolution=} ({period=}) is not supported, supported periods: {self.SUPPORTED_RESOLUTIONS[resolution.timeframe]}"
+                    f"{self.name} {product.symbol} {resolution=} {period=} is not supported, supported periods\n:"
+                    + f"{pformat(supported_resolutions[resolution.timeframe])}"
                 )
-            eresolution = self.adapter(repr(resolution), group="resolution")
+            eresolution = self.adapter(repr(resolution), group="channel_resolutions")
             full_channel = ".".join([echannel, eresolution, product.symbol])
         else:
             raise NotImplementedError(
@@ -221,11 +216,7 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitAccount, BybitProduct]):
     def _parse_candlestick(msg: RawMessage) -> ResponseData:
         schema: Schema = {
             "ts": ("ts",),
-            "channel": (
-                "topic",
-                BybitBaseWebSocketAPI._convert_channel,
-                str,  # convert DataChannel back to normal str
-            ),
+            "channel": ("topic",),
             "@data": ["data"],
             "data": {
                 "start_ts": (
@@ -259,11 +250,7 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitAccount, BybitProduct]):
     def _parse_tradebook(msg: RawMessage) -> ResponseData:
         schema: Schema = {
             "ts": ("ts",),
-            "channel": (
-                "topic",
-                BybitBaseWebSocketAPI._convert_channel,
-                str,  # convert DataChannel back to normal str
-            ),
+            "channel": ("topic",),
             "@data": ["data"],
             "data": {
                 "ts": (

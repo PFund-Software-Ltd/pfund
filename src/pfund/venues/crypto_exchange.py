@@ -7,9 +7,7 @@ if TYPE_CHECKING:
     from httpx2._types import QueryParamTypes, RequestData
     from pfund.typing import FullDataChannel
     from pfund.venues._apis.typing import Result
-    from pfund.datas.resolution import Resolution
-    from pfund.venues.venue_config import VenueConfig
-    from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
+    from pfund.datas.data_market import MarketData
     from pfund.venues._apis.rest_api_base import BaseRestAPI
     from pfund.venues._apis.ws_api_base import BaseWebSocketAPI
 
@@ -33,8 +31,10 @@ from pfund.venues.venue_base import (
 from pfund.enums import Environment, PrivateDataChannel
 
 
-RestAPITypeVar = TypeVar("RestAPITypeVar", bound="BaseRestAPI")
-WebSocketAPITypeVar = TypeVar("WebSocketAPITypeVar", bound="BaseWebSocketAPI[Any, Any]")
+RestAPITypeVar = TypeVar("RestAPITypeVar", bound="BaseRestAPI[Any]")
+WebSocketAPITypeVar = TypeVar(
+    "WebSocketAPITypeVar", bound="BaseWebSocketAPI[Any, Any, Any]"
+)
 
 
 class CryptoExchangeSigner(ABC, Generic[AccountT]):
@@ -87,24 +87,21 @@ class CryptoExchange(
 ):
     """Crypto exchange that follows the standard pattern of using REST and WebSocket APIs."""
 
-    RestAPI: ClassVar[type[BaseRestAPI]]
-    WebSocketAPI: ClassVar[type[BaseWebSocketAPI[Any, Any]]]
+    RestAPI: ClassVar[type[BaseRestAPI[Any]]]
+    WebSocketAPI: ClassVar[type[BaseWebSocketAPI[Any, Any, Any]]]
 
     def __init__(
         self,
         env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"],
-        config: VenueConfig | None = None,
-        settings: TradeEngineSettings | None = None,
+        config: ConfigT | None = None,
     ):
-        if config and type(config) is not self.Config:
-            raise ValueError(f"config must be of type {self.Config}")
-        if not self.METADATA.requires_asyncio_loop:
-            raise ValueError(
-                f"{self.name} requires an asyncio loop, did you forget to set requires_asyncio_loop=True in METADATA?"
-            )
-        super().__init__(env=env, config=cast(ConfigT, config), settings=settings)
-        self.rest_api = cast("RestAPITypeVar", self.RestAPI(env=self.env))
-        self.ws_api = cast("WebSocketAPITypeVar", self.WebSocketAPI(env=self.env))
+        # NOTE: APIs must exist before super().__init__, which may call
+        # refetch_markets() -> get_markets() -> self.rest_api
+        self.rest_api = cast("RestAPITypeVar", self.RestAPI(env=env, config=config))
+        self.ws_api = cast(
+            "WebSocketAPITypeVar", self.WebSocketAPI(env=env, config=config)
+        )
+        super().__init__(env=env, config=config)
 
     def _set_queue(self, queue: queue.Queue[Any]) -> None:
         super()._set_queue(queue)
@@ -126,21 +123,24 @@ class CryptoExchange(
     ) -> None:
         self.ws_api.add_channel(channel, channel_type=channel_type)
 
-    def _create_market_data_channel(
-        self, product: ProductT, resolution: Resolution
-    ) -> FullDataChannel:
-        return self.ws_api._create_market_data_channel(product, resolution)
+    def _add_market_data_channel(self, data: MarketData) -> None:
+        full_channel: FullDataChannel = self.ws_api._create_market_data_channel(
+            data.product, data.resolution
+        )
+        self.add_channel(full_channel, channel_type="public")
 
-    def _create_private_channel(self, channel: PrivateDataChannel) -> FullDataChannel:
-        return self.ws_api._create_private_channel(channel)
+    def _add_private_channels(self) -> None:
+        for channel in PrivateDataChannel:
+            full_channel: FullDataChannel = self.ws_api._create_private_channel(channel)
+            self.add_channel(full_channel, channel_type="private")
 
     async def _get_balances(self, account: AccountT) -> Result:
         return await self.rest_api.get_balances(account)
 
     # TODO:
-    def place_orders(self, orders: list[OrderT]) -> None:
+    async def place_orders(self, orders: list[OrderT]) -> None:
         pass
-        # asyncio.run_coroutine_threadsafe(self.rest_api.function(), self.loop)
+        # asyncio.run_coroutine_threadsafe(self.rest_api.function(), self._loop)
         #
 
     def start(self):

@@ -13,11 +13,4 @@ from pfund.entities import BaseBalance
 
 
 class InteractiveBrokersBalance(BaseBalance):
-    def __init__(self, account, ccy):
-        super().__init__(account, ccy)
-
-    def __str__(self):
-        return f"Broker={self.bkr}|Account={self.acc}|Currency={self.ccy}|Balance={self._balance}"
-
-    def __repr__(self):
-        return f"{self.bkr}:{self.acc}:{self.ccy}:{self._balance}"
+    pass

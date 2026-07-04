@@ -13,7 +13,6 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from pfund_kit.utils.yaml import YAMLDocument
     from pfund.typing import (
         AccountName,
         ProductName,
@@ -21,6 +20,7 @@ if TYPE_CHECKING:
         FullDataChannel,
     )
     from pfund.datas.resolution import Resolution
+    from pfund.datas.data_market import MarketData
     from pfund.entities import (
         BaseAccount,
         BaseProduct,
@@ -30,7 +30,6 @@ if TYPE_CHECKING:
         BaseMarket,
     )
     from pfund.venues.venue_config import VenueConfig
-    from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.venues.adapter_base import BaseAdapter
     from pfund.venues._apis.typing import Result, ResponseData
 
@@ -38,16 +37,14 @@ import sys
 import queue
 import asyncio
 import logging
-from abc import ABC, abstractmethod
 from pathlib import Path
+from abc import ABC, abstractmethod
 from threading import Thread
 from collections.abc import Coroutine
 from concurrent.futures import Future
-from functools import cached_property
 
 from pfund.entities.balances.balance_base import BalanceUpdate, BalanceUpdateSource
 from pfund.errors import NotSupportedByVenueError
-from pfund.entities.products.asset_type import AssetType
 from pfund.entities.products.product_base import ProductKey
 from pfund.venues.venue_metadata import VenueMetadata
 from pfund.enums import Environment, TradingVenue, PrivateDataChannel
@@ -97,37 +94,33 @@ class BaseVenue(
         self,
         env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"],
         config: ConfigT | None = None,
-        settings: TradeEngineSettings | None = None,
     ):
         self._env = Environment[env.upper()]
         if self._env.is_simulated():
             raise ValueError(f"environment {self._env} is not supported")
         self._logger: logging.Logger = logging.getLogger(f"pfund.{self.name.lower()}")
         self._config: ConfigT = config or cast(ConfigT, self.Config())
-        self._settings: TradeEngineSettings | None = settings
         self._accounts: dict[AccountName, AccountT] = {}
         self._products: dict[ProductName, ProductT] = {}
-        if self._requires_asyncio_loop():
-            self._loop: asyncio.AbstractEventLoop | None = asyncio.new_event_loop()
-            self._loop_thread: Thread | None = Thread(
-                target=self._run_loop, name=f"{self.name}_loop", daemon=True
-            )
-        else:
-            self._loop: asyncio.AbstractEventLoop | None = None
-            self._loop_thread: Thread | None = None
+        self._loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
+        self._loop_thread: Thread = Thread(
+            target=self._run_loop, name=f"{self.name}_loop", daemon=True
+        )
         self._queue: queue.Queue[Any] | None = None
+        if self._config.refetch_markets and self.METADATA.has_markets:
+            self.refetch_markets()
 
     @property
     def env(self) -> Literal[Environment.PAPER, Environment.LIVE]:
         return cast(Literal[Environment.PAPER, Environment.LIVE], self._env)
 
-    @property
-    def loop(self) -> asyncio.AbstractEventLoop:
-        assert self._loop is not None, "there is no asyncio loop"
-        return self._loop
+    @classmethod
+    def _create_markets_yml_file_path(cls, data_path: Path | None = None) -> Path:
+        if data_path is None:
+            from pfund.config import get_config
 
-    def _requires_asyncio_loop(self) -> bool:
-        return self.METADATA.requires_asyncio_loop
+            data_path = get_config().data_path
+        return data_path / cls.name / cls.MARKETS_FILENAME
 
     def _set_queue(self, queue: queue.Queue[Any]) -> None:
         """Set the queue for the venue to send data back to the trade engine."""
@@ -206,61 +199,26 @@ class BaseVenue(
             raise ValueError(f"{method_name} expected ts but got None")
         return ts, data
 
-    @cached_property
-    def markets(self) -> dict[ProductKey, MarketT]:
-        return (
-            self._load_markets()
-            if not self._config.refetch_markets
-            else self._dump_markets()
-        )
-
-    @property
-    def _markets_yml_file_path(self) -> Path:
-        from pfund.config import get_config
-
-        return get_config().data_path / self.MARKETS_FILENAME
-
-    def get_markets(self, *args: Any, **kwargs: Any) -> dict[ProductKey, MarketT]:
+    async def get_markets(self, *args: Any, **kwargs: Any) -> dict[ProductKey, MarketT]:
         raise NotSupportedByVenueError(f"{self.name} does not support get_markets")
 
-    def _load_markets(self) -> dict[ProductKey, MarketT]:
-        """Load markets.yml from disk."""
-        from pfund_kit.utils.yaml import load
+    def get_markets_sync(self, *args: Any, **kwargs: Any) -> dict[ProductKey, MarketT]:
+        return self._run_async(self.get_markets(*args, **kwargs))
 
-        file_path = self._markets_yml_file_path
-        if not file_path.exists():
-            return self._dump_markets()
-        document: YAMLDocument = load(file_path) or {}
-        markets: dict[ProductKey, MarketT] = {}
-        for market_data in document.values():  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
-            market = self.Market(**market_data)
-            key = ProductKey(
-                symbol=market.symbol,
-                asset_type=AssetType(market.asset_type),  # pyright: ignore[reportCallIssue]
-            )
-            markets[key] = market  # pyright: ignore[reportArgumentType]
-        return markets
-
-    def _dump_markets(self) -> dict[ProductKey, MarketT]:
+    def refetch_markets(self) -> None:
         """Dump get_markets() result to markets.yml."""
         from pfund_kit.utils.yaml import dump
 
-        markets: dict[ProductKey, MarketT] = self.get_markets()
-        document = {
-            f"{key.symbol}.{key.asset_type.value}": market.model_dump()
-            for key, market in markets.items()
-        }
-        if document:
-            dump(document, self._markets_yml_file_path)
-        return markets
-
-    def refresh_markets(self) -> dict[ProductKey, MarketT]:
-        """Drop the cached markets and reload."""
-        markets = self._dump_markets()
-        self.__dict__["markets"] = (  # pyright: ignore[reportIndexIssue]
-            markets  # warm the cached_property
-        )
-        return markets
+        markets: dict[ProductKey, MarketT] = self.get_markets_sync()
+        file_path = self._create_markets_yml_file_path()
+        if not markets:
+            self._logger.warning(
+                f"{self.name} get_markets() returned no markets; "
+                + f"keeping existing {file_path} (may be stale)"
+            )
+            return
+        document = {str(key): market.model_dump() for key, market in markets.items()}
+        dump(document, file_path)
 
     @abstractmethod
     def add_channel(
@@ -271,26 +229,10 @@ class BaseVenue(
     ) -> None: ...
 
     @abstractmethod
-    def _create_market_data_channel(
-        self, product: ProductT, resolution: Resolution
-    ) -> FullDataChannel: ...
+    def _add_market_data_channel(self, data: MarketData) -> None: ...
 
     @abstractmethod
-    def _create_private_channel(
-        self, channel: PrivateDataChannel
-    ) -> FullDataChannel: ...
-
-    def _add_market_data_channel(
-        self, product: ProductT, resolution: Resolution
-    ) -> None:
-        full_channel: FullDataChannel = self._create_market_data_channel(
-            product, resolution
-        )
-        self.add_channel(full_channel, channel_type="public")
-
-    def _add_private_channel(self, channel: PrivateDataChannel) -> None:
-        full_channel: FullDataChannel = self._create_private_channel(channel)
-        self.add_channel(full_channel, channel_type="private")
+    def _add_private_channels(self) -> None: ...
 
     @classmethod
     def create_product(
@@ -316,11 +258,9 @@ class BaseVenue(
         )
 
     @property
-    def account(self) -> AccountT | None:
+    def account(self) -> AccountT:
         num_accounts = len(self._accounts)
-        if num_accounts < 1:
-            return None
-        elif num_accounts > 1:
+        if num_accounts != 1:
             raise ValueError(f"Expected exactly one account, got {num_accounts}")
         else:
             return list(self._accounts.values())[0]
@@ -337,6 +277,8 @@ class BaseVenue(
             raise ValueError(
                 f"account env {account.env} does not match venue env {self._env}"
             )
+        if account in self._accounts.values():
+            return
         if account.name not in self._accounts:
             self._accounts[account.name] = account
             self._logger.debug(f"added account name={account.name}")
@@ -351,6 +293,8 @@ class BaseVenue(
         return self.products[name]
 
     def add_product(self, product: ProductT) -> None:
+        if product in self._products.values():
+            return
         if product.name not in self._products:
             self._products[product.name] = product
             self.adapter.add_mapping(
@@ -358,16 +302,13 @@ class BaseVenue(
                 internal=product.name,
                 external=product.symbol,
             )
-            self._logger.debug(
-                f"added product name={product.name} symbol={product.symbol}"
-            )
-            try:
-                product.market = self.markets[product.key]
-            except NotSupportedByVenueError:
-                pass
-            except KeyError:
+            self._logger.debug(f"added {product.desc_str()}")
+            if self.METADATA.has_markets and product.market is None:
+                file_path = self._create_markets_yml_file_path()
                 self._logger.error(
-                    f"no market found for product key={product.key} in {self._markets_yml_file_path}"
+                    f"no market found for {product.desc_str()} "
+                    + f"in {file_path}; the product might be delisted, or the file is outdated "
+                    + "- set refetch_markets=True in the venue config to refetch"
                 )
         else:
             raise ValueError(f"product name {product.name} is already registered")
@@ -407,6 +348,11 @@ class BaseVenue(
         if self._queue:
             self._queue.put(update)
         return update
+
+    def get_balances_sync(
+        self, account: AccountT
+    ) -> BalanceUpdate[BalanceSnapshotT] | None:
+        return self._run_async(self.get_balances(account))
 
     @classmethod
     def _build_balance_update(
@@ -451,10 +397,20 @@ class BaseVenue(
         )
 
     # TODO:
-    def get_positions(self, name: AccountName) -> dict[ProductName, PositionT]: ...
+    async def get_positions(
+        self, account: AccountT
+    ) -> dict[ProductName, PositionT]: ...
+
+    def get_positions_sync(self, account: AccountT) -> dict[ProductName, PositionT]:
+        return self._run_async(self.get_positions(account))
 
     # TODO:
-    def get_orders(self, name: AccountName) -> dict[ProductName, list[OrderT]]: ...
+    async def get_orders(
+        self, account: AccountT
+    ) -> dict[ProductName, list[OrderT]]: ...
+
+    def get_orders_sync(self, account: AccountT) -> dict[ProductName, list[OrderT]]:
+        return self._run_async(self.get_orders(account))
 
     def _run_coroutine_threadsafe(
         self,
@@ -473,7 +429,7 @@ class BaseVenue(
 
         kwargs = kwargs or {}
         future: Future[Any] = asyncio.run_coroutine_threadsafe(
-            func(*args, **kwargs), self.loop
+            func(*args, **kwargs), self._loop
         )
         future.add_done_callback(_callback)
 
@@ -498,16 +454,16 @@ class BaseVenue(
             )
 
     def _run_loop(self):
-        asyncio.set_event_loop(self.loop)
-        self.loop.run_forever()  # NOTE: blocking
+        asyncio.set_event_loop(self._loop)
+        self._loop.run_forever()  # NOTE: blocking
 
     def start(self):
         if self._queue is None:
             raise ValueError("Queue not set")
         if self._loop_thread:
             self._loop_thread.start()
-        for channel in self._config.private_channels:
-            self._add_private_channel(PrivateDataChannel[channel.lower()])
+        if self._accounts:
+            self._add_private_channels()
         # TODO
         # if 'start' in self._config.cancel_all_at:
         #     self.cancel_all_orders(reason="start")

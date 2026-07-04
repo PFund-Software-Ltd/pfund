@@ -1,35 +1,46 @@
 from __future__ import annotations
-from typing import TypeAlias
+from typing import Any, TypeAlias, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, GetCoreSchemaHandler
+from pydantic_core import core_schema
 
 from pfund.enums import AllAssetType
+from pfund.datas.resolution import Resolution
 from pfund.datas.timeframe import Timeframe
 
 
 ProductCategory: TypeAlias = str
+ResolutionPeriod: TypeAlias = int
+
+
+class _All:
+    def __contains__(self, item: Any):
+        return isinstance(item, int)
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls, source_type: Any, handler: GetCoreSchemaHandler
+    ) -> core_schema.CoreSchema:
+        # not a validatable/serializable value — just a sentinel; validate by identity of type
+        return core_schema.is_instance_schema(cls)
 
 
 class VenueMetadata(BaseModel):
-    asset_types: list[AllAssetType | str]
-    stream_resolution_periods: (
-        dict[Timeframe, list[int]] | dict[ProductCategory, dict[Timeframe, list[int]]]
-    ) = Field(
-        description="streaming data resolutions supported by the venue's API (e.g. websocket API)"
-    )
-    stream_orderbook_levels: list[int] | dict[ProductCategory, list[int]] = Field(
-        description="Orderbook levels supported by the venue's API (e.g. websocket API)"
-    )
-    requires_asyncio_loop: bool = Field(
+    has_markets: bool = Field(
         default=False,
-        description="""
-        Whether the venue needs a dedicated asyncio event loop in its own thread.
-        True both for native async I/O and for blocking sync REST (e.g. Alpaca)
-        that must be offloaded via loop.run_in_executor to avoid
-        blocking the engine.
-        False only for non-blocking sync APIs (e.g. IBKR's socket),
-        which can be called directly and need no loop.
-        """,
+        description="Whether the venue supports get_markets(), which returns a list of all available markets",
+    )
+    asset_types: list[AllAssetType | str]
+    supported_resolutions: (
+        dict[Resolution | Timeframe, list[ResolutionPeriod] | _All]
+        | dict[
+            ProductCategory, dict[Resolution | Timeframe, list[ResolutionPeriod] | _All]
+        ]
+    ) = Field(
+        description=(
+            "streaming resolutions supported by the venue's API. Absent key = not supported. "
+            + "Value = supported periods for that resolution, or _All for any period."
+        )
     )
     support_place_batch_orders: bool = False
     support_cancel_batch_orders: bool = False

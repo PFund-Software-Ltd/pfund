@@ -50,6 +50,4 @@ class Binance(
     Product: ClassVar[type[BinanceProduct]] = BinanceProduct
     Position: ClassVar[type[BinancePosition]] = BinancePosition
 
-    METADATA: ClassVar[VenueMetadata] = VenueMetadata(
-        requires_asyncio_loop=True,
-    )
+    METADATA: ClassVar[VenueMetadata] = VenueMetadata()

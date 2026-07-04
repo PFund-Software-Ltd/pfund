@@ -34,21 +34,17 @@ from collections import defaultdict
 
 from msgspec import json
 from websockets.asyncio.client import ClientConnection as WebSocket
-from pfund_kit.utils import classproperty
 
 from pfund.errors import WebSocketTimeoutError
 from pfund.enums import Environment, TradingVenue, DataChannelType, PrivateDataChannel
-
-
-AccountT = TypeVar("AccountT", bound="BaseAccount")
-ProductT = TypeVar("ProductT", bound="BaseProduct")
+from pfund.venues.venue_base import ConfigT, AccountT, ProductT
 
 
 class NamedWebSocket(WebSocket):
     name: str  # pyright: ignore[reportUninitializedInstanceVariable]
 
 
-class BaseWebSocketAPI(ABC, Generic[AccountT, ProductT]):
+class BaseWebSocketAPI(ABC, Generic[ConfigT, AccountT, ProductT]):
     venue: ClassVar[TradingVenue]
     _signer: ClassVar[CryptoExchangeSigner[Any]]
 
@@ -65,22 +61,14 @@ class BaseWebSocketAPI(ABC, Generic[AccountT, ProductT]):
     def __init__(
         self,
         env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"],
-        data_mode: bool = False,
+        config: ConfigT | None = None,
     ):
-        """
-        Args:
-            env: The environment to use (PAPER, or LIVE).
-            data_mode: Whether this ws is for receiving public data only.
-                if True, logger will be set to pfeed's logger and accounts cannot be added.
-        """
         self._env = Environment[env.upper()]
         if self._env.is_simulated():
             raise ValueError(f"environment {self._env} is not supported")
-        self._data_mode = data_mode
-        if data_mode:
-            self._logger = logging.getLogger(f"pfeed.{self.venue.lower()}")
-        else:
-            self._logger = logging.getLogger(f"pfund.{self.venue.lower()}")
+        self._logger = logging.getLogger(f"pfund.{self.venue.lower()}")
+        self._config: ConfigT = config or cast(ConfigT, self.venue.venue_class.Config())
+
         self._callback: (
             Callable[[WebSocketName, RawMessage | ResponseData], Awaitable[None] | None]
             | None
@@ -107,9 +95,9 @@ class BaseWebSocketAPI(ABC, Generic[AccountT, ProductT]):
     def env(self) -> Literal[Environment.PAPER, Environment.LIVE]:
         return cast(Literal[Environment.PAPER, Environment.LIVE], self._env)
 
-    @classproperty
-    def adapter(cls) -> BaseAdapter:
-        return cls.venue.venue_class.adapter
+    @property
+    def adapter(self) -> BaseAdapter:
+        return self.venue.venue_class.adapter
 
     def _set_queue(self, queue: queue.Queue[Any]) -> None:
         self._queue = queue
@@ -151,8 +139,6 @@ class BaseWebSocketAPI(ABC, Generic[AccountT, ProductT]):
         pass
 
     def _create_private_channel(self, channel: PrivateDataChannel) -> FullDataChannel:
-        if self._data_mode:
-            raise ValueError("private channels cannot be created in data mode")
         channel = PrivateDataChannel[channel.lower()]
         return str(self.adapter(channel, group="channels"))
 
@@ -169,10 +155,6 @@ class BaseWebSocketAPI(ABC, Generic[AccountT, ProductT]):
     @staticmethod
     def _convert_ms_to_seconds(ms: int | str) -> float:
         return int(ms) / 1000
-
-    @classmethod
-    def _convert_channel(cls, channel: str) -> str:
-        return cls.adapter(channel, group="channels")
 
     def set_callback(
         self,
@@ -194,25 +176,22 @@ class BaseWebSocketAPI(ABC, Generic[AccountT, ProductT]):
         return self.URLS[self.env][DataChannelType[channel_type.lower()]]
 
     def add_account(self, account: AccountT) -> None:
-        if self._data_mode:
-            raise ValueError("accounts cannot be added in data mode")
         if account.env != self.env:
             raise ValueError(
                 f"account env {account.env} does not match websocket env {self.env}"
             )
+        if account in self._accounts.values():
+            return
         if account.name not in self._accounts:
             self._accounts[account.name] = account
         else:
             raise ValueError(f"account name {account.name} has already been registered")
 
     def add_product(self, product: ProductT) -> None:
+        if product in self._products.values():
+            return
         if product.name not in self._products:
             self._products[product.name] = product
-            self.adapter.add_mapping(
-                group=self._create_ws_name(),
-                internal=product.name,
-                external=product.symbol,
-            )
         else:
             raise ValueError(f"product name {product.name} has already been registered")
 

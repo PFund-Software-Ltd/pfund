@@ -41,13 +41,23 @@ class InteractiveBrokersAccount(BaseAccount):
         super().__init__(env=env, venue=TradingVenue.IBKR, name=name)
         dotenv = DotenvStore(env=self._env)
         self._host: str = host or dotenv.get(f"{self.venue}_HOST") or self.DEFAULT_HOST
-        self._port = (
-            port
-            or dotenv.get(f"{self.venue}_{self._env}_PORT")
-            or self.DEFAULT_PORTS.get(self._env)
-        )
+        self._port = port or dotenv.get(f"{self.venue}_{self._env}_PORT")
         if self._port:
             self._port = int(self._port)
+        else:
+            if default_port := self.DEFAULT_PORTS.get(self._env):
+                self._port = default_port
+                warnings.warn(
+                    f"{self.venue} port not set, using default port {default_port}\n"
+                    + f"set env var `{self.venue}_{self._env}_PORT` in .env.{self._env.lower()} file, "
+                    + "or strategy.add_account(..., port=...) to assign it.\n"
+                    + "You can find your socket port in Trader Workstation (TWS):\n"
+                    + "    Settings icon (top right) -> API -> Settings -> Socket port\n"
+                    + "or in IB Gateway:\n"
+                    + "    Configure -> Settings -> API -> Settings -> Socket port",
+                    category=UserWarning,
+                    stacklevel=2,
+                )
 
         self._client_id = client_id or dotenv.get(f"{self.venue}_CLIENT_ID")
         if self._client_id:

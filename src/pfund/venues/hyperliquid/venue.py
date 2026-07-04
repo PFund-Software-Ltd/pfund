@@ -49,6 +49,4 @@ class Hyperliquid(
     Product: ClassVar[type[HyperliquidProduct]] = HyperliquidProduct
     Position: ClassVar[type[HyperliquidPosition]] = HyperliquidPosition
 
-    METADATA: ClassVar[VenueMetadata] = VenueMetadata(
-        requires_asyncio_loop=True,
-    )
+    METADATA: ClassVar[VenueMetadata] = VenueMetadata()

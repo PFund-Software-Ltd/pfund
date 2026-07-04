@@ -32,6 +32,7 @@ class BybitProduct(BaseProduct):
     def category(self) -> Category:
         return self._derive_product_category()
 
+    @override
     def _create_name(self) -> str:
         if self.is_crypto() or self.is_perpetual():
             # NOTE: spots and perpetuals have duplicated symbols, e.g. BTCUSDT, use basis instead to make them unique

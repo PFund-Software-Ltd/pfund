@@ -14,13 +14,14 @@ from decimal import Decimal
 from http import HTTPMethod
 
 from pfund.venues.bybit.signer import BybitSigner
+from pfund.venues.bybit.config import BybitConfig
 from pfund.venues.bybit.product import BybitProduct
 from pfund.venues._apis.typing import Endpoint, EndpointName
 from pfund.venues._apis.rest_api_base import BaseRestAPI
 from pfund.enums import TradingVenue, CryptoAssetType, Environment, OptionType
 
 
-class BybitRestAPI(BaseRestAPI):
+class BybitRestAPI(BaseRestAPI[BybitConfig]):
     venue: ClassVar[TradingVenue] = TradingVenue.BYBIT
     _signer: ClassVar[BybitSigner] = BybitSigner()
     VERSION: ClassVar[str | None] = "v5"

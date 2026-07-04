@@ -1,3 +1,4 @@
+# pyright: reportAttributeAccessIssue=false
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -11,7 +12,7 @@ from decimal import Decimal
 class DerivativeMixin:
     underlying: str = ""
     # TODO: information that requires data fetching or config loading
-    multiplier: Decimal = Decimal(1)
+    multiplier: Decimal | None = None
 
     # contract_unit: str | None = None  # e.g. barrels
     # notional: Decimal | None = None

@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypedDict, ClassVar
 
 if TYPE_CHECKING:
+    from pfund.venues.adapter_base import BaseAdapter
     from pfund.entities import BaseProduct, BaseAccount
     from pfund.enums import TradingVenue
 
@@ -84,6 +85,15 @@ class BaseOrder(BaseModel):
         market moves (by the venue natively, or by the simulator in backtest).
         """,
     )
+    trigger_direction: Literal["up", "down"] | None = Field(
+        default=None,
+        description="""
+        REQUIRED for STOP_MARKET/STOP_LIMIT (a trailing stop is exempt — it derives
+        direction from side). Which way the market must move to fire the trigger:
+          'up'   = fire when price RISES to trigger_price
+          'down' = fire when price FALLS to trigger_price
+        """,
+    )
     trailing_stop: TrailingStop | None = Field(
         default=None,
         description="""
@@ -101,7 +111,15 @@ class BaseOrder(BaseModel):
         e.g. the gap between the fill (avg_price) and target_price measures fill quality
         """,
     )
-    order_type: OrderType | str = OrderType.LIMIT
+    order_type: OrderType | str = Field(
+        default=OrderType.LIMIT,
+        description="""
+        LIMIT/MARKET: plain resting-limit / immediate-market orders.
+        STOP_MARKET/STOP_LIMIT: conditional orders that stay dormant until
+        trigger_price is touched (in the trigger_direction), then fire as a
+        MARKET / LIMIT order respectively.
+        """,
+    )
     time_in_force: TimeInForce | str = TimeInForce.GTC
     key: OrderKey = Field(
         default="",
@@ -112,7 +130,14 @@ class BaseOrder(BaseModel):
         """,
     )
     order_id: str = Field(default="", description="order id given by the trading venue")
-    reduce_only: bool = False
+    post_only: bool = Field(
+        default=False,
+        description="Only add liquidity as a maker; reject/cancel if the order would immediately match (take liquidity).",
+    )
+    reduce_only: bool = Field(
+        default=False,
+        description="Only reduce an existing position; never open, increase, or flip it. Excess size is trimmed or cancelled.",
+    )
     remark: str = ""
 
     def model_post_init(self, __context: Any):
@@ -147,17 +172,33 @@ class BaseOrder(BaseModel):
 
     @field_validator("order_type", mode="before")
     @classmethod
-    def _validate_order_type(cls, value: Any) -> OrderType:
+    def _validate_order_type(cls, value: Any) -> OrderType | str:
         if isinstance(value, str):
-            return OrderType[value.upper()]
-        raise ValueError(f"Invalid order_type: {value}")
+            return OrderType.__members__.get(value.upper(), value)
+        return value
 
     @field_validator("time_in_force", mode="before")
     @classmethod
-    def _validate_time_in_force(cls, value: Any) -> TimeInForce:
+    def _validate_time_in_force(cls, value: Any) -> TimeInForce | str:
         if isinstance(value, str):
-            return TimeInForce[value.upper()]
-        raise ValueError(f"Invalid time_in_force: {value}")
+            return TimeInForce.__members__.get(value.upper(), value)
+        return value
+
+    @model_validator(mode="after")
+    def _validate_trigger_price(self) -> BaseOrder:
+        # a trailing stop produces trigger_price and derives direction from side,
+        # so it's exempt here (handled by _validate_trailing_stop instead)
+        if self.is_stop() and self.trailing_stop is None:
+            if self.trigger_price is None:
+                raise ValueError(
+                    f"trigger_price is required for order_type {self.order_type}"
+                )
+            if self.trigger_direction is None:
+                raise ValueError(
+                    "trigger_direction ('up'/'down') is required for order_type "
+                    + f"{self.order_type}; pfund never infers it from a reference price"
+                )
+        return self
 
     @model_validator(mode="after")
     def _validate_trailing_stop(self) -> BaseOrder:
@@ -224,6 +265,10 @@ class BaseOrder(BaseModel):
             raise ValueError(f"Invalid rounding mode: {rounding}")
         return trim_trailing_zeros(adj_steps * tick_size)
 
+    @property
+    def adapter(self) -> BaseAdapter:
+        return self.venue.venue_class.adapter
+
     @computed_field
     @property
     def size(self) -> Quantity:
@@ -276,6 +321,10 @@ class BaseOrder(BaseModel):
     @property
     def trigger_px(self) -> Decimal | None:
         return self.trigger_price
+
+    @property
+    def trigger_dir(self) -> Literal["up", "down"] | None:
+        return self.trigger_direction
 
     @property
     def target_px(self) -> Decimal | None:
@@ -338,6 +387,9 @@ class BaseOrder(BaseModel):
     @property
     def id(self):
         return self.order_id
+
+    def is_stop(self) -> bool:
+        return self.order_type in (OrderType.STOP_LIMIT, OrderType.STOP_MARKET)
 
     def is_traded(self) -> bool:
         return bool(self.trades)

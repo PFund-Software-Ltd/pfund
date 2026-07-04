@@ -43,7 +43,6 @@ class BybitAdapter(BaseAdapter):
         "C-C-": "Cancelled",
     }
     order_types: dict[OrderType, ExternalName] = {
-        # EXTEND: stop order
         OrderType.LIMIT: "Limit",
         OrderType.MARKET: "Market",
     }
@@ -56,6 +55,8 @@ class BybitAdapter(BaseAdapter):
         DataChannel.tradebook: "publicTrade",
         DataChannel.candlestick: "kline",
         DataChannel.balance: "wallet",
+        DataChannel.position: "position",
+        DataChannel.order: "order",
         DataChannel.trade: "execution",
     }
     channel_resolutions: dict[Resolution | str, ExternalName] = {

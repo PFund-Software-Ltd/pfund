@@ -4,6 +4,7 @@ from pfund.enums.asset_type import (
     AssetTypeModifier,
     CryptoAssetType,
     TraditionalAssetType,
+    PredictionMarketAssetType,
 )
 from pfund.enums.backtest_mode import BacktestMode
 from pfund.enums.component_type import ComponentType, ModelComponentType
@@ -53,6 +54,7 @@ __all__ = [
     "TimeInForce",
     "TradingVenue",
     "TraditionalAssetType",
+    "PredictionMarketAssetType",
     "PositionMode",
     "MarginMode",
 ]

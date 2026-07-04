@@ -1,192 +1,160 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal, Any, cast
 
 if TYPE_CHECKING:
-    from pfund.entities import BaseProduct, BaseOrder, BaseAccount
-    from pfund.datas.data_time_based import TimeBasedData
-    from pfund.typing import AccountName, Currency, FullDataChannel
-    from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
+    from pfund.typing import FullDataChannel
+    from pfund.datas.data_market import MarketData
+    from ibapi.contract import Contract, ContractDetails
 
-from abc import ABC
+import queue
 
-from pfund_kit.utils.text import to_uppercase
-
-from pfund.enums import (
-    Environment,
-    DataChannel,
-    TradingVenue,
-)
+from pfund.datas.resolution import Resolution
+from pfund.datas.timeframe import Timeframe
+from pfund.venues.venue_metadata import VenueMetadata, _All
 from pfund.venues.venue_base import BaseVenue
-from pfund.venues.ibkr.order import InteractiveBrokersOrder
-from pfund.venues.ibkr.product import InteractiveBrokersProduct
+from pfund.enums import (
+    PrivateDataChannel,
+    TraditionalAssetType,
+    PredictionMarketAssetType,
+    TradingVenue,
+    Environment,
+)
+from pfund.venues.ibkr.api import InteractiveBrokersAPI
+from pfund.venues.ibkr.adapter import InteractiveBrokersAdapter
+from pfund.venues.ibkr.config import InteractiveBrokersConfig
+from pfund.venues.ibkr.market import InteractiveBrokersMarket
 from pfund.venues.ibkr.account import InteractiveBrokersAccount
 from pfund.venues.ibkr.balance import InteractiveBrokersBalance
+from pfund.venues.ibkr.order import InteractiveBrokersOrder
+from pfund.venues.ibkr.product import InteractiveBrokersProduct
 from pfund.venues.ibkr.position import InteractiveBrokersPosition
 
 
-class InteractiveBrokers(BaseVenue, ABC):
+ALL_DEPTHS = _All()
+
+
+class InteractiveBrokers(
+    BaseVenue[
+        InteractiveBrokersConfig,
+        InteractiveBrokersMarket,
+        InteractiveBrokersAccount,
+        InteractiveBrokersProduct,
+        InteractiveBrokersOrder,
+        InteractiveBrokersBalance,
+        InteractiveBrokersBalance.Snapshot,
+        InteractiveBrokersPosition,
+        InteractiveBrokersPosition.Snapshot,
+    ],
+):
     name: ClassVar[TradingVenue] = TradingVenue.IBKR
-    Order: ClassVar[type[BaseOrder]] = InteractiveBrokersOrder
+    adapter: ClassVar[InteractiveBrokersAdapter] = InteractiveBrokersAdapter()
+
+    Config: ClassVar[type[InteractiveBrokersConfig]] = InteractiveBrokersConfig
+    Market: ClassVar[type[InteractiveBrokersMarket]] = InteractiveBrokersMarket
+    Account: ClassVar[type[InteractiveBrokersAccount]] = InteractiveBrokersAccount
+    Balance: ClassVar[type[InteractiveBrokersBalance]] = InteractiveBrokersBalance
+    Order: ClassVar[type[InteractiveBrokersOrder]] = InteractiveBrokersOrder
+    Product: ClassVar[type[InteractiveBrokersProduct]] = InteractiveBrokersProduct
+    Position: ClassVar[type[InteractiveBrokersPosition]] = InteractiveBrokersPosition
+
+    METADATA: ClassVar[VenueMetadata] = VenueMetadata(
+        has_markets=False,
+        asset_types=[*list(TraditionalAssetType), PredictionMarketAssetType.OUTCOME],
+        supported_resolutions={
+            Resolution(
+                "QUOTE_L2"
+            ): ALL_DEPTHS,  # all depths as long as it is an interger
+            Resolution("QUOTE_L1"): [1],
+            Timeframe.TICK: [1],
+            Timeframe.SECOND: [5],
+        },
+    )
 
     def __init__(
-        self, env: Environment | str, settings: TradeEngineSettings | None = None
+        self,
+        env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"],
+        config: InteractiveBrokersConfig | None = None,
     ):
-        from pfund.venues.ibkr.api import InteractiveBrokersAPI
+        super().__init__(env=env, config=config)
+        self.api = InteractiveBrokersAPI(env=self.env, config=config)
 
-        super().__init__(env)
-        # self.api = InteractiveBrokersAPI(self._env)
+    def _set_queue(self, queue: queue.Queue[Any]) -> None:
+        super()._set_queue(queue)
+        self.api._set_queue(queue)
 
-    def get_markets(self) -> dict[ProductKey, IBKRMarket]:
-        """IB has no get_markets endpoint, returns an empty dict."""
-        return {}
+    def add_product(self, product: InteractiveBrokersProduct) -> None:
+        super().add_product(product)
+        self.api.add_product(product)
+
+    def add_account(self, account: InteractiveBrokersAccount) -> None:
+        super().add_account(account)
+        self.api.add_account(account)
+
+    def add_channel(
+        self,
+        channel: FullDataChannel,
+        *,
+        channel_type: Literal["public", "private"] = "public",
+    ) -> None:
+        self.api.add_channel(channel, channel_type=channel_type)
+
+    def _add_market_data_channel(self, data: MarketData) -> None:
+        full_channel: FullDataChannel = self.api._create_market_data_channel(
+            cast("InteractiveBrokersProduct", data.product),
+            data.resolution,
+        )
+        self.add_channel(full_channel, channel_type="public")
+
+    def _add_private_channels(self) -> None:
+        for channel in list(PrivateDataChannel) + list(
+            self.api.DEFAULT_PRIVATE_CHANNELS
+        ):
+            full_channel: FullDataChannel = self.api._create_private_channel(channel)
+            self.add_channel(full_channel, channel_type="private")
+
+    async def get_contract_details(
+        self,
+        product: InteractiveBrokersProduct | None = None,
+        contract: Contract | None = None,
+    ) -> list[ContractDetails]:
+        if product is None and contract is None:
+            raise ValueError("either product or contract must be provided")
+        elif product is not None and contract is None:
+            contract = product.to_contract()
+        result: list[ContractDetails] = await self.api.get_contract_details(contract)  # pyright: ignore[reportArgumentType]
+        return result
+
+    def get_contract_details_sync(
+        self,
+        product: InteractiveBrokersProduct | None = None,
+        contract: Contract | None = None,
+    ) -> None:
+        return self._run_async(
+            self.get_contract_details(product=product, contract=contract)
+        )
+
+    # TODO
+    # wallet: 'TotalCashBalance',
+    # available: 'AvailableFunds',
+    # margin: 'EquityWithLoanValue',
+    # TODO: reuse the account summary channel and the same parsing in api
+    async def _get_balances(self, account: InteractiveBrokersAccount) -> Result:
+        pass
+
+    def start(self):
+        super().start()
+        self.api.connect(self.account)
+
+    def stop(self):
+        self.api.disconnect(reason="venue stopped")
+        super().stop()
 
     # async def place_orders(self, ...):
     #     resp = await self._loop.run_in_executor(
     #         None,                                    # None = default ThreadPoolExecutor
     #         lambda: requests.post(url, json=payload) # a *sync* callable
     #     )
-
-    # def _add_default_private_channels(self):
-    #     for channel in list(PrivateDataChannel.__members__) + [
-    #         "account_update",
-    #         "account_summary",
-    #     ]:
-    #         self.add_private_channel(channel)
-
-    # def add_public_channel(
-    #     self,
-    #     channel: DataChannel | FullDataChannel,
-    #     data: TimeBasedData | None = None,
-    # ):
-    #     if channel.lower() in DataChannel.__members__:
-    #         assert data is not None, "data object is required for public channels"
-    #         channel: FullDataChannel = self._api._create_public_channel(
-    #             data.product, data.resolution
-    #         )
-    #     self._api.add_channel(channel, channel_type="public")
-
-    # def add_private_channel(self, channel: PrivateDataChannel | FullDataChannel):
-    #     if channel.lower() in PrivateDataChannel.__members__:
-    #         channel: FullDataChannel = self._api._create_private_channel(channel)
-    #     self._api.add_channel(channel, channel_type="private")
-
-    # def add_account(
-    #     self,
-    #     venue: TradingVenue,
-    #     name: AccountName = "",
-    #     host: str = "",
-    #     port: int | None = None,
-    #     client_id: int | None = None,
-    # ) -> InteractiveBrokersAccount:
-    # TODO: check if requires real connection (in SANDBOX trading, check if its using real data)
-    # if self._requires_real_connection():
-    # if account.port is None:
-    # raise ValueError(
-    #     f"{self.venue} port must be provided, please set "
-    #     + f"`{self.venue}_{self._env}_PORT` in .env.{self._env.lower()} file, "
-    #     + "or in strategy.add_account(..., port=...).\n"
-    #     + "You can find your default socket port in Trader Workstation (TWS):\n"
-    #     + "    Settings icon (top right) -> API -> Settings -> Socket port\n"
-    #     + "or in IB Gateway:\n"
-    #     + "    Configure -> Settings -> API -> Settings -> Socket port"
-    # )
-    # TODO: when its sandbox trading, suppress the warning of auto-assigned client_id
-    #     if name not in self.accounts:
-    #         account = InteractiveBrokersAccount(
-    #             env=self._env, name=name, host=host, port=port, client_id=client_id
-    #         )
-    #         self.accounts[account.name] = account
-    #         self.account = account
-    #         self._api.add_account(account)
-    #     else:
-    #         raise ValueError(f"account name {name} has already been added")
-    #         # FIXME
-    #         # if account.name != name.upper():
-    #         #     raise Exception(f'Only one primary account is supported and account {self.account} is already set up')
-    #     return account
-
-    # def get_product(self, name: ProductName, exch: str = "") -> InteractiveBrokersProduct:
-    #     if exch:
-    #         return self._products[exch.upper()][name]
-    #     else:
-    #         products = [
-    #             _name
-    #             for _exch in self._products
-    #             for _name in self._products[_exch]
-    #             if _name == name
-    #         ]
-    #         if len(products) == 1:
-    #             return products[0]
-    #         else:
-    #             raise ValueError(
-    #                 f"product name {name} has multiple products across exchanges, please specify `exch`"
-    #             )
-
-    # def add_product(
-    #     self,
-    #     basis: str,
-    #     exch: str = "",
-    #     name: ProductName = "",
-    #     symbol: str = "",
-    #     **specs,
-    # ) -> InteractiveBrokersProduct:
-    #     product: InteractiveBrokersProduct = self.create_product(
-    #         basis, exch=exch, name=name, symbol=symbol, **specs
-    #     )
-    #     if product.name not in self._products[product.exchange]:
-    #         # TODO: no market configs to load, get from reqContractDetails()
-    #         # market_configs = self.load_market_configs()
-    #         # if product.symbol not in market_configs[product.category]:
-    #         #     raise ValueError(
-    #         #         f"The symbol '{product.symbol}' is not found in the market configurations. "
-    #         #         f"It might be delisted, or your market configurations could be outdated. "
-    #         #         f"Please set 'refetch_markets=True' in TradeEngine's settings to refetch the latest market configurations."
-    #         #     )
-    #         self._products[product.exchange][product.name] = product
-    #         self._api.add_product(product)
-    #         self.adapter.add_mapping(str(product.type), product.name, product.symbol)
-    #     else:
-    #         existing_product: InteractiveBrokersProduct = self.get_product(
-    #             product.name, exch=product.exchange
-    #         )
-    #         # assert products are the same with the same name
-    #         if existing_product == product:
-    #             product = existing_product
-    #         else:
-    #             raise ValueError(
-    #                 f"product name {name} has already been used for {existing_product}"
-    #             )
-    #     return product
-
-    # def add_balance(
-    #     self, _: TradingVenue, acc: AccountName, ccy: Currency
-    # ) -> InteractiveBrokersBalance | None:
-    #     acc, ccy = to_uppercase(acc, ccy)
-    #     if not (balance := self.get_balances(acc=acc, ccy=ccy)):
-    #         account = self.get_account(acc)
-    #         balance = InteractiveBrokersBalance(account, ccy)
-    #         self._portfolio_manager.add_balance(balance)
-    #         self._logger.debug(f"added {balance=}")
-    #     return balance
-
-    # def add_position(self, exch: str, acc: str, pdt: str) -> InteractiveBrokersPosition | None:
-    #     exch, acc, pdt = to_uppercase(exch, acc, pdt)
-    #     if not (position := self.get_positions(exch=exch, acc=acc, pdt=pdt)):
-    #         account = self.get_account(acc)
-    #         product = self.add_product(exch, pdt)
-    #         position = InteractiveBrokersPosition(account, product)
-    #         self._portfolio_manager.add_position(position)
-    #         self._logger.debug(f"added {position=}")
-    #     return position
-
-    # def add_order(self, exch: str, acc: str, pdt: str) -> InteractiveBrokersOrder | None:
-    #     exch, acc, pdt = to_uppercase(exch, acc, pdt)
-    #     if not (order := self.get_orders(acc)):
-    #         product = self.add_product(exch, pdt)
-    #         order = InteractiveBrokersOrder(self._env, acc, product)
-    #         self.orders[acc][order.oid] = order
-    #     return order
 
     # # TODO
     # def get_orders(self, acc: str = "", pdt: str = "") -> dict | InteractiveBrokersOrder:
@@ -208,29 +176,6 @@ class InteractiveBrokers(BaseVenue, ABC):
     #         pdt: product name.
     #     """
     #     return orders
-
-    # def get_balances(
-    #     self, venue: TradingVenue, acc: str = "", ccy: str = ""
-    # ) -> dict | InteractiveBrokersBalance:
-    #     """Gets balances from an IB account.
-    #     Account name `acc` will be automatically filled using the primary account if not provided.
-    #     Therefore, `acc` is always non-empty
-    #     Case 1: empty `ccy`
-    #         returns balances for that specific account
-    #     Case 2: non-empty `ccy`
-    #         returns balance for that specific currency
-
-    #     Args:
-    #         acc: account name. If empty, use primary account by default.
-    #         ccy: currency name.
-    #     """
-    #     acc, ccy = to_uppercase(acc, ccy)
-    #     if not acc:
-    #         acc = self.account.acc
-    #     balances = self.balances[acc]
-    #     if ccy:
-    #         balances = balances[ccy]
-    #     return balances
 
     # def get_positions(
     #     self, exch: str = "", acc: str = "", pdt: str = ""

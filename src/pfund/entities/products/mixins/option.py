@@ -1,3 +1,4 @@
+# pyright: reportAttributeAccessIssue=false, reportUninitializedInstanceVariable=false
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -15,7 +16,7 @@ from pfund.enums.option_type import OptionType
 from pfund.utils import trim_trailing_zeros
 
 
-# TODO: how to add Greeks? get from broker?
+# TODO: add Greeks
 class OptionMixin(DerivativeMixin):
     expiration: date
     strike_price: Decimal = Field(ge=0.0)

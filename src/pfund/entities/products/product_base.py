@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, ClassVar, NamedTuple
+from typing import Any, ClassVar, NamedTuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pfund_kit.utils.yaml import YAMLDocument
+
+from pathlib import Path
 
 from pfeed.enums import DataSource
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -15,12 +20,13 @@ class ProductKey(NamedTuple):
     symbol: str
     asset_type: AssetType
 
+    def __str__(self) -> str:
+        return f"{self.symbol}.{self.asset_type.value}"
+
 
 class BaseProduct(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(
-        arbitrary_types_allowed=True,
-        validate_assignment=True,
-        extra="forbid",
+        arbitrary_types_allowed=True, extra="forbid"
     )
 
     source: DataSource
@@ -92,10 +98,11 @@ class BaseProduct(BaseModel):
         if hasattr(self, "__mixin_post_init__"):
             self.__mixin_post_init__()  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
         self.specs = self._create_specs()
-        self.symbol = self._create_symbol()
         self.name = self.name or self._create_name()
+        self.symbol = self.symbol or self._create_symbol()
         if self.venue is None and self.source in TradingVenue.__members__:
             self.venue = TradingVenue[self.source]
+        self.market = self._load_market()
 
     @property
     def key(self) -> ProductKey:
@@ -107,6 +114,22 @@ class BaseProduct(BaseModel):
     # Override this method to customize the symbol creation logic
     def _create_symbol(self) -> str:
         return self.symbol
+
+    def _load_market(self, file_path: Path | None = None) -> BaseMarket | None:
+        from pfund_kit.utils.yaml import load
+
+        if self.venue is None:
+            return None
+        VenueClass = self.venue.venue_class
+        if file_path is None:
+            file_path = VenueClass._create_markets_yml_file_path()
+        if not file_path.exists():
+            return None
+        document: YAMLDocument = load(file_path) or {}
+        market_data = document.get(str(self.key))  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
+        if market_data is None:
+            return None
+        return VenueClass.Market(**market_data)  # pyright: ignore[reportUnknownArgumentType]
 
     @property
     def base_asset(self) -> str:
@@ -206,12 +229,16 @@ class BaseProduct(BaseModel):
 
         return isinstance(self, DerivativeMixin)
 
+    def desc_str(self):
+        return f"{self.source} product name={self.name} symbol={self.symbol}"
+
     def __str__(self):
         return "|".join(
             [
                 f"source={self.source}",
                 f"basis={self.basis}",
                 f"name={self.name}",
+                f"symbol={self.symbol}",
                 *[f"{k}={v}" for k, v in sorted(self.specs.items())],
             ]
         )

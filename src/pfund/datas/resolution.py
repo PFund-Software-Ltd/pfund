@@ -20,7 +20,13 @@ class Resolution:
         from pydantic_core import core_schema
 
         def _validate(value: Resolution | str) -> Resolution:
-            return value if isinstance(value, Resolution) else cls(value)
+            if isinstance(value, Resolution):
+                return value
+            if isinstance(value, str):
+                return cls(value)
+            # decline non-str (e.g. a Timeframe) so a `Resolution | Timeframe` union
+            # falls through to its other arm instead of mis-coercing here
+            raise ValueError(f"cannot coerce {type(value).__name__} to Resolution")
 
         return core_schema.no_info_plain_validator_function(
             _validate,
