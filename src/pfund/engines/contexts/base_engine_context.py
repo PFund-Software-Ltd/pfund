@@ -1,11 +1,12 @@
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, TypedDict
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     import datetime
 
+    from pfund.engines.base_engine import DataRangeDict
     from pfund.engines.settings.base_engine_settings import BaseEngineSettings
     from pfund.config import PFundConfig
     from pfund.engines.component_registry import RegistryProxy
@@ -18,12 +19,7 @@ from pfund.engines.component_registry import ComponentRegistry
 from pfund.enums import Environment, RunMode
 
 
-class DataRangeDict(TypedDict, total=False):
-    start_date: str
-    end_date: str
-
-
-class EngineContext:
+class BaseEngineContext:
     DEFAULT_PROJECT_NAME = "default_project"
     DEFAULT_RUN_NAME = "default_run"
 
@@ -36,7 +32,7 @@ class EngineContext:
     ):
         import pfeed as pe
 
-        self.env = env
+        self.env = Environment[env.upper()]
         self.name = name
         self.run_mode = self._detect_run_mode()
         self.project_name = self.DEFAULT_PROJECT_NAME

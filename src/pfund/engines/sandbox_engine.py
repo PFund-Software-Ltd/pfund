@@ -1,22 +1,23 @@
 # pyright: reportIncompatibleVariableOverride=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Literal, cast, ClassVar
 from typing_extensions import override
 
 if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
     from pfund.venues.venue_config import VenueConfig
     from pfund.venues.venue_simulated import SimulatedVenue
-    from pfund.engines.engine_context import DataRangeDict
-    from pfund.engines.settings.sandbox_engine_settings import SandboxEngineSettings
+    from pfund.engines.base_engine import DataRangeDict
 
 from pfund.engines.trade_engine import TradeEngine
 from pfund.enums import Environment, TradingVenue
+from pfund.engines.settings.sandbox_engine_settings import SandboxEngineSettings
+from pfund.engines.contexts.sandbox_engine_context import SandboxEngineContext
 
 
-class SandboxEngine(TradeEngine):
-    settings: SandboxEngineSettings
+class SandboxEngine(TradeEngine[SandboxEngineSettings, SandboxEngineContext]):
+    Context: ClassVar[type[SandboxEngineContext]] = SandboxEngineContext
 
     def __init__(
         self,

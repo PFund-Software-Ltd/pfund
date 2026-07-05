@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.entities.products.product_base import BaseProduct
     from pfund.typing import ComponentT
-    from pfund.utils.dataset_splitter import (
+    from pfund._backtest.dataset_splitter import (
         CrossValidatorDatasetPeriods,
         DatasetPeriods,
     )
@@ -180,7 +180,7 @@ class BacktestMixin:
 
     @property
     def backtest_mode(self) -> BacktestMode:
-        return self.settings.backtest_mode
+        return self._context.mode
 
     # FIXME
     @property

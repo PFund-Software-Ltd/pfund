@@ -1,11 +1,19 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportArgumentType=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    cast,
+    TypeVar,
+    Generic,
+    TypedDict,
+    ClassVar,
+)
 
 if TYPE_CHECKING:
     from mtflow.contexts.base_context import BaseContext
-    from pfeed.sources.pfund.engine_feed import PFundEngineFeed
 
     from pfund.components.actor_proxy import ActorProxy
     from pfund.venues.venue_base import AnyVenue
@@ -14,10 +22,14 @@ if TYPE_CHECKING:
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_market import MarketData
     from pfund.datas.resolution import Resolution
-    from pfund.engines.engine_context import DataRangeDict
     from pfund.engines.settings.base_engine_settings import BaseEngineSettings
     from pfund.entities import BaseAccount, BaseProduct
     from pfund.typing import StrategyT, ComponentName
+
+    class DataRangeDict(TypedDict, total=False):
+        start_date: str
+        end_date: str
+
 
 import logging
 
@@ -32,31 +44,19 @@ from pfund.enums import (
     TradingVenue,
     RunMode,
 )
+from pfund.engines.contexts.base_engine_context import BaseEngineContext
 
 
-class BaseEngine(metaclass=SingletonMeta):
-    def __init__(
-        self,
-        *,
-        env: Environment,
-        name: str,
-        data_range: str | Resolution | DataRangeDict | tuple[str, str] | Literal["ytd"],
-        settings: BaseEngineSettings | None = None,
-    ):
-        """
-        Args:
-            name: engine name
-            data_range: range of data to be used for the engine,
-                when it is a string, it is a resolution, e.g. '1m', '1d', '1w', '1mo', '1y'
-                when it is a dict, it is a dict with keys 'start_date' and 'end_date',
-                    e.g. {'start_date': '2024-01-01', 'end_date': '2024-12-31'}
-                when it is a tuple, it is (start_date, end_date),
-                    e.g. ('2024-01-01', '2024-12-31')
-        """
-        import pfeed as pe
+SettingsT = TypeVar("SettingsT", bound="BaseEngineSettings")
+ContextT = TypeVar("ContextT", bound="BaseEngineContext")
 
+
+class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
+    Context: ClassVar[type[BaseEngineContext]] = BaseEngineContext
+    _context: ContextT  # pyright: ignore[reportUninitializedInstanceVariable]
+
+    def __init__(self, *, env: Environment, name: str):
         from pfund.config import setup_logging
-        from pfund.engines.engine_context import EngineContext
 
         env = Environment[env.upper()]
 
@@ -66,14 +66,7 @@ class BaseEngine(metaclass=SingletonMeta):
 
         setup_logging(env=env, engine_name=name)
         self._logger: logging.Logger = logging.getLogger("pfund")
-        self._context: EngineContext = EngineContext(
-            env=env,
-            name=name,
-            data_range=data_range,
-            settings=settings,
-        )
         self._is_running = False
-        self._feed: PFundEngineFeed = pe.PFund().engine_feed
         self._strategies: dict[
             ComponentName, BaseStrategy | ActorProxy[BaseStrategy]
         ] = {}
@@ -91,12 +84,16 @@ class BaseEngine(metaclass=SingletonMeta):
         return self._context.name
 
     @property
+    def context(self) -> ContextT:
+        return self._context
+
+    @property
     def run_mode(self) -> RunMode:
         return self._context.run_mode
 
     @property
-    def settings(self) -> BaseEngineSettings:
-        return self._context.settings
+    def settings(self) -> SettingsT:
+        return cast("SettingsT", self._context.settings)
 
     @property
     def order_manager(self) -> OrderManager:
@@ -118,6 +115,22 @@ class BaseEngine(metaclass=SingletonMeta):
 
     def is_running(self) -> bool:
         return self._is_running
+
+    def _create_context(
+        self,
+        *,
+        env: Environment,
+        name: str,
+        data_range: str | Resolution | DataRangeDict | tuple[str, str] | Literal["ytd"],
+        settings: SettingsT | None = None,
+        **kwargs: Any,
+    ) -> ContextT:
+        return cast(
+            "ContextT",
+            self.Context(
+                env=env, name=name, data_range=data_range, settings=settings, **kwargs
+            ),
+        )
 
     def _add_product(self, product: BaseProduct):
         for _venue in self._venues.values():

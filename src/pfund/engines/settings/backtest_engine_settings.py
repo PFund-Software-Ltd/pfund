@@ -1,9 +1,9 @@
 from decimal import Decimal
 
-from pydantic import Field, field_validator, PrivateAttr
+from pydantic import Field, field_validator
 
 from pfund.engines.settings.base_engine_settings import BaseEngineSettings
-from pfund.enums import TradingVenue, BacktestMode
+from pfund.enums import TradingVenue
 from pfund.typing import Currency, ProductName
 
 
@@ -16,7 +16,6 @@ class BacktestEngineSettings(BaseEngineSettings):
         default_factory=dict
     )
 
-    _backtest_mode: BacktestMode = PrivateAttr(init=False)
     reuse_signals: bool = Field(
         default=False,
         description="""
@@ -44,19 +43,3 @@ class BacktestEngineSettings(BaseEngineSettings):
             }
             for venue, bal_or_pos in v.items()
         }
-
-    @property
-    def backtest_mode(self) -> BacktestMode:
-        return self._backtest_mode
-
-    @backtest_mode.setter
-    def backtest_mode(self, mode: BacktestMode) -> None:
-        from pfund_kit.style import RichColor, TextStyle, cprint
-
-        self._backtest_mode = BacktestMode[mode.upper()]
-        if self._backtest_mode == BacktestMode.EXACT and self.reuse_signals:
-            cprint(
-                "Warning: Reusing pre-computed signals to speed up event-driven backtesting,\n"
-                + "i.e. computing signals on the fly will be skipped",
-                style=TextStyle.BOLD + RichColor.YELLOW,
-            )

@@ -1,7 +1,7 @@
 # pyright: reportUninitializedInstanceVariable=false, reportUnsafeMultipleInheritance=false, reportIncompatibleVariableOverride=false, reportAssignmentType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, ClassVar
 from typing_extensions import override
 
 if TYPE_CHECKING:
@@ -17,14 +17,10 @@ if TYPE_CHECKING:
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.datas.data_bar import BarData
     from pfund.datas.stores.market_data_store import BarUpdate
-    from pfund.engines.engine_context import DataRangeDict
-    from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
+    from pfund.engines.base_engine import DataRangeDict
     from pfund.typing import FeatureT, IndicatorT, ModelT, StrategyT
-    from pfund.datas.dataset_splitter import (
-        CrossValidatorDatasetPeriods,
-        DatasetPeriods,
-        DatasetSplitsDict,
-    )
+    from pfund._backtest.cv.base import CrossValidatorDatasetPeriods
+    from pfund._backtest.dataset_splitter import DatasetPeriods, DatasetSplitsDict
 
     BacktesteeName: TypeAlias = str
 
@@ -35,12 +31,13 @@ from pfund_kit.style import RichColor, TextStyle, cprint
 from pfund_kit.utils.progress_bar import ProgressBar, track
 
 from pfund.engines.base_engine import BaseEngine
+from pfund.engines.contexts.backtest_engine_context import BacktestEngineContext
+from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
 from pfund.enums import BacktestMode, Environment, TradingVenue
 
 
-class BacktestEngine(BaseEngine):
-    settings: BacktestEngineSettings
-    strategies: dict[str, BaseStrategy]
+class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
+    Context: ClassVar[type[BacktestEngineContext]] = BacktestEngineContext
 
     def __init__(
         self,
@@ -50,44 +47,40 @@ class BacktestEngine(BaseEngine):
         settings: BacktestEngineSettings | None = None,
         mode: BacktestMode | Literal["fast", "exact"] = BacktestMode.FAST,
         dataset_splits: int | DatasetSplitsDict | TimeSeriesSplit = 721,
-        cv_test_ratio: float = 0.1,
-        # TODO: add profiling option for event-driven backtesting?
+        # TODO:
         # profiling: bool=False,
     ):
         """
         Args:
-            cv_test_ratio:
-                if passing in a cross-validator in dataset_splits,
-                this is the ratio of the entire dataset to be reserved as a final hold-out test set.
+            name: engine name
+            data_range: range of data to be used for the engine,
+                when it is a string, it is a resolution, e.g. '1m', '1d', '1w', '1mo', '1y'
+                when it is a dict, it is a dict with keys 'start_date' and 'end_date',
+                    e.g. {'start_date': '2024-01-01', 'end_date': '2024-12-31'}
+                when it is a tuple, it is (start_date, end_date),
+                    e.g. ('2024-01-01', '2024-12-31')
             settings:
                 if not provided, settings.toml will be used.
                 if provided, will override the settings in settings.toml.
         """
-        from pfund.utils.dataset_splitter import DatasetSplitter
-
-        super().__init__(
+        super().__init__(env=Environment.BACKTEST, name=name)
+        self.results: dict[str, Any] | None = None
+        self._context = self._create_context(
             env=Environment.BACKTEST,
             name=name,
             data_range=data_range,
             settings=settings,
+            mode=mode,
+            dataset_splits=dataset_splits,
         )
-        self.results: dict[str, Any] | None = None
-        # TODO
-        # dataset_splitter=DatasetSplitter(
-        #     dataset_start=self.data_start,
-        #     dataset_end=self.data_end,
-        #     dataset_splits=dataset_splits,
-        #     cv_test_ratio=cv_test_ratio,
-        # )
-        self._context.settings.backtest_mode = BacktestMode[mode.upper()]
 
     @property
     def backtest_mode(self) -> BacktestMode:
-        return self.settings.backtest_mode
+        return self._context.mode
 
     @property
     def dataset_periods(self) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
-        return self._context.backtest.dataset_splitter.dataset_periods
+        return self._context.dataset_periods
 
     @override
     def add_venue(

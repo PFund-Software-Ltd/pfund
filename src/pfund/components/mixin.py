@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from pfund.datas.stores.base_data_store import BaseDataStore
     from pfund.datas.stores.market_data_store import MarketDataStore
     from pfund.datas.timeframe import Timeframe
-    from pfund.engines.engine_context import EngineContext
+    from pfund.engines.contexts.base_engine_context import BaseEngineContext
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.entities.products.product_base import BaseProduct
     from pfund.typing import (
@@ -64,7 +64,7 @@ class ComponentMixin:
         self._name = self._get_default_name()
         self._run_mode: RunMode | None = None
         self._resolution: Resolution | None = None
-        self._context: EngineContext | None = None
+        self._context: BaseEngineContext | None = None
 
         self.logger: logging.Logger = logging.getLogger("pfund")
         self.databoy = DataBoy(self)
@@ -97,7 +97,7 @@ class ComponentMixin:
         return self._run_mode
 
     @property
-    def context(self) -> EngineContext:
+    def context(self) -> BaseEngineContext:
         assert self._context is not None, "context is not set"
         return self._context
 
@@ -131,7 +131,7 @@ class ComponentMixin:
         name: ComponentName,
         run_mode: RunMode,
         resolution: Resolution | str,
-        engine_context: EngineContext,
+        engine_context: BaseEngineContext,
         is_top_component: bool = False,
     ):
         """
@@ -141,7 +141,7 @@ class ComponentMixin:
             name (ComponentName): The name to assign to this component.
             run_mode (RunMode): The mode in which the component will run (e.g., local or remote).
             resolution (Resolution | str): The data resolution used by this component.
-            engine_context (EngineContext): The engine context associated with this component. It is None if the component is running in a remote process.
+            engine_context (BaseEngineContext): The engine context associated with this component. It is None if the component is running in a remote process.
         """
         self._context = engine_context
         self._run_mode = run_mode

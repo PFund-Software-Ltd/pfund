@@ -7,7 +7,7 @@ from typing_extensions import override
 if TYPE_CHECKING:
     from ray.actor import ActorClass, ActorHandle
 
-    from pfund.engines.engine_context import EngineContext
+    from pfund.engines.contexts.base_engine_context import BaseEngineContext
 
 from pfund.datas.resolution import Resolution
 from pfund.enums import ComponentType
@@ -21,7 +21,7 @@ class ActorProxy(Generic[ComponentT]):
         name: str,
         resolution: Resolution | str,
         component_type: ComponentType,
-        engine_context: EngineContext,
+        engine_context: BaseEngineContext,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ):
@@ -43,7 +43,7 @@ class ActorProxy(Generic[ComponentT]):
         self.name: str = name
         self.resolution: Resolution = Resolution(resolution)
         self.component_type: ComponentType = component_type
-        self.context: EngineContext = engine_context
+        self.context: BaseEngineContext = engine_context
         if isinstance(self.context.settings, TradeEngineSettings):
             self.context.settings.zmq_urls.enable_ray()
             self.context.settings.zmq_ports.enable_ray()

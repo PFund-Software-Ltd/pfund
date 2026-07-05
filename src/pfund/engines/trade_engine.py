@@ -1,7 +1,7 @@
 # pyright: reportArgumentType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, ClassVar
 
 if TYPE_CHECKING:
     from mtflow.contexts.trade_context import TradeContext
@@ -10,12 +10,11 @@ if TYPE_CHECKING:
     from pfeed.streaming.zeromq import ZeroMQ
 
     from pfund.typing import Component
+    from pfund.engines.base_engine import DataRangeDict
     from pfund.entities import BaseAccount
     from pfund.venues.venue_base import AnyVenue
     from pfund.venues.venue_config import VenueConfig
     from pfund.datas.resolution import Resolution
-    from pfund.engines.engine_context import DataRangeDict
-    from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 
 import time
 import queue
@@ -25,12 +24,22 @@ from threading import Thread
 from apscheduler.schedulers.background import BackgroundScheduler
 from pfeed.enums import DataCategory
 
+from typing_extensions import TypeVar
+
 from pfund.enums import Environment, TradingVenue
 from pfund.engines.base_engine import BaseEngine
+from pfund.engines.contexts.trade_engine_context import TradeEngineContext
+from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 
 
-class TradeEngine(BaseEngine):
-    settings: TradeEngineSettings
+SettingsT = TypeVar(
+    "SettingsT", bound="TradeEngineSettings", default="TradeEngineSettings"
+)
+ContextT = TypeVar("ContextT", bound="TradeEngineContext", default="TradeEngineContext")
+
+
+class TradeEngine(BaseEngine[SettingsT, ContextT]):
+    Context: ClassVar[type[TradeEngineContext]] = TradeEngineContext
 
     def __init__(
         self,
@@ -44,7 +53,21 @@ class TradeEngine(BaseEngine):
         | Literal["ytd"] = "ytd",
         settings: TradeEngineSettings | None = None,
     ):
-        super().__init__(
+        """
+        Args:
+            name: engine name
+            data_range: range of data to be used for the engine,
+                when it is a string, it is a resolution, e.g. '1m', '1d', '1w', '1mo', '1y'
+                when it is a dict, it is a dict with keys 'start_date' and 'end_date',
+                    e.g. {'start_date': '2024-01-01', 'end_date': '2024-12-31'}
+                when it is a tuple, it is (start_date, end_date),
+                    e.g. ('2024-01-01', '2024-12-31')
+            settings:
+                if not provided, settings.toml will be used.
+                if provided, will override the settings in settings.toml.
+        """
+        super().__init__(env=env, name=name)
+        self._context = self._create_context(
             env=env,
             name=name,
             data_range=data_range,

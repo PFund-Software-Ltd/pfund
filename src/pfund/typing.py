@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
     from pfund.entities.accounts.account_base import BaseAccount
 
+
 Component: TypeAlias = "BaseStrategy | BaseModel | BaseFeature | BaseIndicator"
 ComponentT = TypeVar("ComponentT", bound="Component")
 StrategyT = TypeVar("StrategyT", bound="BaseStrategy")
