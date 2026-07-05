@@ -62,12 +62,14 @@ class BaseWebSocketAPI(ABC, Generic[ConfigT, AccountT, ProductT]):
         self,
         env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"],
         config: ConfigT | None = None,
+        read_only: bool = False,
     ):
         self._env = Environment[env.upper()]
         if self._env.is_simulated():
             raise ValueError(f"environment {self._env} is not supported")
         self._logger = logging.getLogger(f"pfund.{self.venue.lower()}")
         self._config: ConfigT = config or cast(ConfigT, self.venue.venue_class.Config())
+        self._read_only = read_only
 
         self._callback: (
             Callable[[WebSocketName, RawMessage | ResponseData], Awaitable[None] | None]

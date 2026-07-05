@@ -5,7 +5,6 @@ import warnings
 
 from pfund.entities import BaseAccount
 from pfund.enums import Environment, TradingVenue
-from pfund.utils import DotenvStore
 
 
 class InteractiveBrokersAccount(BaseAccount):
@@ -15,6 +14,8 @@ class InteractiveBrokersAccount(BaseAccount):
     DEFAULT_PORTS: ClassVar[dict[Environment, int]] = {
         Environment.LIVE: 4001,
         Environment.PAPER: 4002,
+        # NOTE: sandbox uses the same port as live to receive live data
+        Environment.SANDBOX: 4001,
     }
 
     def _get_default_name(self):
@@ -39,9 +40,10 @@ class InteractiveBrokersAccount(BaseAccount):
             name: account code, e.g. DU123456 for paper trading, U123456 for live trading
         """
         super().__init__(env=env, venue=TradingVenue.IBKR, name=name)
-        dotenv = DotenvStore(env=self._env)
-        self._host: str = host or dotenv.get(f"{self.venue}_HOST") or self.DEFAULT_HOST
-        self._port = port or dotenv.get(f"{self.venue}_{self._env}_PORT")
+        self._host: str = (
+            host or self._dotenv.get(f"{self.venue}_HOST") or self.DEFAULT_HOST
+        )
+        self._port = port or self._dotenv.get(f"{self.venue}_{self._env}_PORT")
         if self._port:
             self._port = int(self._port)
         else:
@@ -59,16 +61,26 @@ class InteractiveBrokersAccount(BaseAccount):
                     stacklevel=2,
                 )
 
-        self._client_id = client_id or dotenv.get(f"{self.venue}_CLIENT_ID")
+        self._client_id = client_id or self._dotenv.get(f"{self.venue}_CLIENT_ID")
         if self._client_id:
             self._client_id = int(self._client_id)
         else:
-            self._client_id = self._next_default_client_id()
-            warnings.warn(
-                f"{self.venue} client_id not set, auto-assigned {self._client_id}\n"
-                + f"set env var `{self.venue}_CLIENT_ID` or strategy.add_account(..., client_id=...) to assign it",
-                category=UserWarning,
-                stacklevel=2,
+            if self._env != Environment.BACKTEST:
+                self._client_id = self._next_default_client_id()
+                warnings.warn(
+                    f"{self.venue} client_id not set, auto-assigned {self._client_id}\n"
+                    + f"set env var `{self.venue}_CLIENT_ID` or strategy.add_account(..., client_id=...) to assign it",
+                    category=UserWarning,
+                    stacklevel=2,
+                )
+
+    def _assert_no_credential_leak_in_simulated_env(self):
+        if self._env != Environment.BACKTEST:
+            return
+        if self._port or self._client_id:
+            raise ValueError(
+                f"{self.venue} port and client_id should not be provided in {self._env} environment, \n"
+                + "please remove them from strategy.add_account()"
             )
 
     @property

@@ -42,11 +42,11 @@ class BybitWebSocketAPI(BaseWebSocketAPI[BybitConfig, BybitAccount, BybitProduct
     def __init__(
         self,
         env: Literal[Environment.PAPER, Environment.LIVE],
-        data_mode: bool = False,
+        read_only: bool = False,
     ):
-        super().__init__(env=env, data_mode=data_mode)
+        super().__init__(env=env, read_only=read_only)
         self._apis: dict[BybitProduct.Category, BybitBaseWebSocketAPI] = {
-            category: API(env=env, data_mode=data_mode)
+            category: API(env=env, read_only=read_only)
             for category, API in self.APIS.items()
         }
 
@@ -131,3 +131,8 @@ class BybitWebSocketAPI(BaseWebSocketAPI[BybitConfig, BybitAccount, BybitProduct
         async with asyncio.TaskGroup() as task_group:
             for api in self._apis.values():
                 task_group.create_task(api.disconnect(reason=reason))
+
+    # TODO
+    async def place_orders(self):
+        if self._read_only:
+            raise RuntimeError(f"{self.name} is read-only")

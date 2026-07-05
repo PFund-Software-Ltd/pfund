@@ -94,14 +94,18 @@ class CryptoExchange(
         self,
         env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"],
         config: ConfigT | None = None,
+        read_only: bool = False,
     ):
         # NOTE: APIs must exist before super().__init__, which may call
         # refetch_markets() -> get_markets() -> self.rest_api
-        self.rest_api = cast("RestAPITypeVar", self.RestAPI(env=env, config=config))
-        self.ws_api = cast(
-            "WebSocketAPITypeVar", self.WebSocketAPI(env=env, config=config)
+        self.rest_api = cast(
+            "RestAPITypeVar", self.RestAPI(env=env, config=config, read_only=read_only)
         )
-        super().__init__(env=env, config=config)
+        self.ws_api = cast(
+            "WebSocketAPITypeVar",
+            self.WebSocketAPI(env=env, config=config, read_only=read_only),
+        )
+        super().__init__(env=env, config=config, read_only=read_only)
 
     def _set_queue(self, queue: queue.Queue[Any]) -> None:
         super()._set_queue(queue)
@@ -143,20 +147,13 @@ class CryptoExchange(
         # asyncio.run_coroutine_threadsafe(self.rest_api.function(), self._loop)
         #
 
-    def start(self):
-        super().start()
+    def connect(self):
         self._run_coroutine_threadsafe(self.ws_api.connect)
 
-    def stop(self):
-        if self._loop and self._loop_thread and self._loop_thread.is_alive():
-            future = asyncio.run_coroutine_threadsafe(
-                self.ws_api.disconnect(reason="venue stopped"), self._loop
-            )
-            try:
-                future.result(timeout=10)
-            except Exception:
-                self._logger.exception(f"{self.name} disconnect() failed during stop")
-        super().stop()
+    def disconnect(self, reason: str = ""):
+        self._run_coroutine_threadsafe(
+            self.ws_api.disconnect, kwargs={"reason": reason}, timeout=10
+        )
 
     # # REVIEW
     # @staticmethod

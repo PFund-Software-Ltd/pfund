@@ -94,6 +94,7 @@ class BaseRestAPI(ABC, Generic[ConfigT]):
         self,
         env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"],
         config: ConfigT | None = None,
+        read_only: bool = False,
         dev_mode: bool = False,
     ):
         self._env = Environment[env.upper()]
@@ -101,6 +102,7 @@ class BaseRestAPI(ABC, Generic[ConfigT]):
             raise ValueError(f"environment {self._env} is not supported")
         self._logger = logging.getLogger(f"pfund.{self.venue.lower()}")
         self._config: ConfigT = config or cast(ConfigT, self.venue.venue_class.Config())
+        self._read_only = read_only
         self._dev_mode = dev_mode
         if self._dev_mode:
             self.samples = self._Samples(self.venue)
@@ -166,6 +168,10 @@ class BaseRestAPI(ABC, Generic[ConfigT]):
         cookies: CookieTypes | None = None,
     ) -> Request:
         method = endpoint.method
+        if self._read_only and method != HTTPMethod.GET:
+            raise RuntimeError(
+                f"{self.venue} REST API is read-only — {method} requests are disabled"
+            )
         url = self._url + endpoint.path
         # NOTE: the signer mutates params/json/data/headers in place, so signed requests
         # need a concrete dict (the broad HeaderTypes forms are only for unsigned requests).

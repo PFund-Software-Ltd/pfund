@@ -1,19 +1,22 @@
 # pyright: reportArgumentType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, ClassVar
+from typing import TYPE_CHECKING, Any, Literal, ClassVar, cast
+from typing_extensions import TypeVar
 
 if TYPE_CHECKING:
     from mtflow.contexts.trade_context import TradeContext
     from pfeed.engine import DataEngine
     from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.streaming.zeromq import ZeroMQ
+    from pfund.venues.venue_base import AnyVenue
+    from pfund.venues.venue_config import VenueConfig
+    from pfund.datas.data_base import BaseData
+    from pfund.datas.data_market import MarketData
+    from pfund.entities import BaseAccount, BaseProduct
 
     from pfund.typing import Component
     from pfund.engines.base_engine import DataRangeDict
-    from pfund.entities import BaseAccount
-    from pfund.venues.venue_base import AnyVenue
-    from pfund.venues.venue_config import VenueConfig
     from pfund.datas.resolution import Resolution
 
 import time
@@ -24,8 +27,7 @@ from threading import Thread
 from apscheduler.schedulers.background import BackgroundScheduler
 from pfeed.enums import DataCategory
 
-from typing_extensions import TypeVar
-
+from pfund.managers import OrderManager, PortfolioManager, RiskManager
 from pfund.enums import Environment, TradingVenue
 from pfund.engines.base_engine import BaseEngine
 from pfund.engines.contexts.trade_engine_context import TradeEngineContext
@@ -44,7 +46,12 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
     def __init__(
         self,
         *,
-        env: Environment | Literal["PAPER", "LIVE"] = Environment.PAPER,
+        env: Literal[
+            Environment.PAPER,
+            Environment.LIVE,
+            "PAPER",
+            "LIVE",
+        ] = Environment.PAPER,
         name: str = "engine",
         data_range: str
         | Resolution
@@ -73,7 +80,11 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
             data_range=data_range,
             settings=settings,
         )
-        self._assert_env()
+
+        # FIXME: do NOT allow LIVE env for now
+        if self.env == Environment.LIVE:
+            raise ValueError(f"{env=} is not allowed for now")
+
         self._proxy: ZeroMQ | None = None
         self._worker: ZeroMQ | None = None
         self._data_engine: DataEngine | None = None
@@ -81,10 +92,32 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
         self._queue: queue.Queue[Any] = queue.Queue()
         self._scheduler: BackgroundScheduler = BackgroundScheduler()
         self._schedule_jobs(self._scheduler)
+        self._venues: dict[TradingVenue, AnyVenue] = {}
+        self._order_manager = OrderManager()
+        self._portfolio_manager = PortfolioManager()
+        self._risk_manager = RiskManager()
 
     def _assert_env(self):
         if self.env not in (Environment.PAPER, Environment.LIVE):
             raise ValueError(f"environment {self.env} is not supported")
+
+    @property
+    def order_manager(self) -> OrderManager:
+        return self._order_manager
+
+    om = order_manager
+
+    @property
+    def portfolio_manager(self) -> PortfolioManager:
+        return self._portfolio_manager
+
+    pm = portfolio_manager
+
+    @property
+    def risk_manager(self) -> RiskManager:
+        return self._risk_manager
+
+    rm = risk_manager
 
     # TODO: include descriptions
     def show_zmq_graph(self):
@@ -101,6 +134,9 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
         pprint(self.settings.zmq_urls.to_dict())
         print("engine.settings.zmq_ports:")
         pprint(self.settings.zmq_ports.to_dict())
+
+    def _get_pfeed_stream_kwargs(self) -> dict[str, Any]:
+        return {"env": self.env}
 
     def _setup_data_engine(self):
         import pfeed as pe
@@ -150,9 +186,9 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
                 product=str(data.product.basis),
                 resolution=repr(data.resolution),
                 data_origin=data.origin,
-                env=self.env,
                 storage_config=data.config.storage_config,
                 io_config=data.config.io_config,
+                **self._get_pfeed_stream_kwargs(),
                 **data.product.specs,
             )
             # if not using zmq, data will be sent via transform()
@@ -344,32 +380,56 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
                 _fetch(venue, func_name, account)
             time.sleep(THROTTLE)
 
+    def _add_product(self, product: BaseProduct):
+        for _venue in self._venues.values():
+            if (existing := _venue.products.get(product.name)) is not None:
+                raise ValueError(
+                    f'product name "{product.name}" is already used by {existing!r}; '
+                    + "product names must be unique across the engine"
+                )
+        venue: AnyVenue = self.add_venue(product.source)
+        venue.add_product(product)
+
+    def _add_account(self, account: BaseAccount):
+        for _venue in self._venues.values():
+            if (existing := _venue.accounts.get(account.name)) is not None:
+                raise ValueError(
+                    f'account name "{account.name}" is already used by {existing!r}; '
+                    + "account names must be unique across the engine"
+                )
+        if account.env != self.env:
+            raise ValueError(
+                f"account env {account.env} does not match engine env {self.env}"
+            )
+        venue: AnyVenue = self.add_venue(account.venue)
+        venue.add_account(account)
+
     def add_venue(
         self, venue: TradingVenue | str, config: VenueConfig | None = None
     ) -> AnyVenue:
-        trading_venue = super().add_venue(venue=venue, config=config)
-        trading_venue._set_queue(self._queue)
-        return trading_venue
+        venue = TradingVenue[venue.upper()]
+        if venue not in self._venues:
+            VenueClass = venue.venue_class
+            trading_venue = VenueClass(env=self.env, config=config)
+            trading_venue._set_queue(self._queue)
+            self._venues[venue] = trading_venue
+            self._logger.debug(f"added trading venue {venue}")
+        elif config is not None:
+            raise ValueError(f"{venue} already exists and cannot be configured")
+        return self._venues[venue]
+
+    def get_venue(self, venue: TradingVenue | str) -> AnyVenue:
+        venue = TradingVenue[venue.upper()]
+        return self._venues[venue]
 
     def run(self, ctx: TradeContext | None = None):
         try:
-            if self.settings.auto_stream:
-                self._setup_data_engine()
-            is_using_zmq = self._is_using_zmq()
-            if is_using_zmq:
-                self._zmq_thread = Thread(target=self._run_engine_loop, daemon=True)
-                self._zmq_thread.start()
             super().run(ctx=ctx)
-            self._get_trading_states()
-            self._scheduler.start()
             if self._data_engine:
                 self._data_engine.run()  # blocking call
             else:
-                if self._zmq_thread:
-                    self._zmq_thread.join()
-                else:
-                    while self.is_running():
-                        time.sleep(0.1)
+                while self.is_running():
+                    time.sleep(0.1)
         except KeyboardInterrupt:
             self._logger.warning(f"KeyboardInterrupt received, ending {self.name}")
         except Exception:
@@ -377,9 +437,39 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
         finally:
             self.end()
 
-    def end(self):
-        super().end()
+    def _get_all_datas(self) -> set[BaseData]:
+        datas: set[BaseData] = set()
+        for strategy in self._strategies.values():
+            datas.update(strategy.get_datas())
+            for component in strategy.get_components():
+                datas.update(component.get_datas())
+        return datas
+
+    def _setup(self):
+        super()._setup()
+        for strategy in self._strategies.values():
+            for account in strategy.get_accounts():
+                self._add_account(account)
+        for data in self._get_all_datas():
+            if data.category == DataCategory.MARKET_DATA:
+                market_data = cast("MarketData", data)
+                self._add_product(market_data.product)
+            else:
+                raise NotImplementedError(f"Unhandled data type: {type(data)}")
+        if self.settings.auto_stream:
+            self._setup_data_engine()
+        if self._is_using_zmq():
+            self._zmq_thread = Thread(target=self._run_engine_loop, daemon=True)
+            self._zmq_thread.start()
+        for venue in self._venues.values():
+            venue.start()
+        self._get_trading_states()  # initial fetch
+        self._scheduler.start()
+
+    def _teardown(self):
         self._scheduler.shutdown(wait=False)
+        for venue in self._venues.values():
+            venue.stop()
         if self._data_engine:
             self._data_engine.end()
         if self._zmq_thread and self._zmq_thread.is_alive():
@@ -388,3 +478,4 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
             self._logger.debug(
                 f"{self.name} zmq thread finished (alive={self._zmq_thread.is_alive()})"
             )
+        super()._teardown()

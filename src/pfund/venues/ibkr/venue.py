@@ -75,9 +75,10 @@ class InteractiveBrokers(
         self,
         env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"],
         config: InteractiveBrokersConfig | None = None,
+        read_only: bool = False,
     ):
-        super().__init__(env=env, config=config)
-        self.api = InteractiveBrokersAPI(env=self.env, config=config)
+        super().__init__(env=env, config=config, read_only=read_only)
+        self.api = InteractiveBrokersAPI(env=env, config=config, read_only=read_only)
 
     def _set_queue(self, queue: queue.Queue[Any]) -> None:
         super()._set_queue(queue)
@@ -142,15 +143,15 @@ class InteractiveBrokers(
     async def _get_balances(self, account: InteractiveBrokersAccount) -> Result:
         pass
 
-    def start(self):
-        super().start()
+    def connect(self):
         self.api.connect(self.account)
 
-    def stop(self):
-        self.api.disconnect(reason="venue stopped")
-        super().stop()
+    def disconnect(self, reason: str = ""):
+        self.api.disconnect(reason=reason)
 
     # async def place_orders(self, ...):
+    # if self._read_only:
+    # raise RuntimeError(f"{self.name} is read-only")
     #     resp = await self._loop.run_in_executor(
     #         None,                                    # None = default ThreadPoolExecutor
     #         lambda: requests.post(url, json=payload) # a *sync* callable

@@ -25,7 +25,7 @@ class BaseEngineContext:
 
     def __init__(
         self,
-        env: Environment,
+        env: Environment | str,
         name: str,
         data_range: str | Resolution | DataRangeDict | tuple[str, str] | Literal["ytd"],
         settings: BaseEngineSettings | None = None,

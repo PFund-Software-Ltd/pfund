@@ -60,6 +60,7 @@ class InteractiveBrokersAPI(IBClient, IBWrapper):  # pyright: ignore[reportUnsaf
         self,
         env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"],
         config: InteractiveBrokersConfig | None = None,
+        read_only: bool = False,
         timeout: float = 5.0,
     ):
         """
@@ -78,6 +79,7 @@ class InteractiveBrokersAPI(IBClient, IBWrapper):  # pyright: ignore[reportUnsaf
             raise ValueError(f"environment {self._env} is not supported")
         self._logger = logging.getLogger(f"pfund.{self.venue.lower()}")
         self._config = config or InteractiveBrokersConfig()
+        self._read_only = read_only
         self._timeout = timeout
 
         self._callback: Callable[[str], Awaitable[None] | None] | None = None
@@ -171,6 +173,11 @@ class InteractiveBrokersAPI(IBClient, IBWrapper):  # pyright: ignore[reportUnsaf
         request_id = request_id or self._next_request_id()
         func = lambda: self.reqContractDetails(request_id, contract)
         return await self._request(request_id, func)
+
+    # TODO
+    async def place_orders(self):
+        if self._read_only:
+            raise RuntimeError(f"{self.name} is read-only")
 
     """
     **********************************************************
@@ -287,9 +294,9 @@ class InteractiveBrokersAPI(IBClient, IBWrapper):  # pyright: ignore[reportUnsaf
         return str(self.adapter(channel, group="channels"))
 
     def connect(self, account: InteractiveBrokersAccount):
-        super().connect(
+        super().connect(  # pyright: ignore[reportUnknownMemberType]
             host=account.host, port=account.port, clientId=account.client_id
-        )  # pyright: ignore[reportUnknownMemberType]
+        )
         self._ib_thread.start()
         self._logger.debug(f"{self.venue} thread started")
         # TODO

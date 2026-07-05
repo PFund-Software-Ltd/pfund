@@ -21,7 +21,9 @@ project_name = "pfund"
 _config: PFundConfig | None = None
 
 
-def setup_logging(env: Environment, engine_name: str, reset: bool = False) -> None:
+def setup_logging(
+    env: Environment | str, engine_name: str, reset: bool = False
+) -> None:
     env = Environment[env.upper()]
     config_by_engine_name = get_config(engine_name=engine_name)
     kit_logging.setup_logging(config_by_engine_name, env=env, reset=reset)

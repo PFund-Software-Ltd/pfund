@@ -14,16 +14,12 @@ from typing import (
 
 if TYPE_CHECKING:
     from mtflow.contexts.base_context import BaseContext
+    from pfund_kit.logging.loggers import ColoredLogger
 
     from pfund.components.actor_proxy import ActorProxy
-    from pfund.venues.venue_base import AnyVenue
-    from pfund.venues.venue_config import VenueConfig
     from pfund.components.strategies.strategy_base import BaseStrategy
-    from pfund.datas.data_base import BaseData
-    from pfund.datas.data_market import MarketData
     from pfund.datas.resolution import Resolution
     from pfund.engines.settings.base_engine_settings import BaseEngineSettings
-    from pfund.entities import BaseAccount, BaseProduct
     from pfund.typing import StrategyT, ComponentName
 
     class DataRangeDict(TypedDict, total=False):
@@ -33,17 +29,9 @@ if TYPE_CHECKING:
 
 import logging
 
-from pfund_kit.style import cprint
 from pfund_kit.utils.singleton import SingletonMeta
-from pfeed.enums import DataCategory
 
-from pfund.managers import OrderManager, PortfolioManager, RiskManager
-from pfund.enums import (
-    ComponentType,
-    Environment,
-    TradingVenue,
-    RunMode,
-)
+from pfund.enums import ComponentType, Environment, RunMode
 from pfund.engines.contexts.base_engine_context import BaseEngineContext
 
 
@@ -58,22 +46,14 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
     def __init__(self, *, env: Environment, name: str):
         from pfund.config import setup_logging
 
-        env = Environment[env.upper()]
-
-        # FIXME: do NOT allow LIVE env for now
-        if env == Environment.LIVE:
-            raise ValueError(f"{env=} is not allowed for now")
-
         setup_logging(env=env, engine_name=name)
-        self._logger: logging.Logger = logging.getLogger("pfund")
+        # setup_logging installs ColoredLogger via setLoggerClass, so getLogger
+        # returns one — cast so the `style=` kwarg type-checks on log calls.
+        self._logger: ColoredLogger = cast("ColoredLogger", logging.getLogger("pfund"))
         self._is_running = False
         self._strategies: dict[
             ComponentName, BaseStrategy | ActorProxy[BaseStrategy]
         ] = {}
-        self._venues: dict[TradingVenue, AnyVenue] = {}
-        self._order_manager = OrderManager()
-        self._portfolio_manager = PortfolioManager()
-        self._risk_manager = RiskManager()
 
     @property
     def env(self) -> Environment:
@@ -95,24 +75,6 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
     def settings(self) -> SettingsT:
         return cast("SettingsT", self._context.settings)
 
-    @property
-    def order_manager(self) -> OrderManager:
-        return self._order_manager
-
-    om = order_manager
-
-    @property
-    def portfolio_manager(self) -> PortfolioManager:
-        return self._portfolio_manager
-
-    pm = portfolio_manager
-
-    @property
-    def risk_manager(self) -> RiskManager:
-        return self._risk_manager
-
-    rm = risk_manager
-
     def is_running(self) -> bool:
         return self._is_running
 
@@ -131,46 +93,6 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
                 env=env, name=name, data_range=data_range, settings=settings, **kwargs
             ),
         )
-
-    def _add_product(self, product: BaseProduct):
-        for _venue in self._venues.values():
-            if (existing := _venue.products.get(product.name)) is not None:
-                raise ValueError(
-                    f'product name "{product.name}" is already used by {existing!r}; '
-                    + "product names must be unique across the engine"
-                )
-        venue: AnyVenue = self.add_venue(product.source)
-        venue.add_product(product)
-
-    def _add_account(self, account: BaseAccount):
-        for _venue in self._venues.values():
-            if (existing := _venue.accounts.get(account.name)) is not None:
-                raise ValueError(
-                    f'account name "{account.name}" is already used by {existing!r}; '
-                    + "account names must be unique across the engine"
-                )
-        if account.env != self.env:
-            raise ValueError(
-                f"account env {account.env} does not match engine env {self.env}"
-            )
-        venue: AnyVenue = self.add_venue(account.venue)
-        venue.add_account(account)
-
-    def add_venue(
-        self, venue: TradingVenue | str, config: VenueConfig | None = None
-    ) -> AnyVenue:
-        venue = TradingVenue[venue.upper()]
-        if venue not in self._venues:
-            VenueClass = venue.venue_class
-            self._venues[venue] = VenueClass(env=self.env, config=config)
-            self._logger.debug(f"added trading venue {venue}")
-        elif config is not None:
-            raise ValueError(f"{venue} already exists and cannot be configured")
-        return self._venues[venue]
-
-    def get_venue(self, venue: TradingVenue | str) -> AnyVenue:
-        venue = TradingVenue[venue.upper()]
-        return self._venues[venue]
 
     def add_strategy(
         self,
@@ -236,27 +158,6 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
     def get_strategy(self, name: str) -> BaseStrategy | ActorProxy[BaseStrategy]:
         return self._strategies[name]
 
-    def _gather(self):
-        datas: list[BaseData] = []
-
-        for strategy in self._strategies.values():
-            strategy: BaseStrategy | ActorProxy[BaseStrategy]
-            strategy._gather()
-
-            datas.extend(strategy.get_datas())
-            for component in strategy.get_components():
-                datas.extend(component.get_datas())
-
-            for account in strategy.get_accounts():
-                self._add_account(account)
-
-        for data in set(datas):
-            if data.category == DataCategory.MARKET_DATA:
-                market_data = cast("MarketData", data)
-                self._add_product(market_data.product)
-            else:
-                raise NotImplementedError(f"Unhandled data type: {type(data)}")
-
     def run(self, ctx: BaseContext | None = None):
         if ctx is not None:
             if ctx.env != self.env:
@@ -265,25 +166,28 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
                 )
             self._context.set_project_name(ctx.run.project)
             self._context.set_run_name(ctx.run.id)
-        self._logger.debug(f"Running {self.name}...")
-        cprint(
+        self._logger.warning(
             f"{self.env} {self.name} is running (data_range=({self._context.data_start}, {self._context.data_end}))",
             style=self.env._color,
         )
         self._is_running = True
-        self._gather()
-        for venue in self._venues.values():
-            venue.start()
+        self._setup()
         for strategy in self._strategies.values():
             strategy.start()
 
     def end(self):
-        from pfeed.utils.ray import shutdown_ray
-
-        self._logger.debug(f"Ending {self.name}...")
+        self._logger.warning(f"{self.env} {self.name} is ending...")
         for strategy in self._strategies.values():
             strategy.stop()
-        for venue in self._venues.values():
-            venue.stop()
         self._is_running = False
+        self._teardown()
+
+    def _setup(self):
+        for strategy in self._strategies.values():
+            strategy: BaseStrategy | ActorProxy[BaseStrategy]
+            strategy._gather()
+
+    def _teardown(self):
+        from pfeed.utils.ray import shutdown_ray
+
         shutdown_ray()

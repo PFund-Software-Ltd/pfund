@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, ClassVar
-from typing_extensions import override
 
 if TYPE_CHECKING:
     import torch.nn as nn
@@ -11,8 +10,6 @@ if TYPE_CHECKING:
     from sklearn.model_selection import TimeSeriesSplit
     from mtflow.contexts.backtest_context import BacktestContext
 
-    from pfund.venues.venue_config import VenueConfig
-    from pfund.venues.venue_simulated import SimulatedVenue
     from pfund.components.models.model_base import BaseModel
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.datas.data_bar import BarData
@@ -33,7 +30,7 @@ from pfund_kit.utils.progress_bar import ProgressBar, track
 from pfund.engines.base_engine import BaseEngine
 from pfund.engines.contexts.backtest_engine_context import BacktestEngineContext
 from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
-from pfund.enums import BacktestMode, Environment, TradingVenue
+from pfund.enums import BacktestMode, Environment
 
 
 class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
@@ -64,7 +61,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 if provided, will override the settings in settings.toml.
         """
         super().__init__(env=Environment.BACKTEST, name=name)
-        self.results: dict[str, Any] | None = None
         self._context = self._create_context(
             env=Environment.BACKTEST,
             name=name,
@@ -73,6 +69,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             mode=mode,
             dataset_splits=dataset_splits,
         )
+        self.results: dict[str, Any] | None = None
 
     @property
     def backtest_mode(self) -> BacktestMode:
@@ -81,25 +78,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
     @property
     def dataset_periods(self) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
         return self._context.dataset_periods
-
-    @override
-    def add_venue(
-        self, venue: TradingVenue | str, config: VenueConfig | None = None
-    ) -> SimulatedVenue:
-        if venue not in self._venues:
-            sim_venue = SimulatedVenue(
-                env=self.env,
-                config=config,
-                settings=self.settings,
-                venue=venue,
-                order_manager=self._order_manager,
-                portfolio_manager=self._portfolio_manager,
-                risk_manager=self._risk_manager,
-            )
-            self._logger.debug(f"added trading venue {venue}")
-        elif config is not None:
-            raise ValueError(f"{venue} already exists and cannot be configured")
-        return self._venues[venue]
 
     def add_strategy(
         self,

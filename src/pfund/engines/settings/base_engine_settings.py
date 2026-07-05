@@ -2,19 +2,15 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from pfund.enums import Database, DataLake
+from pfund.enums import DataLake
 
 
 class BaseEngineSettings(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
-    database: Database | str = Field(
-        default=Database.DUCKDB,
-        description="database used to store engine data, e.g. positions, balances, trades",
-    )
     datalake: DataLake | str = Field(
         default=DataLake.DELTALAKE,
-        description="data lake for writing and appending component signal data",
+        description="data lake for writing and appending component data",
     )
     persist: bool = Field(
         default=False,
@@ -44,16 +40,9 @@ class BaseEngineSettings(BaseModel):
 
     @field_validator("cache_materialized_data", mode="before")
     @classmethod
-    def _normalize_cache_resampled_data(cls, v: Any) -> bool | str:
+    def _normalize_cache_materialized_data(cls, v: Any) -> bool | str:
         if isinstance(v, str):
             return v.lower()
-        return v
-
-    @field_validator("database", mode="before")
-    @classmethod
-    def _validate_database(cls, v: Database | str) -> Database:
-        if not isinstance(v, Database):
-            return Database[v.upper()]
         return v
 
     @field_validator("datalake", mode="before")

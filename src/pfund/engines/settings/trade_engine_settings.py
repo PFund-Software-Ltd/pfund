@@ -4,9 +4,14 @@ from pydantic import Field, field_serializer, field_validator
 
 from pfund.engines.settings.base_engine_settings import BaseEngineSettings
 from pfund.utils.ray_dict import RayCompatibleDict
+from pfund.enums import Database
 
 
 class TradeEngineSettings(BaseEngineSettings):
+    database: Database | str = Field(
+        default=Database.DUCKDB,
+        description="database used to store engine data, e.g. positions, balances, trades",
+    )
     # e.g. url='tcp://localhost'
     zmq_urls: RayCompatibleDict = Field(default_factory=RayCompatibleDict)
     zmq_ports: RayCompatibleDict = Field(default_factory=RayCompatibleDict)
@@ -23,6 +28,13 @@ class TradeEngineSettings(BaseEngineSettings):
         default=True,
         description="When True, replace recorded live data with the provider's cleaned end-of-day data once available.",
     )
+
+    @field_validator("database", mode="before")
+    @classmethod
+    def _validate_database(cls, v: Database | str) -> Database:
+        if not isinstance(v, Database):
+            return Database[v.upper()]
+        return v
 
     @field_validator("auto_stream", mode="after")
     @classmethod

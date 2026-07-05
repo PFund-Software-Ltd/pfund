@@ -1,10 +1,13 @@
 from __future__ import annotations
 from typing import Any, ClassVar
 
+from abc import ABC, abstractmethod
+
 from pfund.enums import Environment, TradingVenue
+from pfund.utils import DotenvStore
 
 
-class BaseAccount:
+class BaseAccount(ABC):
     _num: ClassVar[int] = 0
 
     @classmethod
@@ -43,6 +46,15 @@ class BaseAccount:
         # self.name: str = self._normalize_name(name)
         VenueClass = self._venue.venue_class
         self._balance = VenueClass.Balance(currency=currency)
+        if self._env != Environment.BACKTEST:
+            self._dotenv: DotenvStore | dict[str, str] = DotenvStore(env=self._env)
+        else:
+            self._dotenv: DotenvStore | dict[str, str] = {}
+        if self._env.is_simulated():
+            self._assert_no_credential_leak_in_simulated_env()
+
+    @abstractmethod
+    def _assert_no_credential_leak_in_simulated_env(self): ...
 
     @property
     def env(self) -> Environment:

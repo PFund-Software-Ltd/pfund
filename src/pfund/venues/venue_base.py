@@ -47,7 +47,7 @@ from pfund.entities.balances.balance_base import BalanceUpdate, BalanceUpdateSou
 from pfund.errors import NotSupportedByVenueError
 from pfund.entities.products.product_base import ProductKey
 from pfund.venues.venue_metadata import VenueMetadata
-from pfund.enums import Environment, TradingVenue, PrivateDataChannel
+from pfund.enums import Environment, TradingVenue
 
 
 ConfigT = TypeVar("ConfigT", bound="VenueConfig")
@@ -92,18 +92,25 @@ class BaseVenue(
 
     def __init__(
         self,
-        env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"],
+        env: Literal[
+            Environment.PAPER,
+            Environment.LIVE,
+            Environment.SANDBOX,
+            "PAPER",
+            "LIVE",
+            "SANDBOX",
+        ],
         config: ConfigT | None = None,
+        read_only: bool = False,
     ):
         self._env = Environment[env.upper()]
-        if self._env.is_simulated():
-            raise ValueError(f"environment {self._env} is not supported")
         self._logger: logging.Logger = logging.getLogger(f"pfund.{self.name.lower()}")
         self._config: ConfigT = config or cast(ConfigT, self.Config())
+        self._read_only = read_only
         self._accounts: dict[AccountName, AccountT] = {}
         self._products: dict[ProductName, ProductT] = {}
         self._loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
-        self._loop_thread: Thread = Thread(
+        self._loop_thread = Thread(
             target=self._run_loop, name=f"{self.name}_loop", daemon=True
         )
         self._queue: queue.Queue[Any] | None = None
@@ -111,8 +118,10 @@ class BaseVenue(
             self.refetch_markets()
 
     @property
-    def env(self) -> Literal[Environment.PAPER, Environment.LIVE]:
-        return cast(Literal[Environment.PAPER, Environment.LIVE], self._env)
+    def env(self) -> Literal[Environment.PAPER, Environment.LIVE, Environment.SANDBOX]:
+        return cast(
+            Literal[Environment.PAPER, Environment.LIVE, Environment.SANDBOX], self._env
+        )
 
     @classmethod
     def _create_markets_yml_file_path(cls, data_path: Path | None = None) -> Path:
@@ -417,7 +426,19 @@ class BaseVenue(
         func: Callable[..., Coroutine[Any, Any, Any]],
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
-    ) -> None:
+        timeout: float | None = None,
+    ) -> Future[Any] | None:
+        """Schedule `func(*args, **kwargs)` on the venue's event loop from another thread.
+
+        Args:
+            timeout:
+                None (default): fire-and-forget — returns the Future immediately; a
+                    coroutine failure is logged by the done-callback.
+                float: block up to `wait` seconds for completion, then return None. A
+                    timeout is logged here (the done-callback hasn't fired yet); a
+                    coroutine failure is already logged by the done-callback.
+        """
+
         def _callback(future: Future[Any]) -> None:
             func_name = func.__name__
             if future.cancelled():
@@ -432,6 +453,17 @@ class BaseVenue(
             func(*args, **kwargs), self._loop
         )
         future.add_done_callback(_callback)
+        if timeout is None:
+            return future
+        try:
+            future.result(timeout=timeout)
+        except TimeoutError:
+            self._logger.warning(
+                f"{self.name} {func.__name__}() did not finish within {timeout}s"
+            )
+        except Exception:
+            pass  # coroutine failure already logged by the done-callback
+        return None
 
     def _run_async(self, coro: Coroutine[Any, Any, Any]) -> Any:
         """Drive an async-native venue method from a synchronous context.
@@ -457,25 +489,35 @@ class BaseVenue(
         asyncio.set_event_loop(self._loop)
         self._loop.run_forever()  # NOTE: blocking
 
+    @abstractmethod
+    def connect(self):
+        """Connect to the venue's API (e.g. websocket)"""
+        ...
+
+    @abstractmethod
+    def disconnect(self, reason: str = ""):
+        """Disconnect from the venue's API (e.g. websocket)"""
+        ...
+
     def start(self):
         if self._queue is None:
             raise ValueError("Queue not set")
-        if self._loop_thread:
-            self._loop_thread.start()
+        self._loop_thread.start()
         if self._accounts:
             self._add_private_channels()
+        self.connect()
         # TODO
         # if 'start' in self._config.cancel_all_at:
         #     self.cancel_all_orders(reason="start")
 
     def stop(self):
+        if self._loop_thread.is_alive():
+            self.disconnect(reason="venue stopped")
         # TODO
         # if 'stop' in self._config.cancel_all_at:
         #     self.cancel_all_orders(reason="stop")
-        if self._loop:
-            self._loop.call_soon_threadsafe(self._loop.stop)
-        if self._loop_thread:
-            self._loop_thread.join(timeout=5)
+        self._loop.call_soon_threadsafe(self._loop.stop)
+        self._loop_thread.join(timeout=5)
 
     # TODO
     # def place_orders(self, orders: list[BaseOrder], threaded: bool=True, **kwargs: Any) -> list[BaseOrder]: ...
