@@ -65,13 +65,16 @@ afterpython = ">=0.3.16"
 basedpyright = ">=1.39.9"
 jupytext = ">=1.19.3"
 jupyterlab = ">=4.5.7"
-graphviz = ">=0.21"
 memray = ">=1.19.3"
 pandas-stubs = ">=3.0.3.260530"
 pybit = ">=5.16.0"
 flax = ">=0.12.7"
 equinox = ">=0.13.8"
 optax = ">=0.2.8"
+
+[feature.dev.dependencies]
+graphviz = ">=14.1.2"
+python-graphviz = ">=0.21"
 
 [feature.compare.pypi-dependencies]
 vectorbt = ">=1.0.0"

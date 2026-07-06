@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from pfund.entities.orders.order_base import BaseOrder
     from pfund.entities.positions.position_base import BasePosition
     from pfund.entities.products.product_base import BaseProduct
-    from pfund.enums import Side
+    from pfund.engines.trade_engine import TradeEngine
     from pfund.typing import (
         AccountName,
         Component,
@@ -37,6 +37,9 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         self._order_manager = OrderManager()
         self._portfolio_manager = PortfolioManager()
         self._risk_manager = RiskManager()
+        # In-process handle to the engine, injected by TradeEngine._setup() ONLY on the
+        # pure-local path (not self._is_using_zmq()). Stays None when ZMQ/Ray is in use
+        self._engine: TradeEngine | None = None
         self.__mixin_post_init__(
             *args, **kwargs
         )  # calls ComponentMixin.__mixin_post_init__()
@@ -137,29 +140,27 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         self.logger.debug(f"added sub-strategy '{strat}'")
         return strategy
 
-    def _update_positions(self, position):
-        self.positions[position.account][position.pdt] = position
-        self.on_position(position.account, position)
+    def _on_update(self, update: Any):
+        """Transport-agnostic sink for venue updates → this strategy's managers.
 
-    def _update_balances(self, balance):
-        self.balances[balance.account][balance.ccy] = balance
-        self.on_balance(balance.account, balance)
-
-    def _update_orders(
-        self, order, type_: Literal["submitted", "opened", "closed", "modified"]
-    ):
-        if type_ in ["submitted", "opened"]:
-            if order not in self.orders[order.account]:
-                self.orders[order.account].append(order)
-        elif type_ == "closed":
-            if order in self.orders[order.account]:
-                self.orders[order.account].remove(order)
-        self.on_order(order.account, order, type_)
-
-    def _update_trades(self, order, type_: Literal["partial", "filled"]):
-        trade = order.trades[-1]
-        self.trades[order.account].append(trade)
-        self.on_trade(order.account, trade, type_)
+        Called with a fully-formed update object from BOTH paths: the engine's local
+        in-process delivery, and databoy's _data_zmq recv (after reconstructing from the
+        published dict via model_validate). Mirrors the engine's _run_updates_loop match,
+        one level down into the strategy's own managers.
+        """
+        match update:
+            case BalanceUpdate():
+                self._portfolio_manager.on_balance_update(update)
+                self.on_balance(balance.account, balance)
+            case PositionUpdate():
+                self._portfolio_manager.on_position_update(update)
+                self.on_position(position.account, position)
+            case OrderUpdate():
+                self._order_manager.on_order_update(update)
+                self.on_order(order.account, order, type_)
+            case TradeUpdate():
+                self._order_manager.on_trade_update(update)
+                self.on_trade(order.account, trade, type_)
 
     def _gather(self):
         if not self._is_gathered:
@@ -171,27 +172,10 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         else:
             self.logger.debug(f"'{self.name}' has already gathered")
 
-    def create_order(
-        self,
-        *,
-        account: BaseAccount,
-        product: BaseProduct,
-        side: Side | Literal["BUY", "SELL", 1, -1],
-        quantity: float,
-        price: float | None = None,
-        **kwargs,
-    ):
-        broker = self.get_broker(account.bkr)
-        return broker.create_order(
-            creator=self.name,
-            account=account,
-            product=product,
-            side=side,
-            quantity=quantity,
-            price=price,
-            **kwargs,
-        )
+    def _set_engine(self, engine: TradeEngine):
+        self._engine = engine
 
+    # TODO: draft only
     def place_orders(
         self,
         account: BaseAccount,
@@ -200,28 +184,25 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     ):
         if not isinstance(orders, list):
             orders = [orders]
-        broker = self.get_broker(account.bkr)
-        broker.place_orders(account, product, orders)
+        if self.databoy.is_using_zmq():
+            self.databoy._data_zmq.send(...)  # TODO: draft only
+        else:
+            venue = self._engine.get_venue(account.venue)
+            venue._run_coroutine_threadsafe(venue.place_orders, args=(orders,))
         return orders
 
+    # TODO
     def cancel_orders(
         self,
-        account: BaseAccount,
-        product: BaseProduct,
-        orders: list[BaseOrder] | BaseOrder,
     ):
-        if not isinstance(orders, list):
-            orders = [orders]
-        broker = self.get_broker(account.bkr)
-        broker.cancel_orders(account, product, orders)
-        return orders
+        pass
 
     # TODO
     def cancel_all_orders(self):
         pass
 
     # TODO
-    def amend_orders(self, bkr, exch="", acc=""):
+    def amend_orders(self):
         pass
 
     """
@@ -250,37 +231,3 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
 
     def on_trade(self, account, trade: dict, type_: Literal["partial", "filled"]):
         pass
-
-    """
-    ************************************************
-    Sugar Functions
-    ************************************************
-    """
-
-    def buy(self, account, product, price, quantity, **kwargs):
-        order = self.create_order(
-            account, product, 1, quantity, price=price, o_type="LIMIT", **kwargs
-        )
-        self.place_orders(account, product, [order])
-
-    buy_limit = buy_limit_order = buy
-
-    def buy_market_order(self, account, product, quantity):
-        order = self.create_order(account, product, 1, quantity, o_type="MARKET")
-        self.place_orders(account, product, [order])
-
-    buy_market = buy_market_order
-
-    def sell(self, account, product, price, quantity, **kwargs):
-        order = self.create_order(
-            account, product, -1, quantity, price=price, o_type="LIMIT", **kwargs
-        )
-        self.place_orders(account, product, [order])
-
-    sell_limit = sell_limit_order = sell
-
-    def sell_market_order(self, account, product, quantity):
-        order = self.create_order(account, product, -1, quantity, o_type="MARKET")
-        self.place_orders(account, product, [order])
-
-    sell_market = sell_market_order

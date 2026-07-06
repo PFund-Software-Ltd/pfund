@@ -183,7 +183,6 @@ class DataBoy:
         for data in self._component.get_datas():
             if isinstance(data, MarketData):
                 zmq_channel = ZeroMQDataChannel.create_market_data_channel(
-                    data_source=data.source,
                     product=data.product,
                     resolution=data.resolution,
                 )
@@ -257,15 +256,37 @@ class DataBoy:
             self._update_data_store(msg)
         # when using zeromq (there could be some local and remote components, but both use zeromq to receive data anyways)
         else:
+            from pfund.entities.balances.balance_base import BalanceUpdate
+
+            # rebuild-by-topic map for private updates; market data falls through to the
+            # store. Symmetric with market data discriminating on PublicDataChannel.
+            # TODO(#2): add PositionUpdate/OrderUpdate/TradeUpdate once the taxonomy exists.
+            update_types = {
+                PrivateDataChannel.balance: BalanceUpdate,
+                # PrivateDataChannel.position: PositionUpdate,
+                # PrivateDataChannel.order: OrderUpdate,
+                # PrivateDataChannel.trade: TradeUpdate,
+            }
             while self._component.is_running():
                 if msg_tuple := self._data_zmq.recv():
-                    channel, topic, msg, msg_ts = msg_tuple
+                    channel, topic, data, msg_ts = msg_tuple
 
-                    # TEMP
-                    # print('databoy data_zmq recv:', channel, topic, msg, msg_ts)
-                    # update = BalanceUpdate(**update)
-
-                    self._update_data_store(msg)
+                    if UpdateType := update_types.get(topic):
+                        # remote path: rebuild the typed object from the published dict,
+                        # then call the same strategy sink the local path calls. Only
+                        # strategies subscribe to private channels / own _on_update, so
+                        # guard against a stray private msg reaching a non-strategy —
+                        # without skipping the _signals_zmq.recv() below.
+                        if self._component.is_strategy():
+                            update = UpdateType.model_validate(data)
+                            self._component._on_update(update)
+                        else:
+                            self.logger.warning(
+                                f"{self.name} received private update on '{topic}' "
+                                + "but is not a strategy; ignoring"
+                            )
+                    else:
+                        self._update_data_store(data)
                 # TODO:
                 if msg_tuple := self._signals_zmq.recv():
                     pass

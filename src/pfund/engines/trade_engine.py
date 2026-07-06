@@ -89,6 +89,7 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
         self._worker: ZeroMQ | None = None
         self._data_engine: DataEngine | None = None
         self._zmq_thread: Thread | None = None
+        self._updates_thread: Thread | None = None
         self._queue: queue.Queue[Any] = queue.Queue()
         self._scheduler: BackgroundScheduler = BackgroundScheduler()
         self._schedule_jobs(self._scheduler)
@@ -118,22 +119,6 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
         return self._risk_manager
 
     rm = risk_manager
-
-    # TODO: include descriptions
-    def show_zmq_graph(self):
-        try:
-            import graphviz
-        except ImportError:
-            raise ImportError(
-                "graphviz is not installed, please install it using `pip install graphviz`"
-            )
-        # TEMP
-        from pprint import pprint
-
-        print("engine.settings.zmq_urls:")
-        pprint(self.settings.zmq_urls.to_dict())
-        print("engine.settings.zmq_ports:")
-        pprint(self.settings.zmq_ports.to_dict())
 
     def _get_pfeed_stream_kwargs(self) -> dict[str, Any]:
         return {"env": self.env}
@@ -293,13 +278,18 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
             )
         return False
 
-    def _run_engine_loop(self):
+    def _run_zmq_loop(self):
+        """ZMQ I/O loop — only runs when self._is_using_zmq().
+
+        Owns the RECEIVE side only: the proxy's SUB receiver and the worker's PULL. It
+        never sends on the proxy — all outbound publishing happens in _run_updates_loop
+        (which solely owns the proxy's XPUB sender). The two loops share the _proxy
+        wrapper but touch disjoint sockets, which ZeroMQ permits (thread-safe context,
+        one socket per thread). Sockets are built in _setup() and torn down in
+        _teardown(), both on the main thread.
+        """
         from pfeed.streaming.zeromq import ZeroMQDataChannel
 
-        self._setup_proxy()
-        for strategy in self._strategies.values():
-            strategy._setup_messaging()
-        self._setup_worker()
         assert self._proxy is not None, "proxy is not set"
         assert self._worker is not None, "worker is not set"
 
@@ -334,35 +324,56 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
                         args=(...,),
                         kwargs={...},
                     )
-
-                # drain the queue completely
-                while True:
-                    try:
-                        update = self._queue.get_nowait()
-                        match update:
-                            case BalanceUpdate():
-                                self._portfolio_manager.on_balance_update(update)
-                            case PositionUpdate():
-                                self._portfolio_manager.on_position_update(update)
-                            case OrderUpdate():
-                                self._order_manager.on_order_update(update)
-                            case TradeUpdate():
-                                self._order_manager.on_trade_update(update)
-
-                        # TODO: publish orders, positions, balances etc. to components
-                        self._proxy.send(
-                            channel, topic, data=update.model_dump(mode="json")
-                        )
-                    except queue.Empty:
-                        break
-
             except Exception:
-                self._logger.exception(f"Exception in {self.name} _run_engine_loop():")
+                self._logger.exception(f"Exception in {self.name} _run_zmq_loop():")
             except KeyboardInterrupt:
                 self._logger.warning("KeyboardInterrupt received, ending ZMQ loop")
                 break
-        self._proxy.terminate()
-        self._worker.terminate()
+
+    def _run_updates_loop(self):
+        """Drain venue updates -> managers -> publish outward. ALWAYS runs.
+
+        Venues push Balance/Position/Order/Trade updates into self._queue via
+        venue._set_queue(), regardless of ZMQ. This loop is the single consumer, so the
+        manager-routing runs identically in local and ZMQ modes with no duplicated code.
+        Runs in its own thread; blocks on the queue (no busy-spin) and re-checks
+        is_running() every 100ms for clean shutdown.
+        """
+        while self.is_running():
+            try:
+                update = self._queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            try:
+                match update:
+                    case BalanceUpdate():
+                        self._portfolio_manager.on_balance_update(update)
+                    case PositionUpdate():
+                        self._portfolio_manager.on_position_update(update)
+                    case OrderUpdate():
+                        self._order_manager.on_order_update(update)
+                    case TradeUpdate():
+                        self._order_manager.on_trade_update(update)
+
+                # publish outward: ZMQ path sends on the proxy's XPUB sender (this thread
+                # solely owns that socket); local path delivers in-process to strategies.
+                if self._proxy is not None:
+                    # TODO(#2): derive the private channel/topic (venue.account.channel)
+                    #   from update.account + type via create_private_channel, instead of
+                    #   these placeholders (the old drain reused stale recv channel/topic).
+                    channel, topic = "", ""
+
+                    # TODO: only send to strategies
+                    self._proxy.send(
+                        channel, topic, data=update.model_dump(mode="json")
+                    )
+                else:
+                    # local path: call the owning strategy's sink directly, no zmq hop.
+                    # TODO: route by update.account instead of broadcasting to all.
+                    for strategy in self._strategies.values():
+                        strategy._on_update(update)
+            except Exception:
+                self._logger.exception(f"Exception in {self.name} _run_updates_loop():")
 
     def _schedule_jobs(self, scheduler: BackgroundScheduler):
         scheduler.add_job(self._get_trading_states, "interval", seconds=10)
@@ -459,8 +470,24 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
         if self.settings.auto_stream:
             self._setup_data_engine()
         if self._is_using_zmq():
-            self._zmq_thread = Thread(target=self._run_engine_loop, daemon=True)
+            # build the proxy/worker sockets on the main thread, then hand each loop its
+            # own: the I/O loop reads (SUB + PULL), the updates loop writes (XPUB) —
+            # disjoint sockets, one context. Order matters: _setup_worker() must run
+            # after strategy messaging so component data ports are already registered.
+            self._setup_proxy()
+            for strategy in self._strategies.values():
+                strategy._setup_messaging()
+            self._setup_worker()
+            self._zmq_thread = Thread(target=self._run_zmq_loop, daemon=True)
             self._zmq_thread.start()
+        else:
+            # pure-local path: no zmq loop, so strategies reach the engine-owned venues
+            # directly. Inject the engine handle for use in strategy.place_orders().
+            for strategy in self._strategies.values():
+                strategy._set_engine(self)
+        # the updates loop drains venue updates -> managers -> publish, ALWAYS (zmq or not)
+        self._updates_thread = Thread(target=self._run_updates_loop, daemon=True)
+        self._updates_thread.start()
         for venue in self._venues.values():
             venue.start()
         self._get_trading_states()  # initial fetch
@@ -472,10 +499,23 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
             venue.stop()
         if self._data_engine:
             self._data_engine.end()
-        if self._zmq_thread and self._zmq_thread.is_alive():
-            self._logger.debug(f"{self.name} waiting for zmq thread to finish")
-            self._zmq_thread.join(timeout=10)
-            self._logger.debug(
-                f"{self.name} zmq thread finished (alive={self._zmq_thread.is_alive()})"
-            )
+        # join both loops before touching their sockets — is_running() is already False,
+        # so each exits within its poll/timeout window
+        for thread_name, thread in (
+            ("zmq", self._zmq_thread),
+            ("updates", self._updates_thread),
+        ):
+            if thread and thread.is_alive():
+                self._logger.debug(
+                    f"{self.name} waiting for {thread_name} thread to finish"
+                )
+                thread.join(timeout=10)
+                self._logger.debug(
+                    f"{self.name} {thread_name} thread finished (alive={thread.is_alive()})"
+                )
+        # tear down zmq sockets on the main thread, now that both loops have stopped
+        if self._proxy is not None:
+            self._proxy.terminate()
+        if self._worker is not None:
+            self._worker.terminate()
         super()._teardown()
