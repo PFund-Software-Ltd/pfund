@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING, Literal, Any
 from typing_extensions import override
 
 if TYPE_CHECKING:
+    from pfeed.storages.storage_config import StorageConfig
+    from pfeed.sources.pfund.engine_feed import PFundEngineFeed
     from pfund.typing import FullDataChannel
     from pfund.datas.data_market import MarketData
     from pfund.venues.venue_base import AnyVenue
@@ -43,12 +45,14 @@ class SandboxVenue(
     def __init__(
         self,
         venue: TradingVenue | str,
+        engine_feed: PFundEngineFeed,
+        storage_config: StorageConfig,
         replay_mode: bool = True,
         config: VenueConfig | None = None,
     ):
-        import pfeed as pe
-
         self._venue = TradingVenue[venue.upper()]
+        self._engine_feed = engine_feed
+        self._storage_config = storage_config
         self._replay_mode = replay_mode
         VenueClass = self._VenueClass
         # Adopt the real venue's class-level config/metadata/adapter so BaseVenue's
@@ -73,7 +77,6 @@ class SandboxVenue(
             )
         )
         super().__init__(env=Environment.SANDBOX, config=config, read_only=False)
-        self._feed = pe.PFund().engine_feed
 
     @property
     def name(self) -> TradingVenue:

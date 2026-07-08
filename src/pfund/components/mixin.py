@@ -17,7 +17,8 @@ if TYPE_CHECKING:
     from pfund.datas.stores.base_data_store import BaseDataStore
     from pfund.datas.stores.market_data_store import MarketDataStore
     from pfund.datas.timeframe import Timeframe
-    from pfund.engines.contexts.base_engine_context import BaseEngineContext
+    from pfeed.storages.storage_config import StorageConfig
+    from pfund.engines.contexts.trade_engine_context import TradeEngineContext
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.entities.products.product_base import BaseProduct
     from pfund.typing import (
@@ -64,7 +65,7 @@ class ComponentMixin:
         self._name = self._get_default_name()
         self._run_mode: RunMode | None = None
         self._resolution: Resolution | None = None
-        self._context: BaseEngineContext | None = None
+        self._context: TradeEngineContext | None = None
 
         self.logger: logging.Logger = logging.getLogger("pfund")
         self.databoy = DataBoy(self)
@@ -97,13 +98,13 @@ class ComponentMixin:
         return self._run_mode
 
     @property
-    def context(self) -> BaseEngineContext:
+    def context(self) -> TradeEngineContext:
         assert self._context is not None, "context is not set"
         return self._context
 
     @property
     def settings(self) -> TradeEngineSettings:
-        return cast("TradeEngineSettings", self.context.settings)
+        return self.context.settings
 
     @property
     def market_data_store(self) -> MarketDataStore:
@@ -131,7 +132,8 @@ class ComponentMixin:
         name: ComponentName,
         run_mode: RunMode,
         resolution: Resolution | str,
-        engine_context: BaseEngineContext,
+        engine_context: TradeEngineContext,
+        storage_config: StorageConfig,
         is_top_component: bool = False,
     ):
         """
@@ -141,7 +143,11 @@ class ComponentMixin:
             name (ComponentName): The name to assign to this component.
             run_mode (RunMode): The mode in which the component will run (e.g., local or remote).
             resolution (Resolution | str): The data resolution used by this component.
-            engine_context (BaseEngineContext): The engine context associated with this component. It is None if the component is running in a remote process.
+            engine_context (TradeEngineContext): The engine context associated with this component. It is None if the component is running in a remote process.
+            storage_config (StorageConfig): where this component's artifacts are persisted.
+                Always resolved by the caller (per-component override, else the engine
+                default or parent component's config) — never None by the time it lands
+                here, so the store receives a concrete config.
         """
         self._context = engine_context
         self._run_mode = run_mode
@@ -149,6 +155,7 @@ class ComponentMixin:
         self._set_resolution(resolution)
         self.set_logger(self.logger)
         self._is_top_component = is_top_component
+        self.store.set_storage_config(storage_config)
 
     def _setup_messaging(self):
         self.databoy._setup_messaging()
@@ -455,27 +462,12 @@ class ComponentMixin:
             datas.extend(data_store.get_datas())
         return datas
 
-    @staticmethod
-    def get_supported_resolutions(product: BaseProduct) -> dict[Timeframe, list[int]]:
-        import importlib
-
-        supported_resolutions: dict[Timeframe, list[int]]
-        broker = product.broker
-        if broker == Broker.CRYPTO:
-            Exchange = (
-                importlib.import_module(
-                    f"pfund.brokers.crypto.exchanges.{product.exchange.lower()}.exchange"
-                )
-            ).Exchange
-            supported_resolutions = Exchange.get_supported_resolutions(product)
-        elif broker == Broker.IBKR:
-            InteractiveBrokersAPI = importlib.import_module(
-                "pfund.brokers.ibkr.api"
-            ).InteractiveBrokersAPI
-            supported_resolutions = InteractiveBrokersAPI.SUPPORTED_RESOLUTIONS
-        else:
-            raise NotImplementedError(f"broker {broker} is not supported")
-        return supported_resolutions
+    def _get_supported_resolutions(
+        self, product: BaseProduct
+    ) -> dict[Timeframe, list[int]]:
+        venue = product.venue
+        assert venue is not None, "venue is not None"
+        return venue.METADATA.supported_resolutions
 
     @staticmethod
     def dt(ts: float, tz: datetime.tzinfo = datetime.UTC) -> datetime.datetime:
@@ -625,7 +617,7 @@ class ComponentMixin:
         product: BaseProduct = self._add_product(
             venue=venue,
             basis=product,
-            exch=exchange,
+            exchange=exchange,
             symbol=symbol,
             name=product_name,
             **product_specs,
@@ -642,12 +634,16 @@ class ComponentMixin:
         component: ComponentT | ActorProxy[ComponentT],
         resolution: str = "",
         name: str = "",
+        storage_config: StorageConfig | None = None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ) -> ComponentT | ActorProxy[ComponentT] | None:
         """Adds a model component to the current component.
         A model component is a model, feature, or indicator.
         Args:
+            storage_config: per-component override for where this component's artifacts
+                are persisted. Falls back to this parent's storage config (which itself
+                came from the engine default or its own parent) when None.
             ray_kwargs: kwargs for ray actor, e.g. num_cpus
             ray_actor_options:
                 Options for Ray actor.
@@ -711,6 +707,7 @@ class ComponentMixin:
                 run_mode=RunMode.REMOTE if ray_kwargs else RunMode.LOCAL,
                 resolution=resolution or self.resolution,
                 engine_context=self.context,
+                storage_config=storage_config or self.store.storage_config,
             )
 
         components[component.name] = component
@@ -726,16 +723,18 @@ class ComponentMixin:
         model: ModelT | ActorProxy[ModelT] | BaseEstimator | nn.Module,
         resolution: str = "",
         name: str = "",
+        storage_config: StorageConfig | None = None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ) -> ModelT | ActorProxy[ModelT] | None:
-        from pfund.components.models.model_base import wrap_model
+        from pfund.components.models.wrap import wrap_model
 
         model = wrap_model(model)
         return self._add_component(
             component=model,
             resolution=resolution,
             name=name,
+            storage_config=storage_config,
             ray_actor_options=ray_actor_options,
             **ray_kwargs,
         )
@@ -745,6 +744,7 @@ class ComponentMixin:
         feature: FeatureT | ActorProxy[FeatureT],
         resolution: str = "",
         name: str = "",
+        storage_config: StorageConfig | None = None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ) -> FeatureT | ActorProxy[FeatureT] | None:
@@ -752,6 +752,7 @@ class ComponentMixin:
             component=feature,
             resolution=resolution,
             name=name,
+            storage_config=storage_config,
             ray_actor_options=ray_actor_options,
             **ray_kwargs,
         )
@@ -761,6 +762,7 @@ class ComponentMixin:
         indicator: IndicatorT | ActorProxy[IndicatorT],
         resolution: str = "",
         name: str = "",
+        storage_config: StorageConfig | None = None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ) -> IndicatorT | ActorProxy[IndicatorT] | None:
@@ -768,6 +770,7 @@ class ComponentMixin:
             component=indicator,
             resolution=resolution,
             name=name,
+            storage_config=storage_config,
             ray_actor_options=ray_actor_options,
             **ray_kwargs,
         )
@@ -999,7 +1002,7 @@ class ComponentMixin:
         self.store.materialize()
 
     def _reload_markets(self):
-        """venues might have refetched the latest markets, reload markets from markets.yml"""
+        """venues (at engine level) might have refetched the latest markets, reload markets from markets.yml"""
         # NOTE: must use pfund_config from context, config from get_config() could be different from what user has set in Ray Actor
         pfund_config = self.context.pfund_config
         for product in self.products.values():

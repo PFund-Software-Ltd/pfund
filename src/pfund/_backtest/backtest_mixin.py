@@ -2,14 +2,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from typing_extensions import override
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
     from pfund.datas.timeframe import Timeframe
-    from pfund.engines.backtest_engine import BacktestEngineContext
+    from pfund.engines.contexts.backtest_engine_context import BacktestEngineContext
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.entities.products.product_base import BaseProduct
     from pfund.typing import ComponentT
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 from pfund.enums import BacktestMode
 
 
-def setup_backtest_df(df: IntoDataFrame) -> IntoDataFrame:
+def _setup_backtest_df_for_fast_mode(df: IntoDataFrame) -> IntoDataFrame:
     """Prepare a native dataframe (pandas/polars) for FAST backtesting.
 
     Attaches the two ENTRY methods to the df's class so they survive native
@@ -67,7 +67,7 @@ def setup_backtest_df(df: IntoDataFrame) -> IntoDataFrame:
     Every df must carry (date, resolution, product) — MarketDataStore
     guarantees them; a single-product df is simply one combo, so the fluent
     df.create_signal(...)....backtest() chain works on it directly.
-    Calling setup_backtest_df starts a fresh session (clears the product
+    Calling _setup_backtest_df_for_fast_mode starts a fresh session (clears the product
     and portfolio registries of any previous configuration).
 
     Returns the df unchanged.
@@ -151,19 +151,41 @@ class BacktestMixin:
 
     def backtest(self, df: IntoDataFrame) -> IntoDataFrame:
         if hasattr(super(), "backtest"):
-            self._validate_backtest_signature(super().backtest)
-            backtest_df: IntoDataFrame | None = cast(
-                "IntoDataFrame | None", super().backtest(df)
-            )
-            if backtest_df is None:
+            from narwhals.dependencies import is_into_dataframe
+
+            super_backtest = cast("Callable[[IntoDataFrame], Any]", super().backtest)
+            self._validate_backtest_signature(super_backtest)
+
+            if self.is_strategy():
+                # only after we know a valid backtest() exists: prepares the df for the
+                # user's chain (attaches create_signal/create_weight, validates LONG form,
+                # clears registries); returns df unchanged
+                df = _setup_backtest_df_for_fast_mode(df)
+
+            backtest_df: Any = super_backtest(df)
+
+            # check if returns a df
+            if not is_into_dataframe(backtest_df):
                 raise TypeError(
-                    f"{self.name}.backtest() must return the backtested dataframe, got None. Did you forget to return df?"
+                    f"{self.name}.backtest() must return the backtested dataframe, got {type(backtest_df).__name__}. Did you forget to return df?"
                 )
-            return backtest_df
+            # check if returns a new df
+            if self.is_strategy() and backtest_df is df:
+                from pfund_kit.style import RichColor, TextStyle, cprint
+
+                cprint(
+                    f"WARNING: {self.name} backtest() returned the same df unchanged.\n"
+                    + "This is fine if you only used native e.g. Polars/Pandas operations on the original df.\n"
+                    + "However, [italic]this is an ERROR[/italic] if you called backtest methods such as "
+                    + "create_signal(), open_position(), or close_position() —\n"
+                    + "these return a new df, so you must reassign: df = df.create_signal(...) and return the new df",
+                    style=TextStyle.BOLD + RichColor.RED,
+                )
+            return cast("IntoDataFrame", backtest_df)
         else:
             if self.is_strategy():
                 raise NotImplementedError(
-                    f"{self.name} does not have a backtest(self, df) method, cannot run vectorized backtesting"
+                    f"{self.name} does not have a backtest(self, df) method, cannot run backtesting in {self.backtest_mode} mode"
                 )
             else:
                 # model's backtest() is optional
@@ -176,16 +198,15 @@ class BacktestMixin:
 
     @property
     def settings(self) -> BacktestEngineSettings:
-        return cast("BacktestEngineSettings", self.context.settings)
+        return self.context.settings
 
     @property
     def backtest_mode(self) -> BacktestMode:
         return self._context.mode
 
-    # FIXME
     @property
     def dataset_periods(self) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
-        return self.context.backtest.dataset_splitter.dataset_periods
+        return self.context.dataset_periods
 
     @property
     def features_df(self) -> IntoDataFrame | None:
@@ -206,27 +227,94 @@ class BacktestMixin:
 
     df = features_df
 
-    # TODO
-    @property
-    def train_set(self):
-        # FIXME: should use pfeed's config?
-        storage_config = BacktestEngine._storage_config
-        return self.store.load_data_from_storage(
-            storage=storage_config.storage,
-            storage_options=storage_config.storage_options,
+    def _get_dataset(
+        self,
+        key: Literal["train_set", "dev_set", "test_set"],
+        fold: int | None = None,
+    ) -> IntoDataFrame | None:
+        """Slice the full dataset (self.df) down to `key`'s date window.
+
+        dataset_periods only computes the date boundaries; this turns those
+        dates into rows.
+
+        Args:
+            fold: which CV fold to slice. Leave None for a ratio split; it is
+                required (and picks the fold) under cross-validation.
+
+        Returns None when the dataset isn't materialized yet, the segment
+        collapsed to 0 days ((None, None)), or the split doesn't define `key`
+        (CV folds have no test_set — the test hold-out lives outside the folds).
+        """
+        import narwhals as nw
+
+        periods = self.dataset_periods
+        if isinstance(periods, list):
+            if fold is None:
+                raise ValueError(
+                    f"{self.name} uses cross-validation ({len(periods)} folds); "
+                    + f"pass fold=0..{len(periods) - 1} to pick one"
+                )
+            if not 0 <= fold < len(periods):
+                raise IndexError(f"fold {fold} out of range for {len(periods)} folds")
+            period = periods[fold]
+        else:
+            if fold is not None:
+                raise ValueError(
+                    f"{self.name} uses a ratio split, not cross-validation; "
+                    + "fold must be None"
+                )
+            period = periods
+
+        window = period.get(key)
+        if window is None:
+            return None
+        start, end = window
+        df = self.df
+        if start is None or end is None or df is None:
+            return None
+        return (
+            nw.from_native(df)
+            .filter(
+                nw.col("date").dt.date() >= start,
+                nw.col("date").dt.date() <= end,
+            )
+            .to_native()
         )
 
-    # TODO
-    @property
-    def dev_set(self):
-        return self.store.load_data(...)
+    def get_train_set(self, fold: int | None = None) -> IntoDataFrame | None:
+        """Rows of the training split.
 
-    val_set = dev_set
+        Args:
+            fold: which cross-validation fold to slice, 0-indexed. Leave None
+                for a ratio split (there is a single train set); required under
+                cross-validation, where it selects the fold.
+        """
+        return self._get_dataset("train_set", fold)
 
-    # TODO
-    @property
-    def test_set(self):
-        return self.store.load_data(...)
+    get_training_set = get_train_set
+
+    def get_dev_set(self, fold: int | None = None) -> IntoDataFrame | None:
+        """Rows of the dev (validation) split.
+
+        Args:
+            fold: which cross-validation fold to slice, 0-indexed. Leave None
+                for a ratio split (there is a single dev set); required under
+                cross-validation, where it selects the fold.
+        """
+        return self._get_dataset("dev_set", fold)
+
+    get_val_set = get_validation_set = get_development_set = get_dev_set
+
+    def get_test_set(self, fold: int | None = None) -> IntoDataFrame | None:
+        """Rows of the test (hold-out) split.
+
+        Args:
+            fold: which cross-validation fold to slice, 0-indexed. Leave None
+                for a ratio split. Note CV folds have no test set (the test
+                hold-out lives outside the folds), so this returns None for
+                any fold under cross-validation.
+        """
+        return self._get_dataset("test_set", fold)
 
     def _add_component(
         self,
@@ -276,9 +364,9 @@ class BacktestMixin:
             return super()._gather()
 
     @override
-    def get_supported_resolutions(
+    def _get_supported_resolutions(  # pyright: ignore[reportGeneralTypeIssues]
         self, product: BaseProduct
-    ) -> dict[Timeframe, list[int]]:  # pyright: ignore[reportGeneralTypeIssues]
+    ) -> dict[Timeframe, list[int]]:
         """Gets supported resolutions for the product based on the trading venue.
         Overrides it in backtesting, supports only the primary resolution.
         """

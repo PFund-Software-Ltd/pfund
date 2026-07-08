@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
 import narwhals as nw
 from pfeed.enums import DataLayer, IOFormat
+from pfeed.storages.storage_config import StorageConfig
 
 from pfund.enums import ArtifactType
 
@@ -27,6 +28,7 @@ class TradingStore:
         self._feed: PFundComponentFeed = pe.PFund(
             pipeline_mode=True
         ).component_feed.with_component(self._component)
+        self._storage_config: StorageConfig | None = None
 
     @property
     def KEY_COLS(self) -> list[str]:
@@ -36,8 +38,16 @@ class TradingStore:
     def logger(self):
         return self._component.logger
 
+    @property
+    def storage_config(self) -> StorageConfig:
+        assert self._storage_config is not None
+        return self._storage_config
+
     def set_pivot_cols(self, pivot_cols: list[str]):
         self.PIVOT_COLS = pivot_cols
+
+    def set_storage_config(self, storage_config: StorageConfig):
+        self._storage_config = storage_config
 
     def pivot_df(self, df: nw.DataFrame[Any]) -> nw.DataFrame[Any]:
         """Pivots signals dataframe from long form to wide form.

@@ -10,6 +10,8 @@ from typing import (
     Generic,
     TypedDict,
     ClassVar,
+    Required,
+    NotRequired,
 )
 
 if TYPE_CHECKING:
@@ -19,37 +21,43 @@ if TYPE_CHECKING:
     from pfund.components.actor_proxy import ActorProxy
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.datas.resolution import Resolution
-    from pfund.engines.settings.base_engine_settings import BaseEngineSettings
     from pfund.typing import StrategyT, ComponentName
 
     class DataRangeDict(TypedDict, total=False):
-        start_date: str
-        end_date: str
+        start_date: Required[str]
+        end_date: NotRequired[str]
 
 
 import logging
 
 from pfund_kit.utils.singleton import SingletonMeta
+from pfeed.storages.storage_config import StorageConfig
 
 from pfund.enums import ComponentType, Environment, RunMode
-from pfund.engines.contexts.base_engine_context import BaseEngineContext
+from pfund.engines.contexts.base_engine_context import BaseEngineContext, SettingsT
 
 
-SettingsT = TypeVar("SettingsT", bound="BaseEngineSettings")
-ContextT = TypeVar("ContextT", bound="BaseEngineContext")
+ContextT = TypeVar("ContextT", bound="BaseEngineContext[Any]")
 
 
 class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
-    Context: ClassVar[type[BaseEngineContext]] = BaseEngineContext
+    Context: ClassVar[type[BaseEngineContext[Any]]] = BaseEngineContext
     _context: ContextT  # pyright: ignore[reportUninitializedInstanceVariable]
 
-    def __init__(self, *, env: Environment, name: str):
+    def __init__(
+        self,
+        *,
+        env: Environment,
+        name: str,
+        storage_config: StorageConfig | None = None,
+    ):
         from pfund.config import setup_logging
 
         setup_logging(env=env, engine_name=name)
         # setup_logging installs ColoredLogger via setLoggerClass, so getLogger
         # returns one — cast so the `style=` kwarg type-checks on log calls.
         self._logger: ColoredLogger = cast("ColoredLogger", logging.getLogger("pfund"))
+        self._storage_config: StorageConfig = storage_config or StorageConfig()
         self._is_running = False
         self._strategies: dict[
             ComponentName, BaseStrategy | ActorProxy[BaseStrategy]
@@ -73,7 +81,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
 
     @property
     def settings(self) -> SettingsT:
-        return cast("SettingsT", self._context.settings)
+        return self._context.settings
 
     def is_running(self) -> bool:
         return self._is_running
@@ -99,11 +107,15 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
         strategy: StrategyT,
         resolution: str,
         name: str = "",
+        storage_config: StorageConfig | None = None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ) -> StrategyT | ActorProxy[StrategyT]:
         """
         Args:
+            storage_config:
+                per-strategy override for where this strategy's artifacts are persisted.
+                Falls back to the engine-level default (self._storage_config) when None.
             ray_actor_options:
                 Options for Ray actor.
                 will be passed to ray actor like this: Actor.options(**ray_options).remote(**ray_kwargs)
@@ -149,6 +161,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
             resolution=resolution,
             engine_context=self._context,
             is_top_component=True,
+            storage_config=storage_config or self._storage_config,
         )
 
         self._strategies[strat] = strategy

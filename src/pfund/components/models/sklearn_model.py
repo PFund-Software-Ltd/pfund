@@ -6,10 +6,13 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from numpy import ndarray
 
+import io
+import joblib
+
 from pfund.components.models.model_base import BaseModel
 
 
-class SklearnModel(BaseModel):
+class SKLearnModel(BaseModel):
     def predict(self, X: Any, *args: Any, **kwargs: Any) -> ndarray:
         pred_y = self.model.predict(X, *args, **kwargs)
         if not self._signal_cols:
@@ -18,24 +21,12 @@ class SklearnModel(BaseModel):
             self.set_signal_cols(signal_cols)
         return pred_y
 
-    def dump(self, obj: dict[str, Any] | None = None) -> bytes:
-        import io
-
-        import joblib
-
-        if obj is None:
-            obj = {}
-        obj.update(
-            {
-                "model": self.model,
-                "datas": self.datas,
-            }
-        )
-        # serialize to bytes, not a file — pfeed's BlobIO owns persistence (writes
-        # the .joblib). The component only knows its own format.
+    def _encode(self, payload: dict[str, Any]) -> bytes:
         buffer = io.BytesIO()
-        joblib.dump(obj, buffer)
+        joblib.dump(payload, buffer)
         return buffer.getvalue()
 
-
-SKLearnModel = SklearnModel
+    def _decode(self, data: bytes) -> None:
+        payload = joblib.load(io.BytesIO(data))
+        self.model = payload["model"]
+        self.set_signal_cols(payload["signal_cols"])

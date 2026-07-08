@@ -47,7 +47,7 @@ class BaseProduct(BaseModel):
     )
     name: str = Field(
         default="",
-        description="unique product name, if not provided, venue + symbol will be used",
+        description="unique product name (not globally, but within the same trading venue), if not provided, venue + symbol will be used",
     )
     market: BaseMarket | None = Field(
         default=None, description="market this product belongs to"

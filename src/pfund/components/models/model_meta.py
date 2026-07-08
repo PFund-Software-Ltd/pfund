@@ -115,13 +115,13 @@ class MetaModel(ABCMeta):
             BaseEstimator = None
 
         if nn is not None and isinstance(model, nn.Module):
-            from pfund.components.models.pytorch_model import PytorchModel
+            from pfund.components.models.pytorch_model import PyTorchModel
 
-            return PytorchModel
+            return PyTorchModel
         elif BaseEstimator is not None and isinstance(model, BaseEstimator):
-            from pfund.components.models.sklearn_model import SklearnModel
+            from pfund.components.models.sklearn_model import SKLearnModel
 
-            return SklearnModel
+            return SKLearnModel
         else:
             from pfund.components.models.model_base import BaseModel
 

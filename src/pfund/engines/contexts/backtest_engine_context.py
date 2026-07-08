@@ -6,7 +6,6 @@ if TYPE_CHECKING:
     from sklearn.model_selection import TimeSeriesSplit
 
     from pfund.engines.base_engine import DataRangeDict
-    from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund._backtest.cv.base import CrossValidatorDatasetPeriods
     from pfund._backtest.dataset_splitter import DatasetPeriods, DatasetSplitsDict
 
@@ -14,11 +13,12 @@ from pfund_kit.style import RichColor, TextStyle, cprint
 
 from pfund.datas.resolution import Resolution
 from pfund.enums import Environment, BacktestMode
+from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
 from pfund.engines.contexts.base_engine_context import BaseEngineContext
 from pfund._backtest.dataset_splitter import DatasetSplitter
 
 
-class BacktestEngineContext(BaseEngineContext):
+class BacktestEngineContext(BaseEngineContext[BacktestEngineSettings]):
     def __init__(
         self,
         env: Environment,

@@ -20,12 +20,12 @@ class PytorchLinearRegression(nn.Module):
         return self.linear(x)
 
 
-class DummyPytorch(ml.PytorchModel):
+class DummyPytorch(ml.PyTorchModel):
     def predict(self, *args, **kwargs):
         pass
 
 
-class DummySklearn(ml.SklearnModel):
+class DummySklearn(ml.SKLearnModel):
     def predict(self, *args, **kwargs):
         pass
 

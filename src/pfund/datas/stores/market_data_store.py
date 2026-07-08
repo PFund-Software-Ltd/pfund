@@ -125,7 +125,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         data_config.data_resolutions = [primary_resolution] + extra_resolutions
         resolved_data_config = (
             data_config.auto_shift()
-            .auto_resample(self._databoy._component.get_supported_resolutions(product))
+            .auto_resample(self._databoy._component._get_supported_resolutions(product))
             .auto_skip_first_bar()
             .auto_set_stale_bar_timeout()
         )
@@ -185,7 +185,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             DataClass = BarData
         else:
             raise ValueError(f"Unsupported resolution: {resolution}")
-        return DataClass(product=product, resolution=resolution, data_config=config)
+        return DataClass(product=product, resolution=resolution, config=config)
 
     # TODO
     def update_quote(self, update: QuoteUpdate):

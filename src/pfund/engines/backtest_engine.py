@@ -1,7 +1,7 @@
 # pyright: reportUninitializedInstanceVariable=false, reportUnsafeMultipleInheritance=false, reportIncompatibleVariableOverride=false, reportAssignmentType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, ClassVar
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, overload, ClassVar
 
 if TYPE_CHECKING:
     import torch.nn as nn
@@ -11,8 +11,11 @@ if TYPE_CHECKING:
     from mtflow.contexts.backtest_context import BacktestContext
 
     from pfund.components.models.model_base import BaseModel
+    from pfund.components.models.sklearn_model import SKLearnModel
+    from pfund.components.models.pytorch_model import PyTorchModel
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.datas.data_bar import BarData
+    from pfund.datas.resolution import Resolution
     from pfund.datas.stores.market_data_store import BarUpdate
     from pfund.engines.base_engine import DataRangeDict
     from pfund.typing import FeatureT, IndicatorT, ModelT, StrategyT
@@ -24,8 +27,9 @@ if TYPE_CHECKING:
 import os
 
 import narwhals as nw
-from pfund_kit.style import RichColor, TextStyle, cprint
+from pfund_kit.style import RichColor
 from pfund_kit.utils.progress_bar import ProgressBar, track
+from pfeed.storages.storage_config import StorageConfig
 
 from pfund.engines.base_engine import BaseEngine
 from pfund.engines.contexts.backtest_engine_context import BacktestEngineContext
@@ -40,8 +44,13 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         self,
         *,
         name: str = "engine",
-        data_range: str | DataRangeDict | tuple[str, str] | Literal["ytd"] = "1mo",
+        data_range: str
+        | Resolution
+        | DataRangeDict
+        | tuple[str, str]
+        | Literal["ytd"] = "1mo",
         settings: BacktestEngineSettings | None = None,
+        storage_config: StorageConfig | None = None,
         mode: BacktestMode | Literal["fast", "exact"] = BacktestMode.FAST,
         dataset_splits: int | DatasetSplitsDict | TimeSeriesSplit = 721,
         # TODO:
@@ -59,10 +68,17 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             settings:
                 if not provided, settings.toml will be used.
                 if provided, will override the settings in settings.toml.
+            storage_config:
+                where the engine persists its own state storage (e.g. pfund.db), and
+                the default inherited by every component added under this engine for
+                their artifacts. Overridable per-component via
+                add_strategy(..., storage_config=...) / add_model(...).
+                If not provided, a default StorageConfig() (local storage) is used.
         """
-        super().__init__(env=Environment.BACKTEST, name=name)
+        env = Environment.BACKTEST
+        super().__init__(env=env, name=name, storage_config=storage_config)
         self._context = self._create_context(
-            env=Environment.BACKTEST,
+            env=env,
             name=name,
             data_range=data_range,
             settings=settings,
@@ -84,6 +100,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         strategy: StrategyT,
         resolution: str,
         name: str = "",
+        storage_config: StorageConfig | None = None,
     ) -> StrategyT:
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
         from pfund.components.strategies.strategy_backtest import BacktestStrategy
@@ -108,6 +125,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 strategy=strategy,
                 resolution=resolution,
                 name=name or Strategy.__name__,
+                storage_config=storage_config,
             ),
         )
 
@@ -116,6 +134,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         component: ModelT | FeatureT | IndicatorT,
         resolution: str,
         name: str = "",
+        storage_config: StorageConfig | None = None,
     ) -> ModelT | FeatureT | IndicatorT:
         """Add model without creating a strategy (using dummy strategy)"""
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
@@ -129,7 +148,10 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         )
         if dummy_strategy_name not in self._strategies:
             strategy = self.add_strategy(
-                _DummyStrategy(), resolution, name=dummy_strategy_name
+                _DummyStrategy(),
+                resolution,
+                name=dummy_strategy_name,
+                storage_config=storage_config,
             )
         else:
             strategy = self.get_strategy(dummy_strategy_name)
@@ -140,25 +162,52 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             component,
             resolution,
             name=name,
+            storage_config=storage_config,
             is_top_component=True,
         )
         return component
 
     add_feature = add_indicator = _add_component
 
+    @overload
+    def add_model(
+        self,
+        model: ModelT,
+        resolution: str,
+        name: str = "",
+        storage_config: StorageConfig | None = None,
+    ) -> ModelT: ...
+    @overload
+    def add_model(
+        self,
+        model: BaseEstimator,
+        resolution: str,
+        name: str = "",
+        storage_config: StorageConfig | None = None,
+    ) -> SKLearnModel: ...
+    @overload
+    def add_model(
+        self,
+        model: nn.Module,
+        resolution: str,
+        name: str = "",
+        storage_config: StorageConfig | None = None,
+    ) -> PyTorchModel: ...
     def add_model(
         self,
         model: ModelT | BaseEstimator | nn.Module,
         resolution: str,
         name: str = "",
-    ) -> ModelT:
-        from pfund.components.models.model_base import wrap_model
+        storage_config: StorageConfig | None = None,
+    ) -> ModelT | SKLearnModel | PyTorchModel:
+        from pfund.components.models.wrap import wrap_model
 
         model = cast("ModelT", wrap_model(model))
         return self._add_component(
             component=model,
             resolution=resolution,
             name=name,
+            storage_config=storage_config,
         )
 
     def run(
@@ -238,23 +287,9 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             batch_num: int | None = None,
         ) -> IntoDataFrame:
             if backtest_mode == BacktestMode.FAST:
-                from pfund._backtest.backtest_mixin import setup_backtest_df
-
-                backtest_df_original = df_chunk.to_native()
-                if backtestee.is_strategy():
-                    backtest_df_original = setup_backtest_df(df_chunk.to_native())
-                backtest_df = backtestee.backtest(backtest_df_original)
-                if backtestee.is_strategy() and backtest_df is backtest_df_original:
-                    cprint(
-                        f"WARNING: {backtestee.name} backtest() returned the same df unchanged.\n"
-                        + "This is fine if you only used native e.g. Polars/Pandas operations on the original df.\n"
-                        + "However, [italic]this is an ERROR[/italic] if you called backtest methods like "
-                        + "create_signal(), open_position(), or close_position() —\n"
-                        + "these return a new df, so you must reassign: df = df.create_signal(...) and return the new df",
-                        style=TextStyle.BOLD + RichColor.RED,
-                    )
+                backtest_df = backtestee.backtest(df_chunk.to_native())
             elif backtest_mode == BacktestMode.EXACT:
-                backtest_df = BacktestEngine._event_driven_loop(
+                backtest_df = BacktestEngine._backtest_loop(
                     backtestee=backtestee,
                     df_chunk=df_chunk,
                     chunk_num=chunk_num,
@@ -378,7 +413,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
     # EXTEND: support non-bar data types:
     # brainstorm: heapq.merge(market_data_df, news_data_df), with a dispatcher to create data updates for each data type
     @staticmethod
-    def _event_driven_loop(
+    def _backtest_loop(
         backtestee: BaseStrategy | BaseModel,
         df_chunk: nw.DataFrame[Any],
         chunk_num: int | None = None,

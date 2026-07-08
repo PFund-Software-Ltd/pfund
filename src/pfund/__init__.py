@@ -21,8 +21,18 @@ if TYPE_CHECKING:
     from pfund.components.indicators.indicator_base import BaseIndicator as Indicator
     from pfund.components.indicators.talib_indicator import TalibIndicator
     from pfund.components.models.model_base import BaseModel as Model
-    from pfund.components.models.pytorch_model import PytorchModel
-    from pfund.components.models.sklearn_model import SklearnModel
+    from pfund.components.models.pytorch_model import (
+        PyTorchModel,
+        PyTorchModel as PytorchModel,
+    )
+    from pfund.components.models.jax_model import (
+        JAXModel,
+        JAXModel as JaxModel,
+    )
+    from pfund.components.models.sklearn_model import (
+        SKLearnModel,
+        SKLearnModel as SklearnModel,
+    )
     from pfund.components.strategies.strategy_base import BaseStrategy as Strategy
     from pfund.datas.data_config import DataConfig
     from pfund.engines.backtest_engine import BacktestEngine
@@ -103,14 +113,18 @@ def __getattr__(name: str):
         from pfund.components.features.feature_base import BaseFeature as Feature
 
         return Feature
-    elif name == "PytorchModel":
-        from pfund.components.models.pytorch_model import PytorchModel
+    elif name in ("PyTorchModel", "PytorchModel"):
+        from pfund.components.models.pytorch_model import PyTorchModel
 
-        return PytorchModel
-    elif name == "SklearnModel":
-        from pfund.components.models.sklearn_model import SklearnModel
+        return PyTorchModel
+    elif name in ("SKLearnModel", "SklearnModel"):
+        from pfund.components.models.sklearn_model import SKLearnModel
 
-        return SklearnModel
+        return SKLearnModel
+    elif name in ("JAXModel", "JaxModel"):
+        from pfund.components.models.jax_model import JAXModel
+
+        return JAXModel
     elif name == "Indicator":
         from pfund.components.indicators.indicator_base import (
             BaseIndicator as Indicator,
@@ -163,8 +177,12 @@ __all__ = (
     "Strategy",
     "Model",
     "Feature",
+    "PyTorchModel",
     "PytorchModel",
+    "SKLearnModel",
     "SklearnModel",
+    "JAXModel",
+    "JaxModel",
     "Indicator",
     "TalibIndicator",
     "InteractiveBrokers",

@@ -1,22 +1,18 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false, reportArgumentType=false, reportUnknownParameterType=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     import torch.nn as nn
     from narwhals.typing import IntoDataFrame
     from numpy import ndarray
-    from pfeed.storages.storage_config import StorageConfig
     from sklearn.base import BaseEstimator
     from torch import Tensor
+    from pfeed.dataflow.result import RunResult
 
-    from pfund.components.actor_proxy import ActorProxy
     from pfund.components.indicators.indicator_base import TalibFunction
-    from pfund.datas.data_config import DataConfig
-    from pfund.datas.data_market import MarketData
-    from pfund.enums import TradingVenue
-    from pfund.typing import ColumnName, ModelT
+    from pfund.typing import ColumnName
 
     MachineLearningModel = nn.Module | BaseEstimator | TalibFunction
 
@@ -24,42 +20,9 @@ from abc import ABC, abstractmethod
 
 import narwhals as nw
 
+from pfund.enums import ArtifactType
 from pfund.components.mixin import ComponentMixin
 from pfund.components.models.model_meta import MetaModel
-
-
-def wrap_model(
-    model: BaseEstimator | nn.Module | ModelT | ActorProxy[ModelT],
-) -> ModelT | ActorProxy[ModelT]:
-    """Wraps a sklearn/pytorch model into a pfund model"""
-    from pfund.components.actor_proxy import ActorProxy
-    from pfund.components.models.model_base import BaseModel
-
-    if isinstance(model, (ActorProxy, BaseModel)):
-        return model
-    try:
-        from sklearn.base import BaseEstimator
-
-        if isinstance(model, BaseEstimator):
-            from pfund.components.models.sklearn_model import SklearnModel
-
-            pfund_model = SklearnModel(model)
-            pfund_model._set_name(type(model).__name__)
-            return cast("ModelT", pfund_model)
-    except ImportError:
-        pass
-    try:
-        import torch.nn as nn
-
-        if isinstance(model, nn.Module):
-            from pfund.components.models.pytorch_model import PytorchModel
-
-            pfund_model = PytorchModel(model)
-            pfund_model._set_name(type(model).__name__)
-            return cast("ModelT", pfund_model)
-    except ImportError:
-        pass
-    raise TypeError(f"Unsupported model type: {type(model).__name__}")
 
 
 class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
@@ -156,35 +119,82 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             columns = [f"{self.name}-{i}" for i in range(num_cols)]
         return columns
 
-    def _assert_no_missing_datas(self, obj):
-        loaded_datas = {
-            data for product in obj["datas"] for data in obj["datas"][product].values()
-        }
-        added_datas = {
-            data for product in self._datas for data in self._datas[product].values()
-        }
-        if loaded_datas != added_datas:
-            missing_datas = loaded_datas - added_datas
-            raise Exception(
-                f"missing data {missing_datas} in model '{self.name}', please use add_data() to add them back"
-            )
-
-    def load(self):
-        # TEMP
-        # from pfund_kit.logging.filters.trimmed_path_filter import TrimmedPathFilter
-        # trim_path = TrimmedPathFilter.trim_path
-        # TODO:
-        # self.store.component_feed.retrieve(
-        #     artifact_type=ArtifactType.model,
-        #     storage=self.storage_config.storage,
-        #     data_path=self.context.pfund_config.data_path,
-        # )
-        # TEMP
-        # obj: dict = joblib.load(file_path)
-        # self.model = obj['model']
-        # self._assert_no_missing_datas(obj)
-        return
+    @abstractmethod
+    def _encode(self, payload: dict[str, Any]) -> bytes: ...
 
     @abstractmethod
-    def dump(self) -> bytes:
-        pass
+    def _decode(self, data: bytes) -> None: ...
+
+    @staticmethod
+    def _read_safetensors_signal_cols(data: bytes) -> list[str]:
+        # safetensors layout: 8-byte LE u64 header length, then a JSON header
+        # whose "__metadata__" holds the str->str dict _encode wrote signal_cols into.
+        import json
+        import struct
+
+        (header_len,) = struct.unpack("<Q", data[:8])
+        header = json.loads(data[8 : 8 + header_len])
+        signal_cols = header.get("__metadata__", {}).get("signal_cols")
+        return json.loads(signal_cols) if signal_cols else []
+
+    def load(self) -> None:
+        data: bytes = self.store._feed.retrieve(
+            artifact_type=ArtifactType.model,
+            storage_config=self.store.storage_config,
+        ).run()
+        if data:
+            self._decode(data)
+        else:
+            raise FileNotFoundError(
+                f"no saved model found for '{self.name}' in "
+                + f"{self.store.storage_config.storage} storage; call save() after training first"
+            )
+
+    def save(self) -> RunResult:
+        return self.store._feed.download(
+            artifact_type=ArtifactType.model,
+            storage_config=self.store.storage_config,
+        ).run()
+
+    def serialize(self) -> bytes:
+        payload = {"model": self.model, "signal_cols": self._signal_cols}
+        return self._encode(payload)
+
+    def load_checkpoint(self, step: int) -> dict[str, Any]:
+        """Read back the checkpoint written by save_checkpoint() at `step`. Restores
+        the framework essentials (signal_cols) into the model and returns the user's
+        own dict (weights, optimizer, epoch, ...) so they can resume their loop.
+        """
+        if not hasattr(self, "_decode_checkpoint"):
+            raise NotImplementedError(
+                "load_checkpoint is not implemented for this model"
+            )
+        data: bytes = self.store._feed.retrieve(
+            artifact_type=ArtifactType.model,
+            storage_config=self.store.storage_config,
+            checkpoint_step=step,
+        ).run()
+        if not data:
+            raise FileNotFoundError(
+                f"no checkpoint found for '{self.name}' at step {step} in "
+                + f"{self.store.storage_config.storage} storage"
+            )
+        return self._decode_checkpoint(data)
+
+    def save_checkpoint(self, checkpoint: dict[str, Any], step: int) -> RunResult:
+        """Persist a training checkpoint the user built (weights, optimizer, epoch,
+        ... — their dict, their content). Written under the same model storage as
+        save(), but keyed by `step` so checkpoints coexist without clobbering the
+        final model or each other.
+        """
+        if not hasattr(self, "_encode_checkpoint"):
+            raise NotImplementedError(
+                "save_checkpoint is not implemented for this model"
+            )
+        data: bytes = self._encode_checkpoint(checkpoint)
+        return self.store._feed.download(
+            artifact_type=ArtifactType.model,
+            storage_config=self.store.storage_config,
+            checkpoint_step=step,
+            checkpoint_data=data,
+        ).run()

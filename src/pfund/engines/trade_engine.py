@@ -26,6 +26,7 @@ from threading import Thread
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from pfeed.enums import DataCategory
+from pfeed.storages.storage_config import StorageConfig
 
 from pfund.managers import OrderManager, PortfolioManager, RiskManager
 from pfund.enums import Environment, TradingVenue
@@ -37,7 +38,11 @@ from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 SettingsT = TypeVar(
     "SettingsT", bound="TradeEngineSettings", default="TradeEngineSettings"
 )
-ContextT = TypeVar("ContextT", bound="TradeEngineContext", default="TradeEngineContext")
+ContextT = TypeVar(
+    "ContextT",
+    bound="TradeEngineContext[Any]",
+    default="TradeEngineContext[TradeEngineSettings]",
+)
 
 
 class TradeEngine(BaseEngine[SettingsT, ContextT]):
@@ -59,6 +64,7 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
         | tuple[str, str]
         | Literal["ytd"] = "ytd",
         settings: TradeEngineSettings | None = None,
+        storage_config: StorageConfig | None = None,
     ):
         """
         Args:
@@ -72,8 +78,14 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
             settings:
                 if not provided, settings.toml will be used.
                 if provided, will override the settings in settings.toml.
+            storage_config:
+                where the engine persists its own state storage (e.g. pfund.db), and
+                the default inherited by every component added under this engine for
+                their artifacts. Overridable per-component via
+                add_strategy(..., storage_config=...) / add_model(...).
+                If not provided, a default StorageConfig() (local storage) is used.
         """
-        super().__init__(env=env, name=name)
+        super().__init__(env=env, name=name, storage_config=storage_config)
         self._context = self._create_context(
             env=env,
             name=name,

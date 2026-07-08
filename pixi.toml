@@ -50,13 +50,12 @@ scikit-learn = ">=1.9.0"
 torch = ">=2.12.1"
 safetensors = ">=0.8.0"
 jax = ">=0.10.2"
-orbax-checkpoint = ">=0.12.1"
 ta-lib = ">=0.7.0"
 
 [feature.dev.pypi-dependencies]
 pfund = { path = ".", editable = true }
 # TEMP
-pfeed = { path = "../pfeed", editable = true, extras = ["deltalake"] }
+pfeed = { path = "../pfeed", editable = true, extras = ["yfinance"] }
 pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo"] }
 pfund-kit = { path = "../pfund-kit", editable = true }
 pfolio = { path = "../pfolio", editable = true }
@@ -68,6 +67,7 @@ jupyterlab = ">=4.5.7"
 memray = ">=1.19.3"
 pandas-stubs = ">=3.0.3.260530"
 pybit = ">=5.16.0"
+lightning = ">=2.6.5"
 flax = ">=0.12.7"
 equinox = ">=0.13.8"
 optax = ">=0.2.8"

@@ -54,7 +54,6 @@ torch = [
 jax = [
     "jax>=0.10.2",
     "safetensors>=0.8.0",
-    "orbax-checkpoint>=0.12.1",
 ]
 
 [project.scripts]
@@ -69,7 +68,7 @@ repository = "https://github.com/PFund-Software-Ltd/pfund"
 documentation = "https://pfund.pfund.ai/doc"
 
 [build-system]
-requires = ["uv_build>=0.11.26,<0.12.0"]
+requires = ["uv_build>=0.11.28,<0.12.0"]
 build-backend = "uv_build"
 
 [tool.pyright]

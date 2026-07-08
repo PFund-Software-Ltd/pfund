@@ -10,6 +10,8 @@ if TYPE_CHECKING:
     from pfund.venues.venue_sandbox import SandboxVenue
     from pfund.engines.base_engine import DataRangeDict
 
+from pfeed.storages.storage_config import StorageConfig
+
 from pfund.engines.trade_engine import TradeEngine
 from pfund.enums import Environment, TradingVenue
 from pfund.engines.settings.sandbox_engine_settings import SandboxEngineSettings
@@ -29,6 +31,7 @@ class SandboxEngine(TradeEngine[SandboxEngineSettings, SandboxEngineContext]):
         | tuple[str, str]
         | Literal["ytd"] = "ytd",
         settings: SandboxEngineSettings | None = None,
+        storage_config: StorageConfig | None = None,
         replay_mode: bool = True,
         replay_pace: float | None = 0,
     ):
@@ -59,13 +62,23 @@ class SandboxEngine(TradeEngine[SandboxEngineSettings, SandboxEngineContext]):
             settings:
                 if not provided, settings.toml will be used.
                 if provided, will override the settings in settings.toml.
+            storage_config:
+                where the engine persists its own state storage (e.g. pfund.db), and
+                the default inherited by every component added under this engine for
+                their artifacts. Overridable per-component via
+                add_strategy(..., storage_config=...) / add_model(...).
+                If not provided, a default StorageConfig() (local storage) is used.
         """
         super().__init__(
             env=Environment.SANDBOX,  # pyright: ignore[reportArgumentType]
             name=name,
             data_range=data_range,
             settings=settings,
+            storage_config=storage_config,
         )
+        import pfeed as pe
+
+        self._feed = pe.PFund().engine_feed
         self._replay_mode = replay_mode
         self._replay_pace = replay_pace
 
@@ -93,7 +106,11 @@ class SandboxEngine(TradeEngine[SandboxEngineSettings, SandboxEngineContext]):
         venue = TradingVenue[venue.upper()]
         if venue not in self._venues:
             trading_venue = SandboxVenue(
-                venue=venue, replay_mode=self._replay_mode, config=config
+                venue=venue,
+                engine_feed=self._feed,
+                storage_config=self._storage_config,
+                replay_mode=self._replay_mode,
+                config=config,
             )
             trading_venue._set_queue(self._queue)
             self._venues[venue] = trading_venue

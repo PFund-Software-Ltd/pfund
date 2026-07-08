@@ -7,13 +7,15 @@ if TYPE_CHECKING:
 
     from pfund.typing import StrategyT
 
+from abc import ABC
+
 import narwhals as nw
 
 from pfund._backtest.backtest_mixin import BacktestMixin
 
 
 def BacktestStrategy(Strategy: type[StrategyT], *args: Any, **kwargs: Any) -> StrategyT:
-    class _BacktestStrategy(BacktestMixin, Strategy):
+    class _BacktestStrategy(BacktestMixin, Strategy, ABC):
         def __getattr__(self, name: str) -> Any:
             if hasattr(super(), name):
                 return getattr(super(), name)
@@ -104,6 +106,10 @@ def BacktestStrategy(Strategy: type[StrategyT], *args: Any, **kwargs: Any) -> St
             # to_native() already returns the same native class (pandas/polars)
             # that backtest methods are attached to — no wrapping needed
             return df.to_native()
+
+        # TODO: update order manager directly
+        async def place_orders(self):
+            pass
 
     try:
         return cast("StrategyT", _BacktestStrategy(*args, **kwargs))
