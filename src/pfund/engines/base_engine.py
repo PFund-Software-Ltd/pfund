@@ -17,6 +17,8 @@ from typing import (
 if TYPE_CHECKING:
     from mtflow.contexts.base_context import BaseContext
     from pfund_kit.logging.loggers import ColoredLogger
+    from pfeed.storages.storage_config import StorageConfig
+    from pfeed.utils.file_path import FilePath
 
     from pfund.components.actor_proxy import ActorProxy
     from pfund.components.strategies.strategy_base import BaseStrategy
@@ -31,7 +33,6 @@ if TYPE_CHECKING:
 import logging
 
 from pfund_kit.utils.singleton import SingletonMeta
-from pfeed.storages.storage_config import StorageConfig
 
 from pfund.enums import ComponentType, Environment, RunMode
 from pfund.engines.contexts.base_engine_context import BaseEngineContext, SettingsT
@@ -44,20 +45,11 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
     Context: ClassVar[type[BaseEngineContext[Any]]] = BaseEngineContext
     _context: ContextT  # pyright: ignore[reportUninitializedInstanceVariable]
 
-    def __init__(
-        self,
-        *,
-        env: Environment,
-        name: str,
-        storage_config: StorageConfig | None = None,
-    ):
+    def __init__(self, *, env: Environment, name: str):
         from pfund.config import setup_logging
 
-        setup_logging(env=env, engine_name=name)
-        # setup_logging installs ColoredLogger via setLoggerClass, so getLogger
-        # returns one — cast so the `style=` kwarg type-checks on log calls.
+        setup_logging(env=env)
         self._logger: ColoredLogger = cast("ColoredLogger", logging.getLogger("pfund"))
-        self._storage_config: StorageConfig = storage_config or StorageConfig()
         self._is_running = False
         self._strategies: dict[
             ComponentName, BaseStrategy | ActorProxy[BaseStrategy]
@@ -93,12 +85,18 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
         name: str,
         data_range: str | Resolution | DataRangeDict | tuple[str, str] | Literal["ytd"],
         settings: SettingsT | None = None,
+        storage_config: StorageConfig | None = None,
         **kwargs: Any,
     ) -> ContextT:
         return cast(
             "ContextT",
             self.Context(
-                env=env, name=name, data_range=data_range, settings=settings, **kwargs
+                env=env,
+                name=name,
+                data_range=data_range,
+                settings=settings,
+                storage_config=storage_config,
+                **kwargs,
             ),
         )
 
@@ -161,7 +159,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
             resolution=resolution,
             engine_context=self._context,
             is_top_component=True,
-            storage_config=storage_config or self._storage_config,
+            storage_config=storage_config or self.context.storage_config,
         )
 
         self._strategies[strat] = strategy
@@ -171,6 +169,51 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
     def get_strategy(self, name: str) -> BaseStrategy | ActorProxy[BaseStrategy]:
         return self._strategies[name]
 
+    @staticmethod
+    def _create_run_path(
+        *,
+        data_path: FilePath,
+        env: Environment,
+        project_name: str,
+        run_name: str,
+    ) -> FilePath:
+        return data_path / f"env={env}" / project_name.lower() / run_name.lower()
+
+    def _clear_run_path(self) -> None:
+        import pyarrow.fs as pa_fs
+
+        from pfeed.storages.file_based_storage import FileBasedStorage
+        from pfeed.utils.file_path import FilePath
+        from pfeed.enums import DataStorage
+
+        storage_config = self.context.storage_config
+        Storage = DataStorage[storage_config.storage].storage_class
+        storage = Storage.from_storage_config(storage_config)
+
+        if not isinstance(storage, FileBasedStorage):
+            raise TypeError(f"Cannot clear a filesystem run path using {storage.name}")
+
+        run_path = FilePath(
+            self._create_run_path(
+                data_path=storage.data_path,
+                env=self.env,
+                project_name=self.context.project_name,
+                run_name=self.context.run_name,
+            )
+        )
+
+        filesystem = storage.get_filesystem()
+        file_info = filesystem.get_file_info(run_path.schemeless)
+
+        if file_info.type == pa_fs.FileType.NotFound:
+            return
+
+        if file_info.type != pa_fs.FileType.Directory:
+            raise RuntimeError(f"Run path is not a directory: {run_path}")
+
+        filesystem.delete_dir(run_path.schemeless)
+        self._logger.debug(f"cleared existing run path: {run_path}")
+
     def run(self, ctx: BaseContext | None = None):
         if ctx is not None:
             if ctx.env != self.env:
@@ -179,6 +222,9 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
                 )
             self._context.set_project_name(ctx.run.project)
             self._context.set_run_name(ctx.run.id)
+
+        # Must happen before _setup(), which starts persisting source artifacts.
+        self._clear_run_path()
         self._logger.warning(
             f"{self.env} {self.name} is running (data_range=({self._context.data_start}, {self._context.data_end}))",
             style=self.env._color,

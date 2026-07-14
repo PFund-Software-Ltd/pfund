@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from sklearn.model_selection import TimeSeriesSplit
+    from pfeed.storages.storage_config import StorageConfig
 
     from pfund.engines.base_engine import DataRangeDict
     from pfund._backtest.cv.base import CrossValidatorDatasetPeriods
@@ -25,7 +26,9 @@ class BacktestEngineContext(BaseEngineContext[BacktestEngineSettings]):
         name: str,
         data_range: str | Resolution | DataRangeDict | tuple[str, str] | Literal["ytd"],
         settings: BacktestEngineSettings | None = None,
-        mode: BacktestMode | Literal["fast", "exact"] = BacktestMode.FAST,
+        storage_config: StorageConfig | None = None,
+        mode: BacktestMode
+        | Literal["vectorized", "event_driven"] = BacktestMode.VECTORIZED,
         dataset_splits: int | DatasetSplitsDict | TimeSeriesSplit = 721,
     ):
         super().__init__(
@@ -35,7 +38,7 @@ class BacktestEngineContext(BaseEngineContext[BacktestEngineSettings]):
             settings=settings,
         )
         self.mode = BacktestMode[mode.upper()]
-        if self.mode == BacktestMode.EXACT and self.settings.reuse_signals:
+        if self.mode == BacktestMode.EVENT_DRIVEN and self.settings.reuse_signals:
             cprint(
                 "Warning: Reusing pre-computed signals to speed up event-driven backtesting,\n"
                 + "i.e. computing signals on the fly will be skipped",

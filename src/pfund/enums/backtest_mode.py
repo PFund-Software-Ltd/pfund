@@ -2,5 +2,5 @@ from enum import StrEnum
 
 
 class BacktestMode(StrEnum):
-    FAST = "FAST"
-    EXACT = "EXACT"
+    VECTORIZED = "VECTORIZED"
+    EVENT_DRIVEN = "EVENT_DRIVEN"

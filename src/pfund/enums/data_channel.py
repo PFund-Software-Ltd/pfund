@@ -27,3 +27,7 @@ class DataChannel(StrEnum):
 class DataChannelType(StrEnum):
     public = "public"
     private = "private"
+
+
+class PFundDataChannel(StrEnum):
+    signal = "signal"

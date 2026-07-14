@@ -18,8 +18,10 @@ if TYPE_CHECKING:
     from pfund.venues.okx import OKX
     from pfund._backtest.typing import PolarsBacktestDataFrame, PandasBacktestDataFrame
     from pfund.components.features.feature_base import BaseFeature as Feature
-    from pfund.components.indicators.indicator_base import BaseIndicator as Indicator
-    from pfund.components.indicators.talib_indicator import TalibIndicator
+    from pfund.components.features.feature_talib import (
+        TalibIndicator,
+        TalibIndicator as Indicator,
+    )
     from pfund.components.models.model_base import BaseModel as Model
     from pfund.components.models.pytorch_model import (
         PyTorchModel,
@@ -125,14 +127,8 @@ def __getattr__(name: str):
         from pfund.components.models.jax_model import JAXModel
 
         return JAXModel
-    elif name == "Indicator":
-        from pfund.components.indicators.indicator_base import (
-            BaseIndicator as Indicator,
-        )
-
-        return Indicator
-    elif name == "TalibIndicator":
-        from pfund.components.indicators.talib_indicator import TalibIndicator
+    elif name in ("TalibIndicator", "Indicator"):
+        from pfund.components.features.feature_talib import TalibIndicator
 
         return TalibIndicator
     elif name in ("InteractiveBrokers", "IBKR", "IB"):

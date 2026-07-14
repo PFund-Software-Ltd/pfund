@@ -16,6 +16,7 @@ from pfeed.feeds.base_feed import BaseFeed
 
 from pfund.datas.data_base import BaseData
 
+
 DataT = TypeVar("DataT", bound=BaseData)
 FeedT = TypeVar("FeedT", bound=BaseFeed)
 
@@ -74,6 +75,7 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
         self._databoy: DataBoy = databoy
         self._logger = databoy.logger
         self._df: nw.DataFrame[Any] | None = None  # in long form
+        self._data_as_features: bool | None = None
 
     @property
     def KEY_COLS(self) -> list[str]:
@@ -102,6 +104,18 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
     @abstractmethod
     def update_df(self, *args: Any, **kwargs: Any) -> None:
         pass
+
+    @property
+    def data_as_features(self) -> bool:
+        return self._data_as_features is True
+
+    def set_data_as_features(self, as_features: bool) -> None:
+        if self._data_as_features is not None and as_features != self._data_as_features:
+            raise ValueError(
+                f"{self.__class__.__name__} already has as_features="
+                + f"{self._data_as_features}; it cannot be changed to {as_features}"
+            )
+        self._data_as_features = as_features
 
     def _create_feed(self, data: DataT) -> FeedT:
         from pfeed.feeds import create_feed
@@ -167,9 +181,9 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
         window_size: int | None = None,
         pivot: bool = False,
         to_native: bool = False,
-    ) -> nw.DataFrame[Any] | IntoDataFrame | None:
+    ) -> nw.DataFrame[Any] | IntoDataFrame:
         if self._df is None:
-            return None
+            raise RuntimeError(f"{self.__class__.__name__} data df is not ready")
         df = self._df if window_size is None else self._df.tail(window_size)
         if pivot:
             df = self.pivot_df(df)

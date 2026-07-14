@@ -1,11 +1,12 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false, reportArgumentType=false, reportUnnecessaryComparison=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 if TYPE_CHECKING:
     from logging import Logger
 
+    from apscheduler.schedulers.background import BackgroundScheduler
     from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.streaming.zeromq import ZeroMQ
 
@@ -15,13 +16,17 @@ if TYPE_CHECKING:
     from pfund.typing import (
         Component,
         ComponentName,
+        Signals,
     )
 
+    ComponentID: TypeAlias = int
+
 from threading import Thread
+from apscheduler.schedulers.background import BackgroundScheduler
 
 from pfeed.enums import DataCategory
-
-from pfund.enums import PrivateDataChannel
+from pfeed.streaming.zeromq import ZeroMQDataChannel
+from pfund.enums import PrivateDataChannel, PFundDataChannel
 
 
 class DataBoy:
@@ -30,10 +35,8 @@ class DataBoy:
         self._data_stores: dict[DataCategory, BaseDataStore[Any, Any]] = {}
         self._data_zmq: ZeroMQ | None = None
         self._signals_zmq: ZeroMQ | None = None
-        # REVIEW: currently all components use ZeroMQ and a thread to run _collect()
-        # including even the local ones. if theres any performance issue,
-        # consider disabling using ZeroMQ for local components
         self._zmq_thread: Thread | None = None
+        self._scheduler: BackgroundScheduler | None = None
 
     @property
     def logger(self) -> Logger:
@@ -63,19 +66,8 @@ class DataBoy:
             self._data_stores[category] = data_store
             return data_store
 
-    # FIXME: move to market_data_store
-    def _flush_stale_bar(self, data: BarData):
-        if data.is_closed():
-            self._deliver(data)
-
-    # FIXME: move to market_data_store
-    # TODO: also check if there has been no data update for a product for a certain period of time
-    #     it could happen when theres connectivity issues or the data source is down etc.
-    def schedule_jobs(self, scheduler: BackgroundScheduler):
-        for data, timeout in self.market_data_store._stale_bar_timeouts.items():
-            scheduler.add_job(
-                lambda: self._flush_stale_bar(data), "interval", seconds=timeout
-            )
+    def _setup_scheduler(self):
+        self._scheduler = BackgroundScheduler()
 
     def _setup_messaging(self):
         import zmq
@@ -139,7 +131,7 @@ class DataBoy:
 
     def _subscribe(self):
         import zmq
-        from pfeed.streaming.zeromq import ZeroMQ, ZeroMQDataChannel
+        from pfeed.streaming.zeromq import ZeroMQ
 
         from pfund.datas.data_market import MarketData
 
@@ -190,6 +182,9 @@ class DataBoy:
             else:
                 raise NotImplementedError(f"Unhandled data type: {type(data)}")
 
+        self._signals_zmq.receiver.setsockopt(
+            zmq.SUBSCRIBE, str(PFundDataChannel.signal).encode()
+        )
         for component in self._component.get_components():
             component_zmq_url = settings.zmq_urls.get(
                 component.name, ZeroMQ.DEFAULT_URL
@@ -204,16 +199,18 @@ class DataBoy:
                 f"{self._signals_zmq.name} connected to {component.name} at {component_zmq_url}:{component_zmq_port}"
             )
 
-    # FIXME
-    def pong(self):
-        """Pongs back to Engine's ping to show that it is alive"""
-        zmq_msg = (0, 0, (self.strat,))
-        self._zmq.send(*zmq_msg, receiver="engine")
-
     def start(self):
         if self._data_zmq or self._signals_zmq:
             self._zmq_thread = Thread(target=self._collect, daemon=True)
             self._zmq_thread.start()
+        # TODO: flush stale bars, rehydrate_from_lakehouse in market data store
+        if self._scheduler:
+            self._scheduler.add_job(
+                self._component.store.persist_to_lakehouse,
+                "interval",
+                seconds=self._component.settings.persist_interval,
+            )
+            self._scheduler.start()
 
     def stop(self):
         if self._zmq_thread and self._zmq_thread.is_alive():
@@ -222,6 +219,12 @@ class DataBoy:
             self.logger.debug(
                 f"{self.name} data thread finished (alive={self._zmq_thread.is_alive()})"
             )
+        if self._scheduler:
+            self._scheduler.shutdown(wait=False)
+            self._scheduler = None
+            # persist one last time (after the zmq thread has stopped delivering,
+            # so the trading df is final) so rows since the last tick aren't lost
+            self._component.store.persist_to_lakehouse()
 
     def _update_data_store(self, msg: StreamingMessage):
         from msgspec import structs
@@ -244,15 +247,25 @@ class DataBoy:
         else:
             raise NotImplementedError(f"Unhandled data category: {msg.data_category}")
 
-    def _collect(self, msg: StreamingMessage | None = None):
+    def _collect(
+        self,
+        msg: StreamingMessage | None = None,
+        visited: set[ComponentID] | None = None,
+    ):
         """
         Args:
             msg: StreamingMessage, only provided when data is not being sent via zeromq
+            visited: set of visited components to avoid duplicated data collection in local mode (not using zeromq)
         """
         # when not using zeromq (guaranteed ALL components are local components)
         if msg is not None:
+            if visited is None:
+                visited: set[ComponentID] = set()
             for component in self._component.get_components():
-                component.databoy._collect(msg=msg)
+                if id(component) in visited:
+                    continue
+                visited.add(id(component))
+                component.databoy._collect(msg=msg, visited=visited)
             self._update_data_store(msg)
         # when using zeromq (there could be some local and remote components, but both use zeromq to receive data anyways)
         else:
@@ -282,50 +295,106 @@ class DataBoy:
                             self._component._on_update(update)
                         else:
                             self.logger.warning(
-                                f"{self.name} received private update on '{topic}' "
-                                + "but is not a strategy; ignoring"
+                                f"{self.name} received private update on '{topic}' but is not a strategy; ignoring"
                             )
                     else:
                         self._update_data_store(data)
-                # TODO:
-                if msg_tuple := self._signals_zmq.recv():
-                    pass
 
-                # TODO: check if signals are ready, if yes, call back on trade(X)
+    def _wait_for_children_signals(self, data: BarData) -> dict[ComponentName, Signals]:
+        """Blocks until every child has published its signals for the current bar,
+        collecting each one as it arrives.
 
-    # TODO: should receive both signals_dict and signals_df
-    def _wait_for_children_signals(self, timeout: float = 10.0):
-        """Waits for all children's signals via signals_zmq before delivering data.
-        Only used in ZMQ mode when the component has children.
-        zmq.recv() releases the GIL, so other threads (children) can compute their signals.
+        Children publish exactly one signals message per closed bar (empty when
+        still warming up), so the join is a checklist keyed by component name.
+        Freshness: each message is stamped with the close time of the bar it was
+        computed from (payload["bar_end_ts"]); a stamp that differs from the current
+        bar's close time means the signals belong to another bar — stale: dropped
+        with a warning and does not tick the checklist. Persistent stale warnings
+        mean the child's compute time exceeds the data resolution.
         """
         import time
 
-        pending = set(c.name for c in self._component.get_components())
-        deadline = time.monotonic() + timeout
+        component = self._component
+
+        if not self.is_using_zmq():
+            return {
+                child.name: child.signals
+                for child in component.get_components()
+                if child.signals
+            }
+
+        pending: set[ComponentName] = {
+            child.name for child in component.get_components()
+        }
+        signals_timeout = component.settings.signals_timeout
+        deadline = time.time() + signals_timeout
+        child_signals: dict[ComponentName, Signals] = {}
         while pending:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                self.logger.warning(
-                    f"{self.name} timed out waiting for children signals: {pending}"
+            if time.time() > deadline:
+                # a dead/stuck child must not hang the parent (and its parents) forever
+                self.logger.error(
+                    f"{self.name} timed out after {signals_timeout}s waiting for "
+                    + f"child components' signals: {sorted(pending)}; proceeding without them. "
+                    + "If they are alive, make sure they compute signals (e.g. strategy.decide()/model.predict()/feature.transform()) "
+                    + f"faster than the {data.resolution} data resolution"
                 )
                 break
-            if msg_tuple := self._signals_zmq.recv(timeout=int(remaining * 1000)):
-                channel, topic, signal, msg_ts = msg_tuple
-                # TODO: store the signal and extract child name from msg
-                child_name = topic
-                pending.discard(child_name)
+            msg = self._signals_zmq.recv()
+            if not msg:
+                continue
+            channel, topic, payload, msg_ts = msg
+            component_name = topic
+            signals_bar_end_ts: float = payload["bar_end_ts"]
+            if signals_bar_end_ts != data.end_ts:
+                self.logger.warning(
+                    f"{self.name} dropped stale signals from '{component_name}' "
+                    + f"(computed from the bar closed at ts={signals_bar_end_ts}, "
+                    + f"current bar closed at ts={data.end_ts}); "
+                    + "its compute time (e.g. strategy.decide()/model.predict()/feature.transform()) "
+                    + f"likely exceeds the {data.resolution} data resolution"
+                )
+                continue
+            signals: Signals = payload["signals"]
+            if signals:  # empty = child still warming up, nothing to apply
+                child_signals[component_name] = signals
+            pending.discard(component_name)
+        return child_signals
+
+    def _publish_signals(self, signals: Signals, data: BarData):
+        """Publishes this bar's signals for parent components to consume.
+
+        _forward() already outputs the latest signals (one value per signal
+        column for the current bar); they only need converting from numpy to
+        native python here because msgpack cannot encode numpy types.
+
+        Published even when empty (component not ready yet): parents' joins
+        need one message per child per closed bar to distinguish a child
+        that is warming up from one that is dead or lagging.
+        """
+        import numpy as np
+
+        latest_signals = {
+            name: np.asarray(values).tolist() for name, values in signals.items()
+        }
+        self._signals_zmq.send(
+            channel=PFundDataChannel.signal,
+            topic=self._component.name,
+            data={"bar_end_ts": data.end_ts, "signals": latest_signals},
+        )
 
     def _deliver(self, data: MarketData):
         """Deliver data to the component"""
+        component = self._component
         if data.category == DataCategory.MARKET_DATA:
             if data.is_quote():
-                self._component._on_quote(data)
+                component.on_quote(data)
             elif data.is_tick():
-                self._component._on_tick(data)
+                component.on_tick(data)
             elif data.is_bar():
+                component.on_bar(data)
                 if data.is_closed():
-                    self._data_stores[data.category].update_df(data)
-                self._component._on_bar(data)
+                    data_store = self.get_data_store(category=data.category)
+                    data_store.update_df(data)
+                    component._forward(data)
         else:
             raise NotImplementedError(f"Unhandled data type: {type(data)}")

@@ -27,6 +27,10 @@ from threading import Thread
 from apscheduler.schedulers.background import BackgroundScheduler
 from pfeed.enums import DataCategory
 from pfeed.storages.storage_config import StorageConfig
+from pfeed.streaming.zeromq import (
+    ZeroMQDataChannel,
+    ZeroMQSignal,
+)
 
 from pfund.managers import OrderManager, PortfolioManager, RiskManager
 from pfund.enums import Environment, TradingVenue
@@ -85,13 +89,15 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
                 add_strategy(..., storage_config=...) / add_model(...).
                 If not provided, a default StorageConfig() (local storage) is used.
         """
-        super().__init__(env=env, name=name, storage_config=storage_config)
+        # NOTE: create context first to set up config by engine name before super().__init__()
         self._context = self._create_context(
             env=env,
             name=name,
             data_range=data_range,
             settings=settings,
+            storage_config=storage_config,
         )
+        super().__init__(env=self.env, name=self.name)
 
         # FIXME: do NOT allow LIVE env for now
         if self.env == Environment.LIVE:
@@ -300,8 +306,6 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
         one socket per thread). Sockets are built in _setup() and torn down in
         _teardown(), both on the main thread.
         """
-        from pfeed.streaming.zeromq import ZeroMQDataChannel
-
         assert self._proxy is not None, "proxy is not set"
         assert self._worker is not None, "worker is not set"
 
@@ -471,6 +475,7 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
     def _setup(self):
         super()._setup()
         for strategy in self._strategies.values():
+            strategy._setup_scheduler()
             for account in strategy.get_accounts():
                 self._add_account(account)
         for data in self._get_all_datas():

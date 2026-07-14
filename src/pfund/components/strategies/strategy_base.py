@@ -18,6 +18,7 @@ if TYPE_CHECKING:
         Component,
         ComponentName,
         StrategyT,
+        Signals,
     )
 
 from abc import ABC, abstractmethod
@@ -27,10 +28,12 @@ import narwhals as nw
 from pfund.components.mixin import ComponentMixin
 from pfund.components.strategies.strategy_meta import MetaStrategy
 from pfund.managers import OrderManager, PortfolioManager, RiskManager
+from pfund.enums import ComponentType
 
 
 class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def __init__(self, *args: Any, **kwargs: Any):
+        self.component_type = ComponentType.strategy
         self._df_form: Literal["wide", "long"] = "long"
         self.accounts: dict[AccountName, BaseAccount] = {}
         self.strategies: dict[str, BaseStrategy] = {}
@@ -45,7 +48,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         )  # calls ComponentMixin.__mixin_post_init__()
 
     @abstractmethod
-    def trade(self):
+    def decide(self, X: IntoDataFrame) -> list[BaseOrder]:
         pass
 
     @property
@@ -75,8 +78,16 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         pass
 
     # TODO:
-    def signalize(self, features_df: IntoDataFrame) -> IntoDataFrame:
-        X = nw.from_native(features_df)
+    def signalize(self, X: IntoDataFrame) -> Signals:
+        """Creates signals of this component
+
+        Args:
+            X: features df
+
+        Returns:
+            dict[ColumnName, Any]: The predicted signals.
+        """
+        signals = self.decide(X)
 
     # TODO: {product.name}_signal
     def _get_default_signal_cols(self, num_cols: int) -> list[str]:
@@ -96,11 +107,10 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def get_balance(self, account: BaseAccount, ccy: str) -> BaseBalance | None:
         return self.balances[account].get(ccy, None)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             **super().to_dict(),
-            "accounts": [repr(account) for account in self.accounts.values()],
-            "strategies": [strategy.to_dict() for strategy in self.strategies.values()],
+            "strategies": list(self.strategies),
         }
 
     def get_accounts(self) -> list[BaseAccount]:
@@ -117,7 +127,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         self.logger.debug(f'added {account.venue} account "{account.name}"')
         return account
 
-    # FIXME: update, refer to or reuse _add_component() in component_mixin.py
+    # FIXME: update, refer to or reuse _add_component() in component_mixin.py (rmb to update _add_component in backtest mixin)
     # TODO: _setup_logging, _set_engine etc.
     # TODO: make sure sub-strategy's df_form is the same as the top strategy's df_form
     def add_strategy(self, strategy: StrategyT, name: str = "") -> StrategyT:
@@ -162,7 +172,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
                 self._order_manager.on_trade_update(update)
                 self.on_trade(order.account, trade, type_)
 
-    def _gather(self):
+    def _gather(self) -> None:
         if not self._is_gathered:
             # TODO: check if e.g. exchange balances and positions are ready, if backfilling is finished?
             # TODO: top strategy must have an account
@@ -176,12 +186,15 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         self._engine = engine
 
     # TODO: draft only
+    # TODO: write order_price/order_quantity to trading store's df
     def place_orders(
         self,
         account: BaseAccount,
         product: BaseProduct,
         orders: list[BaseOrder] | BaseOrder,
     ):
+        if not self.is_top_component():
+            raise RuntimeError(f"Sub-strategy {self.name} cannot place orders")
         if not isinstance(orders, list):
             orders = [orders]
         if self.databoy.is_using_zmq():

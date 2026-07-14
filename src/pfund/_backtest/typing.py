@@ -9,11 +9,11 @@ class PolarsBacktestDataFrame(
     ProductBacktestMixin, PortfolioBacktestMixin, pl.DataFrame
 ):
     """Annotation-only type: at runtime the df is a plain native DataFrame
-    whose class has the backtest methods attached by _setup_backtest_df_for_fast_mode()."""
+    whose class has the backtest methods attached by _setup_backtest_df_for_vectorized_mode()."""
 
 
 class PandasBacktestDataFrame(
     ProductBacktestMixin, PortfolioBacktestMixin, pd.DataFrame
 ):
     """Annotation-only type: at runtime the df is a plain native DataFrame
-    whose class has the backtest methods attached by _setup_backtest_df_for_fast_mode()."""
+    whose class has the backtest methods attached by _setup_backtest_df_for_vectorized_mode()."""

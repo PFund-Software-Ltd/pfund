@@ -13,6 +13,7 @@ from pfund.enums.data_channel import (
     DataChannelType,
     PrivateDataChannel,
     PublicDataChannel,
+    PFundDataChannel,
 )
 from pfund.enums.database import Database
 from pfund.enums.datalake import DataLake
@@ -41,6 +42,7 @@ __all__ = [
     "DataChannelType",
     "PrivateDataChannel",
     "PublicDataChannel",
+    "PFundDataChannel",
     "Database",
     "DataLake",
     "Environment",

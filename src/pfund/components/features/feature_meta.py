@@ -1,12 +1,12 @@
 # pyright: reportAttributeAccessIssue=false, reportUnknownMemberType=false, reportFunctionMemberAccess=false, reportUnknownArgumentType=false
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from abc import ABCMeta
 
 
-class MetaStrategy(ABCMeta):
+class MetaFeature(ABCMeta):
     @staticmethod
     def _is_user_defined_class(module_name: str) -> bool:
         return not module_name.startswith("pfund.") and not module_name.startswith(
@@ -19,10 +19,10 @@ class MetaStrategy(ABCMeta):
         bases: tuple[type, ...],
         namespace: dict[str, Any],
         **kwargs: Any,
-    ) -> MetaStrategy:
+    ) -> MetaFeature:
         cls = super().__new__(mcs, name, bases, namespace, **kwargs)
         module_name = namespace.get("__module__", "")
-        if MetaStrategy._is_user_defined_class(module_name):
+        if MetaFeature._is_user_defined_class(module_name):
             # capture the class's OWN __init__ from its namespace, NOT cls.__init__:
             # cls.__init__ can be inherited (e.g. the parent's wrapper in a user
             # subclass chain), which would skip this class's init and run the parent's twice
@@ -33,7 +33,7 @@ class MetaStrategy(ABCMeta):
             if original_init is not None and not is_already_wrapped:
 
                 def init_in_correct_order(self: Any, *args: Any, **kwargs: Any):
-                    # force to init the BaseClass first, e.g. BaseStrategy
+                    # force to init the BaseClass first, e.g. BaseFeature
                     BaseClass = cls.__bases__[0]
                     # framework init FIRST, with the user's exact args
                     BaseClass.__init__(self, *args, **kwargs)
@@ -55,8 +55,45 @@ class MetaStrategy(ABCMeta):
         **kwargs: Any,
     ) -> None:
         super().__init__(name, bases, namespace, **kwargs)
+        module_name: str = namespace.get("__module__", "")
+        if MetaFeature._is_user_defined_class(module_name):
+            # this class's OWN init stored by __new__; None when the class defines no
+            # __init__ (nothing to validate — the inherited init was already validated)
+            original_init: Callable[..., None] | None = cls.__dict__.get(
+                "__original_init__"
+            )
+            if original_init is not None:
+                from pfund_kit.utils.function import get_function_args_and_kwargs
 
-        if name == "_BacktestStrategy":
+                init_args, _, _, _ = get_function_args_and_kwargs(original_init)
+                # assert users to include 'indicator' as the first argument in __init__() (TalibIndicator subclasses only)
+                MetaFeature._assert_required_arg(cls, init_args)
+
+        if name == "_BacktestFeature":
             assert "__init__" not in namespace, (
-                "In order to keep the MRO clean, _BacktestStrategy is not allowed to have __init__()"
+                "In order to keep the MRO clean, _BacktestFeature is not allowed to have __init__()"
+            )
+
+    @staticmethod
+    def _get_required_arg(component_class: type) -> Literal["indicator", ""]:
+        # plain features require no first arg; TalibIndicator subclasses must lead with
+        # `indicator` since the init wrapper feeds the same args to TalibIndicator.__init__
+        try:
+            from pfund.components.features.feature_talib import TalibIndicator
+        except ImportError:
+            # talib not installed -> no TalibIndicator subclasses can exist
+            return ""
+        if issubclass(component_class, TalibIndicator):
+            return "indicator"
+        return ""
+
+    @classmethod
+    def _assert_required_arg(mcs, cls: type, init_args: list[str]) -> None:
+        required_arg = MetaFeature._get_required_arg(cls)
+        if not required_arg:
+            return
+        if required_arg not in init_args or init_args[0] != required_arg:
+            raise TypeError(
+                f"{cls.__name__}.__init__() must include `{required_arg}` as the first argument after `self`, like this:\n"
+                + f"{cls.__name__}.__init__(self, {required_arg}, *args, **kwargs)"
             )

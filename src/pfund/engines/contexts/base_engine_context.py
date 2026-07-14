@@ -10,8 +10,7 @@ if TYPE_CHECKING:
     from pfund.engines.settings.base_engine_settings import BaseEngineSettings
     from pfund.config import PFundConfig
     from pfund.engines.component_registry import RegistryProxy
-
-from pfeed.enums import DataTool
+    from pfeed.storages.storage_config import StorageConfig
 
 from pfund.config import get_config, get_logging_config
 from pfund.datas.resolution import Resolution
@@ -32,8 +31,10 @@ class BaseEngineContext(Generic[SettingsT]):
         name: str,
         data_range: str | Resolution | DataRangeDict | tuple[str, str] | Literal["ytd"],
         settings: SettingsT | None = None,
+        storage_config: StorageConfig | None = None,
     ):
         import pfeed as pe
+        from pfund.config import StorageConfig as PFundStorageConfig
 
         self.env = Environment[env.upper()]
         self.name = name
@@ -43,11 +44,10 @@ class BaseEngineContext(Generic[SettingsT]):
         self.data_start, self.data_end = self._parse_data_range(data_range)
         # NOTE: config obtained by get_config() inside ray actor could be different from the one in the main thread (e.g. after calling pf.configure())
         # so we create the config object here in the context and treat it as the source of truth
-        self.pfund_config: PFundConfig = get_config(engine_name=self.name)
+        self.pfund_config: PFundConfig = self._get_pfund_config()
         self.pfeed_config = pe.get_config()
-        if self.pfeed_config.data_tool not in [DataTool.pandas, DataTool.polars]:
-            raise ValueError(f"Unsupported data tool: {self.pfeed_config.data_tool}")
         self.logging_config: dict[str, Any] = get_logging_config()
+        self.storage_config: StorageConfig = storage_config or PFundStorageConfig()
         self.settings = self._resolve_settings(settings)
         # starts local; upgraded in-place to the shared actor-backed registry the first
         # time a remote component is declared (see component_registry.to_registry_proxy)
@@ -62,6 +62,13 @@ class BaseEngineContext(Generic[SettingsT]):
             return RunMode.WASM
         else:
             return RunMode.LOCAL
+
+    def _get_pfund_config(self):
+        pfund_config = get_config()
+        pfund_config.log_path /= self.name
+        pfund_config.data_path /= self.name
+        pfund_config.cache_path /= self.name
+        return pfund_config
 
     def _resolve_settings(self, settings: SettingsT | None) -> SettingsT:
         if settings is None:

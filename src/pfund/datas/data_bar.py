@@ -96,7 +96,12 @@ class Bar:
         return self._open is None
 
     def is_closed(self, now: float | None = None) -> bool:
-        # check if the bar is closed
+        """Return the bar's closed state, optionally updating it based on time.
+
+        When `now` is omitted, this is a read-only check of the current state.
+        When `now` is provided, an open bar is marked closed if `now` has
+        reached or passed its end timestamp, and the resulting state is returned.
+        """
         if not self._is_closed and now is not None:
             is_closed = now >= self._end_ts > 0
             if is_closed:
@@ -154,7 +159,7 @@ class Bar:
             else:
                 self._volume += v
         else:
-            self._start_ts, self._end_ts, self._ts = start_ts, end_ts, ts
+            self._start_ts = self._end_ts = self._ts = 0.0
             self._open, self._high, self._low, self._close, self._volume = o, h, l, c, v
             self._set_closed()
         self._update_ts(

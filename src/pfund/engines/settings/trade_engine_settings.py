@@ -28,6 +28,26 @@ class TradeEngineSettings(BaseEngineSettings):
         default=True,
         description="When True, replace recorded live data with the provider's cleaned end-of-day data once available.",
     )
+    persist_interval: float = Field(
+        default=60.0,
+        gt=0,
+        description="""
+        Seconds between background writes of a component's trading df (features + signals)
+        from the online store (TradingStore) to the offline store (pfeed's data lakehouse).
+        Only used in live trading and event-driven backtesting; vectorized
+        backtesting persists once at the end of backtest() instead.
+        """,
+    )
+    signals_timeout: float = Field(
+        default=5.0,
+        gt=0,
+        description="""
+        Seconds a component waits for its child components' signals per closed bar.
+        A slow child's signals arrive within this window and are waited for;
+        a child that stays silent past it is presumed dead (crashed/hung) and the
+        component proceeds without its signals instead of freezing forever.
+        """,
+    )
 
     @field_validator("database", mode="before")
     @classmethod

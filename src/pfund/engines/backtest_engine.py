@@ -1,24 +1,19 @@
 # pyright: reportUninitializedInstanceVariable=false, reportUnsafeMultipleInheritance=false, reportIncompatibleVariableOverride=false, reportAssignmentType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, overload, ClassVar
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, ClassVar
 
 if TYPE_CHECKING:
-    import torch.nn as nn
     from narwhals.typing import IntoDataFrame
-    from sklearn.base import BaseEstimator
     from sklearn.model_selection import TimeSeriesSplit
     from mtflow.contexts.backtest_context import BacktestContext
 
-    from pfund.components.models.model_base import BaseModel
-    from pfund.components.models.sklearn_model import SKLearnModel
-    from pfund.components.models.pytorch_model import PyTorchModel
+    from pfund.components.models.model_base import BaseModel, UnderlyingModel
     from pfund.components.strategies.strategy_base import BaseStrategy
-    from pfund.datas.data_bar import BarData
+    from pfund.components.features.feature_base import BaseFeature
     from pfund.datas.resolution import Resolution
-    from pfund.datas.stores.market_data_store import BarUpdate
     from pfund.engines.base_engine import DataRangeDict
-    from pfund.typing import FeatureT, IndicatorT, ModelT, StrategyT
+    from pfund.typing import FeatureT, ModelT, StrategyT
     from pfund._backtest.cv.base import CrossValidatorDatasetPeriods
     from pfund._backtest.dataset_splitter import DatasetPeriods, DatasetSplitsDict
 
@@ -27,8 +22,7 @@ if TYPE_CHECKING:
 import os
 
 import narwhals as nw
-from pfund_kit.style import RichColor
-from pfund_kit.utils.progress_bar import ProgressBar, track
+from pfund_kit.utils.progress_bar import ProgressBar
 from pfeed.storages.storage_config import StorageConfig
 
 from pfund.engines.base_engine import BaseEngine
@@ -51,7 +45,8 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         | Literal["ytd"] = "1mo",
         settings: BacktestEngineSettings | None = None,
         storage_config: StorageConfig | None = None,
-        mode: BacktestMode | Literal["fast", "exact"] = BacktestMode.FAST,
+        mode: BacktestMode
+        | Literal["vectorized", "event_driven"] = BacktestMode.VECTORIZED,
         dataset_splits: int | DatasetSplitsDict | TimeSeriesSplit = 721,
         # TODO:
         # profiling: bool=False,
@@ -76,15 +71,17 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 If not provided, a default StorageConfig() (local storage) is used.
         """
         env = Environment.BACKTEST
-        super().__init__(env=env, name=name, storage_config=storage_config)
+        # NOTE: create context first to set up config by engine name before super().__init__()
         self._context = self._create_context(
             env=env,
             name=name,
             data_range=data_range,
             settings=settings,
+            storage_config=storage_config,
             mode=mode,
             dataset_splits=dataset_splits,
         )
+        super().__init__(env=self.env, name=self.name)
         self.results: dict[str, Any] | None = None
 
     @property
@@ -131,11 +128,11 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
 
     def _add_component(
         self,
-        component: ModelT | FeatureT | IndicatorT,
+        component: ModelT | FeatureT,
         resolution: str,
         name: str = "",
         storage_config: StorageConfig | None = None,
-    ) -> ModelT | FeatureT | IndicatorT:
+    ) -> ModelT | FeatureT:
         """Add model without creating a strategy (using dummy strategy)"""
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
 
@@ -155,9 +152,11 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             )
         else:
             strategy = self.get_strategy(dummy_strategy_name)
-        assert not strategy.models, (
-            "Adding more than 1 model to dummy strategy in backtesting is not supported, you should train and dump your models one by one"
-        )
+        if strategy.models or strategy.features:
+            raise ValueError(
+                "Adding more than 1 model/feature in backtesting is not supported, "
+                + "you should (train) and save your models/features one by one"
+            )
         component = strategy._add_component(
             component,
             resolution,
@@ -167,44 +166,31 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         )
         return component
 
-    add_feature = add_indicator = _add_component
-
-    @overload
     def add_model(
         self,
-        model: ModelT,
+        model: ModelT | UnderlyingModel,
         resolution: str,
         name: str = "",
         storage_config: StorageConfig | None = None,
-    ) -> ModelT: ...
-    @overload
-    def add_model(
-        self,
-        model: BaseEstimator,
-        resolution: str,
-        name: str = "",
-        storage_config: StorageConfig | None = None,
-    ) -> SKLearnModel: ...
-    @overload
-    def add_model(
-        self,
-        model: nn.Module,
-        resolution: str,
-        name: str = "",
-        storage_config: StorageConfig | None = None,
-    ) -> PyTorchModel: ...
-    def add_model(
-        self,
-        model: ModelT | BaseEstimator | nn.Module,
-        resolution: str,
-        name: str = "",
-        storage_config: StorageConfig | None = None,
-    ) -> ModelT | SKLearnModel | PyTorchModel:
+    ) -> ModelT:
         from pfund.components.models.wrap import wrap_model
 
-        model = cast("ModelT", wrap_model(model))
         return self._add_component(
-            component=model,
+            component=cast("ModelT", wrap_model(model)),
+            resolution=resolution,
+            name=name,
+            storage_config=storage_config,
+        )
+
+    def add_feature(
+        self,
+        feature: FeatureT,
+        resolution: str = "",
+        name: str = "",
+        storage_config: StorageConfig | None = None,
+    ) -> FeatureT:
+        return self._add_component(
+            component=feature,
             resolution=resolution,
             name=name,
             storage_config=storage_config,
@@ -242,17 +228,27 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
 
         try:
             for strategy in self._strategies.values():
-                is_model_backtesting = strategy.name == _DummyStrategy.__name__
-                if is_model_backtesting:
-                    # dummy strategy has exactly one model
-                    model: BaseModel = cast(
-                        "BaseModel", list(strategy.models.values())[0]
-                    )
-                    backtestee = model
+                is_dummy_strategy = strategy.name == _DummyStrategy.__name__
+                if is_dummy_strategy:
+                    # dummy strategy has exactly one model or one feature
+                    if strategy.models:
+                        model: BaseModel = cast(
+                            "BaseModel", list(strategy.models.values())[0]
+                        )
+                        backtestee = model
+                    elif strategy.features:
+                        feature: BaseFeature = cast(
+                            "BaseFeature", list(strategy.features.values())[0]
+                        )
+                        backtestee = feature
+                    else:
+                        raise ValueError("No model or feature to backtest")
                 else:
                     backtestee = strategy
                 backtest_dfs = self._backtest(
-                    backtestee, num_chunks=num_chunks, num_cpus=num_cpus
+                    cast("BaseStrategy | BaseModel | BaseFeature", backtestee),
+                    num_chunks=num_chunks,
+                    num_cpus=num_cpus,
                 )
                 backtest_results[backtestee.name] = backtest_dfs
 
@@ -266,7 +262,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
 
     def _backtest(
         self,
-        backtestee: BaseStrategy | BaseModel,
+        backtestee: BaseStrategy | BaseModel | BaseFeature,
         num_chunks: int = 1,
         num_cpus: int | None = None,
     ) -> list[IntoDataFrame]:
@@ -274,37 +270,23 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         is_using_ray = num_chunks > 1
         backtest_dfs: list[IntoDataFrame] = []
 
-        features_df = backtestee.features_df
-        if features_df is None:
-            raise ValueError(f"{backtestee.name} features_df is None")
-        df = nw.from_native(features_df)
+        df = nw.from_native(backtestee.df)
 
         def _run_backtest(
-            backtestee: BaseStrategy | BaseModel,
+            backtestee: BaseStrategy | BaseModel | BaseFeature,
             df_chunk: nw.DataFrame[Any],
-            backtest_mode: BacktestMode,
             chunk_num: int | None = None,
             batch_num: int | None = None,
         ) -> IntoDataFrame:
-            if backtest_mode == BacktestMode.FAST:
-                backtest_df = backtestee.backtest(df_chunk.to_native())
-            elif backtest_mode == BacktestMode.EXACT:
-                backtest_df = BacktestEngine._backtest_loop(
-                    backtestee=backtestee,
-                    df_chunk=df_chunk,
-                    chunk_num=chunk_num,
-                    batch_num=batch_num,
-                )
-            else:
-                raise ValueError(f"{backtest_mode} is not supported")
+            backtest_df = backtestee.backtest(df_chunk.to_native())
+            backtest_df.chunk_num = chunk_num
+            backtest_df.batch_num = batch_num
             return backtest_df
 
         ### Backtest ###
         if not is_using_ray:
             backtest_df: IntoDataFrame = _run_backtest(
-                backtestee=backtestee,
-                df_chunk=df,
-                backtest_mode=self.backtest_mode,
+                backtestee=backtestee, df_chunk=df
             )
             backtest_dfs.append(backtest_df)
         else:
@@ -321,7 +303,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 log_queue: Queue,
                 backtestee_ref: ray.ObjectRef[BaseStrategy | BaseModel],
                 df_chunk: nw.DataFrame[Any],
-                backtest_mode: BacktestMode,
                 chunk_num: int,
                 batch_num: int,
             ):
@@ -331,7 +312,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                     backtest_df: IntoDataFrame = _run_backtest(
                         backtestee=backtestee,
                         df_chunk=df_chunk,
-                        backtest_mode=backtest_mode,
                         chunk_num=chunk_num,
                         batch_num=batch_num,
                     )
@@ -375,7 +355,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                                     log_queue=log_queue,  # pyright: ignore[reportCallIssue]
                                     backtestee_ref=backtestee_ref,
                                     df_chunk=df_chunk,
-                                    backtest_mode=self.backtest_mode,
                                     chunk_num=chunk_num,
                                     batch_num=batch_num,
                                 )
@@ -409,43 +388,3 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 for backtest_df in backtest_dfs
             ]
         return backtest_dfs
-
-    # EXTEND: support non-bar data types:
-    # brainstorm: heapq.merge(market_data_df, news_data_df), with a dispatcher to create data updates for each data type
-    @staticmethod
-    def _backtest_loop(
-        backtestee: BaseStrategy | BaseModel,
-        df_chunk: nw.DataFrame[Any],
-        chunk_num: int | None = None,
-        batch_num: int | None = None,
-    ) -> IntoDataFrame:
-        if chunk_num is not None and batch_num is not None:
-            description = f"Backtest-Chunk{chunk_num}-Batch{batch_num}"
-        else:
-            description = ""
-
-        # OPTIMIZE: critical loop
-        for row in track(
-            df_chunk.iter_rows(named=False),
-            total=df_chunk.shape[0],
-            description=description,
-            bar_style=RichColor.BRIGHT_YELLOW,
-        ):
-            ts, resolution, product_name, source_type, o, h, l, c, v = row  # pyright: ignore[reportGeneralTypeIssues, reportUnusedVariable]  # noqa: E741
-            databoy = backtestee.databoy
-            data = cast("BarData", backtestee.get_data(product_name, resolution))
-            update: BarUpdate = {
-                "ts": ts,
-                "open": o,
-                "high": h,
-                "low": l,
-                "close": c,
-                "volume": v,
-                "is_incremental": False,
-                "msg_ts": None,
-                "extra": {},
-            }
-            databoy._update_bar(data, update)
-
-        # TODO: return the backtested dataframe, how?
-        # return ...

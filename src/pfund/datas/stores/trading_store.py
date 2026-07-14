@@ -1,16 +1,17 @@
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportAttributeAccessIssue=false, reportArgumentType=false, reportUnknownArgumentType=false, reportOptionalMemberAccess=false, reportConstantRedefinition=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
     from pfeed.sources.pfund.component_feed import PFundComponentFeed
+    from pfeed.dataflow.result import RunResult
 
-    from pfund.typing import ColumnName, Component
+    from pfund.datas import BarData
+    from pfund.typing import Component, Signals, ColumnName
 
 import narwhals as nw
-from pfeed.enums import DataLayer, IOFormat
 from pfeed.storages.storage_config import StorageConfig
 
 from pfund.enums import ArtifactType
@@ -18,16 +19,24 @@ from pfund.enums import ArtifactType
 
 class TradingStore:
     INDEX_COL: ClassVar[str] = "date"
+    # NOTE: str(resolution) is used as values, not repr(resolution)
     PIVOT_COLS: ClassVar[list[str]] = ["product", "resolution"]
 
     def __init__(self, component: Component):
         import pfeed as pe
 
         self._component: Component = component
-        self._df: nw.DataFrame[Any] | None = None  # component's signals_df
+        # trading_df = [features_df] + [signals_df], in the component's df_form:
+        # the features part is seeded by materialize() (child component signals
+        # and/or the component's own data); the signals part (usually one column)
+        # starts empty and is filled by update_df()
+        self._df: nw.DataFrame[Any] | None = None
         self._feed: PFundComponentFeed = pe.PFund(
             pipeline_mode=True
         ).component_feed.with_component(self._component)
+        self._features: dict[
+            ColumnName, Any
+        ] = {}  # child components signals = component's feature columns
         self._storage_config: StorageConfig | None = None
 
     @property
@@ -66,94 +75,155 @@ class TradingStore:
 
     def get_df(
         self,
+        kind: Literal["features", "signals", "trading"] = "trading",
         window_size: int | None = None,
         to_native: bool = False,
-    ) -> nw.DataFrame[Any] | IntoDataFrame | None:
+    ) -> nw.DataFrame[Any] | IntoDataFrame:
         """
         Args:
+            kind: Which part of the trading_df to return.
+                - "features": the features used to compute signals
+                - "signals": the computed signals
+                - "trading": the full trading DataFrame
             window_size: Number of most recent rows to return.
             to_native: If True, return the underlying backend frame (polars/pandas) instead
                 of a Narwhals DataFrame. Defaults to True.
         """
         df = self._df
+        component = self._component
         if df is None:
-            return None
+            raise RuntimeError(f"{component.name} trading df is not ready")
+        if kind != "trading":
+            columns = df.columns
+            # signal cols are locked on first signalize(); intersect with columns because they
+            # may be locked but not yet written (e.g. features materialized, _forward not run yet)
+            signal_cols = [col for col in component._signal_cols if col in columns]
+            if kind == "signals":
+                if not signal_cols:
+                    raise RuntimeError(
+                        f"{component.name} has no signals in its trading df yet"
+                    )
+                # only KEY_COLS actually present are real keys (wide form folds pivot cols into value-column names)
+                key_cols = [col for col in self.KEY_COLS if col in columns]
+                df = df.select(key_cols + signal_cols)
+            else:  # features
+                df = df.select([col for col in columns if col not in signal_cols])
         if window_size is not None:
             df = df.tail(window_size)
         return df.to_native() if to_native else df
 
-    def update_df(self, features_df: nw.DataFrame[Any], signals: dict[ColumnName, Any]):
-        """
+    def update_df(self, signals: Signals, data: BarData):
+        """Upserts signals into the current bar's row of the trading df.
+
+        Called once per contributor per closed bar — each child component's signals
+        (this component's features), then this component's own signals. Whichever
+        contributor arrives first creates the bar's row; later contributors fill
+        their named columns on that same row. Keyed by column name, hence
+        *update*, not append.
+
         Args:
-            features_df: features used to compute signals in dataframe form
-            signals: computed signals
+            signals: a child component's signals or this component's signals
+            data: the bar the signals were computed for. The store derives the
+                row key from it: the bar's open time, matching the market data
+                storage convention (see MarketDataStore.adjust_date_to_bar_close_time).
         """
-        df_backend = nw.get_native_namespace(features_df)
-        signals_df = nw.concat(
-            [
-                features_df.select(self.KEY_COLS),
-                nw.DataFrame.from_dict(data=signals, backend=df_backend),
-            ],
-            how="horizontal",
-        )
-        if self._df is None:
-            self._df = signals_df
-        else:
-            self._df = nw.concat([self._df, signals_df], how="vertical")
-        max_rows = self._component.config["max_rows"]
-        if max_rows is not None and len(self._df) > max_rows:
-            self._df = self._df.tail(max_rows)
+        import numpy as np
 
-    # TODO: load {component_name}.parquet
-    def materialize(self):
-        # NOTE: lookback_period=None means run the pipeline on the whole dataset
-        # self._component.run_pipeline(lookback_period=None)
-        # self._component.load() ???
-        pass
-
-    # TODO
-    def persist_to_lakehouse(self):
-        """Load pfund's component (strategy/model/feature/indicator) data, e.g. {strategy_name}.parquet, {model_name}.parquet, etc.
-        from the online store (TradingStore) to the offline store (pfeed's data lakehouse).
-        """
-        context = self._component.context
-        pfund_config = context.pfund_config
-
-        data_layer = DataLayer.CURATED
-        io_format = IOFormat.PARQUET
-
-        (
-            self._feed.download(artifact_type=ArtifactType.data).load(
-                data=self._df,
-                storage=self._storage_config.storage,
-                data_path=pfund_config.data_path,
-                data_layer=data_layer,
-                io_format=io_format,
+        component = self._component
+        if component._df_form != "wide":
+            raise NotImplementedError(
+                f"update_df() does not support df_form='{component._df_form}' yet"
             )
+        date = data.start_dt
+
+        # live trading contract: _forward() outputs the LATEST signals — one value
+        # per signal column for the current bar (a lookback window is input context,
+        # not output grain)
+        row_values: dict[ColumnName, Any] = {}
+        for col, value in signals.items():
+            value = np.asarray(value)
+            if value.size != 1:
+                raise ValueError(
+                    f"{component.name} got {value.size} values for signal column '{col}' "
+                    + "on a single bar; in live trading, transform()/predict()/decide() must "
+                    + "output only the latest signals (one value per signal column)"
+                )
+            row_values[col] = value.item()
+
+        df = self._df
+        if df is None:
+            # no seeded features (component without data-as-features): the first
+            # contributor's signals create the trading df
+            from pfeed.config import get_config
+
+            df = nw.DataFrame.from_dict(
+                {self.INDEX_COL: [date], **{col: [v] for col, v in row_values.items()}},
+                backend=str(get_config().data_tool),
+            )
+        else:
+            index_col = self.INDEX_COL
+            row_exists = len(df.filter(nw.col(index_col) == date)) > 0
+            if row_exists:
+                df = df.with_columns(
+                    nw.when(nw.col(index_col) == date)
+                    .then(nw.lit(v))
+                    .otherwise(nw.col(col) if col in df.columns else nw.lit(None))
+                    .alias(col)
+                    for col, v in row_values.items()
+                )
+            else:
+                new_row = nw.DataFrame.from_dict(
+                    {index_col: [date], **{col: [v] for col, v in row_values.items()}},
+                    backend=nw.get_native_namespace(df),
+                )
+                # diagonal: the new row only has [date] + this contributor's columns;
+                # every other column is filled with null
+                df = nw.concat([df, new_row], how="diagonal")
+
+        max_rows = component.config["max_rows"]
+        if max_rows is not None and len(df) > max_rows:
+            df = df.tail(max_rows)
+        self._df = df
+
+    def _save_source_artifact(self) -> RunResult:
+        return self._feed.download(
+            artifact_type=ArtifactType.source,
+            storage_config=self.storage_config,
+        ).run()
+
+    def materialize(self):
+        """Loads child components signals stored in pfeed's data lakehouse as this component's features/factors"""
+        component = self._component
+        data_dfs = {
+            category: data_store.get_df(to_native=True)
+            for category, data_store in component.data_stores.items()
+            if data_store.data_as_features and data_store.get_datas()
+        }
+        if data_dfs:
+            self._df = nw.from_native(component.merge_data_dfs(data_dfs))
+        # TODO: load features_df
+
+    def persist_to_lakehouse(self) -> RunResult | None:
+        """Persist the component's current data artifact through pfeed.
+
+        The dataframe is not passed directly to pfeed. The component feed treats
+        the bound component as a data source and extracts ``component._data_artifact``
+        when the dataflow runs.
+
+        Which rows are exposed by ``data_artifact`` depends on the execution mode:
+        vectorized backtesting exposes the complete trading dataframe, while
+        event-driven and live execution will expose the rows selected by
+        TradingStore for the current persistence interval.
+        """
+        # nothing to persist yet (e.g. component still warming up)
+        component = self._component
+        has_signals = self._df is not None and any(
+            col in self._df.columns for col in component._signal_cols
         )
-
-    # TODO:
-    def rehydrate_from_lakehouse(self):
-        """
-        Load data from pfeed's data lakehouse when:
-        - theres missing data
-        - EOD data is available, replace SourceType.STREAM (live data) with SourceType.BATCH (official EOD data)
-        """
-        self._feed.retrieve(...)
-
-    # TODO:
-    def swap_live_for_eod(self):
-        """Discard the interim live-stream buffer and load the official end-of-day dataset (if any)."""
-        pass
-
-    # TODO: currently just a draft
-    def save_artifacts(self):
-        (self._feed.download(artifact_type=ArtifactType.model).load())
-        # component_feed.load(
-        #     artifact_type=ArtifactType.model,
-        #     storage=self.storage_config.storage,
-        #     data_path=self.storage_config.data_path,
-        #     data_layer=self.storage_config.data_layer,
-        #     data_domain=self.storage_config.data_domain,
-        #     storage_options=self.storage_config.storage_options,
-        # )
+        if not has_signals:
+            self.logger.debug(f"{component.name} has no signals to persist yet")
+            return None
+        return self._feed.download(
+            artifact_type=ArtifactType.data,
+            storage_config=self.storage_config,
+        ).run()

@@ -18,6 +18,8 @@ import math
 import datetime
 from dataclasses import dataclass, field
 
+from pfund_kit.style import TextStyle, cprint
+
 try:
     # from sklearn.model_selection._split import BaseCrossValidator
     from sklearn.model_selection import TimeSeriesSplit as _TimeSeriesSplit
@@ -25,7 +27,7 @@ except ImportError:
     _TimeSeriesSplit = None
 
 
-class DatasetPeriods(TypedDict):
+class DatasetPeriods(TypedDict, total=True):
     dataset: tuple[datetime.date, datetime.date]
     train_set: tuple[datetime.date, datetime.date]
     dev_set: tuple[datetime.date | None, datetime.date | None]
@@ -124,16 +126,39 @@ class DatasetSplitter:
         train_ratio, dev_ratio, _ = self._to_ratios(dataset_splits)
 
         # cumulative-boundary rounding: because cumulative ratios are non-decreasing
-        # and round() is monotonic, the three segments are guaranteed non-negative and
-        # tile [dataset_start, dataset_end] EXACTLY. (Rounding each ratio independently
-        # could overflow, pushing dev/test past dataset_end and making test_days < 0.)
-        train_days = round(train_ratio * total_days)
-        dev_days = round((train_ratio + dev_ratio) * total_days) - train_days
+        # and the rounding is monotonic, the three segments are guaranteed non-negative
+        # and tile [dataset_start, dataset_end] EXACTLY. (Rounding each ratio
+        # independently could overflow, pushing dev/test past dataset_end and making
+        # test_days < 0.)
+        # NOTE: round-half-UP (not Python's round-half-to-even) so that on a tie the
+        # earlier segment wins the extra day — i.e. dev is filled before test. With
+        # half-to-even a tiny dataset could collapse dev to 0 while test kept a day,
+        # which inverts the train->dev->test priority.
+        def round_half_up(x: float) -> int:
+            return math.floor(x + 0.5)
+
+        train_days = round_half_up(train_ratio * total_days)
+        dev_days = round_half_up((train_ratio + dev_ratio) * total_days) - train_days
         test_days = total_days - train_days - dev_days
 
         if train_days <= 0:
             raise ValueError(
                 f"resulting train set is empty (train ratio {train_ratio:.3f} over {total_days} days); use a larger `data_range` or a higher train ratio"
+            )
+
+        # a segment can round down to 0 days on small datasets; warn loudly since the
+        # user asked for a non-zero ratio but won't get that set
+        if dev_days <= 0:
+            cprint(
+                f"dev set is EMPTY (dev ratio {dev_ratio:.3f} over {total_days} days rounded to 0 days); "
+                + "use a larger `data_range` or a higher dev ratio",
+                style=TextStyle.BOLD,
+            )
+        if test_days <= 0:
+            cprint(
+                f"test set is EMPTY ({total_days} days left no room after train/dev); "
+                + "use a larger `data_range` or a higher test ratio",
+                style=TextStyle.BOLD,
             )
 
         # lay the segments out contiguously; a 0-day dev/test collapses to (None, None)

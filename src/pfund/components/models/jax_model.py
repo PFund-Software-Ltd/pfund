@@ -5,6 +5,17 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from jax import Array
+    from narwhals.typing import IntoDataFrame
+
+import io
+import json
+import pickle
+import struct
+
+import numpy as np
+import narwhals as nw
+import jax
+import jax.numpy as jnp
 
 from pfund.components.models.model_base import BaseModel
 
@@ -34,22 +45,16 @@ class JAXModel(BaseModel):
 
     variables: Any = None
 
-    def predict(self, X: Any, *args: Any, **kwargs: Any) -> Array:
-        X = self._to_array(X)  # pyright: ignore[reportConstantRedefinition]
-
+    def predict(self, X: IntoDataFrame, *args: Any, **kwargs: Any) -> Array:
+        X_array = self._to_array(X)
         if self._is_equinox():
-            pred_y = self.model(X, *args, **kwargs)
+            pred_y = self.model(X_array, *args, **kwargs)
         else:
             if self.variables is None:
                 raise ValueError(
                     f"'{self.name}' is using Flax but self.variables is not set"
                 )
-            pred_y = self.model.apply(self.variables, X, *args, **kwargs)
-
-        if not self._signal_cols:
-            num_cols = pred_y.shape[-1] if pred_y.ndim > 1 else 1
-            signal_cols = self._get_default_signal_cols(num_cols)
-            self.set_signal_cols(signal_cols)
+            pred_y = self.model.apply(self.variables, X_array, *args, **kwargs)
         return pred_y
 
     @staticmethod
@@ -60,11 +65,6 @@ class JAXModel(BaseModel):
         native (pandas/polars/pyarrow/...) or an already-wrapped narwhals frame,
         eager or lazy.
         """
-        import jax
-        import jax.numpy as jnp
-        import narwhals as nw
-        import numpy as np
-
         if isinstance(X, jax.Array):
             return X
         if isinstance(X, np.ndarray):
@@ -94,12 +94,7 @@ class JAXModel(BaseModel):
         return isinstance(self.model, eqx.Module)
 
     def _encode(self, payload: dict[str, Any]) -> bytes:
-        import json
-
         if self._is_equinox():
-            import io
-            import struct
-
             import equinox as eqx
 
             # eqx serialises only array leaves and has no metadata slot, so wrap it:
@@ -126,10 +121,6 @@ class JAXModel(BaseModel):
 
     def _decode(self, data: bytes) -> None:
         if self._is_equinox():
-            import io
-            import json
-            import struct
-
             import equinox as eqx
 
             (n,) = struct.unpack("<Q", data[:8])
@@ -158,15 +149,11 @@ class JAXModel(BaseModel):
     # restore would flatten them to dicts and break resume.
 
     def _encode_checkpoint(self, checkpoint: dict[str, Any]) -> bytes:
-        import pickle
-
         # user owns the checkpoint pytree; pfund only stamps in the framework
         # essential (signal_cols) so the wrapper restores on resume.
         return pickle.dumps({**checkpoint, "signal_cols": self._signal_cols})
 
     def _decode_checkpoint(self, data: bytes) -> dict[str, Any]:
-        import pickle
-
         # pfund wrote this blob; pickle rebuilds the pytree's node types as-is, so
         # optax opt_state NamedTuples survive and optimizer.update() can resume.
         checkpoint = pickle.loads(data)

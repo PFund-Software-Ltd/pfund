@@ -30,7 +30,7 @@ pfund-kit = ">=0.1.11"
 pfeed = ">=0.0.16"
 apscheduler = ">=3.11.3"
 httpx2 = { version = ">=2.5.0", extras = ["http2"] }
-websockets = ">=16.0.0"
+websockets = ">=16.1.0"
 numba = ">=0.66.0"
 
 [feature.optional.system-requirements]
@@ -42,12 +42,12 @@ pfolio = ">=0.0.4"
 pfund-plot = {version = ">=0.0.5", extras = ["marimo"]}
 # TODO: enable when ready
 # mtflow = ">=0.0.1.dev2"
-pfund-ibapi = "==10.47.1"
+pfund-ibapi = "==10.48.1"
 alpaca-py = ">=0.43.5"
 hyperliquid-python-sdk = ">=0.24.0"
 joblib = ">=1.5.3"
 scikit-learn = ">=1.9.0"
-torch = ">=2.12.1"
+torch = ">=2.13.0"
 safetensors = ">=0.8.0"
 jax = ">=0.10.2"
 ta-lib = ">=0.7.0"
@@ -71,6 +71,7 @@ lightning = ">=2.6.5"
 flax = ">=0.12.7"
 equinox = ">=0.13.8"
 optax = ">=0.2.8"
+transformers = ">=5.13.0"
 
 [feature.dev.dependencies]
 graphviz = ">=14.1.2"

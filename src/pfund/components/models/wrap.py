@@ -3,11 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
-    import torch.nn as nn
-    from sklearn.base import BaseEstimator
-
     from pfund.components.actor_proxy import ActorProxy
-    from pfund.components.models.model_base import BaseModel
+    from pfund.components.models.model_base import BaseModel, UnderlyingModel
     from pfund.typing import ModelT
 
 
@@ -15,7 +12,7 @@ __all__ = ["wrap_model"]
 
 
 def wrap_model(
-    model: BaseEstimator | nn.Module | ModelT | ActorProxy[ModelT],
+    model: UnderlyingModel | ModelT | ActorProxy[ModelT],
 ) -> ModelT | ActorProxy[ModelT]:
     """Wraps a sklearn/pytorch/jax model into a pfund model"""
     from pfund.components.actor_proxy import ActorProxy

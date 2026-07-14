@@ -4,16 +4,22 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from pydantic import field_validator
+
 from pfund_kit import logging as kit_logging
 from pfund_kit.config import Configuration
+from pfeed.storages.storage_config import StorageConfig as PFeedStorageConfig
+from pfeed.utils.file_path import FilePath
 
 from pfund.enums import Environment
+
 
 __all__ = [
     "configure",
     "configure_logging",
     "get_config",
     "setup_logging",
+    "StorageConfig",
 ]
 
 
@@ -21,32 +27,31 @@ project_name = "pfund"
 _config: PFundConfig | None = None
 
 
-def setup_logging(
-    env: Environment | str, engine_name: str, reset: bool = False
-) -> None:
+class StorageConfig(PFeedStorageConfig):
+    @field_validator("data_path", mode="before")
+    @classmethod
+    def validate_data_path(cls, v: FilePath | Path | str | None) -> FilePath:
+        if v is None:
+            from pfund import get_config
+
+            config = get_config()
+            return FilePath(config.data_path)
+        elif not isinstance(v, FilePath):
+            return FilePath(v)
+        else:
+            return v
+
+
+def setup_logging(env: Environment | str, reset: bool = False) -> None:
     env = Environment[env.upper()]
-    config_by_engine_name = get_config(engine_name=engine_name)
-    kit_logging.setup_logging(config_by_engine_name, env=env, reset=reset)
+    kit_logging.setup_logging(get_config(), env=env, reset=reset)
 
 
-def get_config(engine_name: str | None = None) -> PFundConfig:
-    """Lazy singleton - only creates config when first called.
-    Also loads the .env file.
-    """
+def get_config() -> PFundConfig:
     global _config
     if _config is None:
         _config = PFundConfig()
-    if engine_name is None:
-        return _config
-    else:
-        # modify the config based on the engine name on the fly so that the global config is intact
-        from copy import copy
-
-        config_by_engine_name = copy(_config)
-        config_by_engine_name.log_path /= engine_name
-        config_by_engine_name.data_path /= engine_name
-        config_by_engine_name.cache_path /= engine_name
-        return config_by_engine_name
+    return _config
 
 
 def get_logging_config() -> dict[str, Any]:

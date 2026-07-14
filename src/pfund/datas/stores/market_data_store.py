@@ -34,7 +34,7 @@ from functools import partial
 
 import narwhals as nw
 
-from pfeed.enums import DataAccessType, DataLayer, DataStorage
+from pfeed.enums import DataAccessType
 from pfeed.feeds.market_feed import MarketFeed
 from pfund.datas import BarData, QuoteData, TickData
 from pfund.datas.data_config import DataConfig
@@ -149,7 +149,9 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         product: BaseProduct,
         resolutions: list[Resolution | str] | None = None,
         config: DataConfig | None = None,
+        as_features: bool = False,
     ) -> list[MarketData]:
+        self.set_data_as_features(as_features)
         config = self._resolve_data_config(
             product=product,
             resolutions=resolutions or [],
@@ -256,9 +258,11 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         else:
             # deliver the closed bar before update() clears it for the next bar.
             # NOTE: `not data.is_closed()` guard is necessary because data could be already closed after an non-incremental update
-            if not data.is_closed() and data.is_closed(
+            was_open = not data.is_closed()
+            has_now_reached_end = was_open and data.is_closed(
                 now=update["ts"] or update["msg_ts"] or time.time()
-            ):
+            )
+            if was_open and has_now_reached_end:
                 self._databoy._deliver(data)
                 _update_data(data)
             else:
@@ -291,7 +295,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         request = feed._get_current_request()
         return request.data_resolution != request.target_resolution
 
-    def materialize(self) -> nw.DataFrame[Any]:
+    def materialize(self):
         """Materializes market data by loading from storage, with optional auto-download fallback.
 
         For each registered data feed, first checks the cache for previously resampled data.
@@ -437,7 +441,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         df = nw.concat(dfs).sort(self.KEY_COLS)
         if isinstance(df, nw.LazyFrame):
             df = df.collect()
-        self._df = df
+
         cols = df.columns
         assert self.INDEX_COL in cols, (
             f"Index column {self.INDEX_COL} not found in {cols}"
@@ -445,4 +449,18 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         assert all(col in cols for col in self.PIVOT_COLS), (
             f"Pivot columns {self.PIVOT_COLS} not found in {cols}"
         )
-        return df
+
+        self._df = df
+
+    # TODO:
+    def flush_stale_bars(self):
+        """Flush stale bars from the in-memory buffer."""
+        pass
+
+    # TODO:
+    def rehydrate_from_lakehouse(self):
+        """Load data from pfeed's data lakehouse when:
+        - theres missing data, load streaming data from pfeed (data has been recorded in pfeed)
+        - EOD data is available, replace SourceType.STREAM (live data) with SourceType.BATCH (official EOD data)
+        """
+        pass

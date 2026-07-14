@@ -4,37 +4,46 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     import torch.nn as nn
+    import equinox as eqx
+    from flax import linen
     from narwhals.typing import IntoDataFrame
-    from numpy import ndarray
     from sklearn.base import BaseEstimator
+    from numpy.typing import NDArray
     from torch import Tensor
+    from jax import Array
     from pfeed.dataflow.result import RunResult
 
-    from pfund.components.indicators.indicator_base import TalibFunction
-    from pfund.typing import ColumnName
+    from pfund.typing import Signals
 
-    MachineLearningModel = nn.Module | BaseEstimator | TalibFunction
+    UnderlyingModel = nn.Module | BaseEstimator | linen.Module | eqx.Module
 
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 
-import narwhals as nw
+import numpy as np
 
-from pfund.enums import ArtifactType
+from pfund.enums import ArtifactType, ComponentType
 from pfund.components.mixin import ComponentMixin
 from pfund.components.models.model_meta import MetaModel
 
 
 class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
-    def __init__(self, model: MachineLearningModel, *args: Any, **kwargs: Any):
-        self.model = model  # user-defined machine learning model
+    def __init__(self, model: UnderlyingModel, *args: Any, **kwargs: Any):
+        self.model: UnderlyingModel = model
+        self._checkpoint_artifact: bytes | None = None
+        self.component_type = ComponentType.model
         self._df_form: Literal["wide", "long"] = "wide"
         self.__mixin_post_init__(
             model, *args, **kwargs
         )  # calls ComponentMixin.__mixin_post_init__()
 
     @abstractmethod
-    def predict(self, X: Any, *args: Any, **kwargs: Any) -> Any:
+    def predict(
+        self, X: IntoDataFrame, *args: Any, **kwargs: Any
+    ) -> NDArray[Any] | Tensor | Array:
         pass
 
     def __getattr__(self, name: str):
@@ -61,16 +70,37 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
                 f"'{self.name}' and its underlying model '{self.model.__class__.__name__}' both have no attribute '{name}'"
             )
 
-    def signalize(self, features_df: IntoDataFrame) -> dict[ColumnName, Any]:
-        """Creates signals_df (combined signals from other component)
+    def signalize(self, X: IntoDataFrame) -> Signals:
+        """Creates signals of this component
+
         Args:
-            data_df: dataframe in {self._df_form} form
+            X: features df
+
+        Returns:
+            dict[ColumnName, Any]: The predicted signals.
         """
-        X = nw.from_native(features_df)
-        pred: Tensor | ndarray = self.predict(X)
+        pred: Tensor | NDArray[Any] = self.predict(X)
+        if pred is None:
+            raise ValueError(
+                f"{self.name} predict() returned None, did you forget the return statement?"
+            )
+
         is_from_pytorch = type(pred).__module__.startswith("torch")
         if is_from_pytorch:
             pred = pred.detach().cpu().numpy()
+        pred = np.asarray(
+            pred
+        )  # normalizes JAX/other array-likes; no copy if already ndarray
+        if pred.ndim == 0:
+            raise ValueError(
+                f"{self.name} predict() returned a scalar; "
+                + "expected one value per row"
+            )
+        if not self._signal_cols:
+            num_cols = pred.shape[-1] if pred.ndim > 1 else 1
+            signal_cols = self._get_default_signal_cols(num_cols)
+            self.set_signal_cols(signal_cols)
+
         signal_cols = self._signal_cols
         num_signal_cols = len(signal_cols)
         if pred.ndim == 1:
@@ -78,46 +108,25 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
                 raise ValueError(
                     f"prediction is 1D but {self.name} has {num_signal_cols} signal columns: {signal_cols}"
                 )
-            signals_dict = {signal_cols[0]: pred}
+            signals = {signal_cols[0]: pred}
         else:
             # last dimension = signal columns, everything in between is packed into cells
             if num_signal_cols != pred.shape[-1]:
                 raise ValueError(
                     f"Expected {num_signal_cols} signal columns for {self.name}, but prediction has shape {pred.shape}"
                 )
-            signals_dict = {}
+            signals = {}
             for i, col in enumerate(signal_cols):
                 values = pred[..., i]
                 # NOTE: list() converts 2D+ array into per-row sub-arrays, needed because pandas rejects >1D per-column arrays
-                signals_dict[col] = list(values) if values.ndim > 1 else values
-        return signals_dict
+                signals[col] = list(values) if values.ndim > 1 else values
+        return signals
 
     def to_dict(self) -> dict[str, Any]:
         return {
             **super().to_dict(),
             "model": self.model.__class__.__name__,
         }
-
-    def _assert_functions_signatures(self):
-        from pfund_kit.utils.function import get_function_args_and_kwargs
-
-        super()._assert_functions_signatures()
-
-        def _assert_predict_function():
-            args, kwargs, _, _ = get_function_args_and_kwargs(self.predict)
-            if not args or args[0] != "X":
-                raise Exception(
-                    f'{self.name} predict() must have "X" as its first arg, i.e. predict(self, X, *args, **kwargs)'
-                )
-
-        _assert_predict_function()
-
-    def _get_default_signal_cols(self, num_cols: int) -> list[str]:
-        if num_cols == 1:
-            columns = [self.name]
-        else:
-            columns = [f"{self.name}-{i}" for i in range(num_cols)]
-        return columns
 
     @abstractmethod
     def _encode(self, payload: dict[str, Any]) -> bytes: ...
@@ -137,18 +146,30 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         signal_cols = header.get("__metadata__", {}).get("signal_cols")
         return json.loads(signal_cols) if signal_cols else []
 
+    @property
+    def _model_artifact(self) -> bytes:
+        return self._encode({"model": self.model, "signal_cols": self._signal_cols})
+
+    def _materialize(self):
+        super()._materialize()
+        self.load()
+
     def load(self) -> None:
-        data: bytes = self.store._feed.retrieve(
+        result = self.store._feed.retrieve(
             artifact_type=ArtifactType.model,
             storage_config=self.store.storage_config,
         ).run()
-        if data:
-            self._decode(data)
-        else:
+        data = result.data
+        if data is None:
             raise FileNotFoundError(
                 f"no saved model found for '{self.name}' in "
                 + f"{self.store.storage_config.storage} storage; call save() after training first"
             )
+        if not isinstance(data, bytes):
+            raise TypeError(
+                f"saved model for '{self.name}' returned {type(data).__name__}, expected bytes"
+            )
+        self._decode(data)
 
     def save(self) -> RunResult:
         return self.store._feed.download(
@@ -156,9 +177,29 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             storage_config=self.store.storage_config,
         ).run()
 
-    def serialize(self) -> bytes:
-        payload = {"model": self.model, "signal_cols": self._signal_cols}
-        return self._encode(payload)
+    @contextmanager
+    def _stage_checkpoint_artifact(
+        self,
+        checkpoint: dict[str, Any],
+    ) -> Generator[None, None, None]:
+        """Temporarily expose a user-built checkpoint as component state.
+
+        pfeed's ComponentFeed treats a pfund component as a data source:
+        ``download()`` should pull an artifact from the bound component
+        instead of receiving the artifact data as an argument.
+        Unlike model weights or the trading dataframe, a training checkpoint originates in user code
+        and is not normally retained by the model.
+        Staging it for the duration of ``download().run()`` lets pfeed extract
+        it through ``checkpoint_artifact`` while preserving that pull-based contract.
+        The ``finally`` block ensures the temporary state never outlives the run.
+        """
+        if self._checkpoint_artifact is not None:
+            raise RuntimeError("another checkpoint is already staged")
+        self._checkpoint_artifact = self._encode_checkpoint(checkpoint)
+        try:
+            yield
+        finally:
+            self._checkpoint_artifact = None
 
     def load_checkpoint(self, step: int) -> dict[str, Any]:
         """Read back the checkpoint written by save_checkpoint() at `step`. Restores
@@ -169,15 +210,21 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             raise NotImplementedError(
                 "load_checkpoint is not implemented for this model"
             )
-        data: bytes = self.store._feed.retrieve(
-            artifact_type=ArtifactType.model,
+        result = self.store._feed.retrieve(
+            artifact_type=ArtifactType.checkpoint,
             storage_config=self.store.storage_config,
             checkpoint_step=step,
         ).run()
-        if not data:
+        data = result.data
+        if data is None:
             raise FileNotFoundError(
                 f"no checkpoint found for '{self.name}' at step {step} in "
                 + f"{self.store.storage_config.storage} storage"
+            )
+        if not isinstance(data, bytes):
+            raise TypeError(
+                f"checkpoint for '{self.name}' at step {step} returned "
+                + f"{type(data).__name__}, expected bytes"
             )
         return self._decode_checkpoint(data)
 
@@ -191,10 +238,9 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             raise NotImplementedError(
                 "save_checkpoint is not implemented for this model"
             )
-        data: bytes = self._encode_checkpoint(checkpoint)
-        return self.store._feed.download(
-            artifact_type=ArtifactType.model,
-            storage_config=self.store.storage_config,
-            checkpoint_step=step,
-            checkpoint_data=data,
-        ).run()
+        with self._stage_checkpoint_artifact(checkpoint):
+            return self.store._feed.download(
+                artifact_type=ArtifactType.checkpoint,
+                storage_config=self.store.storage_config,
+                checkpoint_step=step,
+            ).run()
