@@ -63,23 +63,23 @@ class ComponentMixin:
 
         self._name = self._get_default_name()
         self._run_mode: RunMode | None = None
+        self._df_form: Literal["wide", "long"] | None = None
         self._resolution: Resolution | None = None
         self._context: TradeEngineContext | None = None
 
         self.logger: logging.Logger = logging.getLogger("pfund")
+        self.products: dict[ProductName, BaseProduct] = {}
         self.databoy = DataBoy(self)
         self.store = TradingStore(self)
 
         self._signal_cols: list[str] = []
         self.signals: Signals = {}  # latest signals
 
-        self.products: dict[ProductName, BaseProduct] = {}
         self.models: dict[str, BaseModel | ActorProxy[BaseModel]] = {}
         self.features: dict[str, BaseFeature | ActorProxy[BaseFeature]] = {}
 
         self._is_running = False
         self._is_gathered = False
-        self._is_top_component = False
 
     @property
     def env(self) -> Environment:
@@ -94,6 +94,11 @@ class ComponentMixin:
     def run_mode(self) -> RunMode:
         assert self._run_mode is not None, "run_mode is not set"
         return self._run_mode
+
+    @property
+    def df_form(self) -> Literal["wide", "long"]:
+        assert self._df_form is not None, "df_form is not set"
+        return self._df_form
 
     @property
     def context(self) -> TradeEngineContext:
@@ -112,14 +117,26 @@ class ComponentMixin:
     def data_stores(self) -> dict[DataCategory, BaseDataStore[Any, Any]]:
         return self.databoy._data_stores
 
+    @property
+    def component_type(self) -> str:
+        from pfund.components.strategies.strategy_base import BaseStrategy
+        from pfund.components.models.model_base import BaseModel
+        from pfund.components.features.feature_base import BaseFeature
+
+        if isinstance(self, BaseStrategy):
+            return ComponentType.strategy
+        elif isinstance(self, BaseModel):
+            return ComponentType.model
+        elif isinstance(self, BaseFeature):
+            return ComponentType.feature
+        else:
+            raise ValueError(f"Unknown component type: {type(self)}")
+
     # useful when user wants to set logger specific to the component. currently 'pfund' is the default logger.
     def set_logger(self, logger: logging.Logger):
         self.logger = logger
         if self.is_remote(direct_only=False):
             self._setup_logging()
-
-    def is_top_component(self) -> bool:
-        return self._is_top_component
 
     def _hydrate(
         self,
@@ -128,7 +145,7 @@ class ComponentMixin:
         resolution: Resolution | str,
         engine_context: TradeEngineContext,
         storage_config: StorageConfig,
-        is_top_component: bool = False,
+        df_form: Literal["wide", "long"],
     ):
         """
         Hydrates the component with necessary attributes after initialization.
@@ -142,13 +159,14 @@ class ComponentMixin:
                 Always resolved by the caller (per-component override, else the engine
                 default or parent component's config) — never None by the time it lands
                 here, so the store receives a concrete config.
+            df_form: DataFrame layout used by this component.
         """
         self._context = engine_context
         self._run_mode = run_mode
+        self._df_form = df_form
         self._set_name(name)
         self._set_resolution(resolution)
         self.set_logger(self.logger)
-        self._is_top_component = is_top_component
         self.store.set_storage_config(storage_config)
 
     def _forward(self, data: BarData):
@@ -256,7 +274,7 @@ class ComponentMixin:
             # only the top strategy executes (trade() -> orders need products/prices);
             # a sub-strategy is a non-executing signal generator, so like models/features
             # it just needs some input source: data or child components.
-            if self.is_strategy() and self.is_top_component():
+            if self.is_strategy() and self.is_substrategy():
                 raise ValueError(
                     f"{self.name} has no market data, did you forget to call add_data() / add_datas()?"
                 )
@@ -392,11 +410,7 @@ class ComponentMixin:
     def trading_df(self) -> IntoDataFrame:
         return self.get_df(kind="trading", window_size=None, to_native=True)
 
-    @property
-    def full_df(self) -> IntoDataFrame:
-        return self.get_df(kind="full", window_size=None, to_native=True)
-
-    df = full_df
+    df = trading_df
 
     @property
     def df_pandas(self) -> pd.DataFrame:
@@ -411,6 +425,12 @@ class ComponentMixin:
         from pfeed._etl.base import convert_dataframe
 
         return convert_dataframe(self.df, data_tool="polars").collect()
+
+    @property
+    def full_df(self) -> IntoDataFrame:
+        return self.get_df(kind="full", window_size=None, to_native=True)
+
+    complete_df = full_df
 
     def get_df(
         self,
@@ -515,7 +535,7 @@ class ComponentMixin:
 
     @ray_method
     def get_df_form(self) -> Literal["wide", "long"]:
-        return self._df_form
+        return self.df_form
 
     @ray_method
     def get_trading_store(self) -> TradingStore:
@@ -531,9 +551,6 @@ class ComponentMixin:
         else:
             columns = [f"{self.name}-{i}" for i in range(num_cols)]
         return columns
-
-    def set_df_form(self, df_form: Literal["wide", "long"]):
-        self._df_form = df_form.lower()
 
     def get_datas(self) -> list[BaseData]:
         datas = []
@@ -734,9 +751,10 @@ class ComponentMixin:
     def _add_component(
         self,
         component: ComponentT | ActorProxy[ComponentT],
-        resolution: str = "",
-        name: str = "",
-        storage_config: StorageConfig | None = None,
+        resolution: str,
+        name: str,
+        df_form: Literal["wide", "long"],
+        storage_config: StorageConfig | None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ) -> ComponentT | ActorProxy[ComponentT] | None:
@@ -746,6 +764,7 @@ class ComponentMixin:
             storage_config: per-component override for where this component's artifacts
                 are persisted. Falls back to this parent's storage config (which itself
                 came from the engine default or its own parent) when None.
+            df_form: DataFrame layout used by this component.
             ray_kwargs: kwargs for ray actor, e.g. num_cpus
             ray_actor_options:
                 Options for Ray actor.
@@ -753,7 +772,12 @@ class ComponentMixin:
         """
         Component = component.__class__
         ComponentName = Component.__name__
-        if component.is_model():
+        if component.is_strategy():
+            from pfund.components.strategies.strategy_base import BaseStrategy
+
+            components = self.strategies
+            BaseClass = BaseStrategy
+        elif component.is_model():
             from pfund.components.models.model_base import BaseModel
 
             components = self.models
@@ -765,7 +789,7 @@ class ComponentMixin:
             BaseClass = BaseFeature
         else:
             raise ValueError(
-                f"{component.component_type} '{ComponentName}' is not a model or feature"
+                f"{component.component_type} '{ComponentName}' is not a strategy, model or feature"
             )
 
         if not isinstance(component, ActorProxy):
@@ -805,6 +829,7 @@ class ComponentMixin:
                 resolution=resolution or self.resolution,
                 engine_context=self.context,
                 storage_config=storage_config or self.store.storage_config,
+                df_form=df_form,
             )
 
         components[component.name] = component
@@ -820,6 +845,7 @@ class ComponentMixin:
         model: ModelT | ActorProxy[ModelT] | UnderlyingModel,
         resolution: str = "",
         name: str = "",
+        df_form: Literal["wide", "long"] = "wide",
         storage_config: StorageConfig | None = None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
@@ -830,6 +856,7 @@ class ComponentMixin:
             component=wrap_model(model),
             resolution=resolution,
             name=name,
+            df_form=df_form,
             storage_config=storage_config,
             ray_actor_options=ray_actor_options,
             **ray_kwargs,
@@ -840,6 +867,7 @@ class ComponentMixin:
         feature: FeatureT | ActorProxy[FeatureT],
         resolution: str = "",
         name: str = "",
+        df_form: Literal["wide", "long"] = "wide",
         storage_config: StorageConfig | None = None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
@@ -848,13 +876,11 @@ class ComponentMixin:
             component=feature,
             resolution=resolution,
             name=name,
+            df_form=df_form,
             storage_config=storage_config,
             ray_actor_options=ray_actor_options,
             **ray_kwargs,
         )
-
-    def set_signal_cols(self, signal_cols: list[str]):
-        self._signal_cols = signal_cols
 
     def set_pivot_cols(self, pivot_cols: list[str]):
         self.store.set_pivot_cols(pivot_cols)
@@ -864,10 +890,10 @@ class ComponentMixin:
             df = self.get_df(kind="data", data_category=data.category, to_native=False)
             if df is None or len(df) < self.config["warmup_period"]:
                 return False
-            if self._df_form == "long":
+            if self.df_form == "long":
                 # long form: ready when this product's bar is closed
                 return data.is_closed()
-            elif self._df_form == "wide":
+            elif self.df_form == "wide":
                 # wide form: ready when all products' bars are closed
                 return all(
                     cast(
@@ -899,7 +925,7 @@ class ComponentMixin:
             ]
             if metadata_to_drop:
                 nw_df = nw_df.drop(metadata_to_drop)
-            if self._df_form == "wide":
+            if self.df_form == "wide":
                 # REVIEW: this requires dynamic pivoting for EACH call
                 nw_df = data_store.pivot_df(nw_df)
             dfs.append(nw_df)
@@ -918,7 +944,7 @@ class ComponentMixin:
 
         if not common_key_cols:
             raise ValueError(
-                f"No common key columns found in data_dfs in {self._df_form} form for {self.name}. "
+                f"No common key columns found in data_dfs in {self.df_form} form for {self.name}. "
                 + "Please define your own merge_data_dfs() to handle merging data_dfs manually."
             )
 
@@ -934,7 +960,7 @@ class ComponentMixin:
     ) -> IntoDataFrame:
         """Creates features_df by merging signals_dfs (signals from other components).
 
-        For the (self._df_form='long', component_df_form='wide') case the wide
+        For the (self.df_form='long', component_df_form='wide') case the wide
         component signals cannot be melted back to long, so they are broadcast onto
         a long-form KEY_COLS scaffold built purely from this component's config
         (see _build_signals_key_grid) — no data_df is consulted, so no data value
@@ -943,10 +969,10 @@ class ComponentMixin:
         Args:
             signals_dfs: dict of signals_df per component name
         Returns:
-            features_df: features_df in {self._df_form} form
+            features_df: features_df in {self.df_form} form
         """
         dfs: list[nw.DataFrame[Any]] = []
-        # (self._df_form='long', component_df_form='wide') case:
+        # (self.df_form='long', component_df_form='wide') case:
         # cannot melt back to long, so merge them in afterwards by broadcasting on the index col only
         special_dfs: list[nw.DataFrame[Any]] = []
         common_index_col: str | None = None
@@ -963,10 +989,10 @@ class ComponentMixin:
                         f"Unhandled case: index column {common_index_col} is not the same as {trading_store.INDEX_COL} for {component_name}"
                     )
             # special case, cannot unpivot 'wide' to 'long'
-            if self._df_form == "long" and component_df_form == "wide":
+            if self.df_form == "long" and component_df_form == "wide":
                 special_dfs.append(nw.from_native(df))
                 continue
-            elif self._df_form == "wide" and component_df_form == "long":
+            elif self.df_form == "wide" and component_df_form == "long":
                 # REVIEW: this requires dynamic pivoting for EACH call
                 nw_df = trading_store.pivot_df(nw.from_native(df))
             else:
@@ -999,7 +1025,7 @@ class ComponentMixin:
             if len(dfs) > 1:
                 if not common_key_cols:
                     raise ValueError(
-                        f"No common key columns found in signals_dfs in {self._df_form} form for {self.name}. "
+                        f"No common key columns found in signals_dfs in {self.df_form} form for {self.name}. "
                         + "Please define your own merge_signals_dfs() to handle merging signals_dfs manually."
                     )
                 for df in dfs[1:]:
@@ -1012,7 +1038,7 @@ class ComponentMixin:
                             nw.coalesce(key, right_key).alias(key)
                         ).drop(right_key)
 
-        # broadcast (self._df_form='long', component_df_form='wide') specials on index col only
+        # broadcast (self.df_form='long', component_df_form='wide') specials on index col only
         for df in special_dfs:
             features_df = features_df.join(df, on=common_index_col, how="full")
             right_key = f"{common_index_col}_right"

@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from pfund.engines.contexts.backtest_engine_context import BacktestEngineContext
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.entities.products.product_base import BaseProduct
-    from pfund.typing import ModelT, FeatureT, Signals
+    from pfund.typing import ComponentT, Signals
     from pfund._backtest.cv.base import CrossValidatorDatasetPeriods
     from pfund._backtest.dataset_splitter import DatasetPeriods
 
@@ -468,15 +468,24 @@ class BacktestMixin:
 
     def _add_component(
         self,
-        component: ModelT | FeatureT,
-        resolution: str = "",
-        name: str = "",
-        storage_config: StorageConfig | None = None,
+        component: ComponentT,
+        resolution: str,
+        name: str,
+        df_form: Literal["wide", "long"],
+        storage_config: StorageConfig | None,
         # NOTE: non-backtesting kwargs are ignored, e.g. ray_actor_options, ray_kwargs, etc.
         **kwargs: Any,
-    ) -> ModelT | FeatureT:
+    ) -> ComponentT:
         Component = type(component)
-        if component.is_model():
+        if component.is_strategy():
+            from pfund.components.strategies.strategy_backtest import BacktestStrategy
+
+            component = BacktestStrategy(
+                Component,
+                *component.__pfund_args__,
+                **component.__pfund_kwargs__,
+            )
+        elif component.is_model():
             from pfund.components.models.model_backtest import BacktestModel
 
             component = BacktestModel(
@@ -500,6 +509,7 @@ class BacktestMixin:
             component=component,
             resolution=resolution,
             name=name or Component.__name__,
+            df_form=df_form,
             storage_config=storage_config,
         )
 
@@ -509,10 +519,7 @@ class BacktestMixin:
         return isinstance(self, _DummyStrategy)
 
     def _is_signals_precomputed(self) -> bool:
-        return (
-            not self.is_top_component()
-            and self.backtest_mode == BacktestMode.VECTORIZED
-        ) or (
+        return (self.backtest_mode == BacktestMode.VECTORIZED) or (
             self.backtest_mode == BacktestMode.EVENT_DRIVEN
             and self.settings.reuse_signals
         )
@@ -535,9 +542,9 @@ class BacktestMixin:
             return super()._gather()
 
     @override
-    def _get_supported_resolutions(
+    def _get_supported_resolutions(  # pyright: ignore[reportGeneralTypeIssues]
         self, product: BaseProduct
-    ) -> dict[Timeframe, list[int]]:  # pyright: ignore[reportGeneralTypeIssues]
+    ) -> dict[Timeframe, list[int]]:
         """Gets supported resolutions for the product based on the trading venue.
         Overrides it in backtesting, supports only the primary resolution.
         """

@@ -7,7 +7,6 @@ if TYPE_CHECKING:
     from pfund.typing import FeatureT
 
 from pfund._backtest.backtest_mixin import BacktestMixin
-from pfund.components.features.feature_base import BaseFeature
 
 
 def BacktestFeature(Feature: type[FeatureT], *args: Any, **kwargs: Any) -> FeatureT:
@@ -15,10 +14,7 @@ def BacktestFeature(Feature: type[FeatureT], *args: Any, **kwargs: Any) -> Featu
         pass
 
     try:
-        if not issubclass(Feature, BaseFeature):
-            return _BacktestFeature(*args, **kwargs)
-        else:
-            return _BacktestFeature(*args, **kwargs)
+        return _BacktestFeature(*args, **kwargs)
     except TypeError as e:
         if "__init__()" in str(e):
             raise TypeError(

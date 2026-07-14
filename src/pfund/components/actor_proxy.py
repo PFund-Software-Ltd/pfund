@@ -105,20 +105,3 @@ class ActorProxy(Generic[ComponentT]):
                     raise err
 
             return remote_method
-
-    # Define common lifecycle methods explicitly so type checkers preserve their
-    # signatures instead of resolving them through __getattr__ as Any.
-    def _gather(self) -> None:
-        """Run the proxied component's gather hook."""
-        remote_gather = self.__getattr__("_gather")
-        return remote_gather()
-
-    def start(self) -> None:
-        """Start the proxied component."""
-        remote_start = self.__getattr__("start")
-        return remote_start()
-
-    def stop(self, reason: str = "") -> None:
-        """Stop the proxied component."""
-        remote_stop = self.__getattr__("stop")
-        return remote_stop(reason)

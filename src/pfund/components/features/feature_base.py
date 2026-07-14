@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast
+from typing import TYPE_CHECKING, Any, TypeAlias, cast
 from collections.abc import Sequence
 
 if TYPE_CHECKING:
@@ -16,15 +16,12 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from pfund.enums import ComponentType
 from pfund.components.mixin import ComponentMixin
 from pfund.components.features.feature_meta import MetaFeature
 
 
 class BaseFeature(ComponentMixin, ABC, metaclass=MetaFeature):
     def __init__(self, *args: Any, **kwargs: Any):
-        self.component_type = ComponentType.feature
-        self._df_form: Literal["wide", "long"] = "wide"
         self.__mixin_post_init__(
             *args, **kwargs
         )  # calls ComponentMixin.__mixin_post_init__()
@@ -38,6 +35,9 @@ class BaseFeature(ComponentMixin, ABC, metaclass=MetaFeature):
     ) -> FeatureValue | dict[ColumnName, FeatureValue]:
         """Extract features from the input data"""
         pass
+
+    def set_signal_cols(self, signal_cols: list[str]):
+        self._signal_cols = signal_cols
 
     def signalize(self, X: IntoDataFrame) -> Signals:
         """Creates signals of this component

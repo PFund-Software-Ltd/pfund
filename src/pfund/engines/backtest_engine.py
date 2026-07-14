@@ -82,7 +82,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             dataset_splits=dataset_splits,
         )
         super().__init__(env=self.env, name=self.name)
-        self.results: dict[str, Any] | None = None
+        self.results: list[IntoDataFrame] | None = None
 
     @property
     def backtest_mode(self) -> BacktestMode:
@@ -97,6 +97,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         strategy: StrategyT,
         resolution: str,
         name: str = "",
+        df_form: Literal["wide", "long"] = "long",
         storage_config: StorageConfig | None = None,
     ) -> StrategyT:
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
@@ -105,7 +106,11 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         dummy_strategy_name = _DummyStrategy.__name__
         if dummy_strategy_name in self._strategies:
             raise Exception(
-                "adding another strategy is not allowed during model backtesting (i.e. engine.add_model(...) has been called)"
+                "adding another strategy is not allowed during model/feature backtesting"
+            )
+        elif self._strategies:
+            raise Exception(
+                f"strategy {list(self._strategies)[0]} already exists, only one strategy is allowed in backtesting"
             )
         Strategy = type(strategy)
         if Strategy is not _DummyStrategy:
@@ -122,6 +127,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 strategy=strategy,
                 resolution=resolution,
                 name=name or Strategy.__name__,
+                df_form=df_form,
                 storage_config=storage_config,
             ),
         )
@@ -130,39 +136,36 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         self,
         component: ModelT | FeatureT,
         resolution: str,
-        name: str = "",
-        storage_config: StorageConfig | None = None,
+        name: str,
+        df_form: Literal["wide", "long"],
+        storage_config: StorageConfig | None,
     ) -> ModelT | FeatureT:
         """Add model without creating a strategy (using dummy strategy)"""
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
 
         dummy_strategy_name = _DummyStrategy.__name__
-        only_dummy_strategy_exists = (
-            dummy_strategy_name in self._strategies and len(self._strategies) == 1
-        )
+        only_dummy_strategy_exists = dummy_strategy_name in self._strategies
         assert not only_dummy_strategy_exists, (
-            "Please use strategy.add_model(...) instead of engine.add_model(...) when a strategy is already created"
+            "Please use strategy.add_model/add_feature(...) instead of engine.add_model/add_feature(...) when a strategy is already created"
         )
         if dummy_strategy_name not in self._strategies:
             strategy = self.add_strategy(
                 _DummyStrategy(),
                 resolution,
                 name=dummy_strategy_name,
-                storage_config=storage_config,
             )
-        else:
-            strategy = self.get_strategy(dummy_strategy_name)
+        strategy = self.get_strategy(dummy_strategy_name)
         if strategy.models or strategy.features:
             raise ValueError(
                 "Adding more than 1 model/feature in backtesting is not supported, "
                 + "you should (train) and save your models/features one by one"
             )
         component = strategy._add_component(
-            component,
-            resolution,
+            component=component,
+            resolution=resolution,
             name=name,
+            df_form=df_form,
             storage_config=storage_config,
-            is_top_component=True,
         )
         return component
 
@@ -171,6 +174,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         model: ModelT | UnderlyingModel,
         resolution: str,
         name: str = "",
+        df_form: Literal["wide", "long"] = "wide",
         storage_config: StorageConfig | None = None,
     ) -> ModelT:
         from pfund.components.models.wrap import wrap_model
@@ -179,6 +183,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             component=cast("ModelT", wrap_model(model)),
             resolution=resolution,
             name=name,
+            df_form=df_form,
             storage_config=storage_config,
         )
 
@@ -187,12 +192,14 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         feature: FeatureT,
         resolution: str = "",
         name: str = "",
+        df_form: Literal["wide", "long"] = "wide",
         storage_config: StorageConfig | None = None,
     ) -> FeatureT:
         return self._add_component(
             component=feature,
             resolution=resolution,
             name=name,
+            df_form=df_form,
             storage_config=storage_config,
         )
 
@@ -201,7 +208,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         ctx: BacktestContext | None = None,
         num_chunks: int = 1,
         num_cpus: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> list[IntoDataFrame]:
         """
         Args:
             num_chunks:
@@ -224,33 +231,34 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
 
         super().run(ctx=ctx)
 
-        backtest_results: dict[BacktesteeName, list[IntoDataFrame]] = {}
+        backtest_results: list[IntoDataFrame] = []
 
         try:
-            for strategy in self._strategies.values():
-                is_dummy_strategy = strategy.name == _DummyStrategy.__name__
-                if is_dummy_strategy:
-                    # dummy strategy has exactly one model or one feature
-                    if strategy.models:
-                        model: BaseModel = cast(
-                            "BaseModel", list(strategy.models.values())[0]
-                        )
-                        backtestee = model
-                    elif strategy.features:
-                        feature: BaseFeature = cast(
-                            "BaseFeature", list(strategy.features.values())[0]
-                        )
-                        backtestee = feature
-                    else:
-                        raise ValueError("No model or feature to backtest")
+            # NOTE: only one strategy exists in backtesting
+            strategy = cast("BaseStrategy", list(self._strategies.values())[0])
+            is_dummy_strategy = strategy.name == _DummyStrategy.__name__
+            if is_dummy_strategy:
+                # dummy strategy has exactly one model or one feature
+                if strategy.models:
+                    model: BaseModel = cast(
+                        "BaseModel", list(strategy.models.values())[0]
+                    )
+                    backtestee = model
+                elif strategy.features:
+                    feature: BaseFeature = cast(
+                        "BaseFeature", list(strategy.features.values())[0]
+                    )
+                    backtestee = feature
                 else:
-                    backtestee = strategy
-                backtest_dfs = self._backtest(
-                    cast("BaseStrategy | BaseModel | BaseFeature", backtestee),
-                    num_chunks=num_chunks,
-                    num_cpus=num_cpus,
-                )
-                backtest_results[backtestee.name] = backtest_dfs
+                    raise ValueError("No model or feature to backtest")
+            else:
+                backtestee = strategy
+            backtest_dfs = self._backtest(
+                backtestee,
+                num_chunks=num_chunks,
+                num_cpus=num_cpus,
+            )
+            backtest_results = backtest_dfs
 
         except Exception:
             self._logger.exception("Error in backtesting:")
@@ -270,7 +278,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         is_using_ray = num_chunks > 1
         backtest_dfs: list[IntoDataFrame] = []
 
-        df = nw.from_native(backtestee.df)
+        df = nw.from_native(backtestee.full_df)
 
         def _run_backtest(
             backtestee: BaseStrategy | BaseModel | BaseFeature,

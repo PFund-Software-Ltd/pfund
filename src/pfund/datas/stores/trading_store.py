@@ -130,9 +130,9 @@ class TradingStore:
         import numpy as np
 
         component = self._component
-        if component._df_form != "wide":
+        if component.df_form != "wide":
             raise NotImplementedError(
-                f"update_df() does not support df_form='{component._df_form}' yet"
+                f"update_df() does not support df_form='{component.df_form}' yet"
             )
         date = data.start_dt
 

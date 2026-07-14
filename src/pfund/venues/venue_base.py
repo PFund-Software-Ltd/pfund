@@ -19,7 +19,6 @@ if TYPE_CHECKING:
         Currency,
         FullDataChannel,
     )
-    from pfund.datas.resolution import Resolution
     from pfund.datas.data_market import MarketData
     from pfund.entities import (
         BaseAccount,

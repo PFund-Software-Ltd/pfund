@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal
 
-
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
+    from pfeed.storages.storage_config import StorageConfig
 
     from pfund.components.actor_proxy import ActorProxy
     from pfund.entities.accounts.account_base import BaseAccount
@@ -19,24 +19,24 @@ if TYPE_CHECKING:
         ComponentName,
         StrategyT,
         Signals,
+        Currency,
+        ProductName,
     )
 
 from abc import ABC, abstractmethod
 
-import narwhals as nw
-
+from pfund.enums import Side
+from pfund.utils.decorators import ray_method
 from pfund.components.mixin import ComponentMixin
 from pfund.components.strategies.strategy_meta import MetaStrategy
 from pfund.managers import OrderManager, PortfolioManager, RiskManager
-from pfund.enums import ComponentType
 
 
 class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def __init__(self, *args: Any, **kwargs: Any):
-        self.component_type = ComponentType.strategy
-        self._df_form: Literal["wide", "long"] = "long"
-        self.accounts: dict[AccountName, BaseAccount] = {}
-        self.strategies: dict[str, BaseStrategy] = {}
+        self._accounts: dict[AccountName, BaseAccount] = {}
+        self.strategies: dict[str, BaseStrategy] = {}  # NOTE: sub-strategies
+        self._is_substrategy = False
         self._order_manager = OrderManager()
         self._portfolio_manager = PortfolioManager()
         self._risk_manager = RiskManager()
@@ -46,11 +46,25 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         self.__mixin_post_init__(
             *args, **kwargs
         )  # calls ComponentMixin.__mixin_post_init__()
+        self._signal_cols: list[str] = ["signal"]
 
     @abstractmethod
-    def decide(self, X: IntoDataFrame) -> list[BaseOrder]:
+    def decide(self, X: IntoDataFrame) -> Literal[Side.BUY, Side.SELL, None]:
         pass
 
+    @property
+    def accounts(self) -> dict[AccountName, BaseAccount]:
+        return self._accounts
+
+    @property
+    def balances(self) -> dict[AccountName, dict[Currency, BaseBalance]]:
+        return self._portfolio_manager.balances
+
+    @property
+    def positions(self) -> dict[AccountName, dict[ProductName, BasePosition]]:
+        return self._portfolio_manager.positions
+
+    # TODO: add @property active_orders etc., get from order manager
     @property
     def order_manager(self) -> OrderManager:
         return self._order_manager
@@ -69,15 +83,71 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
 
     rm = risk_manager
 
-    # TODO: load strategy's signal_df from parquet
-    def load(self):
-        pass
+    @ray_method
+    def get_component(
+        self, name: ComponentName
+    ) -> Component | ActorProxy[Component] | None:
+        return self.strategies.get(name, None) or super().get_component(name)
 
-    # TODO: dump strategy's signal_df to parquet
-    def dump(self):
-        pass
+    @ray_method
+    def get_components(self) -> list[Component | ActorProxy[Component]]:
+        return [*self.strategies.values(), *super().get_components()]
 
-    # TODO:
+    @ray_method
+    def get_accounts(self) -> list[BaseAccount]:
+        return list(self._accounts.values())
+
+    def is_substrategy(self) -> bool:
+        return self._is_substrategy
+
+    @ray_method
+    def _mark_as_substrategy(self):
+        self._is_substrategy = True
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            **super().to_dict(),
+            "strategies": list(self.strategies),
+        }
+
+    def _set_engine(self, engine: TradeEngine):
+        self._engine = engine
+
+    def add_account(self, account: BaseAccount) -> BaseAccount:
+        if self.is_substrategy():
+            raise ValueError(f"Sub-strategy '{self.name}' cannot add accounts")
+        if account.env != self.env:
+            raise ValueError(
+                f"account env {account.env} does not match strategy env {self.env}"
+            )
+        if account.name not in self._accounts:
+            self._accounts[account.name] = account
+            self.logger.debug(f"added account name={account.name}")
+        else:
+            raise ValueError(f"account name {account.name} is already registered")
+        return account
+
+    def add_strategy(
+        self,
+        strategy: StrategyT | ActorProxy[StrategyT],
+        resolution: str = "",
+        name: str = "",
+        df_form: Literal["wide", "long"] = "long",
+        storage_config: StorageConfig | None = None,
+        ray_actor_options: dict[str, Any] | None = None,
+        **ray_kwargs: Any,
+    ) -> StrategyT | ActorProxy[StrategyT] | None:
+        strategy._mark_as_substrategy()
+        return self._add_component(
+            component=strategy,
+            resolution=resolution,
+            name=name,
+            df_form=df_form,
+            storage_config=storage_config,
+            ray_actor_options=ray_actor_options,
+            **ray_kwargs,
+        )
+
     def signalize(self, X: IntoDataFrame) -> Signals:
         """Creates signals of this component
 
@@ -87,69 +157,16 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         Returns:
             dict[ColumnName, Any]: The predicted signals.
         """
-        signals = self.decide(X)
+        signal = self.decide(X)
+        if signal is not None:
+            if signal not in [Side.BUY, Side.SELL]:
+                raise ValueError(f"Invalid signal: {signal}")
+            else:
+                signal = Side(signal)
+        signal_col = self._signal_cols[0]
+        return {signal_col: signal}
 
-    # TODO: {product.name}_signal
-    def _get_default_signal_cols(self, num_cols: int) -> list[str]:
-        pass
-
-    def get_component(
-        self, name: ComponentName
-    ) -> Component | ActorProxy[Component] | None:
-        return self.strategies.get(name, None) or super().get_component(name)
-
-    def get_components(self) -> list[Component | ActorProxy[Component]]:
-        return [*self.strategies.values(), *super().get_components()]
-
-    def get_position(self, account: BaseAccount, pdt: str) -> BasePosition | None:
-        return self.positions[account].get(pdt, None)
-
-    def get_balance(self, account: BaseAccount, ccy: str) -> BaseBalance | None:
-        return self.balances[account].get(ccy, None)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            **super().to_dict(),
-            "strategies": list(self.strategies),
-        }
-
-    def get_accounts(self) -> list[BaseAccount]:
-        return list(self.accounts.values())
-
-    def add_account(self, account: BaseAccount) -> BaseAccount:
-        if not self.is_top_component():
-            raise ValueError(f"Sub-strategy '{self.name}' cannot add accounts")
-        if account.env != self.env:
-            raise ValueError(
-                f"account env {account.env} does not match strategy env {self.env}"
-            )
-        self.accounts[account.name] = account
-        self.logger.debug(f'added {account.venue} account "{account.name}"')
-        return account
-
-    # FIXME: update, refer to or reuse _add_component() in component_mixin.py (rmb to update _add_component in backtest mixin)
-    # TODO: _setup_logging, _set_engine etc.
-    # TODO: make sure sub-strategy's df_form is the same as the top strategy's df_form
-    def add_strategy(self, strategy: StrategyT, name: str = "") -> StrategyT:
-        if strategy.is_top_component():
-            raise ValueError(
-                f"Top strategy '{self.name}' cannot be added as a sub-strategy"
-            )
-        assert isinstance(strategy, BaseStrategy), (
-            f"strategy '{strategy.__class__.__name__}' is not an instance of BaseStrategy. Please create your strategy using 'class {strategy.__class__.__name__}(pf.Strategy)'"
-        )
-        if name:
-            strategy._set_name(name)
-        strategy._set_trading_store()
-        strategy._create_logger()
-        strategy._set_resolution(self.resolution)
-        strat = strategy.name
-        if strat in self.strategies:
-            return self.strategies[strat]
-        self.strategies[strat] = strategy
-        self.logger.debug(f"added sub-strategy '{strat}'")
-        return strategy
-
+    # TODO:
     def _on_update(self, update: Any):
         """Transport-agnostic sink for venue updates → this strategy's managers.
 
@@ -158,13 +175,15 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         published dict via model_validate). Mirrors the engine's _run_updates_loop match,
         one level down into the strategy's own managers.
         """
+        account_name = update.account
+        account = self.accounts[account_name]
         match update:
             case BalanceUpdate():
                 self._portfolio_manager.on_balance_update(update)
-                self.on_balance(balance.account, balance)
+                self.on_balance(account, self.balances[account_name])
             case PositionUpdate():
                 self._portfolio_manager.on_position_update(update)
-                self.on_position(position.account, position)
+                self.on_position(account, self.positions[account_name])
             case OrderUpdate():
                 self._order_manager.on_order_update(update)
                 self.on_order(order.account, order, type_)
@@ -174,18 +193,14 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
 
     def _gather(self) -> None:
         if not self._is_gathered:
-            # TODO: check if e.g. exchange balances and positions are ready, if backfilling is finished?
-            # TODO: top strategy must have an account
-            self.add_strategies()
             self.add_accounts()
+            self.add_strategies()
+            if not self.is_substrategy() and not self._accounts:
+                raise RuntimeError(f"{self.name} must have at least one account")
             super()._gather()
         else:
             self.logger.debug(f"'{self.name}' has already gathered")
 
-    def _set_engine(self, engine: TradeEngine):
-        self._engine = engine
-
-    # TODO: draft only
     # TODO: write order_price/order_quantity to trading store's df
     def place_orders(
         self,
@@ -193,7 +208,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         product: BaseProduct,
         orders: list[BaseOrder] | BaseOrder,
     ):
-        if not self.is_top_component():
+        if self.is_substrategy():
             raise RuntimeError(f"Sub-strategy {self.name} cannot place orders")
         if not isinstance(orders, list):
             orders = [orders]
@@ -231,16 +246,21 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def add_accounts(self):
         pass
 
-    def on_position(self, account, position):
+    def on_position(self, account: BaseAccount, position: BasePosition):
         pass
 
-    def on_balance(self, account, balance):
+    def on_balance(self, account: BaseAccount, balance: BaseBalance):
         pass
 
     def on_order(
-        self, account, order, type_: Literal["submitted", "opened", "closed", "amended"]
+        self,
+        account: BaseAccount,
+        order: BaseOrder,
+        type_: Literal["submitted", "opened", "closed", "amended"],
     ):
         pass
 
-    def on_trade(self, account, trade: dict, type_: Literal["partial", "filled"]):
+    def on_trade(
+        self, account: BaseAccount, trade: dict, type_: Literal["partial", "filled"]
+    ):
         pass

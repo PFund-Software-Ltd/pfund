@@ -105,6 +105,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
         strategy: StrategyT,
         resolution: str,
         name: str = "",
+        df_form: Literal["wide", "long"] = "long",
         storage_config: StorageConfig | None = None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
@@ -114,6 +115,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
             storage_config:
                 per-strategy override for where this strategy's artifacts are persisted.
                 Falls back to the engine-level default (self._storage_config) when None.
+            df_form: DataFrame layout used by this strategy.
             ray_actor_options:
                 Options for Ray actor.
                 will be passed to ray actor like this: Actor.options(**ray_options).remote(**ray_kwargs)
@@ -158,8 +160,8 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
             run_mode=RunMode.REMOTE if ray_kwargs else RunMode.LOCAL,
             resolution=resolution,
             engine_context=self._context,
-            is_top_component=True,
             storage_config=storage_config or self.context.storage_config,
+            df_form=df_form,
         )
 
         self._strategies[strat] = strategy

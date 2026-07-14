@@ -2,10 +2,11 @@
 authors = ["softwareentrepreneer <softwareentrepreneer+pfund@gmail.com>"]
 channels = ["conda-forge"]
 name = "pfund"
-platforms = ["osx-arm64", "linux-64"]
+# macos = min version of macOS required by torch>=2.12.0
+platforms = [{ platform = "osx-arm64", macos = "14.0" }, "linux-64"]
 # NOTE: this depends on the lock version used in setup-pixi in ci.yml
 # currently the max lock-version supported is 6
-requires-pixi = "<=0.67.2"  # command: pixi workspace requires-pixi set "<=0.67.2"
+requires-pixi = "<=0.72.2"  # command: pixi workspace requires-pixi set "<=0.72.2"
 
 [tasks]
 
@@ -29,12 +30,9 @@ py313 = ["py313", "test", "optional"]
 pfund-kit = ">=0.1.11"
 pfeed = ">=0.0.16"
 apscheduler = ">=3.11.3"
-httpx2 = { version = ">=2.5.0", extras = ["http2"] }
+httpx2 = { version = ">=2.6.0", extras = ["http2"] }
 websockets = ">=16.1.0"
 numba = ">=0.66.0"
-
-[feature.optional.system-requirements]
-macos = "14.0"  # min version of macOS required by torch>=2.12.0
 
 [feature.optional.pypi-dependencies]
 pfeed = { version = ">=0.0.16", extras = ["yfinance"] }

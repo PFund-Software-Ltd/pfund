@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
@@ -15,29 +15,13 @@ from pfund._backtest.backtest_mixin import BacktestMixin
 
 
 def BacktestStrategy(Strategy: type[StrategyT], *args: Any, **kwargs: Any) -> StrategyT:
-    class _BacktestStrategy(BacktestMixin, Strategy, ABC):
+    class _BacktestStrategy(BacktestMixin, Strategy):
         def __getattr__(self, name: str) -> Any:
             if hasattr(super(), name):
                 return getattr(super(), name)
             else:
                 class_name = Strategy.__name__
                 raise AttributeError(f"'{class_name}' object has no attribute '{name}'")
-
-        # FIXME: add sub-strategy
-        def add_strategy(self, strategy: StrategyT, name: str = "") -> StrategyT:
-            strategy: StrategyT = BacktestStrategy(
-                type(strategy), *strategy.__pfund_args__, **strategy.__pfund_kwargs__
-            )
-            return super().add_strategy(strategy, name=name)
-
-        def add_accounts(self):
-            super().add_accounts()
-            if self.accounts:
-                return
-            # add account to each trading venue if no accounts are added
-            trading_venues = set(product.source for product in self.products.values())
-            for venue in trading_venues:
-                self.add_account(venue=venue)
 
         @staticmethod
         def _postprocess_backtest_df(
@@ -112,7 +96,7 @@ def BacktestStrategy(Strategy: type[StrategyT], *args: Any, **kwargs: Any) -> St
             pass
 
     try:
-        return cast("StrategyT", _BacktestStrategy(*args, **kwargs))
+        return _BacktestStrategy(*args, **kwargs)
     except TypeError as e:
         if "__init__()" in str(e):
             raise TypeError(

@@ -27,7 +27,7 @@ dependencies = [
     "pfund-kit>=0.1.11",
     'pfeed>=0.0.16',
     "apscheduler>=3.11.3",
-    "httpx2[http2]>=2.5.0",
+    "httpx2[http2]>=2.6.0",
     "websockets>=16.1.0 ; sys_platform != 'emscripten'",
     "numba>=0.66.0 ; sys_platform != 'emscripten'",
 ]
@@ -81,6 +81,7 @@ reportUnreachable = false
 reportRedeclaration = false
 reportImportCycles = false
 reportPrivateUsage = false
+reportUnusedCallResult = false
 reportImplicitOverride = false
 reportMissingTypeStubs = false
 reportUnannotatedClassAttribute = false
