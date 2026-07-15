@@ -27,14 +27,14 @@ py313 = ["py313", "test", "optional"]
 
 [pypi-dependencies]
 pfund-kit = ">=0.1.12"
-pfeed = ">=0.0.16"
+pfeed = ">=0.0.17"
 apscheduler = ">=3.11.3"
 httpx2 = { version = ">=2.7.0", extras = ["http2"] }
 websockets = ">=16.1.0"
 numba = ">=0.66.0"
 
 [feature.optional.pypi-dependencies]
-pfeed = { version = ">=0.0.16", extras = ["yfinance"] }
+pfeed = { version = ">=0.0.17", extras = ["yfinance"] }
 pfolio = ">=0.0.4"
 pfund-plot = {version = ">=0.0.5", extras = ["marimo"]}
 # TODO: enable when ready

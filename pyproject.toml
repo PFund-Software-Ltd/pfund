@@ -25,7 +25,7 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = [
     "pfund-kit>=0.1.12",
-    'pfeed>=0.0.16',
+    'pfeed>=0.0.17',
     "apscheduler>=3.11.3",
     "httpx2[http2]>=2.7.0",
     "websockets>=16.1.0 ; sys_platform != 'emscripten'",
