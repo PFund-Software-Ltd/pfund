@@ -64,13 +64,12 @@ class TradingStore:
         Args:
             df: signals_df in long form
         """
-        from pfund.datas.stores.base_data_store import pivot_long_to_wide
+        from pfund.utils.dataframe import pivot_long_to_wide
 
         return pivot_long_to_wide(
             df,
             index_col=self.INDEX_COL,
             pivot_cols=self.PIVOT_COLS,
-            key_cols=self.KEY_COLS,
         )
 
     def get_df(

@@ -21,50 +21,6 @@ DataT = TypeVar("DataT", bound=BaseData)
 FeedT = TypeVar("FeedT", bound=BaseFeed)
 
 
-def pivot_long_to_wide(
-    df: nw.DataFrame[Any],
-    *,
-    index_col: str,
-    pivot_cols: list[str],
-    key_cols: list[str],
-) -> nw.DataFrame[Any]:
-    """Pivots a long-form dataframe to wide form with flat, reference-safe names.
-
-    Each pivoted value column is named ``{pivot_key}:{field}``, where ``pivot_key``
-    joins the ``pivot_cols`` values with ":" in ``pivot_cols`` order, e.g.
-    ``1_MINUTE:BYBIT_BTC_USDT_PERPETUAL:close``. This replaces polars' default
-    ``close_{"1_MINUTE","BYBIT_BTC_USDT_PERPETUAL"}`` naming, which embeds
-    quotes/commas that break direct column references.
-
-    Args:
-        df: dataframe in long form
-        index_col: the column to keep as the wide-form index (e.g. "date")
-        pivot_cols: columns folded into the wide-form column names
-        key_cols: all non-value columns (index + pivot); everything else is a value
-    """
-    value_cols = [col for col in df.columns if col not in key_cols]
-    # collapse the multi-column key into one ":"-joined key, so polars emits
-    # flat "{field}{sep}{pivot_key}" names instead of its {"a","b"} tuple form
-    pivot_key_col = "__pivot_key__"
-    df = df.with_columns(
-        nw.concat_str(
-            [nw.col(col).cast(nw.String) for col in pivot_cols],
-            separator=":",
-        ).alias(pivot_key_col)
-    )
-    pivot_keys = df.get_column(pivot_key_col).unique().to_list()
-    # NUL separator: never collides with field names that contain "_"
-    # (e.g. n_data_points), so the rename below is unambiguous
-    sep = "\x00"
-    wide = df.pivot(on=pivot_key_col, index=index_col, values=value_cols, separator=sep)
-    rename = {
-        f"{field}{sep}{pivot_key}": f"{pivot_key}:{field}"
-        for field in value_cols
-        for pivot_key in pivot_keys
-    }
-    return wide.rename(rename).sort(index_col)
-
-
 class BaseDataStore(ABC, Generic[DataT, FeedT]):
     LEFT_COLS: ClassVar[list[str]] = []
     INDEX_COL: ClassVar[str] = "date"
@@ -110,12 +66,13 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
         return self._data_as_features is True
 
     def set_data_as_features(self, as_features: bool) -> None:
-        if self._data_as_features is not None and as_features != self._data_as_features:
-            raise ValueError(
-                f"{self.__class__.__name__} already has as_features="
-                + f"{self._data_as_features}; it cannot be changed to {as_features}"
+        if self._data_as_features is None:
+            self._data_as_features = as_features
+        elif as_features != self._data_as_features:
+            self._logger.debug(
+                f"{self.__class__.__name__} has already set data_as_features={self._data_as_features}, "
+                + f"ignoring inconsistent input {as_features=}"
             )
-        self._data_as_features = as_features
 
     def _create_feed(self, data: DataT) -> FeedT:
         from pfeed.feeds import create_feed
@@ -169,11 +126,12 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
         #     on=self.PIVOT_COLS,
         #     index=self.INDEX_COL,
         # ).sort(self.INDEX_COL)
+        from pfund.utils.dataframe import pivot_long_to_wide
+
         return pivot_long_to_wide(
             df,
             index_col=self.INDEX_COL,
             pivot_cols=self.PIVOT_COLS,
-            key_cols=self.KEY_COLS,
         )
 
     def get_df(
