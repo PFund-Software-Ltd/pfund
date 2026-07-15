@@ -6196,7 +6196,7 @@ packages:
   - httpx2[http2]>=2.7.0
   - websockets>=16.1.0 ; sys_platform != 'emscripten'
   - numba>=0.66.0 ; sys_platform != 'emscripten'
-  - pfeed[yfinance]>=0.0.16 ; extra == 'core'
+  - pfeed[yfinance]>=0.0.17 ; extra == 'core'
   - pfolio>=0.0.4 ; extra == 'core'
   - pfund-plot[marimo]>=0.0.5 ; extra == 'core'
   - pfund-ibapi==10.48.1 ; extra == 'ibkr'

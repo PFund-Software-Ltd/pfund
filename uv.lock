@@ -4115,7 +4115,7 @@ requires-dist = [
     { name = "joblib", marker = "extra == 'sklearn'", specifier = ">=1.5.3" },
     { name = "numba", marker = "sys_platform != 'emscripten'", specifier = ">=0.66.0" },
     { name = "pfeed", specifier = ">=0.0.17" },
-    { name = "pfeed", extras = ["yfinance"], marker = "extra == 'core'", specifier = ">=0.0.16" },
+    { name = "pfeed", extras = ["yfinance"], marker = "extra == 'core'", specifier = ">=0.0.17" },
     { name = "pfolio", marker = "extra == 'core'", specifier = ">=0.0.4" },
     { name = "pfund-ibapi", marker = "extra == 'ibkr'", specifier = "==10.48.1" },
     { name = "pfund-kit", specifier = ">=0.1.12" },
