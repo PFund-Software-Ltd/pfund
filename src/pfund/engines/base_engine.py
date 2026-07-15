@@ -176,11 +176,9 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
         data_path: FilePath,
         env: Environment,
         project_name: str,
-        run_name: str,
+        run_id: str,
     ) -> FilePath:
-        return (
-            data_path / "runs" / f"env={env}" / project_name.lower() / run_name.lower()
-        )
+        return data_path / "runs" / f"env={env}" / project_name.lower() / run_id.lower()
 
     def _clear_run_path(self) -> None:
         import pyarrow.fs as pa_fs
@@ -201,7 +199,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
                 data_path=storage.data_path,
                 env=self.env,
                 project_name=self.context.project_name,
-                run_name=self.context.run_name,
+                run_id=self.context.run_id,
             )
         )
 
@@ -224,7 +222,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
                     f"mtflow's env {ctx.env} does not match with engine env {self.env}"
                 )
             self._context.set_project_name(ctx.run.project)
-            self._context.set_run_name(ctx.run.id)
+            self._context.set_run_id(ctx.run.id)
 
         # Must happen before _setup(), which starts persisting source artifacts.
         if new:

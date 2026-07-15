@@ -23,7 +23,7 @@ SettingsT = TypeVar("SettingsT", bound="BaseEngineSettings")
 
 class BaseEngineContext(Generic[SettingsT]):
     DEFAULT_PROJECT_NAME = "default_project"
-    DEFAULT_RUN_NAME = "default_run"
+    DEFAULT_RUN_ID = "default_run"
 
     def __init__(
         self,
@@ -40,7 +40,7 @@ class BaseEngineContext(Generic[SettingsT]):
         self.name = name
         self.run_mode = self._detect_run_mode()
         self.project_name = self.DEFAULT_PROJECT_NAME
-        self.run_name = self.DEFAULT_RUN_NAME
+        self.run_id = self.DEFAULT_RUN_ID
         self.data_start, self.data_end = self._parse_data_range(data_range)
         # NOTE: config obtained by get_config() inside ray actor could be different from the one in the main thread (e.g. after calling pf.configure())
         # so we create the config object here in the context and treat it as the source of truth
@@ -150,5 +150,5 @@ class BaseEngineContext(Generic[SettingsT]):
     def set_project_name(self, name: str):
         self.project_name = name
 
-    def set_run_name(self, name: str):
-        self.run_name = name
+    def set_run_id(self, run_id: str):
+        self.run_id = run_id

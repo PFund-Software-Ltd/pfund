@@ -178,7 +178,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/22/a6/858897256d0deac81a172289110f31629fc4cee19b6f01283303e18c8db3/ptyprocess-0.7.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/14/0ca1756382f03a1d3860f922f254f81b0070de835ba913ef4bf5a95f9631/skfolio-0.20.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/45/caa600acfab94560807a20a64b5830d2cd3c3202b7f1328644d70b7d6bd8/nvidia_ml_py-13.610.43-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/23/87/b97fd1a764025ef2e391aaf3b92fe7d08b906790d5e3a874d5a7a616e1fb/trackio-0.30.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/cd/066e86230ae37ed0be70aae89aabf03ca8d9f39c8aea0dec8029455b5540/opt_einsum-3.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/db/2a671fa36488cda2c00d53f6f9938ef268bfa013a501cde277999a6ba47f/pybit-5.17.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/e8/9d61dcbd1dce8ef418f06befd4ac084b4720429c26b0b1222bc218685eff/jupyter_lsp-2.3.1-py3-none-any.whl
@@ -362,6 +361,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/96/fd/a40c621ff207f3ce8e484aa0fc8ba4eb6e3ecf52e15b42ba764b457a9550/editorconfig-0.17.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/97/30/33035d5796a3b8b9624997fec7545e3febd2268c7b48df38a715a95cb5e4/trogon-0.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/98/3b/40a68de458904bcc143622015fff2352b6461cd92fd66d3527bf1c6f5716/aiohttp_cors-0.8.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/98/40/d7d438a1277c1c18c4b9d9aea696649ab1702db539885b2a5838f19aa004/trackio-0.31.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/3b/57efe2bc2df0980680d57c01a36516cd3171d2319ceb30e675de19fc2cc5/eth_rlp-2.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/55/db07de81b5c630da5cbf5c7df646580ca26dfaefa593667fc6f2fe016d2e/tabulate-0.10.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/5d/8268b644392ee874ee82a635cd0df1773de230bde356c38de28e298392cc/parso-0.8.7-py2.py3-none-any.whl
@@ -650,7 +650,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/22/a6/858897256d0deac81a172289110f31629fc4cee19b6f01283303e18c8db3/ptyprocess-0.7.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/14/0ca1756382f03a1d3860f922f254f81b0070de835ba913ef4bf5a95f9631/skfolio-0.20.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/45/caa600acfab94560807a20a64b5830d2cd3c3202b7f1328644d70b7d6bd8/nvidia_ml_py-13.610.43-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/23/87/b97fd1a764025ef2e391aaf3b92fe7d08b906790d5e3a874d5a7a616e1fb/trackio-0.30.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/cd/066e86230ae37ed0be70aae89aabf03ca8d9f39c8aea0dec8029455b5540/opt_einsum-3.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/db/2a671fa36488cda2c00d53f6f9938ef268bfa013a501cde277999a6ba47f/pybit-5.17.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/e8/9d61dcbd1dce8ef418f06befd4ac084b4720429c26b0b1222bc218685eff/jupyter_lsp-2.3.1-py3-none-any.whl
@@ -822,6 +821,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/97/12/70b5d0d7c15e1ebb8a6a84a8caa1d19e181d84fb58bb6d70aca29099dec1/numpy-2.4.6-cp313-cp313-macosx_14_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/97/30/33035d5796a3b8b9624997fec7545e3febd2268c7b48df38a715a95cb5e4/trogon-0.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/98/3b/40a68de458904bcc143622015fff2352b6461cd92fd66d3527bf1c6f5716/aiohttp_cors-0.8.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/98/40/d7d438a1277c1c18c4b9d9aea696649ab1702db539885b2a5838f19aa004/trackio-0.31.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/3b/57efe2bc2df0980680d57c01a36516cd3171d2319ceb30e675de19fc2cc5/eth_rlp-2.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/55/db07de81b5c630da5cbf5c7df646580ca26dfaefa593667fc6f2fe016d2e/tabulate-0.10.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/5d/8268b644392ee874ee82a635cd0df1773de230bde356c38de28e298392cc/parso-0.8.7-py2.py3-none-any.whl
@@ -1153,7 +1153,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/22/a6/858897256d0deac81a172289110f31629fc4cee19b6f01283303e18c8db3/ptyprocess-0.7.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/14/0ca1756382f03a1d3860f922f254f81b0070de835ba913ef4bf5a95f9631/skfolio-0.20.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/45/caa600acfab94560807a20a64b5830d2cd3c3202b7f1328644d70b7d6bd8/nvidia_ml_py-13.610.43-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/23/87/b97fd1a764025ef2e391aaf3b92fe7d08b906790d5e3a874d5a7a616e1fb/trackio-0.30.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/cd/066e86230ae37ed0be70aae89aabf03ca8d9f39c8aea0dec8029455b5540/opt_einsum-3.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/db/2a671fa36488cda2c00d53f6f9938ef268bfa013a501cde277999a6ba47f/pybit-5.17.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/e8/9d61dcbd1dce8ef418f06befd4ac084b4720429c26b0b1222bc218685eff/jupyter_lsp-2.3.1-py3-none-any.whl
@@ -1338,6 +1337,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/96/fd/a40c621ff207f3ce8e484aa0fc8ba4eb6e3ecf52e15b42ba764b457a9550/editorconfig-0.17.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/97/30/33035d5796a3b8b9624997fec7545e3febd2268c7b48df38a715a95cb5e4/trogon-0.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/98/3b/40a68de458904bcc143622015fff2352b6461cd92fd66d3527bf1c6f5716/aiohttp_cors-0.8.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/98/40/d7d438a1277c1c18c4b9d9aea696649ab1702db539885b2a5838f19aa004/trackio-0.31.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/3b/57efe2bc2df0980680d57c01a36516cd3171d2319ceb30e675de19fc2cc5/eth_rlp-2.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/5d/8268b644392ee874ee82a635cd0df1773de230bde356c38de28e298392cc/parso-0.8.7-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/fb/e4c0ced9893b84ac95b7181d69a9786ce5879aeb3bbbcbba80a164f85d6a/rlp-4.1.0-py3-none-any.whl
@@ -1597,7 +1597,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/22/a6/858897256d0deac81a172289110f31629fc4cee19b6f01283303e18c8db3/ptyprocess-0.7.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/14/0ca1756382f03a1d3860f922f254f81b0070de835ba913ef4bf5a95f9631/skfolio-0.20.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/45/caa600acfab94560807a20a64b5830d2cd3c3202b7f1328644d70b7d6bd8/nvidia_ml_py-13.610.43-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/23/87/b97fd1a764025ef2e391aaf3b92fe7d08b906790d5e3a874d5a7a616e1fb/trackio-0.30.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/cd/066e86230ae37ed0be70aae89aabf03ca8d9f39c8aea0dec8029455b5540/opt_einsum-3.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/db/2a671fa36488cda2c00d53f6f9938ef268bfa013a501cde277999a6ba47f/pybit-5.17.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/e8/9d61dcbd1dce8ef418f06befd4ac084b4720429c26b0b1222bc218685eff/jupyter_lsp-2.3.1-py3-none-any.whl
@@ -1762,6 +1761,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/97/30/33035d5796a3b8b9624997fec7545e3febd2268c7b48df38a715a95cb5e4/trogon-0.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/98/00/82c2bc0c49aacdfe53006ebd75d00e9cca536b3d0fe5c661d4c1d36ca27c/sqlglotc-30.12.0-cp311-cp311-macosx_10_9_universal2.whl
       - pypi: https://files.pythonhosted.org/packages/98/3b/40a68de458904bcc143622015fff2352b6461cd92fd66d3527bf1c6f5716/aiohttp_cors-0.8.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/98/40/d7d438a1277c1c18c4b9d9aea696649ab1702db539885b2a5838f19aa004/trackio-0.31.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/3b/57efe2bc2df0980680d57c01a36516cd3171d2319ceb30e675de19fc2cc5/eth_rlp-2.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/5d/8268b644392ee874ee82a635cd0df1773de230bde356c38de28e298392cc/parso-0.8.7-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/fb/e4c0ced9893b84ac95b7181d69a9786ce5879aeb3bbbcbba80a164f85d6a/rlp-4.1.0-py3-none-any.whl
@@ -6094,7 +6094,7 @@ packages:
   requires_dist:
   - pfund>=0.0.19
   - litestar[standard]>=2.24.0
-  - trackio[cpu,gpu]>=0.30.4
+  - trackio[cpu,gpu]>=0.31.2
   - optuna>=4.9.0
   - optuna-dashboard>=0.20.0
   - optuna-integration>=4.9.0 ; extra == 'botorch'
@@ -7933,34 +7933,6 @@ packages:
   name: nvidia-ml-py
   version: 13.610.43
   sha256: f13c72698edef492f985cc225f14faafe68ae065a2e407f45bdf6f4b9b43fde8
-- pypi: https://files.pythonhosted.org/packages/23/87/b97fd1a764025ef2e391aaf3b92fe7d08b906790d5e3a874d5a7a616e1fb/trackio-0.30.4-py3-none-any.whl
-  name: trackio
-  version: 0.30.4
-  sha256: 96047592d04407c3d8f6090968799890e725df04a242666435dba495dc80c3eb
-  requires_dist:
-  - brotli>=1.0.0,<2.0.0
-  - gradio-client>=2.0.0,<3.0.0
-  - huggingface-hub>=1.10.0,<2
-  - numpy<3.0.0
-  - orjson>=3.0,<4.0.0
-  - pillow<13.0.0
-  - python-multipart>=0.0.9,<1.0.0
-  - starlette<2.0.0
-  - tomli>=2.0.0 ; python_full_version < '3.11'
-  - uvicorn[standard]>=0.30.0,<1.0.0
-  - psutil>=5.9.0 ; extra == 'apple-gpu'
-  - psutil>=5.9.0 ; extra == 'cpu'
-  - playwright==1.60.0 ; extra == 'dev'
-  - pytest-playwright>=0.7.0,<1.0.0 ; extra == 'dev'
-  - pytest>=8.0.0,<9.0.0 ; extra == 'dev'
-  - ruff==0.9.3 ; extra == 'dev'
-  - nvidia-ml-py>=12.0.0 ; extra == 'gpu'
-  - psutil>=5.9.0 ; extra == 'gpu'
-  - mcp>=1.0.0,<2.0.0 ; extra == 'mcp'
-  - pyarrow>=21.0 ; extra == 'spaces'
-  - tbparse==0.0.9 ; extra == 'tensorboard'
-  - tensorboardx>=2.0.0,<3.0.0 ; extra == 'tensorboard'
-  requires_python: '>=3.10'
 - pypi: https://files.pythonhosted.org/packages/23/cd/066e86230ae37ed0be70aae89aabf03ca8d9f39c8aea0dec8029455b5540/opt_einsum-3.4.0-py3-none-any.whl
   name: opt-einsum
   version: 3.4.0
@@ -14237,6 +14209,34 @@ packages:
   requires_dist:
   - aiohttp>=3.9
   requires_python: '>=3.9'
+- pypi: https://files.pythonhosted.org/packages/98/40/d7d438a1277c1c18c4b9d9aea696649ab1702db539885b2a5838f19aa004/trackio-0.31.3-py3-none-any.whl
+  name: trackio
+  version: 0.31.3
+  sha256: 4639ede64ad0d008e67787e9a28be260dbe8c68e792c681577a1003fff51f566
+  requires_dist:
+  - brotli>=1.0.0,<2.0.0
+  - gradio-client>=2.0.0,<3.0.0
+  - huggingface-hub>=1.10.0,<2
+  - numpy<3.0.0
+  - orjson>=3.0,<4.0.0
+  - pillow<13.0.0
+  - python-multipart>=0.0.9,<1.0.0
+  - starlette<2.0.0
+  - tomli>=2.0.0 ; python_full_version < '3.11'
+  - uvicorn[standard]>=0.30.0,<1.0.0
+  - psutil>=5.9.0 ; extra == 'apple-gpu'
+  - psutil>=5.9.0 ; extra == 'cpu'
+  - playwright==1.60.0 ; extra == 'dev'
+  - pytest-playwright>=0.7.0,<1.0.0 ; extra == 'dev'
+  - pytest>=8.0.0,<9.0.0 ; extra == 'dev'
+  - ruff==0.9.3 ; extra == 'dev'
+  - nvidia-ml-py>=12.0.0 ; extra == 'gpu'
+  - psutil>=5.9.0 ; extra == 'gpu'
+  - mcp>=1.0.0,<2.0.0 ; extra == 'mcp'
+  - pyarrow>=21.0 ; extra == 'spaces'
+  - tbparse==0.0.9 ; extra == 'tensorboard'
+  - tensorboardx>=2.0.0,<3.0.0 ; extra == 'tensorboard'
+  requires_python: '>=3.10'
 - pypi: https://files.pythonhosted.org/packages/99/3b/57efe2bc2df0980680d57c01a36516cd3171d2319ceb30e675de19fc2cc5/eth_rlp-2.2.0-py3-none-any.whl
   name: eth-rlp
   version: 2.2.0
