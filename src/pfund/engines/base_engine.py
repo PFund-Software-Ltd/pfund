@@ -105,7 +105,6 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
         strategy: StrategyT,
         resolution: str,
         name: str = "",
-        df_form: Literal["wide", "long"] = "long",
         storage_config: StorageConfig | None = None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
@@ -161,7 +160,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
             resolution=resolution,
             engine_context=self._context,
             storage_config=storage_config or self.context.storage_config,
-            df_form=df_form,
+            df_form="long",
         )
 
         self._strategies[strat] = strategy

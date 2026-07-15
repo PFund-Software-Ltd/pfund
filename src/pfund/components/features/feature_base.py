@@ -36,9 +36,6 @@ class BaseFeature(ComponentMixin, ABC, metaclass=MetaFeature):
         """Extract features from the input data"""
         pass
 
-    def set_signal_cols(self, signal_cols: list[str]):
-        self._signal_cols = signal_cols
-
     def signalize(self, X: IntoDataFrame) -> Signals:
         """Creates signals of this component
 

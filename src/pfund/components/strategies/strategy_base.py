@@ -46,10 +46,9 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         self.__mixin_post_init__(
             *args, **kwargs
         )  # calls ComponentMixin.__mixin_post_init__()
-        self._signal_cols: list[str] = ["signal"]
 
     @abstractmethod
-    def decide(self, X: IntoDataFrame) -> Literal[Side.BUY, Side.SELL, None]:
+    def decide(self, X: IntoDataFrame) -> Literal[+1, -1, Side.BUY, Side.SELL, None]:
         pass
 
     @property
@@ -132,7 +131,6 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         strategy: StrategyT | ActorProxy[StrategyT],
         resolution: str = "",
         name: str = "",
-        df_form: Literal["wide", "long"] = "long",
         storage_config: StorageConfig | None = None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
@@ -142,7 +140,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
             component=strategy,
             resolution=resolution,
             name=name,
-            df_form=df_form,
+            df_form="long",
             storage_config=storage_config,
             ray_actor_options=ray_actor_options,
             **ray_kwargs,
@@ -198,6 +196,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
             if not self.is_substrategy() and not self._accounts:
                 raise RuntimeError(f"{self.name} must have at least one account")
             super()._gather()
+            self.set_signal_cols(["signal"])
         else:
             self.logger.debug(f"'{self.name}' has already gathered")
 

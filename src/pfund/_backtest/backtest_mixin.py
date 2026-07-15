@@ -205,9 +205,7 @@ class BacktestMixin:
         if self.backtest_mode == BacktestMode.VECTORIZED:
             if hasattr(super(), "backtest"):
                 if not self.is_strategy():
-                    raise TypeError(
-                        f"{self.name} should not override backtest() method"
-                    )
+                    raise TypeError(f"{self.name} should not have a backtest() method")
 
                 super_backtest = cast(
                     "Callable[[IntoDataFrame], Any]", super().backtest
@@ -243,8 +241,7 @@ class BacktestMixin:
                         f"{self.name} has no backtest() method, please implement it or switch to EVENT_DRIVEN mode"
                     )
 
-                # signalize the full features df in vectorized backtesting
-                X = self.X
+                X = df
                 signals = cast("Signals", self.signalize(X))
                 signals_df = nw.DataFrame.from_dict(
                     data=signals,

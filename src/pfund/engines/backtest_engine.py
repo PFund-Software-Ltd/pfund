@@ -97,7 +97,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         strategy: StrategyT,
         resolution: str,
         name: str = "",
-        df_form: Literal["wide", "long"] = "long",
         storage_config: StorageConfig | None = None,
     ) -> StrategyT:
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
@@ -127,7 +126,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 strategy=strategy,
                 resolution=resolution,
                 name=name or Strategy.__name__,
-                df_form=df_form,
+                df_form="long",
                 storage_config=storage_config,
             ),
         )
@@ -278,7 +277,13 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         is_using_ray = num_chunks > 1
         backtest_dfs: list[IntoDataFrame] = []
 
-        df = nw.from_native(backtestee.full_df)
+        if self.backtest_mode == BacktestMode.EVENT_DRIVEN:
+            df = nw.from_native(backtestee.data_df)
+        else:
+            if not backtestee.is_strategy():
+                df = nw.from_native(backtestee.trading_df)
+            else:
+                df = nw.from_native(backtestee.full_df)
 
         def _run_backtest(
             backtestee: BaseStrategy | BaseModel | BaseFeature,

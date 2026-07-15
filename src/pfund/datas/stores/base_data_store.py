@@ -14,6 +14,7 @@ import narwhals as nw
 from pfeed.enums import DataLayer, DataStorage
 from pfeed.feeds.base_feed import BaseFeed
 
+from pfund.utils.dataframe import pivot_long_to_wide, unpivot_wide_to_long
 from pfund.datas.data_base import BaseData
 
 
@@ -122,13 +123,19 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
         Args:
             df: data_df in long form
         """
-        # return df.pivot(
-        #     on=self.PIVOT_COLS,
-        #     index=self.INDEX_COL,
-        # ).sort(self.INDEX_COL)
-        from pfund.utils.dataframe import pivot_long_to_wide
-
         return pivot_long_to_wide(
+            df,
+            index_col=self.INDEX_COL,
+            pivot_cols=self.PIVOT_COLS,
+        )
+
+    def unpivot_df(self, df: nw.DataFrame[Any]) -> nw.DataFrame[Any]:
+        """Unpivots data dataframe from wide form to long form.
+
+        Args:
+            df: data_df in wide form
+        """
+        return unpivot_wide_to_long(
             df,
             index_col=self.INDEX_COL,
             pivot_cols=self.PIVOT_COLS,
@@ -137,12 +144,9 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
     def get_df(
         self,
         window_size: int | None = None,
-        pivot: bool = False,
         to_native: bool = False,
     ) -> nw.DataFrame[Any] | IntoDataFrame:
         if self._df is None:
             raise RuntimeError(f"{self.__class__.__name__} data df is not ready")
         df = self._df if window_size is None else self._df.tail(window_size)
-        if pivot:
-            df = self.pivot_df(df)
         return df.to_native() if to_native else df

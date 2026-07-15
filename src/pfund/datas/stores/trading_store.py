@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 import narwhals as nw
 from pfeed.storages.storage_config import StorageConfig
 
+from pfund.utils.dataframe import pivot_long_to_wide, unpivot_wide_to_long
 from pfund.enums import ArtifactType
 
 
@@ -64,9 +65,19 @@ class TradingStore:
         Args:
             df: signals_df in long form
         """
-        from pfund.utils.dataframe import pivot_long_to_wide
-
         return pivot_long_to_wide(
+            df,
+            index_col=self.INDEX_COL,
+            pivot_cols=self.PIVOT_COLS,
+        )
+
+    def unpivot_df(self, df: nw.DataFrame[Any]) -> nw.DataFrame[Any]:
+        """Unpivots data dataframe from wide form to long form.
+
+        Args:
+            df: data_df in wide form
+        """
+        return unpivot_wide_to_long(
             df,
             index_col=self.INDEX_COL,
             pivot_cols=self.PIVOT_COLS,

@@ -438,7 +438,6 @@ class ComponentMixin:
         kind: Literal["data", "features", "signals", "trading", "full"] = "full",
         data_category: DataCategory | str | None = DataCategory.MARKET_DATA,
         window_size: int | None = None,
-        pivot_data: bool = False,
         to_native: bool = False,
     ) -> nw.DataFrame[Any] | IntoDataFrame:
         """Returns one of the stored dataframes in either trading store or data stores.
@@ -456,18 +455,13 @@ class ComponentMixin:
                 Defaults to market data.
             window_size: Number of most recent rows to return.
                 Defaults to None, i.e. return the whole dataframe.
-            pivot_data: pivot data dataframe from long form to wide form.
-                Ignored when kind != 'data'.
-                Defaults to False.
             to_native: If True, return the underlying backend frame (polars/pandas) instead
                 of a Narwhals DataFrame. Defaults to True.
         """
         if kind == "data":
             if data_category is not None:
                 store = self.databoy.get_data_store(data_category)
-                df = store.get_df(
-                    window_size=window_size, pivot=pivot_data, to_native=to_native
-                )
+                df = store.get_df(window_size=window_size, to_native=to_native)
             else:
                 data_dfs: dict[DataCategory, IntoDataFrame | None] = {
                     category: store.get_df(window_size=window_size, to_native=True)
@@ -512,7 +506,7 @@ class ComponentMixin:
                 if not join_cols:
                     raise ValueError(
                         f"No common key columns between {self.name}'s "
-                        f"data_df {data_df.columns} and trading_df {trading_df.columns}"
+                        + f"data_df {data_df.columns} and trading_df {trading_df.columns}"
                     )
 
                 df = data_df.join(trading_df, on=join_cols, how="full")
@@ -702,7 +696,7 @@ class ComponentMixin:
         symbol: str = "",
         product_name: str = "",
         config: DataConfig | None = None,
-        as_features: bool = False,
+        as_features: bool = True,
         **product_specs: Any,
     ) -> list[MarketData]:
         """Adds market data to the component.
@@ -882,13 +876,16 @@ class ComponentMixin:
             **ray_kwargs,
         )
 
+    def set_signal_cols(self, signal_cols: list[str]):
+        self._signal_cols = signal_cols
+
     def set_pivot_cols(self, pivot_cols: list[str]):
         self.store.set_pivot_cols(pivot_cols)
 
     def is_ready(self, data: BaseData) -> bool:
         if data.category == DataCategory.MARKET_DATA:
             df = self.get_df(kind="data", data_category=data.category, to_native=False)
-            if df is None or len(df) < self.config["warmup_period"]:
+            if len(df) < self.config["warmup_period"]:
                 return False
             if self.df_form == "long":
                 # long form: ready when this product's bar is closed
@@ -954,157 +951,6 @@ class ComponentMixin:
                 nw.coalesce(key, f"{key}_right").alias(key) for key in common_key_cols
             ).drop(*(f"{key}_right" for key in common_key_cols))
         return data_df.sort(common_key_cols).to_native()
-
-    def merge_signals_dfs(
-        self, signals_dfs: dict[ComponentName, IntoDataFrame]
-    ) -> IntoDataFrame:
-        """Creates features_df by merging signals_dfs (signals from other components).
-
-        For the (self.df_form='long', component_df_form='wide') case the wide
-        component signals cannot be melted back to long, so they are broadcast onto
-        a long-form KEY_COLS scaffold built purely from this component's config
-        (see _build_signals_key_grid) — no data_df is consulted, so no data value
-        columns can leak into the returned features_df.
-
-        Args:
-            signals_dfs: dict of signals_df per component name
-        Returns:
-            features_df: features_df in {self.df_form} form
-        """
-        dfs: list[nw.DataFrame[Any]] = []
-        # (self.df_form='long', component_df_form='wide') case:
-        # cannot melt back to long, so merge them in afterwards by broadcasting on the index col only
-        special_dfs: list[nw.DataFrame[Any]] = []
-        common_index_col: str | None = None
-        common_key_cols: set[str] | None = None
-        for component_name, df in signals_dfs.items():
-            component = self.get_component(component_name)
-            component_df_form = component.get_df_form()
-            trading_store = component.get_trading_store()
-            if common_index_col is None:
-                common_index_col = trading_store.INDEX_COL
-            else:
-                if common_index_col != trading_store.INDEX_COL:
-                    raise ValueError(
-                        f"Unhandled case: index column {common_index_col} is not the same as {trading_store.INDEX_COL} for {component_name}"
-                    )
-            # special case, cannot unpivot 'wide' to 'long'
-            if self.df_form == "long" and component_df_form == "wide":
-                special_dfs.append(nw.from_native(df))
-                continue
-            elif self.df_form == "wide" and component_df_form == "long":
-                # REVIEW: this requires dynamic pivoting for EACH call
-                nw_df = trading_store.pivot_df(nw.from_native(df))
-            else:
-                nw_df = nw.from_native(df)
-            dfs.append(nw_df)
-            # KEY_COLS that actually survive on this df (pivot_df folds PIVOT_COLS into column names)
-            df_key_cols = set(
-                col for col in trading_store.KEY_COLS if col in nw_df.columns
-            )
-            if common_key_cols is None:
-                common_key_cols = df_key_cols
-            else:
-                common_key_cols &= df_key_cols
-
-        if not dfs and not special_dfs:
-            raise ValueError(
-                f"Invalid input: {signals_dfs=} in merge_signals_dfs for {self.name}: no dataframe to merge"
-            )
-
-        # only special_dfs exist (e.g. self is strategy in long form, components are models in wide form):
-        # build a long-form KEY_COLS scaffold from config + the dates present in special_dfs,
-        # then broadcast the wide signals onto it below. data_df is NOT consulted.
-        if not dfs:
-            features_df = self._build_signals_key_grid(special_dfs, common_index_col)
-            common_key_cols = set(
-                col for col in self.store.KEY_COLS if col in features_df.columns
-            )
-        else:
-            features_df = dfs[0]
-            if len(dfs) > 1:
-                if not common_key_cols:
-                    raise ValueError(
-                        f"No common key columns found in signals_dfs in {self.df_form} form for {self.name}. "
-                        + "Please define your own merge_signals_dfs() to handle merging signals_dfs manually."
-                    )
-                for df in dfs[1:]:
-                    features_df = features_df.join(
-                        df, on=list(common_key_cols), how="full"
-                    )
-                    for key in common_key_cols:
-                        right_key = f"{key}_right"
-                        features_df = features_df.with_columns(
-                            nw.coalesce(key, right_key).alias(key)
-                        ).drop(right_key)
-
-        # broadcast (self.df_form='long', component_df_form='wide') specials on index col only
-        for df in special_dfs:
-            features_df = features_df.join(df, on=common_index_col, how="full")
-            right_key = f"{common_index_col}_right"
-            features_df = features_df.with_columns(
-                nw.coalesce(common_index_col, right_key).alias(common_index_col)
-            ).drop(right_key)
-
-        sort_keys = list(common_key_cols) if common_key_cols else [common_index_col]
-        return features_df.sort(sort_keys).to_native()
-
-    def _get_pivot_col_values(self, pivot_col: str) -> list[str]:
-        """Returns the config-derived value list for one of the store's PIVOT_COLS,
-        used to build the long-form key grid that wide component signals broadcast onto.
-
-        The returned strings MUST match the values stamped into the long-form df for
-        that column (product.name for 'product', str(resolution) for 'resolution'), so
-        the resulting grid aligns with data_df on KEY_COLS.
-
-        Args:
-            pivot_col: a column name from self.store.PIVOT_COLS
-        """
-        # explicit name -> config-value-list dispatch: there is no generic getattr(self, pivot_col)
-        # ('product' != attr 'products', values need .name; 'resolution' is a single object needing str())
-        pivot_col_value_sources = {
-            "product": lambda: [product.name for product in self.products.values()],
-            "resolution": lambda: [str(self.resolution)],
-        }
-        if pivot_col not in pivot_col_value_sources:
-            raise ValueError(
-                f"Cannot build signals key grid for {self.name}: store PIVOT_COL "
-                + f"{pivot_col!r} has no config value source "
-                + f"(supported: {sorted(pivot_col_value_sources)}). "
-                + "Please define your own merge_signals_dfs() to handle merging signals_dfs manually."
-            )
-        return pivot_col_value_sources[pivot_col]()
-
-    def _build_signals_key_grid(
-        self, special_dfs: list[nw.DataFrame[Any]], index_col: str
-    ) -> nw.DataFrame[Any]:
-        """Builds the long-form KEY_COLS scaffold that wide-form component signals
-        broadcast onto, WITHOUT consulting data_df.
-
-        The index (date) values come from the wide special_dfs; each PIVOT_COL's
-        values come from config via _get_pivot_col_values. self.store.PIVOT_COLS is
-        iterated in order and cross-joined onto the date column, so the grid columns
-        are laid out as KEY_COLS = [INDEX_COL] + PIVOT_COLS.
-
-        Args:
-            special_dfs: wide-form signals dfs to be broadcast (source of index values)
-            index_col: the shared index column name (e.g. 'date')
-        """
-        # keep every frame entering the cross joins on one backend (matching is required)
-        backend = nw.get_native_namespace(special_dfs[0])
-        # union of index (date) values across the wide special_dfs
-        grid = nw.concat(
-            [df.select(index_col) for df in special_dfs], how="vertical"
-        ).unique()
-        # cross-join each PIVOT_COL's config values in PIVOT_COLS order => [index_col] + PIVOT_COLS
-        for pivot_col in self.store.PIVOT_COLS:
-            values = self._get_pivot_col_values(pivot_col)
-            values_df = nw.DataFrame.from_dict(
-                data={pivot_col: values}, backend=backend
-            )
-            grid = grid.join(values_df, how="cross")
-        # enforce the exact KEY_COLS layout [INDEX_COL] + PIVOT_COLS
-        return grid.select([index_col, *self.store.PIVOT_COLS])
 
     def _reload_markets(self):
         """venues (at engine level) might have refetched the latest markets, reload markets from markets.yml"""

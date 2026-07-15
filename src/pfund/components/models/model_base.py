@@ -64,9 +64,6 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
                 f"'{self.name}' and its underlying model '{self.model.__class__.__name__}' both have no attribute '{name}'"
             )
 
-    def set_signal_cols(self, signal_cols: list[str]):
-        self._signal_cols = signal_cols
-
     def signalize(self, X: IntoDataFrame) -> Signals:
         """Creates signals of this component
 
