@@ -212,6 +212,12 @@ class TradingStore:
         if data_dfs:
             self._df = nw.from_native(component.merge_data_dfs(data_dfs))
         # TODO: load features_df
+        # TODO: how to concat e.g. long+wide form or wide+long form
+        for component in self._component.components:
+            # TODO: component could be ray actor,
+            # 1. load from component's trading_df (delta table), OR
+            # 2. component.get_df(kind="signals")  # latency, but should be fine during materialization
+            pass
 
     def persist_to_lakehouse(self) -> RunResult | None:
         """Persist the component's current data artifact through pfeed.

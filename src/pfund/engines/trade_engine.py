@@ -449,9 +449,15 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
         venue = TradingVenue[venue.upper()]
         return self._venues[venue]
 
-    def run(self, ctx: TradeContext | None = None):
+    def run(self, ctx: TradeContext | None = None, new: bool = True):
+        """Run the trade engine.
+
+        Args:
+            ctx: mtflow's context to run in.
+            new: Whether it is a new run. If True, clear the run path (the default_run/ folder).
+        """
         try:
-            super().run(ctx=ctx)
+            super().run(ctx=ctx, new=new)
             if self._data_engine:
                 self._data_engine.run()  # blocking call
             else:

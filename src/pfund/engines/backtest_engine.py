@@ -126,7 +126,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 strategy=strategy,
                 resolution=resolution,
                 name=name or Strategy.__name__,
-                df_form="long",
                 storage_config=storage_config,
             ),
         )
@@ -205,11 +204,13 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
     def run(
         self,
         ctx: BacktestContext | None = None,
+        new: bool = False,
         num_chunks: int = 1,
         num_cpus: int | None = None,
     ) -> list[IntoDataFrame]:
         """
         Args:
+            new: Whether it is a new run. If True, clear the run path (the default_run/ folder).
             num_chunks:
                 Number of chunks to split the dataset into.
                 if = 1, process the whole dataset all at once.
@@ -228,7 +229,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             if num_cpus < 1:
                 raise ValueError("num_cpus must be greater than 0")
 
-        super().run(ctx=ctx)
+        super().run(ctx=ctx, new=new)
 
         backtest_results: list[IntoDataFrame] = []
 

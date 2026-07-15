@@ -13,6 +13,10 @@ def BacktestFeature(Feature: type[FeatureT], *args: Any, **kwargs: Any) -> Featu
     class _BacktestFeature(BacktestMixin, Feature):
         pass
 
+    _BacktestFeature.__name__ = Feature.__name__
+    _BacktestFeature.__qualname__ = Feature.__qualname__
+    setattr(_BacktestFeature, "__wrapped__", Feature)
+
     try:
         return _BacktestFeature(*args, **kwargs)
     except TypeError as e:

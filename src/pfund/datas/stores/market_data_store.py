@@ -89,12 +89,14 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         return self._datas[product].get(resolution, None)
 
     def get_datas(self) -> list[MarketData]:
-        return list(
+        # sort to make the output deterministic
+        return sorted(
             set(
                 data
                 for data_per_resolution in self._datas.values()
                 for data in data_per_resolution.values()
-            )
+            ),
+            key=lambda data: (data.product.name, repr(data.resolution)),
         )
 
     def _add_data(

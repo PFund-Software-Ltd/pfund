@@ -103,10 +103,10 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def _mark_as_substrategy(self):
         self._is_substrategy = True
 
-    def to_dict(self) -> dict[str, Any]:
+    def _identity_fields(self) -> dict[str, Any]:
         return {
-            **super().to_dict(),
-            "strategies": list(self.strategies),
+            **super()._identity_fields(),
+            "strategies": sorted(self.strategies),
         }
 
     def _set_engine(self, engine: TradeEngine):

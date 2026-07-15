@@ -178,7 +178,9 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
         project_name: str,
         run_name: str,
     ) -> FilePath:
-        return data_path / f"env={env}" / project_name.lower() / run_name.lower()
+        return (
+            data_path / "runs" / f"env={env}" / project_name.lower() / run_name.lower()
+        )
 
     def _clear_run_path(self) -> None:
         import pyarrow.fs as pa_fs
@@ -215,7 +217,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
         filesystem.delete_dir(run_path.schemeless)
         self._logger.debug(f"cleared existing run path: {run_path}")
 
-    def run(self, ctx: BaseContext | None = None):
+    def run(self, ctx: BaseContext | None = None, new: bool = True):
         if ctx is not None:
             if ctx.env != self.env:
                 raise ValueError(
@@ -225,7 +227,8 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
             self._context.set_run_name(ctx.run.id)
 
         # Must happen before _setup(), which starts persisting source artifacts.
-        self._clear_run_path()
+        if new:
+            self._clear_run_path()
         self._logger.warning(
             f"{self.env} {self.name} is running (data_range=({self._context.data_start}, {self._context.data_end}))",
             style=self.env._color,

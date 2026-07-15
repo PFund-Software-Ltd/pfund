@@ -16,13 +16,6 @@ from pfund._backtest.backtest_mixin import BacktestMixin
 
 def BacktestStrategy(Strategy: type[StrategyT], *args: Any, **kwargs: Any) -> StrategyT:
     class _BacktestStrategy(BacktestMixin, Strategy):
-        def __getattr__(self, name: str) -> Any:
-            if hasattr(super(), name):
-                return getattr(super(), name)
-            else:
-                class_name = Strategy.__name__
-                raise AttributeError(f"'{class_name}' object has no attribute '{name}'")
-
         @staticmethod
         def _postprocess_backtest_df(
             backtest_df: IntoDataFrame,
@@ -94,6 +87,10 @@ def BacktestStrategy(Strategy: type[StrategyT], *args: Any, **kwargs: Any) -> St
         # TODO: update order manager directly
         async def place_orders(self):
             pass
+
+    _BacktestStrategy.__name__ = Strategy.__name__
+    _BacktestStrategy.__qualname__ = Strategy.__qualname__
+    setattr(_BacktestStrategy, "__wrapped__", Strategy)
 
     try:
         return _BacktestStrategy(*args, **kwargs)

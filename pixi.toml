@@ -5,7 +5,6 @@ name = "pfund"
 # macos = min version of macOS required by torch>=2.12.0
 platforms = [{ platform = "osx-arm64", macos = "14.0" }, "linux-64"]
 # NOTE: this depends on the lock version used in setup-pixi in ci.yml
-# currently the max lock-version supported is 6
 requires-pixi = "<=0.72.2"  # command: pixi workspace requires-pixi set "<=0.72.2"
 
 [tasks]

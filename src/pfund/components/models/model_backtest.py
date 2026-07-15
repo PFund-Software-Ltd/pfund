@@ -115,6 +115,10 @@ def BacktestModel(
                     ),
                 ).run()
 
+    _BacktestModel.__name__ = Model.__name__
+    _BacktestModel.__qualname__ = Model.__qualname__
+    setattr(_BacktestModel, "__wrapped__", Model)
+
     try:
         return _BacktestModel(model, *args, **kwargs)
     except TypeError as e:

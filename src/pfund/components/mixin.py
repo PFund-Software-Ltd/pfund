@@ -31,6 +31,8 @@ if TYPE_CHECKING:
     )
 
 import datetime
+import hashlib
+import json
 import logging
 from pathlib import Path
 
@@ -345,23 +347,43 @@ class ComponentMixin:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "class_name": self.__class__.__name__,
+            **self._identity_fields(),
             "component_name": self.name,
+            "signal_cols": self._signal_cols,
             "data_start": self.context.data_start,
             "data_end": self.context.data_end,
+            "run_mode": self.run_mode,
+            "settings": self.settings.model_dump(),
+        }
+
+    def _identity_fields(self) -> dict[str, Any]:
+        return {
+            "class_name": self.__class__.__name__,
+            "source_sha256": hashlib.sha256(
+                self._source_artifact.read_bytes()
+            ).hexdigest(),
             "resolution": repr(self.resolution),
             "component_type": self.component_type,
             "df_form": self._df_form,
-            "signal_cols": self._signal_cols,
-            "run_mode": self.run_mode,
             "signature": (self.__pfund_args__, self.__pfund_kwargs__),
             "config": self.config,
             "params": self.params,
-            "settings": self.settings.model_dump(),
             "datas": [data.to_dict() for data in self.get_datas()],
-            "models": list(self.models),
-            "features": list(self.features),
+            "models": sorted(self.models),
+            "features": sorted(self.features),
         }
+
+    @property
+    def component_id(self) -> str:
+        identity = self._identity_fields()
+        payload = json.dumps(
+            identity,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode()
+        digest = hashlib.sha256(payload).hexdigest()[:12]
+        return f"{identity['class_name']}-{digest}"
 
     @property
     def components(self) -> list[Component | ActorProxy[Component]]:
@@ -977,11 +999,15 @@ class ComponentMixin:
             self.add_features()
             self._check_input_sources()
             self._check_config()
+            self._reload_markets()
             for component in self.components:
                 component._gather()
-            self._reload_markets()
             self._materialize()
-            _ = self.store._save_source_artifact()
+            # NOTE: Keep this as the last setup step. During materialization,
+            # pfeed normalizes data.config.storage_config.data_domain from "" to
+            # "MARKET_DATA"; that changes the `datas` payload in component_id.
+            # Save only after such mutations so every artifact uses the same ID.
+            self.store._save_source_artifact()
             self._is_gathered = True
             self.logger.info(f"'{self.name}' has gathered")
         else:
