@@ -37,6 +37,18 @@ class BaseEngineSettings(BaseModel):
             - False: never cache, always process on the fly.
         """,
     )
+    warn_new_run: bool = Field(
+        default=True,
+        description="""
+        Ask for confirmation before engine.run(new=True) clears the reused run folder
+        (e.g. default_run/) and all artifacts inside it, including component outputs,
+        models, and checkpoints.
+
+        This setting is ignored when an mtflow context is provided because every
+        mtflow execution receives a new, unique run folder instead of reusing and
+        clearing an existing one.
+        """,
+    )
 
     @field_validator("cache_materialized_data", mode="before")
     @classmethod

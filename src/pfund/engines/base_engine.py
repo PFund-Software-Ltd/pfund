@@ -180,7 +180,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
     ) -> FilePath:
         return data_path / "runs" / f"env={env}" / project_name.lower() / run_id.lower()
 
-    def _clear_run_path(self) -> None:
+    def _clear_run_path(self, *, confirm: bool = False) -> None:
         import pyarrow.fs as pa_fs
 
         from pfeed.storages.file_based_storage import FileBasedStorage
@@ -212,8 +212,54 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
         if file_info.type != pa_fs.FileType.Directory:
             raise RuntimeError(f"Run path is not a directory: {run_path}")
 
+        if confirm:
+            self._confirm_clear_run_path(run_path)
+
         filesystem.delete_dir(run_path.schemeless)
         self._logger.debug(f"cleared existing run path: {run_path}")
+
+    def _confirm_clear_run_path(self, run_path: FilePath) -> None:
+        import signal
+
+        from rich.markup import escape
+        from rich.prompt import Prompt
+
+        class _NewRunCancelled(Exception):
+            pass
+
+        def _handle_sigint(_signum, _frame):
+            raise _NewRunCancelled
+
+        previous_sigint_handler = signal.getsignal(signal.SIGINT)
+        signal.signal(signal.SIGINT, _handle_sigint)
+        try:
+            choice = Prompt.ask(
+                (
+                    "\n[bold red]WARNING:[/] engine's run(new=True) will permanently delete "
+                    "the whole run folder:\n\n"
+                    f"  {escape(str(run_path))}\n\n"
+                    "This includes all component artifacts (e.g. models).\n\n"
+                    "\\[y] Clear this time\n"
+                    "\\[n] Cancel\n"
+                    "\\[d] Clear and disable this warning in settings.toml"
+                ),
+                choices=["y", "n", "d"],
+                case_sensitive=False,
+                default="n",
+                show_choices=False,
+            ).lower()
+        except _NewRunCancelled:
+            choice = "n"
+        finally:
+            signal.signal(signal.SIGINT, previous_sigint_handler)
+
+        if choice == "n":
+            print("\nRun cancelled; the existing run folder was not cleared")
+            raise SystemExit(0)
+
+        if choice == "d":
+            self.settings.warn_new_run = False
+            self.context._save_settings(self.settings)
 
     def run(self, ctx: BaseContext | None = None, new: bool = True):
         if ctx is not None:
@@ -223,10 +269,9 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
                 )
             self._context.set_project_name(ctx.run.project)
             self._context.set_run_id(ctx.run.id)
-
-        # Must happen before _setup(), which starts persisting source artifacts.
-        if new:
-            self._clear_run_path()
+        else:
+            if new:
+                self._clear_run_path(confirm=self.settings.warn_new_run)
         self._logger.warning(
             f"{self.env} {self.name} is running (data_range=({self._context.data_start}, {self._context.data_end}))",
             style=self.env._color,
