@@ -25,7 +25,7 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = [
     "pfund-kit>=0.1.12",
-    'pfeed>=0.0.17',
+    'pfeed>=0.0.18',
     "apscheduler>=3.11.3",
     "httpx2[http2]>=2.7.0",
     "websockets>=16.1.0 ; sys_platform != 'emscripten'",
@@ -34,7 +34,7 @@ dependencies = [
 
 [project.optional-dependencies]
 core = [
-    'pfeed[yfinance]>=0.0.17',
+    'pfeed[yfinance]>=0.0.18',
     'pfolio>=0.0.4',
     'pfund-plot[marimo]>=0.0.5',
     # 'mtflow>=0.0.1.dev2',

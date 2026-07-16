@@ -4,9 +4,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 if TYPE_CHECKING:
+    from datetime import timedelta
+
+    from deltalake.table import FilterConjunctionType
+    from deltalake.transaction import CommitProperties, PostCommitHookProperties
+    from deltalake.writer.properties import WriterProperties
     from narwhals.typing import IntoDataFrame
     from pfeed.sources.pfund.component_feed import PFundComponentFeed
     from pfeed.dataflow.result import RunResult
+    from pfeed.storages.base_storage import BaseStorage
 
     from pfund.datas import BarData
     from pfund.typing import Component, Signals, ColumnName
@@ -39,6 +45,7 @@ class TradingStore:
             ColumnName, Any
         ] = {}  # child components signals = component's feature columns
         self._storage_config: StorageConfig | None = None
+        self._lakehouse_storage: BaseStorage | None = None
 
     @property
     def KEY_COLS(self) -> list[str]:
@@ -56,8 +63,17 @@ class TradingStore:
     def set_pivot_cols(self, pivot_cols: list[str]):
         self.PIVOT_COLS = pivot_cols
 
-    def set_storage_config(self, storage_config: StorageConfig):
+    def set_lakehouse_storage(self, storage_config: StorageConfig):
         self._storage_config = storage_config
+        Storage = storage_config.storage.storage_class
+        io_config = self._feed._create_artifact_io_config(ArtifactType.data)
+        self._lakehouse_storage = (
+            Storage.from_storage_config(storage_config)
+            .with_io(io_config)
+            .with_data_model(
+                self._feed.create_data_model(artifact_type=ArtifactType.data)
+            )
+        )
 
     def pivot_df(self, df: nw.DataFrame[Any]) -> nw.DataFrame[Any]:
         """Pivots signals dataframe from long form to wide form.
@@ -243,3 +259,98 @@ class TradingStore:
             artifact_type=ArtifactType.data,
             storage_config=self.storage_config,
         ).run()
+
+    def optimize_lakehouse(
+        self,
+        partition_filters: FilterConjunctionType | None = None,
+        target_size: int | None = None,
+        max_concurrent_tasks: int | None = None,
+        max_spill_size: int | None = None,
+        max_temp_directory_size: int | None = None,
+        min_commit_interval: int | timedelta | None = None,
+        writer_properties: WriterProperties | None = None,
+        post_commithook_properties: PostCommitHookProperties | None = None,
+        commit_properties: CommitProperties | None = None,
+    ) -> dict[str, Any] | None:
+        """Compact this component's Delta table using pfeed's implementation.
+
+        Returns ``None`` until the component has successfully persisted its first
+        trading dataframe.
+        """
+        storage = self._lakehouse_storage
+        if storage is None:
+            self.logger.debug(
+                f"{self._component.name} has no Delta table to optimize yet"
+            )
+            return None
+        from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
+
+        if not isinstance(storage, DeltaLakeStorageMixin):
+            raise TypeError(f"{storage.name} does not support optimize_lakehouse")
+        from deltalake.exceptions import TableNotFoundError
+
+        try:
+            delta_table = storage.get_delta_table()
+        except TableNotFoundError:
+            self.logger.debug(
+                f"{self._component.name} has no Delta table to optimize yet"
+            )
+            return None
+        return storage.optimize_delta_table(
+            delta_table,
+            partition_filters=partition_filters,
+            target_size=target_size,
+            max_concurrent_tasks=max_concurrent_tasks,
+            max_spill_size=max_spill_size,
+            max_temp_directory_size=max_temp_directory_size,
+            min_commit_interval=min_commit_interval,
+            writer_properties=writer_properties,
+            post_commithook_properties=post_commithook_properties,
+            commit_properties=commit_properties,
+        )
+
+    def vacuum_lakehouse(
+        self,
+        retention_hours: int | None = None,
+        dry_run: bool = True,
+        enforce_retention_duration: bool = True,
+        post_commithook_properties: PostCommitHookProperties | None = None,
+        commit_properties: CommitProperties | None = None,
+        full: bool = False,
+        keep_versions: list[int] | None = None,
+    ) -> list[str] | None:
+        """Vacuum this component's Delta table using pfeed's implementation.
+
+        Pfeed's safe defaults apply, including ``dry_run=True``. Returns ``None``
+        until the component has successfully persisted its first trading
+        dataframe.
+        """
+        storage = self._lakehouse_storage
+        if storage is None:
+            self.logger.debug(
+                f"{self._component.name} has no Delta table to vacuum yet"
+            )
+            return None
+        from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
+
+        if not isinstance(storage, DeltaLakeStorageMixin):
+            raise TypeError(f"{storage.name} does not support vacuum_lakehouse")
+        from deltalake.exceptions import TableNotFoundError
+
+        try:
+            delta_table = storage.get_delta_table()
+        except TableNotFoundError:
+            self.logger.debug(
+                f"{self._component.name} has no Delta table to vacuum yet"
+            )
+            return None
+        return storage.vacuum_delta_table(
+            delta_table,
+            retention_hours=retention_hours,
+            dry_run=dry_run,
+            enforce_retention_duration=enforce_retention_duration,
+            post_commithook_properties=post_commithook_properties,
+            commit_properties=commit_properties,
+            full=full,
+            keep_versions=keep_versions,
+        )

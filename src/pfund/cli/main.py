@@ -1,6 +1,7 @@
 from pfund_kit.cli import create_cli_group
 from pfund_kit.cli.commands import config, remove
 
+from pfund.cli.commands.deltalake import deltalake
 from pfund.cli.commands.docker_compose import docker_compose
 from pfund.cli.commands.settings import settings
 
@@ -19,3 +20,5 @@ pfund_group.add_command(docker_compose, name="compose")
 pfund_group.add_command(remove)
 pfund_group.add_command(remove, name="rm")
 pfund_group.add_command(settings)
+pfund_group.add_command(deltalake)
+pfund_group.add_command(deltalake, name="delta")

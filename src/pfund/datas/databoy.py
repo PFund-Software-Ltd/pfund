@@ -1,7 +1,7 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false, reportArgumentType=false, reportUnnecessaryComparison=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias
 
 if TYPE_CHECKING:
     from logging import Logger
@@ -30,6 +30,8 @@ from pfund.enums import PrivateDataChannel, PFundDataChannel
 
 
 class DataBoy:
+    LAKEHOUSE_MAINTENANCE_JITTER_SECONDS: ClassVar[int] = 300
+
     def __init__(self, component: Component):
         self._component: Component = component
         self._data_stores: dict[DataCategory, BaseDataStore[Any, Any]] = {}
@@ -205,11 +207,37 @@ class DataBoy:
             self._zmq_thread.start()
         # TODO: flush stale bars, rehydrate_from_lakehouse in market data store
         if self._scheduler:
+            store = self._component.store
+            settings = self._component.settings
             self._scheduler.add_job(
-                self._component.store.persist_to_lakehouse,
+                store.persist_to_lakehouse,
                 "interval",
-                seconds=self._component.settings.persist_interval,
+                seconds=settings.persist_interval,
+                coalesce=True,
+                max_instances=1,
             )
+            if settings.optimize_interval is not None:
+                self._scheduler.add_job(
+                    store.optimize_lakehouse,
+                    "interval",
+                    seconds=settings.optimize_interval,
+                    jitter=self.LAKEHOUSE_MAINTENANCE_JITTER_SECONDS,
+                    coalesce=True,
+                    max_instances=1,
+                )
+            if settings.vacuum_interval is not None:
+                self._scheduler.add_job(
+                    store.vacuum_lakehouse,
+                    "interval",
+                    seconds=settings.vacuum_interval,
+                    jitter=self.LAKEHOUSE_MAINTENANCE_JITTER_SECONDS,
+                    kwargs={
+                        "dry_run": False,
+                        "retention_hours": settings.vacuum_retention_hours,
+                    },
+                    coalesce=True,
+                    max_instances=1,
+                )
             self._scheduler.start()
 
     def stop(self):
@@ -220,7 +248,9 @@ class DataBoy:
                 f"{self.name} data thread finished (alive={self._zmq_thread.is_alive()})"
             )
         if self._scheduler:
-            self._scheduler.shutdown(wait=False)
+            # Let any in-flight persistence or maintenance finish before the final
+            # write so two persistence dataflows cannot overlap during shutdown.
+            self._scheduler.shutdown(wait=True)
             self._scheduler = None
             # persist one last time (after the zmq thread has stopped delivering,
             # so the trading df is final) so rows since the last tick aren't lost

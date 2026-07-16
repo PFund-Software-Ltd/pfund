@@ -9,7 +9,7 @@ from pfund.enums import Database
 
 class TradeEngineSettings(BaseEngineSettings):
     database: Database | str = Field(
-        default=Database.DUCKDB,
+        default=Database.SQLITE,
         description="database used to store engine data, e.g. positions, balances, trades",
     )
     # e.g. url='tcp://localhost'
@@ -24,7 +24,7 @@ class TradeEngineSettings(BaseEngineSettings):
         want to stream data manually. e.g. configure the trade engines to share the same data engine from pfeed.
         """,
     )
-    swap_live_for_eod: bool = Field(
+    rehydrate_data: bool = Field(
         default=True,
         description="When True, replace recorded live data with the provider's cleaned end-of-day data once available.",
     )
@@ -36,6 +36,33 @@ class TradeEngineSettings(BaseEngineSettings):
         from the online store (TradingStore) to the offline store (pfeed's data lakehouse).
         Only used in live trading and event-driven backtesting; vectorized
         backtesting persists once at the end of backtest() instead.
+        """,
+    )
+    optimize_interval: float | None = Field(
+        default=86_400.0,
+        gt=0,
+        description="""
+        Seconds between background compactions of each component's lakehouse table.
+        The daily default keeps frequent small appends manageable without optimizing
+        on every persistence. Set to None to disable automatic optimization.
+        """,
+    )
+    vacuum_interval: float | None = Field(
+        default=604_800.0,
+        gt=0,
+        description="""
+        Seconds between background vacuum runs for each component's lakehouse table.
+        The weekly default is independent of vacuum_retention_hours. Set to None to
+        disable automatic vacuuming.
+        """,
+    )
+    vacuum_retention_hours: int = Field(
+        default=168,
+        ge=168,
+        description="""
+        Hours of obsolete table files to retain when vacuuming. Passed directly to
+        the lakehouse vacuum operation. The seven-day minimum preserves Delta Lake's
+        retention safety check.
         """,
     )
     signals_timeout: float = Field(

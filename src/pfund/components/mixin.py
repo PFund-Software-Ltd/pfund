@@ -169,7 +169,7 @@ class ComponentMixin:
         self._set_name(name)
         self._set_resolution(resolution)
         self.set_logger(self.logger)
-        self.store.set_storage_config(storage_config)
+        self.store.set_lakehouse_storage(storage_config)
 
     def _forward(self, data: BarData):
         child_signals: dict[ComponentName, Signals] = (

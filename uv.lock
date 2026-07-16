@@ -4018,7 +4018,7 @@ wheels = [
 
 [[package]]
 name = "pfeed"
-version = "0.0.17"
+version = "0.0.18"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -4035,9 +4035,9 @@ dependencies = [
     { name = "ray", extra = ["default"], marker = "sys_platform != 'emscripten'" },
     { name = "zstandard" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5d/52/019a8c7cb90d1b9e8d0d97e5591bc31f3c4c1b9aa2651126f4d3e272542b/pfeed-0.0.17.tar.gz", hash = "sha256:754aa4fc67ffe02172bb5612bc73f803fca500c6b0243367eac3de448aeea237", size = 146955, upload-time = "2026-07-15T23:19:16.11Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bb/d4/c7c191e457ee94dbaa5df754bba6c5d1dd320e3ebf958856e4d810e094e2/pfeed-0.0.18.tar.gz", hash = "sha256:11d3fd2b7a3dfdf9c076c133549f3bbd7e0b326a97491aff42cb8cbba3e681aa", size = 147716, upload-time = "2026-07-16T01:14:27.779Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c3/2e/b7cab45be9ed48dc449dc775268092b6e6bbe3b8e0a738e95c2a2f1e2ce6/pfeed-0.0.17-py3-none-any.whl", hash = "sha256:9793929c426c1f779791bfcc69873111f9f8ec7324b1e8a2e0a4270bb93cff22", size = 222590, upload-time = "2026-07-15T23:19:14.442Z" },
+    { url = "https://files.pythonhosted.org/packages/3a/af/e35a1cc0339f048df5b391b355b509e9c1e49909d8c1072487d96c47ef19/pfeed-0.0.18-py3-none-any.whl", hash = "sha256:ac1ab44568f798026fe79074bc179601f8a3095661626c025886c92fdcae3060", size = 223454, upload-time = "2026-07-16T01:14:26.533Z" },
 ]
 
 [package.optional-dependencies]
@@ -4114,8 +4114,8 @@ requires-dist = [
     { name = "jax", marker = "extra == 'jax'", specifier = ">=0.10.2" },
     { name = "joblib", marker = "extra == 'sklearn'", specifier = ">=1.5.3" },
     { name = "numba", marker = "sys_platform != 'emscripten'", specifier = ">=0.66.0" },
-    { name = "pfeed", specifier = ">=0.0.17" },
-    { name = "pfeed", extras = ["yfinance"], marker = "extra == 'core'", specifier = ">=0.0.17" },
+    { name = "pfeed", specifier = ">=0.0.18" },
+    { name = "pfeed", extras = ["yfinance"], marker = "extra == 'core'", specifier = ">=0.0.18" },
     { name = "pfolio", marker = "extra == 'core'", specifier = ">=0.0.4" },
     { name = "pfund-ibapi", marker = "extra == 'ibkr'", specifier = "==10.48.1" },
     { name = "pfund-kit", specifier = ">=0.1.12" },
