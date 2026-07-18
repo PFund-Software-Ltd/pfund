@@ -330,7 +330,9 @@ class DataBoy:
                     else:
                         self._update_data_store(data)
 
-    def _wait_for_children_signals(self, data: BarData) -> dict[ComponentName, Signals]:
+    def _wait_for_components_signals(
+        self, data: BarData
+    ) -> dict[ComponentName, Signals]:
         """Blocks until every child has published its signals for the current bar,
         collecting each one as it arrives.
 
@@ -425,8 +427,7 @@ class DataBoy:
                     component.on_bar(data)
                     # only process closed bar with primary resolution
                     if data.is_closed() and data.resolution == component.resolution:
-                        data_store = self.get_data_store(category=data.category)
-                        data_store.update_df(data)
+                        component._update_data_df(data)
                         component.forward(data)
             else:
                 raise NotImplementedError(f"Unhandled data type: {type(data)}")

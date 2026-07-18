@@ -16,12 +16,9 @@ class BacktestEngineSettings(BaseEngineSettings):
         default_factory=dict
     )
 
-    reuse_trading_df: bool = Field(
-        default=False,
-        description="""
-        if True, reuses signals from dumped signal_df in _next() instead of recalculating the signals.
-        This will make event-driven backtesting a LOT faster but inconsistent with live trading.
-        """,
+    reuse_signals: bool = Field(
+        default=True,
+        description="Reuse pre-computed signals from child components in event-driven backtests.",
     )
     cache_features_df: bool = Field(
         default=True,

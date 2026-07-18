@@ -128,6 +128,32 @@ class TradingStore:
             df = df.tail(window_size)
         return df.to_native() if to_native else df
 
+    def get_signals(self, data: BarData) -> Signals | None:
+        df = self._df
+        if df is None:
+            return None
+
+        if self._component.df_form == "long":
+            predicate = (
+                (nw.col("date") == data.start_dt)
+                & (nw.col("product") == data.product.name)
+                & (nw.col("resolution") == str(data.resolution))
+            )
+        else:
+            predicate = nw.col("date") == data.start_dt
+
+        row = df.filter(predicate).head(1)
+        if len(row) == 0:
+            return None
+
+        signal_cols = [
+            col for col in self._component._signal_cols if col in row.columns
+        ]
+        if not signal_cols:
+            return None
+
+        return {col: row.get_column(col).to_list()[0] for col in signal_cols}
+
     # TODO: need to handle if data_as_features is True, i.e. if data is also a feature
     # TODO: check if the data.is_closed() is False (incomplete bar)
     #   if thats true, it means user manually calls forward(), need to mark it in the df
@@ -211,13 +237,10 @@ class TradingStore:
             storage_config=self.storage_config,
         ).run()
 
-    # TODO: remove all the "order_xxx" and "trade_xxx" columns
-    def materialize(self) -> bool:
-        """Load this component's own persisted trading dataframe.
-
-        Returns:
-            Whether a persisted trading dataframe was found.
-        """
+    # TODO: remove strategy columns, e.g. "signal", "order_xxx" and "trade_xxx"
+    # they are unnecessary and could be misleading (if created by vectorized backtesting, results are inaccurate)
+    def materialize(self):
+        """Load this component's own trading_df.delta (data artifact)."""
         result = self._feed.retrieve(
             artifact_type=ArtifactType.data,
             storage_config=self.storage_config,
@@ -227,11 +250,10 @@ class TradingStore:
             self.logger.debug(
                 f"No persisted trading dataframe found for '{self._component.name}'"
             )
-            return False
+            return
 
         df = nw.from_native(cast("IntoDataFrame", result.data))
         self._df = df.collect() if isinstance(df, nw.LazyFrame) else df
-        return True
 
     def persist_to_lakehouse(self) -> RunResult | None:
         """Persist the component's current data artifact through pfeed.

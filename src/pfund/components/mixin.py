@@ -1,4 +1,4 @@
-# pyright: reportUninitializedInstanceVariable=false, reportUnknownParameterType=false, reportUnknownMemberType=false, reportArgumentType=false, reportAssignmentType=false, reportReturnType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false, reportOptionalMemberAccess=false, reportUnknownArgumentType=false
+# pyright: reportUninitializedInstanceVariable=false, reportUnknownParameterType=false, reportUnknownMemberType=false, reportArgumentType=false, reportAssignmentType=false, reportReturnType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false, reportOptionalMemberAccess=false, reportUnknownArgumentType=false, reportUnusedParameter=false
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
@@ -42,7 +42,7 @@ from pfund_kit.style import RichColor, TextStyle, cprint
 from pfund_kit.utils import toml
 
 from pfund.components.actor_proxy import ActorProxy
-from pfund.datas.stores._bar_dataframe import (
+from pfund.components.bar_dataframe import (
     KEY_COLS as BAR_KEY_COLS,
     aggregate_events_by_bar,
     align_df_to_spine,
@@ -179,6 +179,13 @@ class ComponentMixin:
         self.set_logger(self.logger)
         self.store.set_lakehouse_storage(storage_config)
 
+    def _update_data_df(self, data: BaseData) -> None:
+        data_store = self.get_data_store(data.category)
+        data_store.update_df(data)
+
+    def _get_components_signals(self, data: BarData) -> dict[ComponentName, Signals]:
+        return self._databoy._wait_for_components_signals(data)
+
     def forward(self, data: BarData):
         """Forwards the given bar data to the child components, wait for their signals,
         compute the component's signals, and then updates its trading store.
@@ -196,27 +203,27 @@ class ComponentMixin:
             has_forwarded = self.store.has_updated(data)
             if has_forwarded:
                 return
-
+            if not self.is_ready(data=data):
+                return
             signals: Signals = {}
-            if self.is_ready(data=data):
-                signals_per_child: dict[ComponentName, Signals] = (
-                    self._databoy._wait_for_children_signals(data)
-                )
-                for child_signals in signals_per_child.values():
-                    self.store.update_df(child_signals, data=data)
-                X = self.get_df(
-                    kind="features",
-                    window_size=self.config["lookback_period"],
-                    to_native=True,
-                )
-                signals = self.signalize(X)
-                self.signals = signals
-                self.store.update_df(signals, data=data)
-            # self.signals = latest signals: {} during warmup, last computed otherwise
-            if self._databoy.is_using_zmq():
-                self._databoy._publish_signals(signals, data)
+            signals_per_component = self._get_components_signals(data)
+            for component_signals in signals_per_component.values():
+                self.store.update_df(component_signals, data=data)
+            X = self.get_df(
+                kind="features",
+                window_size=self.config["lookback_period"],
+                to_native=True,
+            )
+            signals = self.signalize(X)
+            self.signals = signals
+            self.store.update_df(signals, data=data)
+            self._publish_signals(signals, data)
         except Exception:
             self.logger.exception("Error forwarding data:")
+
+    def _publish_signals(self, signals: Signals, data: BarData):
+        if self._databoy.is_using_zmq():
+            self._databoy._publish_signals(signals, data)
 
     def _setup_scheduler(self):
         self._databoy._setup_scheduler()

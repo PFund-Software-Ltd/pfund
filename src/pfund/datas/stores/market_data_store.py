@@ -37,7 +37,7 @@ import narwhals as nw
 from pfeed.enums import DataAccessType
 from pfeed.feeds.market_feed import MarketFeed
 from pfund.datas import BarData, QuoteData, TickData
-from pfund.datas.stores._bar_dataframe import (
+from pfund.components.bar_dataframe import (
     reorder_key_cols,
     validate_spine_df,
 )

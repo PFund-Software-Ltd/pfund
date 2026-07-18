@@ -1,4 +1,4 @@
-# pyright: reportUninitializedInstanceVariable=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false, reportArgumentType=false, reportUnusedParameter=false, reportUnknownParameterType=false, reportUnknownArgumentType=false
+# pyright: reportUninitializedInstanceVariable=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false, reportArgumentType=false, reportUnusedParameter=false, reportUnknownParameterType=false, reportUnknownArgumentType=false, reportGeneralTypeIssues=false
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -18,12 +18,13 @@ if TYPE_CHECKING:
     DataT = TypeVar("DataT", IntoDataFrame, IntoSeries, "NDArray[Any]")
 
     from pfund.datas.timeframe import Timeframe
+    from pfund.datas.data_base import BaseData
     from pfund.datas.data_bar import BarData
     from pfund.datas.stores.market_data_store import BarUpdate
     from pfund.engines.contexts.backtest_engine_context import BacktestEngineContext
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.entities.products.product_base import BaseProduct
-    from pfund.typing import ComponentT, Signals, Component
+    from pfund.typing import ComponentT, Signals, Component, ComponentName
     from pfund._backtest.cv.base import CrossValidatorDatasetPeriods
     from pfund._backtest.dataset_splitter import DatasetPeriods
 
@@ -35,7 +36,7 @@ from narwhals.dependencies import is_into_dataframe
 from pfund_kit.style import cprint, RichColor, TextStyle
 from pfeed.enums import DataCategory
 
-from pfund.datas.stores._bar_dataframe import (
+from pfund.components.bar_dataframe import (
     KEY_COLS as BAR_KEY_COLS,
     align_df_to_spine,
     reorder_key_cols,
@@ -175,7 +176,7 @@ class BacktestMixin:
                 + "(one row per (date, product) for multiple products). "
                 + "Wide form (e.g. 'BTC_close', 'ETH_close') is not supported."
             )
-        from pfund.datas.stores._bar_dataframe import KEY_COLS
+        from pfund.components.bar_dataframe import KEY_COLS
 
         key_cols = KEY_COLS
         missing = [c for c in key_cols if c not in nw_df.columns]
@@ -287,7 +288,7 @@ class BacktestMixin:
             description=description,
             bar_style=RichColor.BRIGHT_YELLOW,
         ):
-            ts, resolution, product_name, source_type, o, h, l, c, v = row  # pyright: ignore[reportGeneralTypeIssues, reportUnusedVariable]  # noqa: E741
+            ts, resolution, product_name, source_type, o, h, l, c, v = row  # pyright: ignore[reportUnusedVariable]  # noqa: E741
             data = cast("BarData", self.get_data(product_name, resolution))
             update: BarUpdate = {
                 "ts": ts,
@@ -300,8 +301,7 @@ class BacktestMixin:
                 "msg_ts": None,
                 "extra": {},
             }
-            # TODO: convert update to StreamingMessage
-            self._databoy._collect(...)
+            self._databoy.collect(...)
 
         # TODO: return the backtested dataframe, how?
         return df
@@ -479,6 +479,7 @@ class BacktestMixin:
             ),
         )
 
+    @override
     def _add_component(
         self,
         component: ComponentT,
@@ -531,6 +532,39 @@ class BacktestMixin:
 
         return isinstance(self, _DummyStrategy)
 
+    @property
+    def _reuse_child_component_signals(self):
+        return not self._is_top_component and self.settings.reuse_signals
+
+    @override
+    def _get_components_signals(self, data: BarData) -> dict[ComponentName, Signals]:
+        return {
+            component.name: component.store.get_signals(data)
+            for component in self.components
+        }
+
+    # data df has already been loaded in full in backtesting, so no need to update
+    @override
+    def _update_data_df(self, data: BaseData) -> None:
+        pass
+
+    @override
+    def forward(self, data: BarData):
+        try:
+            if self._reuse_child_component_signals:
+                # NOTE: child component's signals are already available (loaded during materialization), reuse them
+                self.signals = self.store.get_signals(data)
+                return
+            return super().forward(data)
+        except Exception:
+            self.logger.exception("Error forwarding data:")
+
+    # no-op in backtesting, zeromq is not in use
+    @override
+    def _publish_signals(self, signals: Signals, data: BarData):
+        pass
+
+    @override
     def _materialize(self):
         for data_store in self.data_stores.values():
             data_store.materialize()
@@ -549,9 +583,13 @@ class BacktestMixin:
                     self.store._df = self._vectorized_backtest(X)
                 else:
                     self.store._df = X
-        elif self.settings.reuse_trading_df:
-            self.store.materialize()
+        elif self.backtest_mode == BacktestMode.EVENT_DRIVEN:
+            if self._reuse_child_component_signals:
+                self.store.materialize()
+        else:
+            raise ValueError(f"Unknown backtest mode: {self.backtest_mode}")
 
+    @override
     def _gather(self) -> None:
         if self._is_dummy_strategy():
             assert len(self.components) == 1, (
@@ -564,7 +602,7 @@ class BacktestMixin:
             return super()._gather()
 
     @override
-    def _get_supported_resolutions(  # pyright: ignore[reportGeneralTypeIssues]
+    def _get_supported_resolutions(
         self, product: BaseProduct
     ) -> dict[Timeframe, list[int]]:
         """Gets supported resolutions for the product based on the trading venue.

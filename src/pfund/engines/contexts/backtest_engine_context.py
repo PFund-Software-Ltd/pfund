@@ -38,12 +38,14 @@ class BacktestEngineContext(BaseEngineContext[BacktestEngineSettings]):
             settings=settings,
         )
         self.mode = BacktestMode[mode.upper()]
-        if self.mode == BacktestMode.EVENT_DRIVEN and self.settings.reuse_trading_df:
+        if self.mode == BacktestMode.EVENT_DRIVEN and self.settings.reuse_signals:
             cprint(
-                "Warning: Reusing pre-computed signals to speed up event-driven backtesting,\n"
-                + "i.e. computing signals on the fly will be skipped",
+                "Warning: Reusing pre-computed features to speed up event-driven backtesting,\n"
+                + "i.e. computing features on the fly will be skipped",
                 style=TextStyle.BOLD + RichColor.YELLOW,
             )
+        assert self.data_start is not None
+        assert self.data_end is not None
         self.dataset_splitter = DatasetSplitter(
             dataset_start=self.data_start,
             dataset_end=self.data_end,
