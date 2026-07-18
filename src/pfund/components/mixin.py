@@ -42,6 +42,11 @@ from pfund_kit.style import RichColor, TextStyle, cprint
 from pfund_kit.utils import toml
 
 from pfund.components.actor_proxy import ActorProxy
+from pfund.datas.stores._bar_dataframe import (
+    KEY_COLS as BAR_KEY_COLS,
+    aggregate_events_by_bar,
+    align_df_to_spine,
+)
 from pfund.datas.data_config import DataConfig
 from pfund.datas.databoy import DataBoy
 from pfund.datas.resolution import Resolution
@@ -71,7 +76,7 @@ class ComponentMixin:
 
         self.logger: logging.Logger = logging.getLogger("pfund")
         self.products: dict[ProductName, BaseProduct] = {}
-        self.databoy = DataBoy(self)
+        self._databoy = DataBoy(self)
         self.store = TradingStore(self)
 
         self._signal_cols: list[str] = []
@@ -113,11 +118,11 @@ class ComponentMixin:
 
     @property
     def market_data_store(self) -> MarketDataStore:
-        return self.databoy.get_data_store(DataCategory.MARKET_DATA)
+        return self._databoy.get_data_store(DataCategory.MARKET_DATA)
 
     @property
     def data_stores(self) -> dict[DataCategory, BaseDataStore[Any, Any]]:
-        return self.databoy._data_stores
+        return self._databoy._data_stores
 
     @property
     def component_type(self) -> str:
@@ -133,6 +138,9 @@ class ComponentMixin:
             return ComponentType.feature
         else:
             raise ValueError(f"Unknown component type: {type(self)}")
+
+    def get_data_store(self, category: DataCategory | str) -> BaseDataStore[Any, Any]:
+        return self._databoy.get_data_store(category)
 
     # useful when user wants to set logger specific to the component. currently 'pfund' is the default logger.
     def set_logger(self, logger: logging.Logger):
@@ -171,34 +179,55 @@ class ComponentMixin:
         self.set_logger(self.logger)
         self.store.set_lakehouse_storage(storage_config)
 
-    def _forward(self, data: BarData):
-        child_signals: dict[ComponentName, Signals] = (
-            self.databoy._wait_for_children_signals(data)
-        )
-        for signals in child_signals.values():
-            self.store.update_df(signals, data=data)
-        if self.is_ready(data=data):
-            X = self.get_df(
-                kind="features",
-                window_size=self.config["lookback_period"],
-                to_native=True,
-            )
-            self.signals = self.signalize(X)
-            self.store.update_df(self.signals, data=data)
-        # self.signals = latest signals: {} during warmup, last computed otherwise
-        if self.databoy.is_using_zmq():
-            self.databoy._publish_signals(self.signals, data)
+    def forward(self, data: BarData):
+        """Forwards the given bar data to the child components, wait for their signals,
+        compute the component's signals, and then updates its trading store.
+
+        This forward function could be called manually.
+        Manual forward is triggered by the user, it could be useful in cases such as:
+            e.g. user wants to forward 1m data a bit earlier (bar is incomplete)
+                before the market close.
+
+        Args:
+            data (BarData): The bar data to forward.
+        """
+        try:
+            # NOTE: user might have manually called forward() before databoy does
+            has_forwarded = self.store.has_updated(data)
+            if has_forwarded:
+                return
+
+            signals: Signals = {}
+            if self.is_ready(data=data):
+                signals_per_child: dict[ComponentName, Signals] = (
+                    self._databoy._wait_for_children_signals(data)
+                )
+                for child_signals in signals_per_child.values():
+                    self.store.update_df(child_signals, data=data)
+                X = self.get_df(
+                    kind="features",
+                    window_size=self.config["lookback_period"],
+                    to_native=True,
+                )
+                signals = self.signalize(X)
+                self.signals = signals
+                self.store.update_df(signals, data=data)
+            # self.signals = latest signals: {} during warmup, last computed otherwise
+            if self._databoy.is_using_zmq():
+                self._databoy._publish_signals(signals, data)
+        except Exception:
+            self.logger.exception("Error forwarding data:")
 
     def _setup_scheduler(self):
-        self.databoy._setup_scheduler()
+        self._databoy._setup_scheduler()
         for component in self.components:
             component._setup_scheduler()
 
     def _setup_messaging(self):
-        self.databoy._setup_messaging()
+        self._databoy._setup_messaging()
         for component in self.components:
             component._setup_messaging()
-        self.databoy._subscribe()
+        self._databoy._subscribe()
 
     def _setup_logging(self):
         """Sets up logging for component running in remote process, uses zmq's PUSHHandler to send logs to engine"""
@@ -482,16 +511,16 @@ class ComponentMixin:
         """
         if kind == "data":
             if data_category is not None:
-                store = self.databoy.get_data_store(data_category)
+                store = self._databoy.get_data_store(data_category)
                 df = store.get_df(window_size=window_size, to_native=to_native)
             else:
-                data_dfs: dict[DataCategory, IntoDataFrame | None] = {
-                    category: store.get_df(window_size=window_size, to_native=True)
+                data_dfs: dict[DataCategory, nw.DataFrame[Any]] = {
+                    category: store.get_df(window_size=window_size, to_native=False)
                     for category, store in self.data_stores.items()
                 }
-                df = self.merge_data_dfs(data_dfs)
-                if not to_native:
-                    df = nw.from_native(df)
+                df = self._merge_data_dfs(data_dfs)
+                if to_native:
+                    df = df.to_native()
         elif kind == "features":
             df = self.store.get_df(
                 kind="features", window_size=window_size, to_native=to_native
@@ -505,21 +534,36 @@ class ComponentMixin:
                 kind="trading", window_size=window_size, to_native=to_native
             )
         elif kind == "full":
-            trading_df = self.store.get_df(
-                kind="trading", window_size=window_size, to_native=False
-            )
-            data_dfs_not_included_in_trading_df = {
-                category: data_store.get_df(
-                    window_size=window_size,
-                    to_native=True,
-                )
-                for category, data_store in self.data_stores.items()
-                if not data_store.data_as_features and data_store.get_datas()
-            }
+            trading_df = self.store._df
+            if trading_df is not None and window_size is not None:
+                trading_df = trading_df.tail(window_size)
+            market_data_store = self.data_stores.get(DataCategory.MARKET_DATA)
+            if market_data_store is None or market_data_store._df is None:
+                data_dfs_not_included_in_trading_df = {}
+            else:
+                data_dfs_not_included_in_trading_df = {
+                    category: data_store.get_df(
+                        window_size=window_size,
+                        to_native=False,
+                    )
+                    for category, data_store in self.data_stores.items()
+                    if not data_store.data_as_features
+                    and data_store.get_datas()
+                    and data_store._df is not None
+                }
             if data_dfs_not_included_in_trading_df:
-                data_df = nw.from_native(
-                    self.merge_data_dfs(data_dfs_not_included_in_trading_df)
-                )
+                data_df = self._merge_data_dfs(data_dfs_not_included_in_trading_df)
+            else:
+                data_df = None
+
+            if data_df is None and trading_df is None:
+                raise RuntimeError(f"{self.name} full df is not ready")
+            if data_df is None:
+                assert trading_df is not None
+                df = trading_df
+            elif trading_df is None:
+                df = data_df
+            else:
                 join_cols = [
                     col
                     for col in self.store.KEY_COLS
@@ -541,8 +585,6 @@ class ComponentMixin:
                         ).drop(right_key)
 
                 df = df.sort(join_cols)
-            else:
-                df = trading_df
             if to_native:
                 df = df.to_native()
         else:
@@ -698,9 +740,6 @@ class ComponentMixin:
             )
         return self.products[product.name]
 
-    def get_product(self, name: ProductName) -> BaseProduct | None:
-        return self.products.get(name, None)
-
     def get_data(
         self, product: ProductName, resolution: Resolution | str
     ) -> MarketData | None:
@@ -808,6 +847,20 @@ class ComponentMixin:
                 f"{component.component_type} '{ComponentName}' is not a strategy, model or feature"
             )
 
+        component_resolution = (
+            component.resolution
+            if isinstance(component, ActorProxy)
+            else Resolution(resolution or self.resolution)
+        )
+        if component_resolution > self.resolution:
+            component_name = name or component.name
+            raise ValueError(
+                f"{component.component_type} '{component_name}' resolution "
+                + f"{component_resolution!r} is finer than parent '{self.name}' resolution "
+                + f"{self.resolution!r}; a child component's output resolution must "
+                + "be equal to or coarser than its parent's resolution"
+            )
+
         if not isinstance(component, ActorProxy):
             component_type = component.component_type
             assert isinstance(component, BaseClass), (
@@ -832,7 +885,7 @@ class ComponentMixin:
                 component = ActorProxy(
                     component,
                     name=component_name,
-                    resolution=resolution or self.resolution,
+                    resolution=component_resolution,
                     component_type=component_type,
                     engine_context=self.context,
                     ray_actor_options=ray_actor_options,
@@ -842,7 +895,7 @@ class ComponentMixin:
             component._hydrate(
                 name=component_name,
                 run_mode=RunMode.REMOTE if ray_kwargs else RunMode.LOCAL,
-                resolution=resolution or self.resolution,
+                resolution=component_resolution,
                 engine_context=self.context,
                 storage_config=storage_config or self.store.storage_config,
                 df_form=df_form,
@@ -901,9 +954,8 @@ class ComponentMixin:
     def set_signal_cols(self, signal_cols: list[str]):
         self._signal_cols = signal_cols
 
-    def set_pivot_cols(self, pivot_cols: list[str]):
-        self.store.set_pivot_cols(pivot_cols)
-
+    # FIXME
+    # TODO: add a progress bar to it when its not ready
     def is_ready(self, data: BaseData) -> bool:
         if data.category == DataCategory.MARKET_DATA:
             df = self.get_df(kind="data", data_category=data.category, to_native=False)
@@ -926,53 +978,79 @@ class ComponentMixin:
                 f"is_ready() is not implemented for {data.category=}"
             )
 
-    def merge_data_dfs(
-        self, data_dfs: dict[DataCategory, IntoDataFrame]
-    ) -> IntoDataFrame:
-        """Creates data_df by merging data_dfs per data category in long form
+    def _merge_data_dfs(
+        self, data_dfs: dict[DataCategory, nw.DataFrame[Any]]
+    ) -> nw.DataFrame[Any]:
+        """Enrich the component's primary-resolution market-data spine.
+
         Args:
-            data_dfs: dataframes per data category in long form
+            data_dfs: Narwhals dataframes per data category. All dataframes must
+                be in long form.
         """
-        dfs: list[nw.DataFrame[Any]] = []
-        common_key_cols: set[str] | None = None
-        for category, df in data_dfs.items():
-            data_store = self.databoy.get_data_store(category)
-            nw_df = nw.from_native(df)
-            # strip provenance metadata: the merged data_df feeds featurize, where metadata is not a feature
-            metadata_to_drop = [
-                col for col in data_store.METADATA_COLS if col in nw_df.columns
-            ]
-            if metadata_to_drop:
-                nw_df = nw_df.drop(metadata_to_drop)
-            if self.df_form == "wide":
-                # REVIEW: this requires dynamic pivoting for EACH call
-                nw_df = data_store.pivot_df(nw_df)
-            dfs.append(nw_df)
-            # KEY_COLS that actually survive on this df (pivot_df folds PIVOT_COLS into column names)
-            df_key_cols = set(
-                col for col in data_store.KEY_COLS if col in nw_df.columns
-            )
-            if common_key_cols is None:
-                common_key_cols = df_key_cols
-            else:
-                common_key_cols &= df_key_cols
-
-        data_df = dfs[0]
-        if len(dfs) == 1:
-            return data_df.to_native()
-
-        if not common_key_cols:
+        if not data_dfs:
+            raise ValueError(f"No data dfs provided for {self.name}")
+        market_category = DataCategory.MARKET_DATA
+        if market_category not in data_dfs:
             raise ValueError(
-                f"No common key columns found in data_dfs in {self.df_form} form for {self.name}. "
-                + "Please define your own merge_data_dfs() to handle merging data_dfs manually."
+                f"Market data is required as the bar spine for {self.name}"
             )
 
-        for df in dfs[1:]:
-            data_df = data_df.join(df, on=list(common_key_cols), how="full")
-            data_df = data_df.with_columns(
-                nw.coalesce(key, f"{key}_right").alias(key) for key in common_key_cols
-            ).drop(*(f"{key}_right" for key in common_key_cols))
-        return data_df.sort(common_key_cols).to_native()
+        def _drop_metadata(
+            category: DataCategory,
+            df: nw.DataFrame[Any],
+        ) -> nw.DataFrame[Any]:
+            data_store = self._databoy.get_data_store(category)
+            metadata_cols = [
+                col for col in data_store.METADATA_COLS if col in df.columns
+            ]
+            return df.drop(metadata_cols) if metadata_cols else df
+
+        market_df = _drop_metadata(
+            market_category,
+            data_dfs[market_category],
+        )
+        data_df = market_df
+
+        for category, contributor_df in data_dfs.items():
+            if category == market_category:
+                continue
+
+            contributor_df = _drop_metadata(category, contributor_df)
+            category_name = category.value.lower().removesuffix("_data")
+            event_time_col = f"{category_name}_date"
+            events_col = f"{category_name}_events"
+            count_col = f"{category_name}_count"
+
+            if "date" not in contributor_df.columns:
+                raise ValueError(
+                    f"{category.value} dataframe is missing its event 'date' column"
+                )
+            if event_time_col in contributor_df.columns:
+                raise ValueError(
+                    f"{category.value} dataframe already contains reserved column "
+                    + repr(event_time_col)
+                )
+
+            contributor_df = contributor_df.rename({"date": event_time_col})
+            aligned_df = align_df_to_spine(
+                market_df,
+                contributor_df,
+                mode="event",
+                time_col=event_time_col,
+                broadcast_null_products=True,
+            )
+            aggregated_df = aggregate_events_by_bar(
+                aligned_df,
+                events_col=events_col,
+                count_col=count_col,
+            )
+            data_df = data_df.join(
+                aggregated_df,
+                on=BAR_KEY_COLS,
+                how="left",
+            ).with_columns(nw.col(count_col).fill_null(0))
+
+        return data_df.sort(BAR_KEY_COLS)
 
     def _reload_markets(self):
         """venues (at engine level) might have refetched the latest markets, reload markets from markets.yml"""
@@ -986,6 +1064,9 @@ class ComponentMixin:
             product._load_market(file_path)
 
     def _materialize(self):
+        """Materialize historical frames only when a data range was requested."""
+        if self.context.data_start is None and self.context.data_end is None:
+            return
         for data_store in self.data_stores.values():
             data_store.materialize()
         self.store.materialize()
@@ -1022,7 +1103,7 @@ class ComponentMixin:
                 component.start()
             self._is_running = True
             self.on_start()
-            self.databoy.start()
+            self._databoy.start()
             self.logger.info(f"'{self.name}' has started")
         else:
             self.logger.info(f"'{self.name}' has already started")
@@ -1034,7 +1115,7 @@ class ComponentMixin:
                 component.stop()
             self._is_running = False
             self.on_stop()
-            self.databoy.stop()
+            self._databoy.stop()
             self.logger.info(f"'{self.name}' has stopped, ({reason=})")
         else:
             self.logger.info(f"'{self.name}' has already stopped")

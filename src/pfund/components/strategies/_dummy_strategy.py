@@ -17,5 +17,5 @@ class _DummyStrategy(BaseStrategy):  # pyright: ignore[reportUnusedClass]
     def on_bar(self, *args: Any, **kwargs: Any):
         pass
 
-    def decide(self, *args: Any, **kwargs: Any):
+    def trade(self, *args: Any, **kwargs: Any):
         pass

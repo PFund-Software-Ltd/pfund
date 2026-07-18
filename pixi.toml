@@ -30,7 +30,7 @@ pfund-kit = ">=0.1.12"
 pfeed = ">=0.0.18"
 apscheduler = ">=3.11.3"
 httpx2 = { version = ">=2.7.0", extras = ["http2"] }
-websockets = ">=16.1.0"
+websockets = ">=16.1.1"
 numba = ">=0.66.0"
 
 [feature.optional.pypi-dependencies]
@@ -47,7 +47,7 @@ scikit-learn = ">=1.9.0"
 torch = ">=2.13.0"
 safetensors = ">=0.8.0"
 jax = ">=0.10.2"
-ta-lib = ">=0.7.0"
+ta-lib = ">=0.7.1"
 
 [feature.dev.pypi-dependencies]
 pfund = { path = ".", editable = true }

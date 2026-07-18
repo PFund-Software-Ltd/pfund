@@ -7,8 +7,8 @@ import narwhals as nw
 import numpy as np
 from narwhals.typing import IntoDataFrameT, IntoSeries
 
-from pfund.datas.stores.market_data_store import MarketDataStore
 from pfund._backtest.product_backtest_kernel import backtest_loop_kernel
+from pfund.datas.stores._bar_dataframe import PIVOT_COLS
 
 # what a registration is keyed by, minus its data_range: a (resolution, product)
 # combo for product backtesting, a bare product string for portfolio
@@ -70,7 +70,7 @@ def _clear_registry() -> None:
 
 def _get_current_combo(df: nw.DataFrame) -> tuple:
     """Return the single (resolution, product) combo's values in PIVOT_COLS order."""
-    combos = df.select(*MarketDataStore.PIVOT_COLS).unique().rows()
+    combos = df.select(*PIVOT_COLS).unique().rows()
     if len(combos) != 1:
         raise ValueError(
             "Multiple (resolution, product)s detected — backtest one (resolution, product) at a time:\n"
@@ -663,7 +663,7 @@ class ProductBacktestMixin:
 
         # Group rows by combo once (O(n log n))
         positions_by_combo = _group_positions(
-            [df.get_column(c).to_numpy() for c in MarketDataStore.PIVOT_COLS], n
+            [df.get_column(c).to_numpy() for c in PIVOT_COLS], n
         )
 
         # Outputs: nan = row not backtested (its combo was never configured)

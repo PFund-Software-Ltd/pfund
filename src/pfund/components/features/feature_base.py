@@ -83,3 +83,10 @@ class BaseFeature(ComponentMixin, ABC, metaclass=MetaFeature):
             # NOTE: list() converts 2D+ array into per-row sub-arrays, needed because pandas rejects >1D per-column arrays
             signals[col] = list(value) if value.ndim > 1 else value
         return signals
+
+    # TODO?: the primary data_df will then have "tick"/"quote" column created using tick/quote_df
+    # where the value in "tick"/"quote" column is a list of ticks/quotes
+    # so that X in transform() will have "tick"/"quote" columns (if data_as_features is True)
+    # think of this as allowing a different input resolution -> output resolution is still component's primary resolution
+    # def add_tick_data(self, as_feature: bool = True): ... -> data store will create tick_df
+    # def add_quote_data(self, as_feature: bool = True): ... -> data store will create quote_df

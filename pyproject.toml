@@ -28,7 +28,7 @@ dependencies = [
     'pfeed>=0.0.18',
     "apscheduler>=3.11.3",
     "httpx2[http2]>=2.7.0",
-    "websockets>=16.1.0 ; sys_platform != 'emscripten'",
+    "websockets>=16.1.1 ; sys_platform != 'emscripten'",
     "numba>=0.66.0 ; sys_platform != 'emscripten'",
 ]
 
@@ -42,7 +42,7 @@ core = [
 ibkr = ["pfund-ibapi==10.48.1"]
 alpaca = ["alpaca-py>=0.43.5"]
 hyperliquid = ["hyperliquid-python-sdk>=0.24.0"]
-ta-lib = ["ta-lib>=0.7.0"]
+ta-lib = ["ta-lib>=0.7.1"]
 sklearn = [
     "joblib>=1.5.3",
     "scikit-learn>=1.9.0",

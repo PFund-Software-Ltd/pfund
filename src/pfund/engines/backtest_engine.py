@@ -120,6 +120,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         strategy: StrategyT = BacktestStrategy(
             Strategy, *strategy.__pfund_args__, **strategy.__pfund_kwargs__
         )
+        strategy.set_top_component()
         return cast(
             "StrategyT",
             super().add_strategy(
@@ -165,6 +166,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             df_form=df_form,
             storage_config=storage_config,
         )
+        component.set_top_component()
         return component
 
     def add_model(
@@ -243,6 +245,12 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                     model: BaseModel = cast(
                         "BaseModel", list(strategy.models.values())[0]
                     )
+                    if (
+                        self.backtest_mode == BacktestMode.VECTORIZED
+                        and model.is_training()
+                    ):
+                        self.result = backtest_results
+                        return backtest_results
                     backtestee = model
                 elif strategy.features:
                     feature: BaseFeature = cast(

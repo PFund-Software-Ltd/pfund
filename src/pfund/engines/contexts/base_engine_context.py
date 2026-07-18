@@ -29,7 +29,12 @@ class BaseEngineContext(Generic[SettingsT]):
         self,
         env: Environment | str,
         name: str,
-        data_range: str | Resolution | DataRangeDict | tuple[str, str] | Literal["ytd"],
+        data_range: str
+        | Resolution
+        | DataRangeDict
+        | tuple[str, str]
+        | Literal["ytd"]
+        | None,
         settings: SettingsT | None = None,
         storage_config: StorageConfig | None = None,
     ):
@@ -79,9 +84,17 @@ class BaseEngineContext(Generic[SettingsT]):
 
     def _parse_data_range(
         self,
-        data_range: str | Resolution | DataRangeDict | tuple[str, str] | Literal["ytd"],
-    ) -> tuple[datetime.date, datetime.date]:
+        data_range: str
+        | Resolution
+        | DataRangeDict
+        | tuple[str, str]
+        | Literal["ytd"]
+        | None,
+    ) -> tuple[datetime.date | None, datetime.date | None]:
         from pfeed.utils.temporal import parse_date_range
+
+        if data_range is None:
+            return None, None
 
         # normalize a (start_date, end_date) tuple into a DataRangeDict
         if isinstance(data_range, tuple):

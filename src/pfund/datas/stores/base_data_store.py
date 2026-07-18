@@ -14,7 +14,6 @@ import narwhals as nw
 from pfeed.enums import DataLayer, DataStorage
 from pfeed.feeds.base_feed import BaseFeed
 
-from pfund.utils.dataframe import pivot_long_to_wide, unpivot_wide_to_long
 from pfund.datas.data_base import BaseData
 
 
@@ -23,9 +22,6 @@ FeedT = TypeVar("FeedT", bound=BaseFeed)
 
 
 class BaseDataStore(ABC, Generic[DataT, FeedT]):
-    LEFT_COLS: ClassVar[list[str]] = []
-    INDEX_COL: ClassVar[str] = "date"
-    PIVOT_COLS: ClassVar[list[str]] = []
     METADATA_COLS: ClassVar[list[str]] = []
 
     def __init__(self, databoy: DataBoy):
@@ -33,10 +29,6 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
         self._logger = databoy.logger
         self._df: nw.DataFrame[Any] | None = None  # in long form
         self._data_as_features: bool | None = None
-
-    @property
-    def KEY_COLS(self) -> list[str]:
-        return [self.INDEX_COL] + self.PIVOT_COLS
 
     @abstractmethod
     def materialize(self, *args: Any, **kwargs: Any) -> None:
@@ -105,40 +97,9 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
         assert set(metadata) == set(self.METADATA_COLS), (
             f"metadata keys {set(metadata)} do not match METADATA_COLS {set(self.METADATA_COLS)}"
         )
-        nwdf = nw.from_native(df).with_columns(
+        return nw.from_native(df).with_columns(
             # product=nw.lit(data.product.name).cast(nw.String),
             **metadata,
-        )
-        cols = nwdf.collect_schema().names()
-        # re-order columns
-        target_cols = self.LEFT_COLS + [
-            col for col in cols if col not in self.LEFT_COLS
-        ]
-        nwdf = nwdf.select(target_cols)
-        return nwdf
-
-    def pivot_df(self, df: nw.DataFrame[Any]) -> nw.DataFrame[Any]:
-        """Pivots data dataframe from long form to wide form.
-
-        Args:
-            df: data_df in long form
-        """
-        return pivot_long_to_wide(
-            df,
-            index_col=self.INDEX_COL,
-            pivot_cols=self.PIVOT_COLS,
-        )
-
-    def unpivot_df(self, df: nw.DataFrame[Any]) -> nw.DataFrame[Any]:
-        """Unpivots data dataframe from wide form to long form.
-
-        Args:
-            df: data_df in wide form
-        """
-        return unpivot_wide_to_long(
-            df,
-            index_col=self.INDEX_COL,
-            pivot_cols=self.PIVOT_COLS,
         )
 
     def get_df(

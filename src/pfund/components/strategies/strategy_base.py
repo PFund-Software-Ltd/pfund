@@ -9,7 +9,6 @@ if TYPE_CHECKING:
     from pfund.components.actor_proxy import ActorProxy
     from pfund.entities.accounts.account_base import BaseAccount
     from pfund.entities.balances.balance_base import BaseBalance
-    from pfund.entities.orders.order_base import BaseOrder
     from pfund.entities.positions.position_base import BasePosition
     from pfund.entities.products.product_base import BaseProduct
     from pfund.engines.trade_engine import TradeEngine
@@ -25,7 +24,7 @@ if TYPE_CHECKING:
 
 from abc import ABC, abstractmethod
 
-from pfund.enums import Side
+from pfund.entities.orders.order_base import BaseOrder
 from pfund.utils.decorators import ray_method
 from pfund.components.mixin import ComponentMixin
 from pfund.components.strategies.strategy_meta import MetaStrategy
@@ -48,7 +47,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         )  # calls ComponentMixin.__mixin_post_init__()
 
     @abstractmethod
-    def decide(self, X: IntoDataFrame) -> Literal[+1, -1, Side.BUY, Side.SELL, None]:
+    def trade(self, X: IntoDataFrame) -> list[BaseOrder]:
         pass
 
     @property
@@ -155,13 +154,26 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         Returns:
             dict[ColumnName, Any]: The predicted signals.
         """
-        signal = self.decide(X)
-        if signal is not None:
-            if signal not in [Side.BUY, Side.SELL]:
-                raise ValueError(f"Invalid signal: {signal}")
-            else:
-                signal = Side(signal)
+        orders = self.trade(X)
+        if orders is None:
+            orders = []
+        if not isinstance(orders, (list, set)):
+            raise TypeError(
+                f"Expected list or set returned from trade(), got {type(orders)}"
+            )
+        if not orders:
+            signal = None
+        else:
+            if not isinstance(orders[0], BaseOrder):
+                raise TypeError(
+                    f"Expected list of Order objects, got {type(orders[0])}"
+                )
+            sides = {o.side for o in orders}
+            if len(sides) != 1:
+                raise ValueError(f"All orders should have the same side, got: {sides}")
+            signal = sides.pop()
         signal_col = self._signal_cols[0]
+        # TODO: add 'order_type', 'order_price', 'order_quantity' to signals
         return {signal_col: signal}
 
     # TODO:
@@ -200,7 +212,6 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         else:
             self.logger.debug(f"'{self.name}' has already gathered")
 
-    # TODO: write order_price/order_quantity to trading store's df
     def place_orders(
         self,
         account: BaseAccount,
@@ -211,8 +222,8 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
             raise RuntimeError(f"Sub-strategy {self.name} cannot place orders")
         if not isinstance(orders, list):
             orders = [orders]
-        if self.databoy.is_using_zmq():
-            self.databoy._data_zmq.send(...)  # TODO: draft only
+        if self._databoy.is_using_zmq():
+            self._databoy._data_zmq.send(...)  # TODO: draft only
         else:
             venue = self._engine.get_venue(account.venue)
             venue._run_coroutine_threadsafe(venue.place_orders, args=(orders,))

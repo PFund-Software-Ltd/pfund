@@ -16,7 +16,7 @@ class BacktestEngineSettings(BaseEngineSettings):
         default_factory=dict
     )
 
-    reuse_signals: bool = Field(
+    reuse_trading_df: bool = Field(
         default=False,
         description="""
         if True, reuses signals from dumped signal_df in _next() instead of recalculating the signals.

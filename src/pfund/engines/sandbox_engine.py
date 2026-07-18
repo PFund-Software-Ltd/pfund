@@ -29,7 +29,8 @@ class SandboxEngine(TradeEngine[SandboxEngineSettings, SandboxEngineContext]):
         | Resolution
         | DataRangeDict
         | tuple[str, str]
-        | Literal["ytd"] = "ytd",
+        | Literal["ytd"]
+        | None = None,
         settings: SandboxEngineSettings | None = None,
         storage_config: StorageConfig | None = None,
         replay_mode: bool = True,

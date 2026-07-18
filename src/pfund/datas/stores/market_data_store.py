@@ -37,6 +37,10 @@ import narwhals as nw
 from pfeed.enums import DataAccessType
 from pfeed.feeds.market_feed import MarketFeed
 from pfund.datas import BarData, QuoteData, TickData
+from pfund.datas.stores._bar_dataframe import (
+    reorder_key_cols,
+    validate_spine_df,
+)
 from pfund.datas.data_config import DataConfig
 from pfund.datas.data_market import MarketData
 from pfund.datas.resolution import Resolution
@@ -45,9 +49,6 @@ from pfund.enums import Environment
 
 
 class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
-    # Columns pinned to the left side of the materialized dataframe for readability
-    LEFT_COLS: ClassVar[list[str]] = ["date", "resolution", "product", "source_type"]
-    PIVOT_COLS: ClassVar[list[str]] = ["resolution", "product"]
     METADATA_COLS: ClassVar[list[str]] = ["source_type"]
 
     def __init__(self, databoy: DataBoy):
@@ -55,29 +56,6 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         self._datas: dict[ProductName, dict[ResolutionRepr, MarketData]] = defaultdict(
             dict
         )
-
-    @staticmethod
-    def adjust_date_to_bar_close_time(df: nw.DataFrame[Any]) -> nw.DataFrame[Any]:
-        """Shift 'date' from bar open time (storage convention) to bar close time.
-
-        Bars are stored labeled by their open time, but a bar's information only
-        exists once the bar closes: a 1m bar labeled 00:00:00 is formed at
-        00:00:59.999, a 15m bar at 00:14:59.999. Aligning rows across
-        resolutions (and avoiding lookahead) is only correct on close time.
-        Each row is shifted by its own 'resolution' column value, using the
-        same convention as BarData's end_ts (start + period - 1ms).
-        """
-        from datetime import timedelta
-
-        expr = nw.col("date")
-        for res in df.get_column("resolution").unique().to_list():
-            offset = timedelta(seconds=Resolution(res).to_seconds(), milliseconds=-1)
-            expr = (
-                nw.when(nw.col("resolution") == res)
-                .then(nw.col("date") + offset)
-                .otherwise(expr)
-            )
-        return df.with_columns(expr.alias("date"))
 
     def get_data(
         self, product: ProductName, resolution: Resolution | ResolutionRepr
@@ -319,7 +297,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         component = self._databoy._component
         primary_resolution = component.resolution
         for product in component.products.values():
-            # REVIEW: only materialize data with primary resolution?
+            # only materialize data with primary resolution
             data = self.get_data(product.name, primary_resolution)
             if data is None:
                 raise Exception(
@@ -444,15 +422,8 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         if isinstance(df, nw.LazyFrame):
             df = df.collect()
 
-        cols = df.columns
-        assert self.INDEX_COL in cols, (
-            f"Index column {self.INDEX_COL} not found in {cols}"
-        )
-        assert all(col in cols for col in self.PIVOT_COLS), (
-            f"Pivot columns {self.PIVOT_COLS} not found in {cols}"
-        )
-
-        self._df = df
+        validate_spine_df(df)
+        self._df = reorder_key_cols(df)
 
     # TODO:
     def flush_stale_bars(self):

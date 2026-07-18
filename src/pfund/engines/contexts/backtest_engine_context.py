@@ -38,7 +38,7 @@ class BacktestEngineContext(BaseEngineContext[BacktestEngineSettings]):
             settings=settings,
         )
         self.mode = BacktestMode[mode.upper()]
-        if self.mode == BacktestMode.EVENT_DRIVEN and self.settings.reuse_signals:
+        if self.mode == BacktestMode.EVENT_DRIVEN and self.settings.reuse_trading_df:
             cprint(
                 "Warning: Reusing pre-computed signals to speed up event-driven backtesting,\n"
                 + "i.e. computing signals on the fly will be skipped",

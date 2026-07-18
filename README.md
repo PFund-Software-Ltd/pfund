@@ -61,7 +61,7 @@ PFund (/piː fʌnd/), which stands for "**Personal Fund**", is an **algo-trading
 
 ## Core Features
 - [x] Supports vectorized and event-driven backtesting with different resolutions of data, e.g. tick data, second data and minute data etc.
-- [x] Allows choosing your preferred data tool, e.g. pandas, polars, pyspark etc.
+- [x] Dataframe-centric trading workflow
 - [x] Supports machine learning models, features, technical analysis indicators
 - [x] Trains machine learning models using your favorite frameworks, i.e. PFund is **ML-framework agnostic**
 - [x] Offers **LEGO-style** strategy and model building, allowing strategies to add other strategies, models to add other models

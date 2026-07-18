@@ -83,7 +83,12 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
         *,
         env: Environment,
         name: str,
-        data_range: str | Resolution | DataRangeDict | tuple[str, str] | Literal["ytd"],
+        data_range: str
+        | Resolution
+        | DataRangeDict
+        | tuple[str, str]
+        | Literal["ytd"]
+        | None,
         settings: SettingsT | None = None,
         storage_config: StorageConfig | None = None,
         **kwargs: Any,

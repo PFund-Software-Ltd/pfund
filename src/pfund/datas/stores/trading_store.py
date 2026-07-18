@@ -1,7 +1,7 @@
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportAttributeAccessIssue=false, reportArgumentType=false, reportUnknownArgumentType=false, reportOptionalMemberAccess=false, reportConstantRedefinition=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 if TYPE_CHECKING:
     from datetime import timedelta
@@ -20,23 +20,18 @@ if TYPE_CHECKING:
 import narwhals as nw
 from pfeed.storages.storage_config import StorageConfig
 
-from pfund.utils.dataframe import pivot_long_to_wide, unpivot_wide_to_long
 from pfund.enums import ArtifactType
 
 
 class TradingStore:
-    INDEX_COL: ClassVar[str] = "date"
-    # NOTE: str(resolution) is used as values, not repr(resolution)
-    PIVOT_COLS: ClassVar[list[str]] = ["product", "resolution"]
-
     def __init__(self, component: Component):
         import pfeed as pe
 
         self._component: Component = component
         # trading_df = [features_df] + [signals_df], in the component's df_form:
-        # the features part is seeded by materialize() (child component signals
-        # and/or the component's own data); the signals part (usually one column)
-        # starts empty and is filled by update_df()
+        # vectorized backtesting constructs it from the component's data and
+        # child signals; event-driven/live execution fills it incrementally;
+        # materialize() rehydrates the component's own persisted trading_df.
         self._df: nw.DataFrame[Any] | None = None
         self._feed: PFundComponentFeed = pe.PFund(
             pipeline_mode=True
@@ -48,10 +43,6 @@ class TradingStore:
         self._lakehouse_storage: BaseStorage | None = None
 
     @property
-    def KEY_COLS(self) -> list[str]:
-        return [self.INDEX_COL] + self.PIVOT_COLS
-
-    @property
     def logger(self):
         return self._component.logger
 
@@ -59,9 +50,6 @@ class TradingStore:
     def storage_config(self) -> StorageConfig:
         assert self._storage_config is not None
         return self._storage_config
-
-    def set_pivot_cols(self, pivot_cols: list[str]):
-        self.PIVOT_COLS = pivot_cols
 
     def set_lakehouse_storage(self, storage_config: StorageConfig):
         self._storage_config = storage_config
@@ -75,29 +63,31 @@ class TradingStore:
             )
         )
 
-    def pivot_df(self, df: nw.DataFrame[Any]) -> nw.DataFrame[Any]:
-        """Pivots signals dataframe from long form to wide form.
+    def has_updated(self, data: BarData) -> bool:
+        """Return whether the trading dataframe already contains ``data``'s bar.
 
-        Args:
-            df: signals_df in long form
+        Long-form dataframes preserve the complete bar key
+        ``(date, product, resolution)``. Wide-form dataframes fold ``product``
+        and ``resolution`` into value-column names, so their row key is only
+        ``date``.
         """
-        return pivot_long_to_wide(
-            df,
-            index_col=self.INDEX_COL,
-            pivot_cols=self.PIVOT_COLS,
-        )
+        df = self._df
+        if df is None or len(df) == 0:
+            return False
 
-    def unpivot_df(self, df: nw.DataFrame[Any]) -> nw.DataFrame[Any]:
-        """Unpivots data dataframe from wide form to long form.
+        component = self._component
+        if component.df_form == "long":
+            predicate = (
+                (nw.col(self.INDEX_COL) == data.start_dt)
+                & (nw.col("product") == data.product.name)
+                & (nw.col("resolution") == str(data.resolution))
+            )
+        elif component.df_form == "wide":
+            predicate = nw.col(self.INDEX_COL) == data.start_dt
+        else:
+            raise ValueError(f"unsupported dataframe form {component.df_form!r}")
 
-        Args:
-            df: data_df in wide form
-        """
-        return unpivot_wide_to_long(
-            df,
-            index_col=self.INDEX_COL,
-            pivot_cols=self.PIVOT_COLS,
-        )
+        return len(df.filter(predicate).head(1)) > 0
 
     def get_df(
         self,
@@ -138,6 +128,9 @@ class TradingStore:
             df = df.tail(window_size)
         return df.to_native() if to_native else df
 
+    # TODO: need to handle if data_as_features is True, i.e. if data is also a feature
+    # TODO: check if the data.is_closed() is False (incomplete bar)
+    #   if thats true, it means user manually calls forward(), need to mark it in the df
     def update_df(self, signals: Signals, data: BarData):
         """Upserts signals into the current bar's row of the trading df.
 
@@ -151,7 +144,8 @@ class TradingStore:
             signals: a child component's signals or this component's signals
             data: the bar the signals were computed for. The store derives the
                 row key from it: the bar's open time, matching the market data
-                storage convention (see MarketDataStore.adjust_date_to_bar_close_time).
+                storage convention. Close-time availability is used only as a
+                temporary alignment boundary in the bar-dataframe utilities.
         """
         import numpy as np
 
@@ -162,7 +156,7 @@ class TradingStore:
             )
         date = data.start_dt
 
-        # live trading contract: _forward() outputs the LATEST signals — one value
+        # live trading contract: forward() outputs the LATEST signals — one value
         # per signal column for the current bar (a lookback window is input context,
         # not output grain)
         row_values: dict[ColumnName, Any] = {}
@@ -217,23 +211,27 @@ class TradingStore:
             storage_config=self.storage_config,
         ).run()
 
-    def materialize(self):
-        """Loads child components signals stored in pfeed's data lakehouse as this component's features/factors"""
-        component = self._component
-        data_dfs = {
-            category: data_store.get_df(to_native=True)
-            for category, data_store in component.data_stores.items()
-            if data_store.data_as_features and data_store.get_datas()
-        }
-        if data_dfs:
-            self._df = nw.from_native(component.merge_data_dfs(data_dfs))
-        # TODO: load features_df
-        # TODO: how to concat e.g. long+wide form or wide+long form
-        for component in self._component.components:
-            # TODO: component could be ray actor,
-            # 1. load from component's trading_df (delta table), OR
-            # 2. component.get_df(kind="signals")  # latency, but should be fine during materialization
-            pass
+    # TODO: remove all the "order_xxx" and "trade_xxx" columns
+    def materialize(self) -> bool:
+        """Load this component's own persisted trading dataframe.
+
+        Returns:
+            Whether a persisted trading dataframe was found.
+        """
+        result = self._feed.retrieve(
+            artifact_type=ArtifactType.data,
+            storage_config=self.storage_config,
+        ).run()
+        if result.data is None:
+            self._df = None
+            self.logger.debug(
+                f"No persisted trading dataframe found for '{self._component.name}'"
+            )
+            return False
+
+        df = nw.from_native(cast("IntoDataFrame", result.data))
+        self._df = df.collect() if isinstance(df, nw.LazyFrame) else df
+        return True
 
     def persist_to_lakehouse(self) -> RunResult | None:
         """Persist the component's current data artifact through pfeed.

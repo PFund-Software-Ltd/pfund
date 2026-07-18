@@ -66,7 +66,8 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
         | Resolution
         | DataRangeDict
         | tuple[str, str]
-        | Literal["ytd"] = "ytd",
+        | Literal["ytd"]
+        | None = None,
         settings: TradeEngineSettings | None = None,
         storage_config: StorageConfig | None = None,
     ):
@@ -74,6 +75,7 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
         Args:
             name: engine name
             data_range: range of data to be used for the engine,
+                or None to skip historical materialization and start with live data
                 when it is a string, it is a resolution, e.g. '1m', '1d', '1w', '1mo', '1y'
                 when it is a dict, it is a dict with keys 'start_date' and 'end_date',
                     e.g. {'start_date': '2024-01-01', 'end_date': '2024-12-31'}
@@ -167,7 +169,7 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
 
         def _collect_msg_if_not_using_ray(msg: StreamingMessage):
             for strategy in self._strategies.values():
-                strategy.databoy._collect(msg=msg)
+                strategy._databoy._collect(msg=msg)
             return msg
 
         # data engine creates feeds and subscribes to market data to prepare for streaming
