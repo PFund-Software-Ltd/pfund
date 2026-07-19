@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from deltalake.writer.properties import WriterProperties
     from narwhals.typing import IntoDataFrame
     from pfeed.sources.pfund.component_feed import PFundComponentFeed
+    from pfeed.sources.pfund.component_metadata import PFundComponentDataMetadata
     from pfeed.dataflow.result import RunResult
     from pfeed.storages.base_storage import BaseStorage
 
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
 import narwhals as nw
 from pfeed.storages.storage_config import StorageConfig
 
+from pfund.components.bar_dataframe import KEY_COLS
 from pfund.enums import ArtifactType
 
 
@@ -117,10 +119,10 @@ class TradingStore:
             if kind == "signals":
                 if not signal_cols:
                     raise RuntimeError(
-                        f"{component.name} has no signals in its trading df yet"
+                        f"{component.name} has no signals or signal_cols is empty ({signal_cols=}) in its trading df yet"
                     )
                 # only KEY_COLS actually present are real keys (wide form folds pivot cols into value-column names)
-                key_cols = [col for col in self.KEY_COLS if col in columns]
+                key_cols = [col for col in KEY_COLS if col in columns]
                 df = df.select(key_cols + signal_cols)
             else:  # features
                 df = df.select([col for col in columns if col not in signal_cols])
@@ -176,6 +178,15 @@ class TradingStore:
         import numpy as np
 
         component = self._component
+        # A trading dataframe may only grow on its owning component's bar
+        # cadence. For example, a 1d child signal cannot create a row in a 1m
+        # model's dataframe; it must be as-of aligned when a legitimate 1m bar
+        # drives the model update.
+        if not data.resolution.is_strict_equal(component.resolution):
+            raise ValueError(
+                f"{component.name} cannot update its {component.resolution!r} "
+                + f"trading dataframe from a {data.resolution!r} bar"
+            )
         if component.df_form != "wide":
             raise NotImplementedError(
                 f"update_df() does not support df_form='{component.df_form}' yet"
@@ -254,6 +265,13 @@ class TradingStore:
 
         df = nw.from_native(cast("IntoDataFrame", result.data))
         self._df = df.collect() if isinstance(df, nw.LazyFrame) else df
+
+        metadata = cast(
+            "PFundComponentDataMetadata",
+            result.dataflows[0].data_model.metadata,
+        )
+        if metadata.component.signal_cols:
+            self._component.set_signal_cols(metadata.component.signal_cols)
 
     def persist_to_lakehouse(self) -> RunResult | None:
         """Persist the component's current data artifact through pfeed.

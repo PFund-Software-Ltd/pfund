@@ -43,9 +43,13 @@ from pfund_kit.utils import toml
 
 from pfund.components.actor_proxy import ActorProxy
 from pfund.components.bar_dataframe import (
+    INDEX_COL as BAR_INDEX_COL,
     KEY_COLS as BAR_KEY_COLS,
+    PIVOT_COLS as BAR_PIVOT_COLS,
     aggregate_events_by_bar,
     align_df_to_spine,
+    pivot_long_to_wide,
+    reorder_key_cols,
 )
 from pfund.datas.data_config import DataConfig
 from pfund.datas.databoy import DataBoy
@@ -306,13 +310,20 @@ class ComponentMixin:
             cls.params = params
 
     def _check_input_sources(self):
-        """Checks the component has at least one input source (data or child components)
-        and that its X (features) will be non-empty."""
-        if not self.get_datas():
-            # only the top strategy executes (trade() -> orders need products/prices);
-            # a sub-strategy is a non-executing signal generator, so like models/features
-            # it just needs some input source: data or child components.
-            if self.is_strategy() and self.is_substrategy():
+        """Check that the component can establish its spine and features.
+
+        Spine invariant:
+        - If the component has market data, that market data defines its spine.
+        - Otherwise, a wide component needs a same-resolution child, while a
+          long component needs a same-resolution long-form child so the child
+          can provide ``(date, product, resolution)`` keys.
+        - Same-resolution children collectively define the spine.
+        - Coarser children may contribute values but cannot define the missing
+          finer bars.
+        """
+        has_market_data = bool(self.market_data_store.get_datas())
+        if not has_market_data:
+            if self.is_strategy():
                 raise ValueError(
                     f"{self.name} has no market data, did you forget to call add_data() / add_datas()?"
                 )
@@ -320,6 +331,20 @@ class ComponentMixin:
                 raise ValueError(
                     f"{self.name} has no input source, did you forget to call add_data() / add_datas(), "
                     + "or add a child component via add_model() / add_feature()?"
+                )
+            elif not any(
+                child.resolution.is_strict_equal(self.resolution)
+                and (self.df_form == "wide" or child.df_form == "long")
+                for child in self.components
+            ):
+                required_child = (
+                    "same-resolution child"
+                    if self.df_form == "wide"
+                    else "same-resolution long-form child"
+                )
+                raise ValueError(
+                    f"{self.name} has no market data and no {required_child} "
+                    + "to establish its spine"
                 )
 
         # With no children, at least one populated data category must provide features.
@@ -541,27 +566,32 @@ class ComponentMixin:
                 kind="trading", window_size=window_size, to_native=to_native
             )
         elif kind == "full":
-            trading_df = self.store._df
-            if trading_df is not None and window_size is not None:
-                trading_df = trading_df.tail(window_size)
-            market_data_store = self.data_stores.get(DataCategory.MARKET_DATA)
-            if market_data_store is None or market_data_store._df is None:
-                data_dfs_not_included_in_trading_df = {}
-            else:
-                data_dfs_not_included_in_trading_df = {
-                    category: data_store.get_df(
-                        window_size=window_size,
-                        to_native=False,
+            data_dfs = {
+                category: data_store.get_df(
+                    window_size=None,
+                    to_native=False,
+                )
+                for category, data_store in self.data_stores.items()
+                if data_store.get_datas() and data_store._df is not None
+            }
+            data_df = self._merge_data_dfs(data_dfs) if data_dfs else None
+
+            # Data stores are canonically long-form. full_df follows the
+            # component's configured form, just like its trading dataframe.
+            if data_df is not None and self.df_form == "wide":
+                data_value_cols = [
+                    col for col in data_df.columns if col not in BAR_KEY_COLS
+                ]
+                if data_value_cols:
+                    data_df = pivot_long_to_wide(
+                        data_df,
+                        index_col=BAR_INDEX_COL,
+                        pivot_cols=BAR_PIVOT_COLS,
                     )
-                    for category, data_store in self.data_stores.items()
-                    if not data_store.data_as_features
-                    and data_store.get_datas()
-                    and data_store._df is not None
-                }
-            if data_dfs_not_included_in_trading_df:
-                data_df = self._merge_data_dfs(data_dfs_not_included_in_trading_df)
-            else:
-                data_df = None
+                else:
+                    data_df = data_df.select(BAR_INDEX_COL).unique().sort(BAR_INDEX_COL)
+
+            trading_df = self.store._df
 
             if data_df is None and trading_df is None:
                 raise RuntimeError(f"{self.name} full df is not ready")
@@ -571,16 +601,29 @@ class ComponentMixin:
             elif trading_df is None:
                 df = data_df
             else:
-                join_cols = [
+                join_cols = BAR_KEY_COLS if self.df_form == "long" else [BAR_INDEX_COL]
+                missing_join_cols = [
                     col
-                    for col in self.store.KEY_COLS
-                    if col in data_df.columns and col in trading_df.columns
+                    for col in join_cols
+                    if col not in data_df.columns or col not in trading_df.columns
                 ]
-                if not join_cols:
+                if missing_join_cols:
                     raise ValueError(
-                        f"No common key columns between {self.name}'s "
-                        + f"data_df {data_df.columns} and trading_df {trading_df.columns}"
+                        f"Cannot build {self.name}'s full df; data_df and "
+                        + f"trading_df must both contain key columns {join_cols}, "
+                        + f"missing {missing_join_cols}"
                     )
+
+                # Data configured as features is present in both frames. Keep
+                # the canonical data-store copy and remove the duplicate from
+                # trading_df before joining features and signals onto it.
+                overlapping_value_cols = [
+                    col
+                    for col in trading_df.columns
+                    if col not in join_cols and col in data_df.columns
+                ]
+                if overlapping_value_cols:
+                    trading_df = trading_df.drop(overlapping_value_cols)
 
                 df = data_df.join(trading_df, on=join_cols, how="full")
 
@@ -591,7 +634,12 @@ class ComponentMixin:
                             nw.coalesce(key, right_key).alias(key)
                         ).drop(right_key)
 
-                df = df.sort(join_cols)
+            df = reorder_key_cols(
+                df.sort(BAR_KEY_COLS if self.df_form == "long" else [BAR_INDEX_COL]),
+                df_form=self.df_form,
+            )
+            if window_size is not None:
+                df = df.tail(window_size)
             if to_native:
                 df = df.to_native()
         else:
@@ -1097,9 +1145,9 @@ class ComponentMixin:
             # Save only after such mutations so every artifact uses the same ID.
             self.store._save_source_artifact()
             self._is_gathered = True
-            self.logger.info(f"'{self.name}' has gathered")
+            self.logger.debug(f"'{self.name}' has gathered")
         else:
-            self.logger.info(f"'{self.name}' has already gathered")
+            self.logger.debug(f"'{self.name}' has already gathered")
 
     def start(self) -> None:
         if not self.is_running():
@@ -1111,9 +1159,9 @@ class ComponentMixin:
             self._is_running = True
             self.on_start()
             self._databoy.start()
-            self.logger.info(f"'{self.name}' has started")
+            self.logger.debug(f"'{self.name}' has started")
         else:
-            self.logger.info(f"'{self.name}' has already started")
+            self.logger.debug(f"'{self.name}' has already started")
 
     def stop(self, reason: str = "") -> None:
         """Stops the component, keep the internal states"""
@@ -1123,9 +1171,9 @@ class ComponentMixin:
             self._is_running = False
             self.on_stop()
             self._databoy.stop()
-            self.logger.info(f"'{self.name}' has stopped, ({reason=})")
+            self.logger.debug(f"'{self.name}' has stopped, ({reason=})")
         else:
-            self.logger.info(f"'{self.name}' has already stopped")
+            self.logger.debug(f"'{self.name}' has already stopped")
 
     """
     ************************************************

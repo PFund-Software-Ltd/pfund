@@ -26,9 +26,18 @@ PIVOT_COLS = ["product", "resolution"]
 KEY_COLS = [INDEX_COL, *PIVOT_COLS]
 
 
-def reorder_key_cols(df: nw.DataFrame[Any]) -> nw.DataFrame[Any]:
-    """Move the canonical bar key columns to the left."""
-    key_cols = KEY_COLS
+def reorder_key_cols(
+    df: nw.DataFrame[Any],
+    *,
+    df_form: Literal["long", "wide"] = "long",
+) -> nw.DataFrame[Any]:
+    """Move the dataframe form's key columns to the left."""
+    if df_form == "long":
+        key_cols = KEY_COLS
+    elif df_form == "wide":
+        key_cols = [INDEX_COL]
+    else:
+        raise ValueError(f"unsupported dataframe form {df_form!r}")
     return df.select(key_cols + [col for col in df.columns if col not in key_cols])
 
 

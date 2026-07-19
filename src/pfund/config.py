@@ -62,6 +62,7 @@ def configure(
     data_path: str | None = None,
     log_path: str | None = None,
     cache_path: str | None = None,
+    show_progress_bar: bool | None = None,
     persist: bool = False,
 ) -> PFundConfig:
     """
@@ -70,6 +71,7 @@ def configure(
         data_path: Path to the data directory.
         log_path: Path to the log directory.
         cache_path: Path to the cache directory.
+        show_progress_bar: Whether pfund progress bars are displayed.
         persist: If True, the config will be saved to the config file.
     """
     config = get_config()
@@ -108,7 +110,13 @@ class PFundConfig(Configuration):
 
     def _initialize_from_data(self):
         """Initialize PFundConfig-specific attributes from config data."""
-        pass
+        self.show_progress_bar = self._data.get("show_progress_bar", True)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            **super().to_dict(),
+            "show_progress_bar": self.show_progress_bar,
+        }
 
     def get_settings_file_path(self, engine_name: str) -> Path:
         settings_file_path = self.config_path / engine_name / self.SETTINGS_FILENAME

@@ -4118,7 +4118,7 @@ requires-dist = [
     { name = "pfeed", extras = ["yfinance"], marker = "extra == 'core'", specifier = ">=0.0.18" },
     { name = "pfolio", marker = "extra == 'core'", specifier = ">=0.0.4" },
     { name = "pfund-ibapi", marker = "extra == 'ibkr'", specifier = "==10.48.1" },
-    { name = "pfund-kit", specifier = ">=0.1.12" },
+    { name = "pfund-kit", specifier = ">=0.1.14" },
     { name = "pfund-plot", extras = ["marimo"], marker = "extra == 'core'", specifier = ">=0.0.5" },
     { name = "safetensors", marker = "extra == 'jax'", specifier = ">=0.8.0" },
     { name = "safetensors", marker = "extra == 'torch'", specifier = ">=0.8.0" },
@@ -4143,7 +4143,7 @@ wheels = [
 
 [[package]]
 name = "pfund-kit"
-version = "0.1.12"
+version = "0.1.14"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -4156,9 +4156,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "trogon", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ec/d8/fff4155ce2d4c01f0dd930399c58dd01fc2cfa34675eb51f2f069465fe7e/pfund_kit-0.1.12.tar.gz", hash = "sha256:60132382922a64b48b7bda7b3ba1a9d6bbc9ea848833f708d5c8f5096dfaa705", size = 43181, upload-time = "2026-07-15T22:28:54.162Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ff/5b/c48957b740f9b900ccfc13c6241f8423dd7d5006b574ec534669b3a21a4a/pfund_kit-0.1.14.tar.gz", hash = "sha256:ccf842022d2b02434b2e11db594657e3ea761d6e021df5b1a825ed581751b4e4", size = 43298, upload-time = "2026-07-18T22:34:00.891Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7b/a0/12c0acec57d1f81a5a9922514e375c797814b2db450f93e46a4491dc46ef/pfund_kit-0.1.12-py3-none-any.whl", hash = "sha256:a37fd6c96aa9a6b55a158b831d4b46abe7eb2a565b2e207161cea3933c86e5bb", size = 59425, upload-time = "2026-07-15T22:28:53.114Z" },
+    { url = "https://files.pythonhosted.org/packages/0d/f3/1a67696d4c5285dee0dc8e5ae2cdfb1496b6a2a218ab181760297013a0fb/pfund_kit-0.1.14-py3-none-any.whl", hash = "sha256:a77caa35913ff5676d87cf6a94b829fa97614cf70e52b6d647032114a350932c", size = 59563, upload-time = "2026-07-18T22:33:59.949Z" },
 ]
 
 [[package]]
@@ -6306,14 +6306,14 @@ wheels = [
 
 [[package]]
 name = "tqdm"
-version = "4.67.3"
+version = "4.69.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorama", marker = "sys_platform == 'win32'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/09/a9/6ba95a270c6f1fbcd8dac228323f2777d886cb206987444e4bce66338dd4/tqdm-4.67.3.tar.gz", hash = "sha256:7d825f03f89244ef73f1d4ce193cb1774a8179fd96f31d7e1dcde62092b960bb", size = 169598, upload-time = "2026-02-03T17:35:53.048Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8c/69/40407dfc835517f058b603dbf37a6df094d8582b015a51eddc988febbcb7/tqdm-4.69.0.tar.gz", hash = "sha256:700c5e85dcd5f009dd6222588a29180a193a748247a5d855b4d67db93d79a53b", size = 792569, upload-time = "2026-07-17T18:09:06.2Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/16/e1/3079a9ff9b8e11b846c6ac5c8b5bfb7ff225eee721825310c91b3b50304f/tqdm-4.67.3-py3-none-any.whl", hash = "sha256:ee1e4c0e59148062281c49d80b25b67771a127c85fc9676d3be5f243206826bf", size = 78374, upload-time = "2026-02-03T17:35:50.982Z" },
+    { url = "https://files.pythonhosted.org/packages/fe/21/99a0cdaf54eb35e77623c41b5a2c9472ee4404bba687052791fe2aba6773/tqdm-4.69.0-py3-none-any.whl", hash = "sha256:9979978912be667a6ef21fd5d8abf54e324e63d82f7f43c360792ebc2bc4e622", size = 676680, upload-time = "2026-07-17T18:09:04.172Z" },
 ]
 
 [[package]]

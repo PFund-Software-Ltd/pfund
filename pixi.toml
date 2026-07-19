@@ -26,7 +26,7 @@ py313 = ["py313", "test", "optional"]
 [dependencies]
 
 [pypi-dependencies]
-pfund-kit = ">=0.1.12"
+pfund-kit = ">=0.1.14"
 pfeed = ">=0.0.18"
 apscheduler = ">=3.11.3"
 httpx2 = { version = ">=2.7.0", extras = ["http2"] }

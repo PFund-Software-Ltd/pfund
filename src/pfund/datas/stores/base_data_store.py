@@ -26,7 +26,7 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
 
     def __init__(self, databoy: DataBoy):
         self._databoy: DataBoy = databoy
-        self._logger = databoy.logger
+        self._logger = databoy._logger
         self._df: nw.DataFrame[Any] | None = None  # in long form
         self._data_as_features: bool | None = None
 

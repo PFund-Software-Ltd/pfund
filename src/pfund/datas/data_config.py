@@ -22,8 +22,8 @@ class DataConfig(BaseModel):
         arbitrary_types_allowed=True,
         validate_assignment=True,
     )
-    storage_config: StorageConfig | None = Field(default=None)
-    io_config: IOConfig | None = Field(default=None)
+    storage_config: StorageConfig = Field(default_factory=StorageConfig)
+    io_config: IOConfig = Field(default_factory=IOConfig)
 
     @staticmethod
     def default_stale_bar_timeout(resolution: Resolution) -> float:

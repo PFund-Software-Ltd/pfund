@@ -24,7 +24,7 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "pfund-kit>=0.1.12",
+    "pfund-kit>=0.1.14",
     'pfeed>=0.0.18',
     "apscheduler>=3.11.3",
     "httpx2[http2]>=2.7.0",

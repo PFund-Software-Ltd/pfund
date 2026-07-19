@@ -38,6 +38,7 @@ from pfeed.enums import DataAccessType
 from pfeed.feeds.market_feed import MarketFeed
 from pfund.datas import BarData, QuoteData, TickData
 from pfund.components.bar_dataframe import (
+    KEY_COLS,
     reorder_key_cols,
     validate_spine_df,
 )
@@ -114,14 +115,6 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                 f"{product.name} {primary_resolution=!r} {extra_resolutions=!r} "
                 + f"is auto-resampled from {data_config.resample} to {resolved_data_config.resample}"
             )
-        if resolved_data_config.storage_config is None:
-            from pfeed.storages.storage_config import StorageConfig
-
-            resolved_data_config.storage_config = StorageConfig()
-        if resolved_data_config.io_config is None:
-            from pfeed._io.io_config import IOConfig
-
-            resolved_data_config.io_config = IOConfig()
         return resolved_data_config
 
     def add_data(
@@ -287,6 +280,12 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             DataNotFoundError: If no data is found and auto-download is disabled,
                 or if the data source is paid-by-usage (auto-download of paid data is not allowed).
         """
+        # A model/feature may derive its spine from same-resolution children and
+        # therefore have no market data store entries of its own.
+        if not self.get_datas():
+            self._df = None
+            return
+
         from pfeed.errors import DataNotFoundError
 
         dfs: list[nw.DataFrame[Any]] = []
@@ -345,7 +344,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                     )
                 _df: IntoDataFrame | None = result.data
                 if _df is not None:
-                    self._logger.info(
+                    self._logger.debug(
                         f"loaded data from {storage_config.data_path} for {data.product.name} {data.resolution}"
                     )
                     dfs.append(self._standardize_df(_df))
@@ -372,7 +371,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             _df: IntoDataFrame | None = result.data
             if _df is not None:
                 dfs.append(self._standardize_df(_df))
-                self._logger.info(
+                self._logger.debug(
                     f"loaded data from {storage_config.data_path} for {data.product.name} {data.resolution}"
                 )
             else:
@@ -418,7 +417,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         # concat just stacks per-(product, resolution) frames; sort by KEY_COLS
         # (date-leading) so _df holds a deterministic, date-ascending invariant
         # for every downstream consumer (get_df, merge_data_dfs, features_df)
-        df = nw.concat(dfs).sort(self.KEY_COLS)
+        df = nw.concat(dfs).sort(KEY_COLS)
         if isinstance(df, nw.LazyFrame):
             df = df.collect()
 
