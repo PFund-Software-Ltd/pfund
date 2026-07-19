@@ -350,9 +350,9 @@ class DataBoy:
 
         if not self.is_using_zmq():
             return {
-                child.name: child.signals
+                child.name: child._latest_signals
                 for child in component.get_components()
-                if child.signals
+                if child._latest_signals
             }
 
         pending: set[ComponentName] = {

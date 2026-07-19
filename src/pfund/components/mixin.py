@@ -84,7 +84,8 @@ class ComponentMixin:
         self.store = TradingStore(self)
 
         self._signal_cols: list[str] = []
-        self.signals: Signals = {}  # latest signals
+        # Last successfully computed signals; may not belong to the current bar.
+        self._latest_signals: Signals = {}
 
         self.models: dict[str, BaseModel | ActorProxy[BaseModel]] = {}
         self.features: dict[str, BaseFeature | ActorProxy[BaseFeature]] = {}
@@ -219,7 +220,7 @@ class ComponentMixin:
                 to_native=True,
             )
             signals = self.signalize(X)
-            self.signals = signals
+            self._latest_signals = signals
             self.store.update_df(signals, data=data)
             self._publish_signals(signals, data)
         except Exception:
@@ -655,8 +656,8 @@ class ComponentMixin:
         return self.store
 
     @ray_method
-    def get_signals(self) -> Signals:
-        return self.signals
+    def get_latest_signals(self) -> Signals | None:
+        return self._latest_signals
 
     def _get_default_signal_cols(self, num_cols: int) -> list[str]:
         if num_cols == 1:
