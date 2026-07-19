@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
         AccountName,
         Component,
         ComponentName,
+        ComponentT,
         StrategyT,
         Signals,
         Currency,
@@ -25,6 +27,7 @@ if TYPE_CHECKING:
 from abc import ABC, abstractmethod
 
 from pfund.entities.orders.order_base import BaseOrder
+from pfund.engines.component_registry import TOP_LEVEL_STRATEGY_SIGNAL_OWNER
 from pfund.utils.decorators import ray_method
 from pfund.components.mixin import ComponentMixin
 from pfund.components.strategies.strategy_meta import MetaStrategy
@@ -135,7 +138,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         **ray_kwargs: Any,
     ) -> StrategyT | ActorProxy[StrategyT] | None:
         strategy._mark_as_substrategy()
-        return self._add_component(
+        strategy = self._add_component(
             component=strategy,
             resolution=resolution,
             name=name,
@@ -144,6 +147,11 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
             ray_actor_options=ray_actor_options,
             **ray_kwargs,
         )
+        # NOTE: must be called AFTER hydration, because strategy may be an ActorProxy,
+        # need to mark it as a substrategy after its creation
+        if strategy is not None:
+            strategy._mark_as_substrategy()
+        return strategy
 
     def signalize(self, X: IntoDataFrame) -> Signals:
         """Creates signals of this component
@@ -201,6 +209,14 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
                 self._order_manager.on_trade_update(update)
                 self.on_trade(order.account, trade, type_)
 
+    @override
+    def _get_default_signal_cols(self, num_cols: int) -> list[str]:
+        if num_cols != 1:
+            raise ValueError(
+                f"{self.name} strategy must have exactly one signal column"
+            )
+        return [self.name] if self.is_substrategy() else ["signal"]
+
     def _gather(self) -> None:
         if not self._is_gathered:
             self.add_accounts()
@@ -208,7 +224,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
             if not self.is_substrategy() and not self._accounts:
                 raise RuntimeError(f"{self.name} must have at least one account")
             super()._gather()
-            self.set_signal_cols(["signal"])
+            self.set_signal_cols(self._get_default_signal_cols(num_cols=1))
         else:
             self.logger.debug(f"'{self.name}' has already gathered")
 

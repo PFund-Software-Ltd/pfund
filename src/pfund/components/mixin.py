@@ -659,6 +659,10 @@ class ComponentMixin:
     def get_latest_signals(self) -> Signals | None:
         return self._latest_signals
 
+    @ray_method
+    def get_signal_cols(self) -> list[str]:
+        return self._signal_cols
+
     def _get_default_signal_cols(self, num_cols: int) -> list[str]:
         if num_cols == 1:
             columns = [self.name]
@@ -1007,8 +1011,19 @@ class ComponentMixin:
             **ray_kwargs,
         )
 
-    def set_signal_cols(self, signal_cols: list[str]):
+    def set_signal_cols(self, signal_cols: list[str]) -> None:
         self._signal_cols = signal_cols
+
+    def _assert_unique_child_signal_cols(self) -> None:
+        child_signal_cols = [
+            signal_col
+            for component in self.get_components()
+            for signal_col in component.get_signal_cols()
+        ]
+        assert len(child_signal_cols) == len(set(child_signal_cols)), (
+            f"'{self.name}' child components have duplicate signal columns: "
+            f"{child_signal_cols}"
+        )
 
     # FIXME
     # TODO: add a progress bar to it when its not ready
@@ -1139,6 +1154,7 @@ class ComponentMixin:
             self._reload_markets()
             for component in self.components:
                 component._gather()
+            self._assert_unique_child_signal_cols()
             self._materialize()
             # NOTE: Keep this as the last setup step. During materialization,
             # pfeed normalizes data.config.storage_config.data_domain from "" to
