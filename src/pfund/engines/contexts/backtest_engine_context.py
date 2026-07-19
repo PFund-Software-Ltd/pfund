@@ -36,6 +36,7 @@ class BacktestEngineContext(BaseEngineContext[BacktestEngineSettings]):
             name=name,
             data_range=data_range,
             settings=settings,
+            storage_config=storage_config,
         )
         self.mode = BacktestMode[mode.upper()]
         if self.mode == BacktestMode.EVENT_DRIVEN and self.settings.reuse_signals:

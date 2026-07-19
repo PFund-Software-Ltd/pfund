@@ -580,10 +580,11 @@ class BacktestMixin:
                 if not self._is_top_component:
                     cprint(
                         f"No persisted trading dataframe found for '{self.name}'. "
-                        + "Running its vectorized backtest now...",
+                        + "Running its vectorized backtest on the fly...",
                         style=TextStyle.BOLD + RichColor.YELLOW,
                     )
                     self.store._df = self._vectorized_backtest(X)
+                    self.store.persist_to_lakehouse()
                 else:
                     self.store._df = X
         elif self.backtest_mode == BacktestMode.EVENT_DRIVEN:

@@ -214,9 +214,10 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         Args:
             new: Whether it is a new run. If True, clear the run path (the default_run/ folder).
             num_chunks:
-                Number of chunks to split the dataset into.
+                Number of standalone strategy backtests to split the dataset into.
                 if = 1, process the whole dataset all at once.
                 if > 1, use Ray for parallel processing.
+                Chunking is not supported for model or feature backtesting.
             num_cpus:
                 Maximum number of CPUs (Ray workers) to use per batch, i.e. how many chunks run in parallel at once.
                 if None, defaults to os.cpu_count().
@@ -226,10 +227,14 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
 
         if num_chunks < 1:
             raise ValueError("num_chunks must be greater than 0")
-        if num_cpus:
-            num_cpus = min(num_cpus, cast(int, os.cpu_count()))
+        if num_cpus is not None:
             if num_cpus < 1:
                 raise ValueError("num_cpus must be greater than 0")
+            available_cpus = os.cpu_count()
+            if available_cpus is not None:
+                num_cpus = min(num_cpus, available_cpus)
+        if num_chunks > 1 and _DummyStrategy.__name__ in self._strategies:
+            raise ValueError("Chunking is only supported for strategy backtesting")
 
         super().run(ctx=ctx, new=new)
 
