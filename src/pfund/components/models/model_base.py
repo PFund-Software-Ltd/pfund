@@ -1,7 +1,7 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false, reportArgumentType=false, reportUnknownParameterType=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     import torch.nn as nn
@@ -28,11 +28,37 @@ from pfund.components.models.model_meta import MetaModel
 
 
 class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
+    _allowed_model_method_collisions: ClassVar[frozenset[str]] = frozenset({"predict"})
+
     def __init__(self, model: UnderlyingModel, *args: Any, **kwargs: Any):
         self.model: UnderlyingModel = model
         self.__mixin_post_init__(
             model, *args, **kwargs
         )  # calls ComponentMixin.__mixin_post_init__()
+        self._assert_no_model_method_collisions()
+
+    def _assert_no_model_method_collisions(self) -> None:
+        import inspect
+
+        component_methods = {
+            name
+            for name, _ in inspect.getmembers(type(self), predicate=callable)
+            if not name.startswith("_")
+        }
+        underlying_model_methods = {
+            name
+            for name, _ in inspect.getmembers(type(self.model), predicate=callable)
+            if not name.startswith("_")
+        }
+        collisions = (
+            component_methods & underlying_model_methods
+        ) - self._allowed_model_method_collisions
+        if collisions:
+            raise TypeError(
+                f"'{self.__class__.__name__}' and its underlying model "
+                + f"'{self.model.__class__.__name__}' define the same public "
+                + f"method(s): {', '.join(sorted(collisions))}"
+            )
 
     @abstractmethod
     def predict(

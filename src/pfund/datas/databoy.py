@@ -428,7 +428,7 @@ class DataBoy:
                     # only process closed bar with primary resolution
                     if data.is_closed() and data.resolution == component.resolution:
                         component._update_data_df(data)
-                        component.forward(data)
+                        component.step(data)
             else:
                 raise NotImplementedError(f"Unhandled data type: {type(data)}")
         except Exception:

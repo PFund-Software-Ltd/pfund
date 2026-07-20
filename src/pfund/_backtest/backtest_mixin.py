@@ -200,6 +200,9 @@ class BacktestMixin:
 
     @property
     def _source_artifact(self) -> Path:
+        if self._source_artifact_path is not None:
+            return self._source_artifact_path
+
         import inspect
 
         from pfund._backtest.backtest_mixin import BacktestMixin
@@ -494,6 +497,7 @@ class BacktestMixin:
         # NOTE: non-backtesting kwargs are ignored, e.g. ray_actor_options, ray_kwargs, etc.
         **kwargs: Any,
     ) -> ComponentT:
+        source_artifact_path = component._source_artifact_path
         Component = type(component)
         if component.is_strategy():
             from pfund.components.strategies.strategy_backtest import BacktestStrategy
@@ -523,6 +527,8 @@ class BacktestMixin:
             )
         else:
             raise ValueError(f"Unsupported component type: {component}")
+        if source_artifact_path is not None:
+            component._set_source_artifact_path(str(source_artifact_path))
         return super()._add_component(
             component=component,
             resolution=resolution,
@@ -553,13 +559,13 @@ class BacktestMixin:
         pass
 
     @override
-    def forward(self, data: BarData):
+    def step(self, data: BarData):
         try:
             if self._reuse_child_component_signals:
                 # NOTE: child component's signals are already available (loaded during materialization), reuse them
                 self._latest_signals = self.store.get_signals(data)
                 return
-            return super().forward(data)
+            return super().step(data)
         except Exception:
             self.logger.exception("Error forwarding data:")
 

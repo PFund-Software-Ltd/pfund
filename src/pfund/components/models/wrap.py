@@ -11,6 +11,28 @@ if TYPE_CHECKING:
 __all__ = ["wrap_model"]
 
 
+def _get_caller_source_artifact_path() -> str | None:
+    """Return the first caller source file outside pfund itself."""
+    import inspect
+    from pathlib import Path
+
+    pfund_package_path = Path(__file__).resolve().parents[2]
+    frame = inspect.currentframe()
+    try:
+        frame = frame.f_back if frame is not None else None
+        while frame is not None:
+            source_artifact_path = Path(frame.f_code.co_filename).resolve()
+            if (
+                not source_artifact_path.is_relative_to(pfund_package_path)
+                and source_artifact_path.is_file()
+            ):
+                return str(source_artifact_path)
+            frame = frame.f_back
+    finally:
+        del frame
+    return None
+
+
 def wrap_model(
     model: UnderlyingModel | ModelT | ActorProxy[ModelT],
 ) -> ModelT | ActorProxy[ModelT]:
@@ -23,6 +45,11 @@ def wrap_model(
     for wrap in (_wrap_sklearn, _wrap_pytorch, _wrap_jax):
         if (pfund_model := wrap(model)) is not None:
             pfund_model._set_name(type(model).__name__)
+            # A raw model does not retain the file where it was instantiated,
+            # while its wrapper class points to pfund's internal adapter. Capture
+            # the user's call site before that source provenance is lost.
+            if source_artifact_path := _get_caller_source_artifact_path():
+                pfund_model._set_source_artifact_path(source_artifact_path)
             return cast("ModelT", pfund_model)
     raise TypeError(f"Unsupported model type: {type(model).__name__}")
 

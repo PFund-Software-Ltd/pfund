@@ -1,7 +1,7 @@
 # pyright: reportUnknownLambdaType=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     from pfund.typing import FullDataChannel
@@ -18,7 +18,6 @@ from msgspec import json
 
 from pfund.venues._apis.ws_api_base import BaseWebSocketAPI, NamedWebSocket
 from pfund.datas.resolution import Resolution
-from pfund.datas.timeframe import Timeframe
 from pfund.venues.bybit.product import BybitProduct
 from pfund.venues.bybit.account import BybitAccount
 from pfund.venues.bybit.signer import BybitSigner
@@ -144,11 +143,7 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitConfig, BybitAccount, BybitPro
         """Creates a full public channel name based on the product and resolution"""
         self.add_product(product)
         metadata = self.venue.venue_class.METADATA
-        supported_resolutions = cast(
-            dict[BybitProduct.Category, dict[Resolution | Timeframe, list[int]]],
-            metadata.supported_resolutions,
-        )
-        supported_resolutions = supported_resolutions[product.category]
+        supported_resolutions = metadata.get_supported_resolutions(product)
         if resolution.is_quote():
             if resolution not in supported_resolutions:
                 raise ValueError(

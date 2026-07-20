@@ -113,8 +113,10 @@ class BaseVenue(
             target=self._run_loop, name=f"{self.name}_loop", daemon=True
         )
         self._queue: queue.Queue[Any] | None = None
-        if self._config.refetch_markets and self.METADATA.has_markets:
-            self.refetch_markets()
+        if self.METADATA.has_markets:
+            markets_file = self._create_markets_yml_file_path()
+            if self._config.refetch_markets or not markets_file.exists():
+                self.refetch_markets()
 
     @property
     def env(self) -> Literal[Environment.PAPER, Environment.LIVE, Environment.SANDBOX]:
@@ -313,11 +315,13 @@ class BaseVenue(
             self._logger.debug(f"added {product.desc_str()}")
             if self.METADATA.has_markets and product.market is None:
                 file_path = self._create_markets_yml_file_path()
-                self._logger.error(
-                    f"no market found for {product.desc_str()} "
-                    + f"in {file_path}; the product might be delisted, or the file is outdated "
-                    + "- set refetch_markets=True in the venue config to refetch"
-                )
+                product.load_market(file_path)
+                if product.market is None:
+                    self._logger.error(
+                        f"no market found for {product.desc_str()} "
+                        + f"in {file_path}; the product might be delisted, or the file is outdated "
+                        + "- set refetch_markets=True in the venue config to refetch"
+                    )
         else:
             raise ValueError(f"product name {product.name} is already registered")
 

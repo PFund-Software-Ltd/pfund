@@ -102,7 +102,7 @@ class BaseProduct(BaseModel):
         self.symbol = self.symbol or self._create_symbol()
         if self.venue is None and self.source in TradingVenue.__members__:
             self.venue = TradingVenue[self.source]
-        self.market = self._load_market()
+        self.load_market()
 
     @property
     def key(self) -> ProductKey:
@@ -115,7 +115,7 @@ class BaseProduct(BaseModel):
     def _create_symbol(self) -> str:
         return self.symbol
 
-    def _load_market(self, file_path: Path | None = None) -> BaseMarket | None:
+    def load_market(self, file_path: Path | None = None) -> BaseMarket | None:
         from pfund_kit.utils.yaml import load
 
         if self.venue is None:
@@ -129,7 +129,7 @@ class BaseProduct(BaseModel):
         market_data = document.get(str(self.key))  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
         if market_data is None:
             return None
-        return VenueClass.Market(**market_data)  # pyright: ignore[reportUnknownArgumentType]
+        self.market = VenueClass.Market(**market_data)  # pyright: ignore[reportUnknownArgumentType]
 
     @property
     def base_asset(self) -> str:

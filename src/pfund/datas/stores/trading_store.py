@@ -193,7 +193,7 @@ class TradingStore:
             )
         date = data.start_dt
 
-        # live trading contract: forward() outputs the LATEST signals — one value
+        # live trading contract: step() outputs the LATEST signals — one value
         # per signal column for the current bar (a lookback window is input context,
         # not output grain)
         row_values: dict[ColumnName, Any] = {}

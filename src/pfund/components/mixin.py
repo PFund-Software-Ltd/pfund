@@ -77,6 +77,7 @@ class ComponentMixin:
         self._df_form: Literal["wide", "long"] | None = None
         self._resolution: Resolution | None = None
         self._context: TradeEngineContext | None = None
+        self._source_artifact_path: Path | None = None
 
         self.logger: logging.Logger = logging.getLogger("pfund")
         self.products: dict[ProductName, BaseProduct] = {}
@@ -191,17 +192,17 @@ class ComponentMixin:
     def _get_components_signals(self, data: BarData) -> dict[ComponentName, Signals]:
         return self._databoy._wait_for_components_signals(data)
 
-    def forward(self, data: BarData):
+    def step(self, data: BarData):
         """Forwards the given bar data to the child components, wait for their signals,
         compute the component's signals, and then updates its trading store.
 
-        This forward function could be called manually.
-        Manual forward is triggered by the user, it could be useful in cases such as:
+        This function could be called manually.
+        Manual step forward is triggered by the user, it could be useful in cases such as:
             e.g. user wants to forward 1m data a bit earlier (bar is incomplete)
                 before the market close.
 
         Args:
-            data (BarData): The bar data to forward.
+            data (BarData): The bar data to step forward.
         """
         try:
             # NOTE: user might have manually called forward() before databoy does
@@ -680,8 +681,13 @@ class ComponentMixin:
         self, product: BaseProduct
     ) -> dict[Timeframe, list[int]]:
         venue = product.venue
-        assert venue is not None, "venue is not None"
-        return venue.METADATA.supported_resolutions
+        assert venue is not None, "product venue is not None"
+        VenueClass = venue.venue_class
+        assert VenueClass is not None, "venue class is not None"
+        return cast(
+            "dict[Timeframe, list[int]]",
+            VenueClass.METADATA.get_supported_resolutions(product),
+        )
 
     @staticmethod
     def dt(ts: float, tz: datetime.tzinfo = datetime.UTC) -> datetime.datetime:
@@ -700,12 +706,19 @@ class ComponentMixin:
 
     @property
     def _source_artifact(self) -> Path:
+        if self._source_artifact_path is not None:
+            return self._source_artifact_path
+
         import inspect
 
         source_file = inspect.getsourcefile(type(self))
         if source_file is None:
             raise ValueError(f"cannot locate source file for {type(self).__name__}")
         return Path(source_file)
+
+    @ray_method
+    def _set_source_artifact_path(self, source_artifact_path: str) -> None:
+        self._source_artifact_path = Path(source_artifact_path)
 
     @property
     def _data_artifact(self) -> IntoDataFrame:
@@ -1169,7 +1182,7 @@ class ComponentMixin:
                 continue
             VenueClass = product.venue.venue_class
             file_path = VenueClass._create_markets_yml_file_path(pfund_config.data_path)
-            product._load_market(file_path)
+            product.load_market(file_path)
 
     def _materialize(self):
         """Materialize historical frames only when a data range was requested."""

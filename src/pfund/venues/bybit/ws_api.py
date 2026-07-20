@@ -41,12 +41,13 @@ class BybitWebSocketAPI(BaseWebSocketAPI[BybitConfig, BybitAccount, BybitProduct
 
     def __init__(
         self,
-        env: Literal[Environment.PAPER, Environment.LIVE],
+        env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"],
+        config: BybitConfig | None = None,
         read_only: bool = False,
     ):
-        super().__init__(env=env, read_only=read_only)
+        super().__init__(env=env, config=config, read_only=read_only)
         self._apis: dict[BybitProduct.Category, BybitBaseWebSocketAPI] = {
-            category: API(env=env, read_only=read_only)
+            category: API(env=env, config=config, read_only=read_only)
             for category, API in self.APIS.items()
         }
 

@@ -35,13 +35,10 @@ from pfeed.streaming.zeromq import (
 from pfund.managers import OrderManager, PortfolioManager, RiskManager
 from pfund.enums import Environment, TradingVenue
 from pfund.engines.base_engine import BaseEngine
-from pfund.engines.contexts.trade_engine_context import TradeEngineContext
+from pfund.engines.contexts.trade_engine_context import SettingsT, TradeEngineContext
 from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 
 
-SettingsT = TypeVar(
-    "SettingsT", bound="TradeEngineSettings", default="TradeEngineSettings"
-)
 ContextT = TypeVar(
     "ContextT",
     bound="TradeEngineContext[Any]",

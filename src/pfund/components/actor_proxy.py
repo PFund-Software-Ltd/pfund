@@ -54,6 +54,7 @@ class ActorProxy(Generic[ComponentT]):
     ) -> ActorHandle[ComponentT]:
         import ray
 
+        source_artifact_path = component._source_artifact.resolve()
         ComponentClass: type[ComponentT] = component.__class__
         try:
             ComponentActor: ActorClass[ComponentT] = ray.remote(**ray_kwargs)(
@@ -62,7 +63,7 @@ class ActorProxy(Generic[ComponentT]):
         except ValueError as err:
             raise ValueError(f"{ComponentClass.__name__} {ray_kwargs=}:\n{err}")
 
-        return cast(
+        actor = cast(
             "ActorHandle[ComponentT]",
             (
                 ComponentActor.options(**ray_actor_options).remote(  # pyright: ignore[reportUnknownMemberType]
@@ -70,6 +71,12 @@ class ActorProxy(Generic[ComponentT]):
                 )
             ),
         )
+        ray.get(
+            getattr(actor, "_set_source_artifact_path").remote(
+                str(source_artifact_path)
+            )
+        )
+        return actor
 
     @property
     def actor(self) -> ActorHandle[ComponentT]:
