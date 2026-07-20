@@ -99,6 +99,20 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         name: str = "",
         storage_config: StorageConfig | None = None,
     ) -> StrategyT:
+        """Add a strategy as the top-level backtesting component.
+
+        Backtesting supports one top-level strategy per engine.
+
+        Args:
+            strategy: Strategy instance to backtest.
+            resolution: Resolution at which the strategy runs.
+            name: Optional name for the strategy. Defaults to its class name.
+            storage_config: Per-strategy storage configuration. Uses the engine's
+                storage configuration when omitted.
+
+        Returns:
+            The strategy configured for backtesting.
+        """
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
         from pfund.components.strategies.strategy_backtest import BacktestStrategy
 
@@ -177,6 +191,22 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         df_form: Literal["wide", "long"] = "wide",
         storage_config: StorageConfig | None = None,
     ) -> ModelT:
+        """Add a model as the top-level backtesting component.
+
+        The model is hosted by an internal dummy strategy. Only one top-level
+        model or feature may be added per engine.
+
+        Args:
+            model: Model instance, or supported underlying model, to backtest.
+            resolution: Resolution at which the model runs.
+            name: Optional name for the model.
+            df_form: Dataframe layout used by the model.
+            storage_config: Per-model storage configuration. Uses the engine's
+                storage configuration when omitted.
+
+        Returns:
+            The model configured for backtesting.
+        """
         from pfund.components.models.wrap import wrap_model
 
         return self._add_component(
@@ -195,6 +225,23 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         df_form: Literal["wide", "long"] = "wide",
         storage_config: StorageConfig | None = None,
     ) -> FeatureT:
+        """Add a feature as the top-level backtesting component.
+
+        The feature is hosted by an internal dummy strategy. Only one top-level
+        model or feature may be added per engine.
+
+        Args:
+            feature: Feature instance to backtest.
+            resolution: Resolution at which the feature runs. Uses the feature's
+                resolution when omitted.
+            name: Optional name for the feature.
+            df_form: Dataframe layout used by the feature.
+            storage_config: Per-feature storage configuration. Uses the engine's
+                storage configuration when omitted.
+
+        Returns:
+            The feature configured for backtesting.
+        """
         return self._add_component(
             component=feature,
             resolution=resolution,

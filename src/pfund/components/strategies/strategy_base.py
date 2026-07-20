@@ -137,6 +137,23 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ) -> StrategyT | ActorProxy[StrategyT] | None:
+        """Add a child strategy to this strategy.
+
+        Args:
+            strategy: Strategy instance or remote strategy proxy to add.
+            resolution: Resolution at which the child strategy runs. Inherits
+                this strategy's resolution when omitted.
+            name: Optional name for the child strategy.
+            storage_config: Per-strategy storage configuration. Inherits this
+                strategy's storage configuration when omitted.
+            ray_actor_options: Options passed to the Ray actor.
+            ray_kwargs: Ray actor constructor arguments. Providing these runs the
+                child strategy remotely.
+
+        Returns:
+            The added child strategy or its remote proxy. Returns ``None`` when
+            adding a local child strategy to a remote parent strategy.
+        """
         strategy._mark_as_substrategy()
         strategy = self._add_component(
             component=strategy,

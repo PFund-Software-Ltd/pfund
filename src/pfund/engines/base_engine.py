@@ -114,15 +114,20 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ) -> StrategyT | ActorProxy[StrategyT]:
-        """
+        """Add a strategy to the engine.
+
         Args:
-            storage_config:
-                per-strategy override for where this strategy's artifacts are persisted.
-                Falls back to the engine-level default (self._storage_config) when None.
-            df_form: DataFrame layout used by this strategy.
-            ray_actor_options:
-                Options for Ray actor.
-                will be passed to ray actor like this: Actor.options(**ray_options).remote(**ray_kwargs)
+            strategy: Strategy instance to add.
+            resolution: Resolution at which the strategy runs.
+            name: Optional name for the strategy.
+            storage_config: Per-strategy storage configuration. Uses the engine's
+                storage configuration when omitted.
+            ray_actor_options: Options passed to the Ray actor.
+            ray_kwargs: Ray actor constructor arguments. Providing these runs the
+                strategy remotely.
+
+        Returns:
+            The added strategy or its remote proxy.
         """
         from pfund.components.actor_proxy import ActorProxy
         from pfund.components.strategies.strategy_base import BaseStrategy

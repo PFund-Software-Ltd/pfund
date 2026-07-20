@@ -979,6 +979,25 @@ class ComponentMixin:
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ) -> ModelT | ActorProxy[ModelT] | None:
+        """Add a model as a child of this component.
+
+        Args:
+            model: PFund model, remote model proxy, or supported underlying model
+                to add.
+            resolution: Resolution at which the model runs. Inherits this
+                component's resolution when omitted.
+            name: Optional name for the model.
+            df_form: DataFrame layout used by the model.
+            storage_config: Per-model storage configuration. Inherits this
+                component's storage configuration when omitted.
+            ray_actor_options: Options passed to the Ray actor.
+            ray_kwargs: Ray actor constructor arguments. Providing these runs the
+                model remotely.
+
+        Returns:
+            The added model or its remote proxy. Returns ``None`` when adding a
+            local model to a remote parent component.
+        """
         from pfund.components.models.wrap import wrap_model
 
         return self._add_component(
@@ -1001,6 +1020,24 @@ class ComponentMixin:
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ) -> FeatureT | ActorProxy[FeatureT] | None:
+        """Add a feature as a child of this component.
+
+        Args:
+            feature: Feature instance or remote feature proxy to add.
+            resolution: Resolution at which the feature runs. Inherits this
+                component's resolution when omitted.
+            name: Optional name for the feature.
+            df_form: DataFrame layout used by the feature.
+            storage_config: Per-feature storage configuration. Inherits this
+                component's storage configuration when omitted.
+            ray_actor_options: Options passed to the Ray actor.
+            ray_kwargs: Ray actor constructor arguments. Providing these runs the
+                feature remotely.
+
+        Returns:
+            The added feature or its remote proxy. Returns ``None`` when adding a
+            local feature to a remote parent component.
+        """
         return self._add_component(
             component=feature,
             resolution=resolution,
