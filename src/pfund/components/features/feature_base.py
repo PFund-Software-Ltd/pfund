@@ -52,10 +52,13 @@ class BaseFeature(ComponentMixin, ABC, metaclass=MetaFeature):
             )
 
         if not self._signal_cols:
-            num_cols = len(features) if isinstance(features, dict) else 1
-            signal_cols = self._get_default_signal_cols(num_cols=num_cols)
+            if isinstance(features, dict):
+                signal_cols = list(features)
+            else:
+                signal_cols = self._get_default_signal_cols(num_cols=1)
             self.set_signal_cols(signal_cols)
 
+        # normalize features to dict
         if not isinstance(features, dict):
             if len(self._signal_cols) > 1:
                 raise ValueError(

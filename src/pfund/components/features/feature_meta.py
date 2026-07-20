@@ -66,7 +66,7 @@ class MetaFeature(ABCMeta):
                 from pfund_kit.utils.function import get_function_args_and_kwargs
 
                 init_args, _, _, _ = get_function_args_and_kwargs(original_init)
-                # assert users to include 'indicator' as the first argument in __init__() (TalibIndicator subclasses only)
+                # assert users to include 'indicator' as the first argument in __init__() (TALibIndicator subclasses only)
                 MetaFeature._assert_required_arg(cls, init_args)
 
         if name == "_BacktestFeature":
@@ -76,14 +76,14 @@ class MetaFeature(ABCMeta):
 
     @staticmethod
     def _get_required_arg(component_class: type) -> Literal["indicator", ""]:
-        # plain features require no first arg; TalibIndicator subclasses must lead with
-        # `indicator` since the init wrapper feeds the same args to TalibIndicator.__init__
+        # plain features require no first arg; TALibIndicator subclasses must lead with
+        # `indicator` since the init wrapper feeds the same args to TALibIndicator.__init__
         try:
-            from pfund.components.features.feature_talib import TalibIndicator
+            from pfund.components.features.feature_talib import TALibIndicator
         except ImportError:
-            # talib not installed -> no TalibIndicator subclasses can exist
+            # talib not installed -> no TALibIndicator subclasses can exist
             return ""
-        if issubclass(component_class, TalibIndicator):
+        if issubclass(component_class, TALibIndicator):
             return "indicator"
         return ""
 

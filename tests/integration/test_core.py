@@ -95,7 +95,7 @@ class TestCore:
 
         # add talib indicator
         strategy.add_indicator(
-            ind.TalibIndicator(talib.SMA, timeperiod=3, price="close"), name="SMA"
+            ind.TALibIndicator(talib.SMA, timeperiod=3, price="close"), name="SMA"
         )
 
         engine.run()

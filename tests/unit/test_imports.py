@@ -67,9 +67,9 @@ def test_import_feature():
 
 def test_import_talib_indicator():
     try:
-        from pfund import TalibIndicator
+        from pfund import TALibIndicator
     except ImportError:
-        pytest.fail("Failed to import 'TalibIndicator' package")
+        pytest.fail("Failed to import 'TALibIndicator' package")
 
 
 @pytest.mark.smoke

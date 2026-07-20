@@ -17,7 +17,6 @@ if TYPE_CHECKING:
         AccountName,
         Component,
         ComponentName,
-        ComponentT,
         StrategyT,
         Signals,
         Currency,
@@ -27,7 +26,6 @@ if TYPE_CHECKING:
 from abc import ABC, abstractmethod
 
 from pfund.entities.orders.order_base import BaseOrder
-from pfund.engines.component_registry import TOP_LEVEL_STRATEGY_SIGNAL_OWNER
 from pfund.utils.decorators import ray_method
 from pfund.components.mixin import ComponentMixin
 from pfund.components.strategies.strategy_meta import MetaStrategy

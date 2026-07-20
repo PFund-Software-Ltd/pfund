@@ -19,8 +19,9 @@ if TYPE_CHECKING:
     from pfund._backtest.typing import PolarsBacktestDataFrame, PandasBacktestDataFrame
     from pfund.components.features.feature_base import BaseFeature as Feature
     from pfund.components.features.feature_talib import (
-        TalibIndicator,
-        TalibIndicator as Indicator,
+        TALibIndicator,
+        TALibIndicator as TalibIndicator,
+        TALibIndicator as Indicator,
     )
     from pfund.components.models.model_base import BaseModel as Model
     from pfund.components.models.pytorch_model import (
@@ -127,10 +128,10 @@ def __getattr__(name: str):
         from pfund.components.models.jax_model import JAXModel
 
         return JAXModel
-    elif name in ("TalibIndicator", "Indicator"):
-        from pfund.components.features.feature_talib import TalibIndicator
+    elif name in ("TALibIndicator", "TalibIndicator", "Indicator"):
+        from pfund.components.features.feature_talib import TALibIndicator
 
-        return TalibIndicator
+        return TALibIndicator
     elif name in ("InteractiveBrokers", "IBKR", "IB"):
         from pfund.venues.ibkr import InteractiveBrokers
 
@@ -181,6 +182,7 @@ __all__ = (
     "JaxModel",
     "Indicator",
     "TalibIndicator",
+    "TALibIndicator",
     "InteractiveBrokers",
     "IBKR",
     "IB",
