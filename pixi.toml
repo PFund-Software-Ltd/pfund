@@ -34,7 +34,7 @@ websockets = ">=16.1.1"
 numba = ">=0.66.0"
 
 [feature.optional.pypi-dependencies]
-pfeed = { version = ">=0.0.18", extras = ["yfinance"] }
+pfeed = { version = ">=0.0.19", extras = ["yfinance"] }
 pfolio = ">=0.0.4"
 pfund-plot = {version = ">=0.0.5", extras = ["marimo"]}
 # TODO: enable when ready

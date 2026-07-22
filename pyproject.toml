@@ -34,7 +34,7 @@ dependencies = [
 
 [project.optional-dependencies]
 core = [
-    'pfeed[yfinance]>=0.0.18',
+    'pfeed[yfinance]>=0.0.19',
     'pfolio>=0.0.4',
     'pfund-plot[marimo]>=0.0.5',
     # 'mtflow>=0.0.1.dev2',
