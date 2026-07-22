@@ -35,6 +35,7 @@ import hashlib
 import json
 import logging
 from pathlib import Path
+from functools import cached_property
 
 import narwhals as nw
 from pfeed.enums import DataCategory
@@ -436,7 +437,12 @@ class ComponentMixin:
             "features": sorted(self.features),
         }
 
-    @property
+    # Component identity must remain fixed after its first use. Runtime work can
+    # mutate objects in the identity signature (e.g. materializing a PyTorch
+    # LazyLinear), so recomputing this property could write one component's
+    # artifacts under different IDs. Keep this cached so every artifact uses
+    # the same ID for the lifetime of the component.
+    @cached_property
     def component_id(self) -> str:
         identity = self._identity_fields()
         payload = json.dumps(
@@ -1196,21 +1202,33 @@ class ComponentMixin:
         """Sets up everything before start"""
         # NOTE: use is_gathered to avoid a component being gathered multiple times when it's a shared component
         if not self._is_gathered:
+            # 1. Let the component declare its complete graph.
             self.add_datas()
             self.add_models()
             self.add_features()
+
+            # 2. Validate and normalize this component before expensive work.
             self._check_input_sources()
             self._check_config()
             self._reload_markets()
+
+            # 3. Prepare dependencies completely, bottom-up.
             for component in self.components:
                 component._gather()
+
+            # 4. Validate state that child gathering establishes.
             self._assert_unique_child_signal_cols()
+
+            # 5. Materialize this component from its prepared dependencies.
             self._materialize()
+
+            # 6. Persist provenance only after successful setup.
             # NOTE: Keep this as the last setup step. During materialization,
             # pfeed normalizes data.config.storage_config.data_domain from "" to
             # "MARKET_DATA"; that changes the `datas` payload in component_id.
             # Save only after such mutations so every artifact uses the same ID.
             self.store._save_source_artifact()
+
             self._is_gathered = True
             self.logger.debug(f"'{self.name}' has gathered")
         else:

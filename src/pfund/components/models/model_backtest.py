@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -27,6 +28,7 @@ def BacktestModel(
         def is_training(self) -> bool:
             return self._is_training
 
+        @override
         def _materialize(self):
             super()._materialize()
             try:

@@ -27,6 +27,28 @@ from pfund.components.mixin import ComponentMixin
 from pfund.components.models.model_meta import MetaModel
 
 
+def _get_caller_source_artifact_path() -> str | None:
+    """Return the first caller source file outside pfund itself."""
+    import inspect
+    from pathlib import Path
+
+    pfund_package_path = Path(__file__).resolve().parents[2]
+    frame = inspect.currentframe()
+    try:
+        frame = frame.f_back if frame is not None else None
+        while frame is not None:
+            source_artifact_path = Path(frame.f_code.co_filename).resolve()
+            if (
+                not source_artifact_path.is_relative_to(pfund_package_path)
+                and source_artifact_path.is_file()
+            ):
+                return str(source_artifact_path)
+            frame = frame.f_back
+    finally:
+        del frame
+    return None
+
+
 class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
     _allowed_model_method_collisions: ClassVar[frozenset[str]] = frozenset({"predict"})
 
@@ -35,6 +57,13 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         self.__mixin_post_init__(
             model, *args, **kwargs
         )  # calls ComponentMixin.__mixin_post_init__()
+        # Built-in adapters otherwise resolve their source artifact to this
+        # pfund file. Capture the user's construction site here so both
+        # PyTorchModel(model) and automatic wrapping retain user provenance.
+        # User-defined wrapper classes keep their class file as the artifact.
+        if type(self).__module__.startswith("pfund."):
+            if source_artifact_path := _get_caller_source_artifact_path():
+                self._set_source_artifact_path(source_artifact_path)
         self._assert_no_model_method_collisions()
 
     def _assert_no_model_method_collisions(self) -> None:

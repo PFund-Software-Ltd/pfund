@@ -15,6 +15,7 @@ import numpy as np
 import narwhals as nw
 from safetensors.torch import save, load
 
+from pfund.components.bar_dataframe import KEY_COLS as BAR_KEY_COLS
 from pfund.components.models.model_base import BaseModel
 
 
@@ -69,6 +70,11 @@ class PyTorchModel(BaseModel):
                 )
             if isinstance(frame, nw.LazyFrame):
                 frame = frame.collect()
+            # PFund keeps bar keys in feature dataframes for row alignment, but
+            # date/product/resolution are not numerical model inputs.
+            key_cols = [col for col in BAR_KEY_COLS if col in frame.columns]
+            if key_cols:
+                frame = frame.drop(key_cols)
             array = frame.to_numpy()
         return torch.tensor(array, dtype=dtype, device=device)
 
