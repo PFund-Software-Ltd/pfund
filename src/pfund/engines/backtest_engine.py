@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, ClassVar
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
-    from sklearn.model_selection import TimeSeriesSplit
     from mtflow.contexts.backtest_context import BacktestContext
 
     from pfund.components.models.model_base import BaseModel, UnderlyingModel
@@ -13,15 +12,15 @@ if TYPE_CHECKING:
     from pfund.components.features.feature_base import BaseFeature
     from pfund.datas.resolution import Resolution
     from pfund.engines.base_engine import DataRangeDict
+    from pfund.engines.contexts.backtest_engine_context import DatasetSplits
     from pfund.typing import FeatureT, ModelT, StrategyT
-    from pfund._backtest.cv.base import CrossValidatorDatasetPeriods
-    from pfund._backtest.dataset_splitter import DatasetPeriods, DatasetSplitsDict
 
     BacktesteeName: TypeAlias = str
 
 import os
 
 import narwhals as nw
+import numpy as np
 from pfund_kit.utils.progress_bar import ProgressBar
 from pfeed.storages.storage_config import StorageConfig
 
@@ -29,6 +28,51 @@ from pfund.engines.base_engine import BaseEngine
 from pfund.engines.contexts.backtest_engine_context import BacktestEngineContext
 from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
 from pfund.enums import BacktestMode, Environment
+
+
+def _split_df_into_time_chunks(
+    df: nw.DataFrame[Any],
+    num_chunks: int,
+) -> list[tuple[nw.DataFrame[Any], int]]:
+    """Split a sorted dataframe into contiguous, timestamp-safe chunks."""
+    if num_chunks < 1:
+        raise ValueError("num_chunks must be greater than 0")
+    if "date" not in df.columns:
+        raise ValueError("chunked backtesting requires a 'date' column")
+
+    date = df.get_column("date")
+    if len(date) == 0:
+        raise ValueError("chunked backtesting requires at least one row")
+    if date.is_null().any():
+        raise ValueError("chunked backtesting does not support null dates")
+    if not date.is_sorted():
+        raise ValueError("the dataframe must be sorted by 'date' before chunking")
+
+    row_dates = date.to_numpy()
+    starts_new_time = np.empty(len(row_dates), dtype=bool)
+    starts_new_time[0] = True
+    starts_new_time[1:] = row_dates[1:] != row_dates[:-1]
+    time_starts = np.flatnonzero(starts_new_time)
+    num_times = len(time_starts)
+    if num_chunks > num_times:
+        raise ValueError(
+            f"num_chunks ({num_chunks}) cannot exceed the number of unique "
+            + f"timestamps ({num_times})"
+        )
+
+    row_boundaries = np.append(time_starts, len(row_dates))
+    time_chunks = np.array_split(np.arange(num_times), num_chunks)
+    return [
+        (
+            df[
+                int(row_boundaries[time_chunk[0]]) : int(
+                    row_boundaries[time_chunk[-1] + 1]
+                )
+            ],
+            chunk_num,
+        )
+        for chunk_num, time_chunk in enumerate(time_chunks)
+    ]
 
 
 class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
@@ -47,7 +91,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         storage_config: StorageConfig | None = None,
         mode: BacktestMode
         | Literal["vectorized", "event_driven"] = BacktestMode.VECTORIZED,
-        dataset_splits: int | DatasetSplitsDict | TimeSeriesSplit = 721,
+        dataset_splits: DatasetSplits = 721,
         # TODO:
         # profiling: bool=False,
     ):
@@ -69,8 +113,20 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 their artifacts. Overridable per-component via
                 add_strategy(..., storage_config=...) / add_model(...).
                 If not provided, a default StorageConfig() (local storage) is used.
+            dataset_splits:
+                None to use the complete dataset as training data, a three-digit
+                legacy ratio such as 721, a ratio dict, Holdout, or an
+                sklearn-compatible cross-validator. Dataset splitting is only
+                available in vectorized mode.
         """
         env = Environment.BACKTEST
+        mode = BacktestMode[mode.upper()]
+        if mode == BacktestMode.EVENT_DRIVEN and dataset_splits is not None:
+            raise ValueError(
+                "event-driven backtesting requires dataset_splits=None; "
+                + "dataset splitting and cross-validation are only supported "
+                + "in vectorized mode"
+            )
         # NOTE: create context first to set up config by engine name before super().__init__()
         self._context = self._create_context(
             env=env,
@@ -87,10 +143,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
     @property
     def backtest_mode(self) -> BacktestMode:
         return self._context.mode
-
-    @property
-    def dataset_periods(self) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
-        return self._context.dataset_periods
 
     def add_strategy(
         self,
@@ -396,12 +448,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                     )
                     return None
 
-            df_chunks: list[tuple[nw.DataFrame[Any], int]] = []
-            total_rows = df.shape[0]
-            chunk_size: int = total_rows // num_chunks
-            for chunk_num, row_offset in enumerate(range(0, total_rows, chunk_size)):
-                df_chunk: nw.DataFrame[Any] = df[row_offset : row_offset + chunk_size]
-                df_chunks.append((df_chunk, chunk_num))
+            df_chunks = _split_df_into_time_chunks(df, num_chunks)
 
             logger = backtestee.logger
             self._logger.debug("setting up ray...")

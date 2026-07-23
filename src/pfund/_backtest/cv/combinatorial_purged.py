@@ -13,13 +13,12 @@ implementation instead:
   - historical reference: mlfinlab.cross_validation.CombinatorialPurgedKFold
       (now behind Hudson & Thames' paid tier)
 
-CPCV breaks the current one-return-shape assumption: it emits paths, so the output
-type will differ from `CrossValidatorDatasetPeriods` (which is per-fold). Design the
-path-assembly type here when implementing; `fold_cv_region` is per-fold and will
-NOT map cleanly onto paths.
+CPCV breaks the current one-return-shape assumption: it emits paths rather than
+only independent Fold objects. Design the path-assembly type here when
+implementing; the current tuple of folds does not capture that structure.
 
 PREREQUISITE: same as purged K-Fold — needs per-sample label end-times (`t1`) and
-an embargo fraction, which the range-based `DatasetSplitter` does not have.
+an embargo fraction, which PFund's current split configuration does not carry.
 """
 
 from __future__ import annotations

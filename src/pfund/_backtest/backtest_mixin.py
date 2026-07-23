@@ -7,15 +7,8 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 from typing_extensions import override
 
 if TYPE_CHECKING:
-    from typing import TypeVar
-
-    from numpy.typing import NDArray
-    from narwhals.typing import IntoDataFrame, IntoSeries
+    from narwhals.typing import IntoDataFrame
     from pfeed.storages.storage_config import StorageConfig
-
-    # constrained (not bound) so the exact input type is preserved on the way out:
-    # DataFrame in -> DataFrame out, Series in -> Series out, ndarray in -> ndarray out
-    DataT = TypeVar("DataT", IntoDataFrame, IntoSeries, "NDArray[Any]")
 
     from pfund.datas.timeframe import Timeframe
     from pfund.datas.data_base import BaseData
@@ -25,12 +18,11 @@ if TYPE_CHECKING:
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.entities.products.product_base import BaseProduct
     from pfund.typing import ComponentT, Signals, Component, ComponentName
-    from pfund._backtest.cv.base import CrossValidatorDatasetPeriods
-    from pfund._backtest.dataset_splitter import DatasetPeriods
+    from pfund._backtest.cv.dataset_split import DatasetSplit
+    from pfund._backtest.cv.fold import Fold
 
 from pathlib import Path
 
-import numpy as np
 import narwhals as nw
 from narwhals.dependencies import is_into_dataframe
 from pfund_kit.style import cprint, RichColor, TextStyle
@@ -46,6 +38,7 @@ from pfund.components.bar_dataframe import (
     validate_spine_df,
 )
 from pfund.enums import BacktestMode
+from pfund._backtest.cv.indexing import DataT
 
 
 class BacktestMixin:
@@ -55,6 +48,8 @@ class BacktestMixin:
         super().__mixin_post_init__(*args, **kwargs)
         # top components are the ones added by engine.add_strategy/model/feature()
         self._is_top_component = False
+        self._dataset_split: DatasetSplit | None = None
+        self._folds: tuple[Fold, ...] = ()
 
     @property
     def context(self) -> BacktestEngineContext:
@@ -70,8 +65,57 @@ class BacktestMixin:
         return self._context.mode
 
     @property
-    def dataset_periods(self) -> DatasetPeriods | list[CrossValidatorDatasetPeriods]:
-        return self.context.dataset_periods
+    def folds(self) -> tuple[Fold, ...]:
+        return self._folds
+
+    @property
+    def X_train(self) -> IntoDataFrame | None:
+        """Feature rows in the single training split.
+
+        Cross-validation has multiple training splits, so access them through
+        ``fold.X_train`` instead.
+        """
+        dataset_split = self._get_dataset_split()
+        return None if dataset_split is None else dataset_split.X_train
+
+    @property
+    def X_val(self) -> IntoDataFrame | None:
+        """Feature rows in the single validation split.
+
+        Cross-validation has multiple validation splits, so access them through
+        ``fold.X_val`` instead.
+        """
+        dataset_split = self._get_dataset_split()
+        return None if dataset_split is None else dataset_split.X_val
+
+    @property
+    def X_test(self) -> IntoDataFrame | None:
+        """Feature rows in the single test split.
+
+        Cross-validation does not define a test split.
+        """
+        dataset_split = self._get_dataset_split()
+        return None if dataset_split is None else dataset_split.X_test
+
+    def _resolve_dataset_splits(self) -> None:
+        from pfund._backtest.cv.dataset_split import DatasetSplit
+        from pfund._backtest.cv.resolver import resolve_dataset_splits
+
+        resolved = resolve_dataset_splits(
+            self.X,
+            self.context.dataset_splits,
+        )
+        if isinstance(resolved, DatasetSplit):
+            self._dataset_split = resolved
+            self._folds = ()
+        else:
+            self._dataset_split = None
+            self._folds = resolved
+
+    def _get_dataset_split(self) -> DatasetSplit | None:
+        if self._dataset_split is None and not self._folds:
+            self._resolve_dataset_splits()
+        return self._dataset_split
 
     @staticmethod
     def _validate_backtest_signature(
@@ -313,178 +357,40 @@ class BacktestMixin:
         # TODO: return the backtested dataframe, how?
         return df
 
-    def _get_dataset(
-        self,
-        key: Literal["train_set", "dev_set", "test_set"],
-        data: IntoDataFrame | IntoSeries | NDArray[Any] | None = None,
-        fold: int | None = None,
-    ) -> IntoDataFrame | IntoSeries | NDArray[Any] | None:
-        """Slice a dataset down to `key`'s date window.
-
-        dataset_periods only computes the date boundaries; this turns those
-        dates into rows. By default it slices the full feature dataset (self.df).
-        Pass `data` to slice an external object (e.g. a target y) by the SAME
-        window so it stays aligned with the features; `data` must be row-aligned
-        1:1 with self.df (same length and order).
-
-        Args:
-            data: object to slice instead of self.df. A DataFrame/Series is
-                filtered by the mask; a bare ndarray is sliced positionally by
-                it. Leave None to slice self.df.
-            fold: which CV fold to slice. Leave None for a ratio split; it is
-                required (and picks the fold) under cross-validation.
-
-        Returns None when the dataset isn't materialized yet, the segment
-        collapsed to 0 days ((None, None)), or the split doesn't define `key`
-        (CV folds have no test_set — the test hold-out lives outside the folds).
-        """
-        import narwhals as nw
-
-        periods = self.dataset_periods
-        if isinstance(periods, list):
-            if fold is None:
-                raise ValueError(
-                    f"{self.name} uses cross-validation ({len(periods)} folds); "
-                    + f"pass fold=0..{len(periods) - 1} to pick one"
-                )
-            if not 0 <= fold < len(periods):
-                raise IndexError(f"fold {fold} out of range for {len(periods)} folds")
-            period = periods[fold]
-        else:
-            if fold is not None:
-                raise ValueError(
-                    f"{self.name} uses a ratio split, not cross-validation; "
-                    + "fold must be None"
-                )
-            period = periods
-
-        window = period.get(key)
-        if window is None:
-            return None
-        start, end = window
-        if start is None or end is None:
-            return None
-
-        # build the row mask once from self.df's date column (the only source
-        # guaranteed to carry `date`), then apply it to whatever we're slicing so
-        # X and any aligned `data` (y) share the window
-        date = nw.from_native(self.df)["date"].dt.date()
-        mask = (date >= start) & (date <= end)
-        if data is None:
-            return nw.from_native(self.df).filter(mask).to_native()
-        else:
-            # `data` is sliced positionally, so it MUST be row-aligned 1:1 with self.df;
-            # a length mismatch means the slice would silently misalign X and y
-            n_ref = mask.len()
-            n_data = (
-                data.shape[0]
-                if isinstance(data, np.ndarray)
-                else len(nw.from_native(data, allow_series=True))
-            )
-            if n_data != n_ref:
-                raise ValueError(
-                    f"{self.name}: `data` must be row-aligned 1:1 with the dataset "
-                    + f"({n_ref} rows), but got {n_data} rows"
-                )
-
-            if isinstance(data, np.ndarray):
-                # bare ndarray has no date column -> positional slice by the same mask
-                return data[mask.to_numpy()]
-            return nw.from_native(data, allow_series=True).filter(mask).to_native()
-
-    @property
-    def train_set(self) -> IntoDataFrame | None:
-        """Rows of the training split."""
-        return self.get_train_set()
-
-    training_set = train_set
-
-    @property
-    def dev_set(self) -> IntoDataFrame | None:
-        """Rows of the dev (validation) split."""
-        return self.get_dev_set()
-
-    val_set = validation_set = development_set = dev_set
-
-    @property
-    def test_set(self) -> IntoDataFrame | None:
-        """Rows of the test split."""
-        return self.get_test_set()
-
-    def get_train_set(self, fold: int | None = None) -> IntoDataFrame | None:
-        """Rows of the training split.
-
-        Args:
-            fold: which cross-validation fold to slice, 0-indexed. Leave None
-                for a ratio split (there is a single train set); required under
-                cross-validation, where it selects the fold.
-        """
-        return cast("IntoDataFrame | None", self._get_dataset("train_set", fold=fold))
-
-    get_training_set = get_train_set
-
-    def get_dev_set(self, fold: int | None = None) -> IntoDataFrame | None:
-        """Rows of the dev (validation) split.
-
-        Args:
-            fold: which cross-validation fold to slice, 0-indexed. Leave None
-                for a ratio split (there is a single dev set); required under
-                cross-validation, where it selects the fold.
-        """
-        return cast("IntoDataFrame | None", self._get_dataset("dev_set", fold=fold))
-
-    get_val_set = get_validation_set = get_development_set = get_dev_set
-
-    def get_test_set(self, fold: int | None = None) -> IntoDataFrame | None:
-        """Rows of the test (hold-out) split.
-
-        Args:
-            fold: which cross-validation fold to slice, 0-indexed. Leave None
-                for a ratio split. Note CV folds have no test set (the test
-                hold-out lives outside the folds), so this returns None for
-                any fold under cross-validation.
-        """
-        return cast("IntoDataFrame | None", self._get_dataset("test_set", fold=fold))
-
-    def split_dataset(
+    def split(
         self,
         data: DataT,
-        fold: int | None = None,
     ) -> tuple[DataT | None, DataT | None, DataT | None]:
-        """Split `data` into (train, dev, test) slices using the same date
-        windows as the features (self.df).
+        """Split aligned data into the component's train/validation/test sets.
 
-        `data` is sliced positionally by a mask built from self.df, so it needs
+        `data` is sliced positionally by selectors built from X, so it needs
         no `date` column of its own — it only has to be row-aligned 1:1 with
-        self.df (same length and order). A target y, class labels, sample
-        weights, or any per-row companion of the features therefore split on the
-        identical boundaries as train_set/dev_set/test_set. This is how X and y
-        stay aligned: put each through the same window.
+        X (same length and order). A target y, class labels, sample
+        weights, or any per-row companion of the features therefore uses the
+        same boundaries as X.
 
             close = next(c for c in model.df.columns if c.endswith(":close"))
             y = model.df.get_column(close).shift(-1) / model.df.get_column(close) - 1.0
-            X_train, X_val, _ = model.split_dataset(model.df)
-            y_train, y_val, _ = model.split_dataset(y)
+            X_train, X_val, _ = model.split(model.X)
+            y_train, y_val, _ = model.split(y)
             model.fit(X_train, y_train)
 
         Args:
-            data: a DataFrame, Series, or ndarray row-aligned 1:1 with self.df.
-            fold: which cross-validation fold to slice, 0-indexed. Leave None for
-                a ratio split; required under cross-validation, where it selects
-                the fold (test is always None per fold — the hold-out lives
-                outside the folds).
+            data: a DataFrame, Series, or ndarray row-aligned 1:1 with X.
 
-        Returns a (train, dev, test) tuple; any segment that collapsed to 0 days
-        or is undefined for the split is None.
+        Returns a (train, val, test) tuple; any segment that collapsed to 0
+        timestamps or is undefined for the split is None.
+
+        Cross-validation has multiple splits, so call ``fold.split(data)`` on
+        each item in ``component.folds`` instead.
         """
-        return cast(
-            "tuple[DataT | None, DataT | None, DataT | None]",
-            (
-                self._get_dataset("train_set", data=data, fold=fold),
-                self._get_dataset("dev_set", data=data, fold=fold),
-                self._get_dataset("test_set", data=data, fold=fold),
-            ),
-        )
+        dataset_split = self._get_dataset_split()
+        if dataset_split is None:
+            raise ValueError(
+                "component.split() is undefined under cross-validation; "
+                + "iterate over component.folds and call fold.split(data)"
+            )
+        return dataset_split.split(data)
 
     @override
     def _add_component(
@@ -593,6 +499,7 @@ class BacktestMixin:
                     self.store.persist_to_lakehouse()
                 else:
                     self.store._df = X
+            self._resolve_dataset_splits()
         elif self.backtest_mode == BacktestMode.EVENT_DRIVEN:
             if self._reuse_child_component_signals:
                 self.store.materialize()

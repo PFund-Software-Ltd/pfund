@@ -17,6 +17,8 @@ if TYPE_CHECKING:
     from pfund.venues.binance import Binance
     from pfund.venues.okx import OKX
     from pfund._backtest.typing import PolarsBacktestDataFrame, PandasBacktestDataFrame
+    from pfund._backtest.cv.cross_validation import CrossValidation
+    from pfund._backtest.cv.holdout import Holdout
     from pfund.components.features.feature_base import BaseFeature as Feature
     from pfund.components.features.feature_talib import (
         TALibIndicator,
@@ -74,6 +76,14 @@ def __getattr__(name: str):
         from pfund.engines.backtest_engine import BacktestEngine
 
         return BacktestEngine
+    elif name == "Holdout":
+        from pfund._backtest.cv.holdout import Holdout
+
+        return Holdout
+    elif name == "CrossValidation":
+        from pfund._backtest.cv.cross_validation import CrossValidation
+
+        return CrossValidation
     elif name == "PolarsBacktestDataFrame":
         from pfund._backtest.typing import PolarsBacktestDataFrame
 
@@ -164,6 +174,8 @@ __all__ = (
     "configure_logging",
     "DataConfig",
     "BacktestEngine",
+    "Holdout",
+    "CrossValidation",
     "TradeEngine",
     "SandboxEngine",
     "TradeEngineSettings",
