@@ -56,7 +56,7 @@ pfund = { path = ".", editable = true }
 # pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo"] }
 # pfund-kit = { path = "../pfund-kit", editable = true }
 # pfolio = { path = "../pfolio", editable = true }
-# mtflow = { path = "../mtflow", editable = true }
+mtflow = { path = "../mtflow", editable = true }
 afterpython = ">=0.3.17"
 basedpyright = ">=1.39.9"
 memray = ">=1.19.3"

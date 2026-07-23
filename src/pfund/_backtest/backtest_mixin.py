@@ -512,7 +512,6 @@ class BacktestMixin:
 
             component = BacktestModel(
                 Component,
-                component.model,
                 *component.__pfund_args__,
                 **component.__pfund_kwargs__,
             )
