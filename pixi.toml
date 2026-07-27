@@ -4,8 +4,18 @@ channels = ["conda-forge"]
 name = "pfund"
 # macos = min version of macOS required by torch>=2.12.0
 platforms = [{ platform = "osx-arm64", macos = "14.0" }, "linux-64"]
-# NOTE: this depends on the lock version used in setup-pixi in ci.yml
-requires-pixi = "<=0.72.2"  # command: pixi workspace requires-pixi set "<=0.72.2"
+# NOTE: the minimum supports relative exclude-newer; the maximum matches setup-pixi in ci.yml
+requires-pixi = ">=0.67.0,<=0.72.2"
+# FIXME: set it back to "14 days" when the package is stable
+exclude-newer = "0d"
+
+[pypi-exclude-newer]
+afterpython = "0d"
+pfeed = "0d"
+pfolio = "0d"
+pfund-kit = "0d"
+pfund-plot = "0d"
+mtflow = "0d"
 
 [tasks]
 
@@ -26,10 +36,10 @@ py313 = ["py313", "test", "optional"]
 [dependencies]
 
 [pypi-dependencies]
-pfund-kit = ">=0.1.14"
-pfeed = ">=0.0.18"
+pfund-kit = ">=0.1.15"
+pfeed = ">=0.0.19"
 apscheduler = ">=3.11.3"
-httpx2 = { version = ">=2.7.0", extras = ["http2"] }
+httpx2 = { version = ">=2.9.1", extras = ["http2"] }
 websockets = ">=16.1.1"
 numba = ">=0.66.0"
 
@@ -52,12 +62,12 @@ ta-lib = ">=0.7.1"
 [feature.dev.pypi-dependencies]
 pfund = { path = ".", editable = true }
 # TEMP
-# pfeed = { path = "../pfeed", editable = true, extras = ["yfinance"] }
+pfeed = { path = "../pfeed", editable = true, extras = ["yfinance"] }
 # pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo"] }
 # pfund-kit = { path = "../pfund-kit", editable = true }
 # pfolio = { path = "../pfolio", editable = true }
 mtflow = { path = "../mtflow", editable = true }
-afterpython = ">=0.3.17"
+afterpython = ">=0.3.18"
 basedpyright = ">=1.39.9"
 memray = ">=1.19.3"
 pandas-stubs = ">=3.0.3.260530"

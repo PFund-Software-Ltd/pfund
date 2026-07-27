@@ -4,8 +4,6 @@ import math
 from typing import TYPE_CHECKING, Literal, TypeAlias, TypedDict
 
 if TYPE_CHECKING:
-    from pfeed.storages.storage_config import StorageConfig
-
     from pfund.engines.base_engine import DataRangeDict
 
 from pfund_kit.style import RichColor, TextStyle, cprint
@@ -31,11 +29,11 @@ DatasetSplits: TypeAlias = int | DatasetSplitsDict | Holdout | CrossValidator | 
 class BacktestEngineContext(BaseEngineContext[BacktestEngineSettings]):
     def __init__(
         self,
+        *,
         env: Environment,
         name: str,
         data_range: str | Resolution | DataRangeDict | tuple[str, str] | Literal["ytd"],
         settings: BacktestEngineSettings | None = None,
-        storage_config: StorageConfig | None = None,
         mode: BacktestMode
         | Literal["vectorized", "event_driven"] = BacktestMode.VECTORIZED,
         dataset_splits: DatasetSplits = 721,
@@ -45,7 +43,6 @@ class BacktestEngineContext(BaseEngineContext[BacktestEngineSettings]):
             name=name,
             data_range=data_range,
             settings=settings,
-            storage_config=storage_config,
         )
         self.mode = BacktestMode[mode.upper()]
         if self.mode == BacktestMode.EVENT_DRIVEN and self.settings.reuse_signals:

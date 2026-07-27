@@ -4,12 +4,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pydantic import field_validator
-
 from pfund_kit import logging as kit_logging
 from pfund_kit.config import Configuration
-from pfeed.storages.storage_config import StorageConfig as PFeedStorageConfig
-from pfeed.utils.file_path import FilePath
 
 from pfund.enums import Environment
 
@@ -19,27 +15,11 @@ __all__ = [
     "configure_logging",
     "get_config",
     "setup_logging",
-    "StorageConfig",
 ]
 
 
 project_name = "pfund"
 _config: PFundConfig | None = None
-
-
-class StorageConfig(PFeedStorageConfig):
-    @field_validator("data_path", mode="before")
-    @classmethod
-    def validate_data_path(cls, v: FilePath | Path | str | None) -> FilePath:
-        if v is None:
-            from pfund import get_config
-
-            config = get_config()
-            return FilePath(config.data_path)
-        elif not isinstance(v, FilePath):
-            return FilePath(v)
-        else:
-            return v
 
 
 def setup_logging(env: Environment | str, reset: bool = False) -> None:

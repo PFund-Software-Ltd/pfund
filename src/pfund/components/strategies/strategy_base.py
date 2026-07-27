@@ -5,7 +5,6 @@ from typing_extensions import override
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
-    from pfeed.storages.storage_config import StorageConfig
 
     from pfund.components.actor_proxy import ActorProxy
     from pfund.entities.accounts.account_base import BaseAccount
@@ -131,7 +130,6 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         strategy: StrategyT | ActorProxy[StrategyT],
         resolution: str = "",
         name: str = "",
-        storage_config: StorageConfig | None = None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ) -> StrategyT | ActorProxy[StrategyT] | None:
@@ -142,8 +140,6 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
             resolution: Resolution at which the child strategy runs. Inherits
                 this strategy's resolution when omitted.
             name: Optional name for the child strategy.
-            storage_config: Per-strategy storage configuration. Inherits this
-                strategy's storage configuration when omitted.
             ray_actor_options: Options passed to the Ray actor.
             ray_kwargs: Ray actor constructor arguments. Providing these runs the
                 child strategy remotely.
@@ -158,7 +154,6 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
             resolution=resolution,
             name=name,
             df_form="long",
-            storage_config=storage_config,
             ray_actor_options=ray_actor_options,
             **ray_kwargs,
         )

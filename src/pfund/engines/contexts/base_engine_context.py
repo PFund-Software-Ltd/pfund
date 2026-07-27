@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal, Generic, TypeVar, cast
+from urllib.parse import urlparse
 
 if TYPE_CHECKING:
     import datetime
@@ -10,7 +11,9 @@ if TYPE_CHECKING:
     from pfund.engines.settings.base_engine_settings import BaseEngineSettings
     from pfund.config import PFundConfig
     from pfund.engines.component_registry import RegistryProxy
-    from pfeed.storages.storage_config import StorageConfig
+
+from pfeed.enums import DataStorage
+from pfeed.storages.storage_config import StorageConfig
 
 from pfund.config import get_config, get_logging_config
 from pfund.datas.resolution import Resolution
@@ -23,10 +26,11 @@ SettingsT = TypeVar("SettingsT", bound="BaseEngineSettings")
 
 class BaseEngineContext(Generic[SettingsT]):
     DEFAULT_PROJECT_NAME = "default_project"
-    DEFAULT_RUN_ID = "default_run"
+    DEFAULT_RUN_NAME = "default_run"
 
     def __init__(
         self,
+        *,
         env: Environment | str,
         name: str,
         data_range: str
@@ -36,24 +40,22 @@ class BaseEngineContext(Generic[SettingsT]):
         | Literal["ytd"]
         | None,
         settings: SettingsT | None = None,
-        storage_config: StorageConfig | None = None,
     ):
         import pfeed as pe
-        from pfund.config import StorageConfig as PFundStorageConfig
 
         self.env = Environment[env.upper()]
         self.name = name
         self.run_mode = self._detect_run_mode()
         self.project_name = self.DEFAULT_PROJECT_NAME
-        self.run_id = self.DEFAULT_RUN_ID
+        self.run_name = self.DEFAULT_RUN_NAME
         self.data_start, self.data_end = self._parse_data_range(data_range)
         # NOTE: config obtained by get_config() inside ray actor could be different from the one in the main thread (e.g. after calling pf.configure())
         # so we create the config object here in the context and treat it as the source of truth
         self.pfund_config: PFundConfig = self._get_pfund_config()
         self.pfeed_config = pe.get_config()
         self.logging_config: dict[str, Any] = get_logging_config()
-        self.storage_config: StorageConfig = storage_config or PFundStorageConfig()
         self.settings = self._resolve_settings(settings)
+        self.datalake_storage_config = self._create_datalake_storage_config()
         # starts local; upgraded in-place to the shared actor-backed registry the first
         # time a remote component is declared (see component_registry.to_registry_proxy)
         self.component_registry: ComponentRegistry | RegistryProxy = ComponentRegistry()
@@ -74,6 +76,15 @@ class BaseEngineContext(Generic[SettingsT]):
         pfund_config.data_path /= self.name
         pfund_config.cache_path /= self.name
         return pfund_config
+
+    def _create_datalake_storage_config(self) -> StorageConfig:
+        datalake_path = self.settings.datalake_path
+        scheme = urlparse(datalake_path).scheme
+        storage = DataStorage[scheme.upper()] if scheme else DataStorage.LOCAL
+        return StorageConfig(
+            storage=storage,
+            data_path=datalake_path,
+        )
 
     def _resolve_settings(self, settings: SettingsT | None) -> SettingsT:
         if settings is None:
@@ -163,5 +174,5 @@ class BaseEngineContext(Generic[SettingsT]):
     def set_project_name(self, name: str):
         self.project_name = name
 
-    def set_run_id(self, run_id: str):
-        self.run_id = run_id
+    def set_run_name(self, run_name: str):
+        self.run_name = run_name

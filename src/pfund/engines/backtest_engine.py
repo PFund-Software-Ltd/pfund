@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, ClassVar
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
-    from mtflow.contexts.backtest_context import BacktestContext
+
+    from mtflow.tracking.run import MTFlowRun
 
     from pfund.components.models.model_base import BaseModel, UnderlyingModel
     from pfund.components.strategies.strategy_base import BaseStrategy
@@ -22,7 +23,6 @@ import os
 import narwhals as nw
 import numpy as np
 from pfund_kit.utils.progress_bar import ProgressBar
-from pfeed.storages.storage_config import StorageConfig
 
 from pfund.engines.base_engine import BaseEngine
 from pfund.engines.contexts.backtest_engine_context import BacktestEngineContext
@@ -88,7 +88,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         | tuple[str, str]
         | Literal["ytd"] = "1mo",
         settings: BacktestEngineSettings | None = None,
-        storage_config: StorageConfig | None = None,
         mode: BacktestMode
         | Literal["vectorized", "event_driven"] = BacktestMode.VECTORIZED,
         dataset_splits: DatasetSplits = 721,
@@ -107,12 +106,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             settings:
                 if not provided, settings.toml will be used.
                 if provided, will override the settings in settings.toml.
-            storage_config:
-                where the engine persists its own state storage (e.g. pfund.db), and
-                the default inherited by every component added under this engine for
-                their artifacts. Overridable per-component via
-                add_strategy(..., storage_config=...) / add_model(...).
-                If not provided, a default StorageConfig() (local storage) is used.
             dataset_splits:
                 None to use the complete dataset as training data, a three-digit
                 legacy ratio such as 721, a ratio dict, Holdout, or an
@@ -127,17 +120,15 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 + "dataset splitting and cross-validation are only supported "
                 + "in vectorized mode"
             )
-        # NOTE: create context first to set up config by engine name before super().__init__()
-        self._context = self._create_context(
+
+        super().__init__(
             env=env,
             name=name,
             data_range=data_range,
             settings=settings,
-            storage_config=storage_config,
             mode=mode,
             dataset_splits=dataset_splits,
         )
-        super().__init__(env=self.env, name=self.name)
         self.results: list[IntoDataFrame] | None = None
 
     @property
@@ -149,7 +140,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         strategy: StrategyT,
         resolution: str,
         name: str = "",
-        storage_config: StorageConfig | None = None,
     ) -> StrategyT:
         """Add a strategy as the top-level backtesting component.
 
@@ -159,8 +149,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             strategy: Strategy instance to backtest.
             resolution: Resolution at which the strategy runs.
             name: Optional name for the strategy. Defaults to its class name.
-            storage_config: Per-strategy storage configuration. Uses the engine's
-                storage configuration when omitted.
 
         Returns:
             The strategy configured for backtesting.
@@ -193,7 +181,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 strategy=strategy,
                 resolution=resolution,
                 name=name or Strategy.__name__,
-                storage_config=storage_config,
             ),
         )
 
@@ -203,7 +190,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         resolution: str,
         name: str,
         df_form: Literal["wide", "long"],
-        storage_config: StorageConfig | None,
     ) -> ModelT | FeatureT:
         """Add model without creating a strategy (using dummy strategy)"""
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
@@ -230,7 +216,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             resolution=resolution,
             name=name,
             df_form=df_form,
-            storage_config=storage_config,
         )
         component.set_top_component()
         return component
@@ -241,7 +226,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         resolution: str,
         name: str = "",
         df_form: Literal["wide", "long"] = "wide",
-        storage_config: StorageConfig | None = None,
     ) -> ModelT:
         """Add a model as the top-level backtesting component.
 
@@ -253,8 +237,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             resolution: Resolution at which the model runs.
             name: Optional name for the model.
             df_form: Dataframe layout used by the model.
-            storage_config: Per-model storage configuration. Uses the engine's
-                storage configuration when omitted.
 
         Returns:
             The model configured for backtesting.
@@ -266,7 +248,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             resolution=resolution,
             name=name,
             df_form=df_form,
-            storage_config=storage_config,
         )
 
     def add_feature(
@@ -275,7 +256,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         resolution: str = "",
         name: str = "",
         df_form: Literal["wide", "long"] = "wide",
-        storage_config: StorageConfig | None = None,
     ) -> FeatureT:
         """Add a feature as the top-level backtesting component.
 
@@ -288,8 +268,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 resolution when omitted.
             name: Optional name for the feature.
             df_form: Dataframe layout used by the feature.
-            storage_config: Per-feature storage configuration. Uses the engine's
-                storage configuration when omitted.
 
         Returns:
             The feature configured for backtesting.
@@ -299,19 +277,20 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             resolution=resolution,
             name=name,
             df_form=df_form,
-            storage_config=storage_config,
         )
 
     def run(
         self,
-        ctx: BacktestContext | None = None,
-        new: bool = False,
+        *,
+        overwrite: bool = False,
+        run: MTFlowRun | None = None,
         num_chunks: int = 1,
         num_cpus: int | None = None,
     ) -> list[IntoDataFrame]:
         """
         Args:
-            new: Whether it is a new run. If True, clear the run path (the default_run/ folder).
+            overwrite: If True, clear the reused run path (the default_run/ folder) before running.
+                Ignored when an mtflow run is active, since each mtflow run gets its own folder.
             num_chunks:
                 Number of standalone strategy backtests to split the dataset into.
                 if = 1, process the whole dataset all at once.
@@ -335,7 +314,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         if num_chunks > 1 and _DummyStrategy.__name__ in self._strategies:
             raise ValueError("Chunking is only supported for strategy backtesting")
 
-        super().run(ctx=ctx, new=new)
+        super().run(overwrite=overwrite, run=run)
 
         backtest_results: list[IntoDataFrame] = []
 

@@ -41,7 +41,6 @@ class TradingStore:
         self._features: dict[
             ColumnName, Any
         ] = {}  # child components signals = component's feature columns
-        self._storage_config: StorageConfig | None = None
         self._lakehouse_storage: BaseStorage | None = None
 
     @property
@@ -50,19 +49,21 @@ class TradingStore:
 
     @property
     def storage_config(self) -> StorageConfig:
-        assert self._storage_config is not None
-        return self._storage_config
+        return self._component.context.datalake_storage_config
 
-    def set_lakehouse_storage(self, storage_config: StorageConfig):
-        self._storage_config = storage_config
+    def setup_lakehouse(self) -> None:
+        storage_config = self.storage_config
         Storage = storage_config.storage.storage_class
         io_config = self._feed._create_artifact_io_config(ArtifactType.data)
-        self._lakehouse_storage = (
-            Storage.from_storage_config(storage_config)
-            .with_io(io_config)
-            .with_data_model(
-                self._feed.create_data_model(artifact_type=ArtifactType.data)
-            )
+        self._lakehouse_storage = Storage.from_storage_config(storage_config).with_io(
+            io_config
+        )
+
+    @property
+    def lakehouse_storage(self) -> BaseStorage:
+        assert self._lakehouse_storage is not None
+        return self._lakehouse_storage.with_data_model(
+            self._feed.create_data_model(artifact_type=ArtifactType.data)
         )
 
     def has_updated(self, data: BarData) -> bool:
@@ -315,12 +316,7 @@ class TradingStore:
         Returns ``None`` until the component has successfully persisted its first
         trading dataframe.
         """
-        storage = self._lakehouse_storage
-        if storage is None:
-            self.logger.debug(
-                f"{self._component.name} has no Delta table to optimize yet"
-            )
-            return None
+        storage = self.lakehouse_storage
         from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
 
         if not isinstance(storage, DeltaLakeStorageMixin):
@@ -363,12 +359,7 @@ class TradingStore:
         until the component has successfully persisted its first trading
         dataframe.
         """
-        storage = self._lakehouse_storage
-        if storage is None:
-            self.logger.debug(
-                f"{self._component.name} has no Delta table to vacuum yet"
-            )
-            return None
+        storage = self.lakehouse_storage
         from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
 
         if not isinstance(storage, DeltaLakeStorageMixin):

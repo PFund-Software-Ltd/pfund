@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from pfund.datas.stores.base_data_store import BaseDataStore
     from pfund.datas.stores.market_data_store import MarketDataStore
     from pfund.datas.timeframe import Timeframe
-    from pfeed.storages.storage_config import StorageConfig
     from pfund.engines.contexts.trade_engine_context import TradeEngineContext
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.entities.products.product_base import BaseProduct
@@ -161,7 +160,6 @@ class ComponentMixin:
         run_mode: RunMode,
         resolution: Resolution | str,
         engine_context: TradeEngineContext,
-        storage_config: StorageConfig,
         df_form: Literal["wide", "long"],
     ):
         """
@@ -172,10 +170,6 @@ class ComponentMixin:
             run_mode (RunMode): The mode in which the component will run (e.g., local or remote).
             resolution (Resolution | str): The data resolution used by this component.
             engine_context (TradeEngineContext): The engine context associated with this component. It is None if the component is running in a remote process.
-            storage_config (StorageConfig): where this component's artifacts are persisted.
-                Always resolved by the caller (per-component override, else the engine
-                default or parent component's config) — never None by the time it lands
-                here, so the store receives a concrete config.
             df_form: DataFrame layout used by this component.
         """
         self._context = engine_context
@@ -184,7 +178,7 @@ class ComponentMixin:
         self._set_name(name)
         self._set_resolution(resolution)
         self.set_logger(self.logger)
-        self.store.set_lakehouse_storage(storage_config)
+        self.store.setup_lakehouse()
 
     def _update_data_df(self, data: BaseData) -> None:
         data_store = self.get_data_store(data.category)
@@ -888,16 +882,12 @@ class ComponentMixin:
         resolution: str,
         name: str,
         df_form: Literal["wide", "long"],
-        storage_config: StorageConfig | None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ) -> ComponentT | ActorProxy[ComponentT] | None:
         """Adds a model component to the current component.
         A model component is a model or feature.
         Args:
-            storage_config: per-component override for where this component's artifacts
-                are persisted. Falls back to this parent's storage config (which itself
-                came from the engine default or its own parent) when None.
             df_form: DataFrame layout used by this component.
             ray_kwargs: kwargs for ray actor, e.g. num_cpus
             ray_actor_options:
@@ -976,7 +966,6 @@ class ComponentMixin:
                 run_mode=RunMode.REMOTE if ray_kwargs else RunMode.LOCAL,
                 resolution=component_resolution,
                 engine_context=self.context,
-                storage_config=storage_config or self.store.storage_config,
                 df_form=df_form,
             )
 
@@ -994,7 +983,6 @@ class ComponentMixin:
         resolution: str = "",
         name: str = "",
         df_form: Literal["wide", "long"] = "wide",
-        storage_config: StorageConfig | None = None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ) -> ModelT | ActorProxy[ModelT] | None:
@@ -1007,8 +995,6 @@ class ComponentMixin:
                 component's resolution when omitted.
             name: Optional name for the model.
             df_form: DataFrame layout used by the model.
-            storage_config: Per-model storage configuration. Inherits this
-                component's storage configuration when omitted.
             ray_actor_options: Options passed to the Ray actor.
             ray_kwargs: Ray actor constructor arguments. Providing these runs the
                 model remotely.
@@ -1024,7 +1010,6 @@ class ComponentMixin:
             resolution=resolution,
             name=name,
             df_form=df_form,
-            storage_config=storage_config,
             ray_actor_options=ray_actor_options,
             **ray_kwargs,
         )
@@ -1035,7 +1020,6 @@ class ComponentMixin:
         resolution: str = "",
         name: str = "",
         df_form: Literal["wide", "long"] = "wide",
-        storage_config: StorageConfig | None = None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ) -> FeatureT | ActorProxy[FeatureT] | None:
@@ -1047,8 +1031,6 @@ class ComponentMixin:
                 component's resolution when omitted.
             name: Optional name for the feature.
             df_form: DataFrame layout used by the feature.
-            storage_config: Per-feature storage configuration. Inherits this
-                component's storage configuration when omitted.
             ray_actor_options: Options passed to the Ray actor.
             ray_kwargs: Ray actor constructor arguments. Providing these runs the
                 feature remotely.
@@ -1062,7 +1044,6 @@ class ComponentMixin:
             resolution=resolution,
             name=name,
             df_form=df_form,
-            storage_config=storage_config,
             ray_actor_options=ray_actor_options,
             **ray_kwargs,
         )

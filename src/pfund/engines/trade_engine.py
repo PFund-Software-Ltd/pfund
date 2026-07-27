@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Literal, ClassVar, cast
 from typing_extensions import TypeVar
 
 if TYPE_CHECKING:
-    from mtflow.contexts.trade_context import TradeContext
+    from mtflow.tracking.run import MTFlowRun
     from pfeed.engine import DataEngine
     from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.streaming.zeromq import ZeroMQ
@@ -26,7 +26,6 @@ from threading import Thread
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from pfeed.enums import DataCategory
-from pfeed.storages.storage_config import StorageConfig
 from pfeed.streaming.zeromq import (
     ZeroMQDataChannel,
     ZeroMQSignal,
@@ -66,7 +65,6 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
         | Literal["ytd"]
         | None = None,
         settings: TradeEngineSettings | None = None,
-        storage_config: StorageConfig | None = None,
     ):
         """
         Args:
@@ -81,22 +79,13 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
             settings:
                 if not provided, settings.toml will be used.
                 if provided, will override the settings in settings.toml.
-            storage_config:
-                where the engine persists its own state storage (e.g. pfund.db), and
-                the default inherited by every component added under this engine for
-                their artifacts. Overridable per-component via
-                add_strategy(..., storage_config=...) / add_model(...).
-                If not provided, a default StorageConfig() (local storage) is used.
         """
-        # NOTE: create context first to set up config by engine name before super().__init__()
-        self._context = self._create_context(
+        super().__init__(
             env=env,
             name=name,
             data_range=data_range,
             settings=settings,
-            storage_config=storage_config,
         )
-        super().__init__(env=self.env, name=self.name)
 
         # FIXME: do NOT allow LIVE env for now
         if self.env == Environment.LIVE:
@@ -448,15 +437,15 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
         venue = TradingVenue[venue.upper()]
         return self._venues[venue]
 
-    def run(self, ctx: TradeContext | None = None, new: bool = True):
+    def run(self, *, overwrite: bool = True, run: MTFlowRun | None = None):
         """Run the trade engine.
 
         Args:
-            ctx: mtflow's context to run in.
-            new: Whether it is a new run. If True, clear the run path (the default_run/ folder).
+            overwrite: If True, clear the reused run path (the default_run/ folder) before running.
+                Ignored when an mtflow run is active, since each mtflow run gets its own folder.
         """
         try:
-            super().run(ctx=ctx, new=new)
+            super().run(overwrite=overwrite, run=run)
             if self._data_engine:
                 self._data_engine.run()  # blocking call
             else:

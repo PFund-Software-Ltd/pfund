@@ -4,7 +4,6 @@ from __future__ import annotations
 from typing import (
     TYPE_CHECKING,
     Any,
-    Literal,
     cast,
     TypeVar,
     Generic,
@@ -14,15 +13,14 @@ from typing import (
     NotRequired,
 )
 
+
 if TYPE_CHECKING:
-    from mtflow.contexts.base_context import BaseContext
+    from mtflow.tracking.run import MTFlowRun
     from pfund_kit.logging.loggers import ColoredLogger
-    from pfeed.storages.storage_config import StorageConfig
     from pfeed.utils.file_path import FilePath
 
     from pfund.components.actor_proxy import ActorProxy
     from pfund.components.strategies.strategy_base import BaseStrategy
-    from pfund.datas.resolution import Resolution
     from pfund.typing import StrategyT, ComponentName
 
     class DataRangeDict(TypedDict, total=False):
@@ -43,12 +41,12 @@ ContextT = TypeVar("ContextT", bound="BaseEngineContext[Any]")
 
 class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
     Context: ClassVar[type[BaseEngineContext[Any]]] = BaseEngineContext
-    _context: ContextT  # pyright: ignore[reportUninitializedInstanceVariable]
 
-    def __init__(self, *, env: Environment, name: str):
+    def __init__(self, **kwargs: Any):
         from pfund.config import setup_logging
 
-        setup_logging(env=env)
+        self._context = self.Context(**kwargs)
+        setup_logging(env=self.env)
         self._logger: ColoredLogger = cast("ColoredLogger", logging.getLogger("pfund"))
         self._is_running = False
         self._strategies: dict[
@@ -65,7 +63,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
 
     @property
     def context(self) -> ContextT:
-        return self._context
+        return cast("ContextT", self._context)
 
     @property
     def run_mode(self) -> RunMode:
@@ -78,39 +76,11 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
     def is_running(self) -> bool:
         return self._is_running
 
-    def _create_context(
-        self,
-        *,
-        env: Environment,
-        name: str,
-        data_range: str
-        | Resolution
-        | DataRangeDict
-        | tuple[str, str]
-        | Literal["ytd"]
-        | None,
-        settings: SettingsT | None = None,
-        storage_config: StorageConfig | None = None,
-        **kwargs: Any,
-    ) -> ContextT:
-        return cast(
-            "ContextT",
-            self.Context(
-                env=env,
-                name=name,
-                data_range=data_range,
-                settings=settings,
-                storage_config=storage_config,
-                **kwargs,
-            ),
-        )
-
     def add_strategy(
         self,
         strategy: StrategyT,
         resolution: str,
         name: str = "",
-        storage_config: StorageConfig | None = None,
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ) -> StrategyT | ActorProxy[StrategyT]:
@@ -120,8 +90,6 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
             strategy: Strategy instance to add.
             resolution: Resolution at which the strategy runs.
             name: Optional name for the strategy.
-            storage_config: Per-strategy storage configuration. Uses the engine's
-                storage configuration when omitted.
             ray_actor_options: Options passed to the Ray actor.
             ray_kwargs: Ray actor constructor arguments. Providing these runs the
                 strategy remotely.
@@ -169,7 +137,6 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
             run_mode=RunMode.REMOTE if ray_kwargs else RunMode.LOCAL,
             resolution=resolution,
             engine_context=self._context,
-            storage_config=storage_config or self.context.storage_config,
             df_form="long",
         )
 
@@ -186,9 +153,11 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
         data_path: FilePath,
         env: Environment,
         project_name: str,
-        run_id: str,
+        run_name: str,
     ) -> FilePath:
-        return data_path / "runs" / f"env={env}" / project_name.lower() / run_id.lower()
+        return (
+            data_path / "runs" / f"env={env}" / project_name.lower() / run_name.lower()
+        )
 
     def _clear_run_path(self, *, confirm: bool = False) -> None:
         import pyarrow.fs as pa_fs
@@ -197,7 +166,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
         from pfeed.utils.file_path import FilePath
         from pfeed.enums import DataStorage
 
-        storage_config = self.context.storage_config
+        storage_config = self.context.datalake_storage_config
         Storage = DataStorage[storage_config.storage].storage_class
         storage = Storage.from_storage_config(storage_config)
 
@@ -209,7 +178,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
                 data_path=storage.data_path,
                 env=self.env,
                 project_name=self.context.project_name,
-                run_id=self.context.run_id,
+                run_name=self.context.run_name,
             )
         )
 
@@ -234,18 +203,18 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
         from rich.markup import escape
         from rich.prompt import Prompt
 
-        class _NewRunCancelled(Exception):
+        class _OverwriteCancelled(Exception):
             pass
 
         def _handle_sigint(_signum, _frame):
-            raise _NewRunCancelled
+            raise _OverwriteCancelled
 
         previous_sigint_handler = signal.getsignal(signal.SIGINT)
         signal.signal(signal.SIGINT, _handle_sigint)
         try:
             choice = Prompt.ask(
                 (
-                    "\n[bold red]WARNING:[/] engine's run(new=True) will permanently delete "
+                    "\n[bold red]WARNING:[/] engine's run(overwrite=True) will permanently delete "
                     "the whole run folder:\n\n"
                     f"  {escape(str(run_path))}\n\n"
                     "This includes all component artifacts (e.g. models).\n\n"
@@ -258,7 +227,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
                 default="n",
                 show_choices=False,
             ).lower()
-        except _NewRunCancelled:
+        except _OverwriteCancelled:
             choice = "n"
         finally:
             signal.signal(signal.SIGINT, previous_sigint_handler)
@@ -268,20 +237,30 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
             raise SystemExit(0)
 
         if choice == "d":
-            self.settings.warn_new_run = False
+            self.settings.warn_overwrite = False
             self.context._save_settings(self.settings)
 
-    def run(self, ctx: BaseContext | None = None, new: bool = True):
-        if ctx is not None:
-            if ctx.env != self.env:
-                raise ValueError(
-                    f"mtflow's env {ctx.env} does not match with engine env {self.env}"
+    def run(self, *, overwrite: bool = True, run: MTFlowRun | None = None):
+        try:
+            import mtflow
+        except ImportError:
+            mtflow = None
+        if overwrite:
+            if mtflow:
+                self._logger.warning(
+                    f"{overwrite=} is ignored when an mtflow run is active "
+                    + "(every mtflow run gets its own folder, so there is nothing to overwrite)"
                 )
-            self._context.set_project_name(ctx.run.project)
-            self._context.set_run_id(ctx.run.id)
-        else:
-            if new:
-                self._clear_run_path(confirm=self.settings.warn_new_run)
+            else:
+                self._clear_run_path(confirm=self.settings.warn_overwrite)
+        run = run or (mtflow.get_run() if mtflow else None)
+        if run is not None:
+            assert mtflow is not None
+            client = mtflow.get_client()
+            assert client is not None
+            client.set_env(self.env)
+            self._context.set_project_name(run.project)
+            self._context.set_run_name(run.name)
         self._logger.warning(
             f"{self.env} {self.name} is running (data_range=({self._context.data_start}, {self._context.data_end}))",
             style=self.env._color,

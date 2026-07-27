@@ -2,6 +2,7 @@ from typing import Any
 
 from pydantic import Field, field_serializer, field_validator
 
+from pfund.config import get_config
 from pfund.engines.settings.base_engine_settings import BaseEngineSettings
 from pfund.utils.ray_dict import RayCompatibleDict
 from pfund.enums import Database
@@ -12,6 +13,14 @@ class TradeEngineSettings(BaseEngineSettings):
         default=Database.SQLITE,
         description="database used to store engine data, e.g. positions, balances, trades",
     )
+    database_path: str = Field(
+        default_factory=lambda: str(get_config().data_path),
+        description="database root path under which each run stores its pfund.db",
+    )
+    # database_storage_options: dict[str, Any] = Field(
+    #     default_factory=dict,
+    #     description="non-secret options passed to the database storage backend",
+    # )
     # e.g. url='tcp://localhost'
     zmq_urls: RayCompatibleDict = Field(default_factory=RayCompatibleDict)
     zmq_ports: RayCompatibleDict = Field(default_factory=RayCompatibleDict)

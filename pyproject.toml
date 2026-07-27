@@ -24,10 +24,10 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "pfund-kit>=0.1.14",
+    "pfund-kit>=0.1.15",
     'pfeed>=0.0.19',
     "apscheduler>=3.11.3",
-    "httpx2[http2]>=2.7.0",
+    "httpx2[http2]>=2.9.1",
     "websockets>=16.1.1 ; sys_platform != 'emscripten'",
     "numba>=0.66.0 ; sys_platform != 'emscripten'",
 ]
@@ -68,8 +68,13 @@ repository = "https://github.com/PFund-Software-Ltd/pfund"
 documentation = "https://pfund.pfund.ai/doc"
 
 [build-system]
-requires = ["uv_build>=0.11.31,<0.12.0"]
+requires = ["uv_build>=0.11.32,<0.12.0"]
 build-backend = "uv_build"
+
+[tool.uv]
+# FIXME: set it back to "14 days" when the package is stable
+exclude-newer = "0 days"
+exclude-newer-package = { pfeed = false, pfolio = false, pfund-kit = false, pfund-plot = false, mtflow = false }
 
 [tool.pyright]
 # typeCheckingMode = "basic"

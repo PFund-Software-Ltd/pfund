@@ -2,6 +2,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from pfund.config import get_config
 from pfund.enums import DataLake
 
 
@@ -12,6 +13,14 @@ class BaseEngineSettings(BaseModel):
         default=DataLake.DELTALAKE,
         description="data lake for writing and appending component data",
     )
+    datalake_path: str = Field(
+        default_factory=lambda: str(get_config().data_path),
+        description="data lake path, such as /data/pfund or s3://bucket/prefix",
+    )
+    # datalake_storage_options: dict[str, Any] = Field(
+    #     default_factory=dict,
+    #     description="non-secret options passed to the data lake storage backend",
+    # )
     persist: bool = Field(
         default=False,
         description="""
@@ -37,16 +46,15 @@ class BaseEngineSettings(BaseModel):
             - False: never cache, always process on the fly.
         """,
     )
-    warn_new_run: bool = Field(
+    warn_overwrite: bool = Field(
         default=True,
         description="""
-        Ask for confirmation before engine.run(new=True) clears the reused run folder
+        Ask for confirmation before engine.run(overwrite=True) clears the reused run folder
         (e.g. default_run/) and all artifacts inside it, including component outputs,
         models, and checkpoints.
 
-        This setting is ignored when an mtflow context is provided because every
-        mtflow execution receives a new, unique run folder instead of reusing and
-        clearing an existing one.
+        This setting is ignored when an mtflow run is active because every mtflow run
+        receives its own unique run folder instead of reusing and clearing an existing one.
         """,
     )
 

@@ -20,6 +20,17 @@ resolution-markers = [
     "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32'",
 ]
 
+[options]
+exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
+exclude-newer-span = "PT0S"
+
+[options.exclude-newer-package]
+pfolio = false
+mtflow = false
+pfund-kit = false
+pfeed = false
+pfund-plot = false
+
 [[package]]
 name = "aiohappyeyeballs"
 version = "2.7.1"
@@ -1946,15 +1957,15 @@ wheels = [
 
 [[package]]
 name = "httpcore2"
-version = "2.7.0"
+version = "2.9.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "h11" },
     { name = "truststore" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d5/fe/6a3f9f1a8bb8733326140737446aaf72fddb8b54b8f202302f5c84960613/httpcore2-2.7.0.tar.gz", hash = "sha256:6dc0fedf329a52a990930a5579edfebaea81118ea700ea0dd7de2b5e5be49efc", size = 65593, upload-time = "2026-07-14T20:40:01.111Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/39/a8/20ed1ed79cbc2ecdf5301c0968ab7c85547212e2a7bd126ddd2d986e206e/httpcore2-2.9.1.tar.gz", hash = "sha256:4d8acbf8b306f48c9d6046591fd5ba4037d1b1b1000d140fc2c3eab1e9a0c0e2", size = 67089, upload-time = "2026-07-24T09:21:03.867Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6f/6c/62e2e279e63fc4f7a5ee841ef13175a8bbc613f258e9dcc186e9de803a42/httpcore2-2.7.0-py3-none-any.whl", hash = "sha256:1452f589fe23f55b44546cd884294c41a29330af902bc0b71a761fd52d18f92b", size = 81506, upload-time = "2026-07-14T20:39:58.053Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/fb/46c52b781975c335a2bcf1072c7bbc007cbdc8d674217f5ee1daba2c848b/httpcore2-2.9.1-py3-none-any.whl", hash = "sha256:6182472379e855fe4221246a2bb7ecede403bc61c6798062ae1787d051ccde26", size = 82809, upload-time = "2026-07-24T09:21:01.178Z" },
 ]
 
 [[package]]
@@ -1974,7 +1985,7 @@ wheels = [
 
 [[package]]
 name = "httpx2"
-version = "2.7.0"
+version = "2.9.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -1983,9 +1994,9 @@ dependencies = [
     { name = "truststore" },
     { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a3/4a/129b2e21b90ac2985d3928d96792bccc39bc6dfe796c5eee2d8ec06d4105/httpx2-2.7.0.tar.gz", hash = "sha256:8b30709aed5c8465b0dd3b95c09ce301c8f79e7e7a2d00ab0af551e0d0375b07", size = 94487, upload-time = "2026-07-14T20:40:02.318Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/21/14/38128fbafd7e0ed41d874df6c9a653d47c2d111cfe59e2b4ac95161b4abd/httpx2-2.9.1.tar.gz", hash = "sha256:1932a768737e3666291582833da748cc4e563c337cf96706fccc04fa6e58764a", size = 95458, upload-time = "2026-07-24T09:21:04.972Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1d/b8/c341bba6411bdfda786020343c47a75ef472f6085caf82391b142b1a3ad9/httpx2-2.7.0-py3-none-any.whl", hash = "sha256:ed2a2719c696789e09493bd8e2bec3d8bd925cc6e26b68389ec25ade132f7bf4", size = 90234, upload-time = "2026-07-14T20:39:59.531Z" },
+    { url = "https://files.pythonhosted.org/packages/13/b8/cfd91c4ab9134d386d48f0b6ac662ff3d4be6efdee59ee1c67ebc3c0487c/httpx2-2.9.1-py3-none-any.whl", hash = "sha256:1820fe14a9ab1107bfeff39259987429450b070ec0ff38cc87eb0d8c97fdc71a", size = 91191, upload-time = "2026-07-24T09:21:02.6Z" },
 ]
 
 [package.optional-dependencies]
@@ -4109,7 +4120,7 @@ torch = [
 requires-dist = [
     { name = "alpaca-py", marker = "extra == 'alpaca'", specifier = ">=0.43.5" },
     { name = "apscheduler", specifier = ">=3.11.3" },
-    { name = "httpx2", extras = ["http2"], specifier = ">=2.7.0" },
+    { name = "httpx2", extras = ["http2"], specifier = ">=2.9.1" },
     { name = "hyperliquid-python-sdk", marker = "extra == 'hyperliquid'", specifier = ">=0.24.0" },
     { name = "jax", marker = "extra == 'jax'", specifier = ">=0.10.2" },
     { name = "joblib", marker = "extra == 'sklearn'", specifier = ">=1.5.3" },
@@ -4118,7 +4129,7 @@ requires-dist = [
     { name = "pfeed", extras = ["yfinance"], marker = "extra == 'core'", specifier = ">=0.0.19" },
     { name = "pfolio", marker = "extra == 'core'", specifier = ">=0.0.4" },
     { name = "pfund-ibapi", marker = "extra == 'ibkr'", specifier = "==10.48.1" },
-    { name = "pfund-kit", specifier = ">=0.1.14" },
+    { name = "pfund-kit", specifier = ">=0.1.15" },
     { name = "pfund-plot", extras = ["marimo"], marker = "extra == 'core'", specifier = ">=0.0.5" },
     { name = "safetensors", marker = "extra == 'jax'", specifier = ">=0.8.0" },
     { name = "safetensors", marker = "extra == 'torch'", specifier = ">=0.8.0" },
@@ -4143,7 +4154,7 @@ wheels = [
 
 [[package]]
 name = "pfund-kit"
-version = "0.1.14"
+version = "0.1.15"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -4156,9 +4167,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "trogon", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ff/5b/c48957b740f9b900ccfc13c6241f8423dd7d5006b574ec534669b3a21a4a/pfund_kit-0.1.14.tar.gz", hash = "sha256:ccf842022d2b02434b2e11db594657e3ea761d6e021df5b1a825ed581751b4e4", size = 43298, upload-time = "2026-07-18T22:34:00.891Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/58/c7/50e9f19b462a74d8c36b4c2a4e6805bd39faa0bbe707b3da3b57b5f3ee23/pfund_kit-0.1.15.tar.gz", hash = "sha256:9c1ec96ee66e2f84fd5fa18be460b3ad4533ac434cdecfce0743e1c56d09a120", size = 43528, upload-time = "2026-07-24T21:46:12.978Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0d/f3/1a67696d4c5285dee0dc8e5ae2cdfb1496b6a2a218ab181760297013a0fb/pfund_kit-0.1.14-py3-none-any.whl", hash = "sha256:a77caa35913ff5676d87cf6a94b829fa97614cf70e52b6d647032114a350932c", size = 59563, upload-time = "2026-07-18T22:33:59.949Z" },
+    { url = "https://files.pythonhosted.org/packages/68/af/05cde865b435adc5f52b3406683a492801d40119903bf0b578840d0b4933/pfund_kit-0.1.15-py3-none-any.whl", hash = "sha256:86eb1c171dcca585e2dfa46469b92e42b1b94b4dd9435b9c84d0e0861d3085e4", size = 59761, upload-time = "2026-07-24T21:46:12.115Z" },
 ]
 
 [[package]]
@@ -6325,14 +6336,14 @@ wheels = [
 
 [[package]]
 name = "tqdm"
-version = "4.69.0"
+version = "4.69.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorama", marker = "sys_platform == 'win32'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8c/69/40407dfc835517f058b603dbf37a6df094d8582b015a51eddc988febbcb7/tqdm-4.69.0.tar.gz", hash = "sha256:700c5e85dcd5f009dd6222588a29180a193a748247a5d855b4d67db93d79a53b", size = 792569, upload-time = "2026-07-17T18:09:06.2Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/dd/84/da0e5038228fa34dfd77c5026b173ed035d2a3ba31f1077590c013de2bff/tqdm-4.69.1.tar.gz", hash = "sha256:2be21080a0ce17e902c2f1baeb6a74bf551b67bbdfa4bc0109fad471d0b4cb0d", size = 793046, upload-time = "2026-07-24T14:22:02.08Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fe/21/99a0cdaf54eb35e77623c41b5a2c9472ee4404bba687052791fe2aba6773/tqdm-4.69.0-py3-none-any.whl", hash = "sha256:9979978912be667a6ef21fd5d8abf54e324e63d82f7f43c360792ebc2bc4e622", size = 676680, upload-time = "2026-07-17T18:09:04.172Z" },
+    { url = "https://files.pythonhosted.org/packages/01/50/5817619a0fca56aff06383dbfde7ae017b3ca383915b3f1e4713164273cf/tqdm-4.69.1-py3-none-any.whl", hash = "sha256:0a654b96f7a2660cceb615b56f307ec2bef96c515409014a429a561981ab52b4", size = 675452, upload-time = "2026-07-24T14:22:00.048Z" },
 ]
 
 [[package]]

@@ -8,7 +8,6 @@ from typing_extensions import override
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
-    from pfeed.storages.storage_config import StorageConfig
 
     from pfund.datas.timeframe import Timeframe
     from pfund.datas.data_base import BaseData
@@ -399,7 +398,6 @@ class BacktestMixin:
         resolution: str,
         name: str,
         df_form: Literal["wide", "long"],
-        storage_config: StorageConfig | None,
         # NOTE: non-backtesting kwargs are ignored, e.g. ray_actor_options, ray_kwargs, etc.
         **kwargs: Any,
     ) -> ComponentT:
@@ -439,7 +437,6 @@ class BacktestMixin:
             resolution=resolution,
             name=name or Component.__name__,
             df_form=df_form,
-            storage_config=storage_config,
         )
 
     def _is_dummy_strategy(self) -> bool:
