@@ -15,5 +15,5 @@ class TradeEngineContext(BaseEngineContext[SettingsT]):
         super().__init__(**kwargs)
         self.database_storage_config = StorageConfig(
             storage=self.settings.database,
-            data_path=self.settings.database_path,
+            data_path=self.settings.database_uri,
         )

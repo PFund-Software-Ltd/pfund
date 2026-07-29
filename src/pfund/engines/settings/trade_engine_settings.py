@@ -13,9 +13,9 @@ class TradeEngineSettings(BaseEngineSettings):
         default=Database.SQLITE,
         description="database used to store engine data, e.g. positions, balances, trades",
     )
-    database_path: str = Field(
-        default_factory=lambda: str(get_config().data_path),
-        description="database root path under which each run stores its pfund.db",
+    database_uri: str = Field(
+        default_factory=lambda: get_config().data_path.resolve().as_uri(),
+        description="database root URI under which each run stores its pfund.db",
     )
     # database_storage_options: dict[str, Any] = Field(
     #     default_factory=dict,

@@ -15,6 +15,8 @@ from typing import (
 
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from mtflow.tracking.run import MTFlowRun
     from pfund_kit.logging.loggers import ColoredLogger
     from pfeed.utils.file_path import FilePath
@@ -150,20 +152,21 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
     @staticmethod
     def _create_run_path(
         *,
-        data_path: FilePath,
+        data_path: Path,
         env: Environment,
         project_name: str,
         run_name: str,
-    ) -> FilePath:
+    ) -> Path:
         return (
             data_path / "runs" / f"env={env}" / project_name.lower() / run_name.lower()
         )
 
     def _clear_run_path(self, *, confirm: bool = False) -> None:
+        from pathlib import Path
+
         import pyarrow.fs as pa_fs
 
         from pfeed.storages.file_based_storage import FileBasedStorage
-        from pfeed.utils.file_path import FilePath
         from pfeed.enums import DataStorage
 
         storage_config = self.context.datalake_storage_config
@@ -173,17 +176,15 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
         if not isinstance(storage, FileBasedStorage):
             raise TypeError(f"Cannot clear a filesystem run path using {storage.name}")
 
-        run_path = FilePath(
-            self._create_run_path(
-                data_path=storage.data_path,
-                env=self.env,
-                project_name=self.context.project_name,
-                run_name=self.context.run_name,
-            )
+        run_path = self._create_run_path(
+            data_path=Path(cast("FilePath", storage.data_path).schemeless),
+            env=self.env,
+            project_name=self.context.project_name,
+            run_name=self.context.run_name,
         )
 
         filesystem = storage.get_filesystem()
-        file_info = filesystem.get_file_info(run_path.schemeless)
+        file_info = filesystem.get_file_info(str(run_path))
 
         if file_info.type == pa_fs.FileType.NotFound:
             return
@@ -194,10 +195,10 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
         if confirm:
             self._confirm_clear_run_path(run_path)
 
-        filesystem.delete_dir(run_path.schemeless)
+        filesystem.delete_dir(str(run_path))
         self._logger.debug(f"cleared existing run path: {run_path}")
 
-    def _confirm_clear_run_path(self, run_path: FilePath) -> None:
+    def _confirm_clear_run_path(self, run_path: Path) -> None:
         import signal
 
         from rich.markup import escape
@@ -258,6 +259,10 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
             assert mtflow is not None
             client = mtflow.get_client()
             assert client is not None
+            mtflow.configure(
+                # NOTE: use datalake_path, not pfund's data_path
+                data_path=str(self._context.datalake_storage_config.data_path)
+            )
             client.set_env(self.env)
             self._context.set_project_name(run.project)
             self._context.set_run_name(run.name)
