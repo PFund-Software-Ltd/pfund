@@ -7,7 +7,7 @@ import narwhals as nw
 import numpy as np
 from narwhals.typing import IntoDataFrameT, IntoSeries
 
-from pfund._backtest.product_backtest_kernel import backtest_loop_kernel
+from pfund.backtest.product_backtest_kernel import backtest_loop_kernel
 from pfund.components.bar_dataframe import PIVOT_COLS
 
 # what a registration is keyed by, minus its data_range: a (resolution, product)

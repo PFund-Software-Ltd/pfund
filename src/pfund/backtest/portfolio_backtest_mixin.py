@@ -6,8 +6,8 @@ import numpy as np
 from narwhals.typing import IntoDataFrameT, IntoSeries
 from pfund_kit.style import RichColor, TextStyle, cprint
 
-from pfund._backtest.portfolio_backtest_kernel import portfolio_backtest_loop_kernel
-from pfund._backtest.product_backtest_mixin import (
+from pfund.backtest.portfolio_backtest_kernel import portfolio_backtest_loop_kernel
+from pfund.backtest.product_backtest_mixin import (
     _group_positions,
     _resolve_targets,
     _series_to_positional_float64,

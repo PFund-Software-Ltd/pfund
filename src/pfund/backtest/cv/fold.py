@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 import numpy as np
 
-from pfund._backtest.cv.indexing import (
+from pfund.backtest.cv.indexing import (
     DataT,
     normalize_indices,
     row_count,

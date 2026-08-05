@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any, cast
 
-from pfund._backtest.cv.base import CrossValidator
+from pfund.backtest.cv.base import CrossValidator
 
 
 @dataclass(frozen=True)

@@ -27,7 +27,6 @@ depends-on = [
 ]
 
 [environments]
-compare = ["py313", "dev", "optional", "compare"]
 default = ["py311", "dev", "optional"]
 py311 = ["py311", "test", "optional"]
 py312 = ["py312", "test", "optional"]
@@ -49,7 +48,7 @@ pfolio = ">=0.0.4"
 pfund-plot = {version = ">=0.0.5", extras = ["marimo"]}
 # TODO: enable when ready
 # mtflow = ">=0.0.1.dev2"
-pfund-ibapi = "==10.48.1"
+pfund-ibapi = "==10.49.1"
 alpaca-py = ">=0.43.5"
 hyperliquid-python-sdk = ">=0.24.0"
 joblib = ">=1.5.3"
@@ -67,7 +66,7 @@ pfeed = { path = "../pfeed", editable = true, extras = ["yfinance"] }
 # pfund-kit = { path = "../pfund-kit", editable = true }
 # pfolio = { path = "../pfolio", editable = true }
 mtflow = { path = "../mtflow", editable = true }
-afterpython = ">=0.3.18"
+afterpython = ">=0.3.19"
 basedpyright = ">=1.39.9"
 memray = ">=1.19.3"
 pandas-stubs = ">=3.0.3.260530"
@@ -81,13 +80,6 @@ transformers = ">=5.13.0"
 [feature.dev.dependencies]
 graphviz = ">=14.1.2"
 python-graphviz = ">=0.21"
-
-[feature.compare.pypi-dependencies]
-vectorbt = ">=1.0.0"
-backtrader = ">=1.9.78.123"
-backtesting = ">=0.6.5"
-nautilus-trader = ">=1.230.0"
-lib-pybroker = ">=1.2.12"
 
 [feature.test.pypi-dependencies]
 pfund = { path = ".", editable = true }

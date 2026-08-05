@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 from contextlib import contextmanager
 
-from pfund._backtest.backtest_mixin import BacktestMixin
+from pfund.backtest.backtest_mixin import BacktestMixin
 from pfund.enums import ArtifactType
 
 

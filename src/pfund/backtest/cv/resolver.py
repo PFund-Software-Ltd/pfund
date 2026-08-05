@@ -11,10 +11,10 @@ import narwhals as nw
 import numpy as np
 from pfund_kit.style import TextStyle, cprint
 
-from pfund._backtest.cv.base import CrossValidator
-from pfund._backtest.cv.dataset_split import DatasetSplit
-from pfund._backtest.cv.fold import Fold
-from pfund._backtest.cv.holdout import Holdout
+from pfund.backtest.cv.base import CrossValidator
+from pfund.backtest.cv.dataset_split import DatasetSplit
+from pfund.backtest.cv.fold import Fold
+from pfund.backtest.cv.holdout import Holdout
 
 
 def _resolve_time_spine(

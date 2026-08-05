@@ -11,7 +11,7 @@ from abc import ABC
 
 import narwhals as nw
 
-from pfund._backtest.backtest_mixin import BacktestMixin
+from pfund.backtest.backtest_mixin import BacktestMixin
 
 
 def BacktestStrategy(Strategy: type[StrategyT], *args: Any, **kwargs: Any) -> StrategyT:

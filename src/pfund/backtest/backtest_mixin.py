@@ -17,8 +17,8 @@ if TYPE_CHECKING:
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.entities.products.product_base import BaseProduct
     from pfund.typing import ComponentT, Signals, Component, ComponentName
-    from pfund._backtest.cv.dataset_split import DatasetSplit
-    from pfund._backtest.cv.fold import Fold
+    from pfund.backtest.cv.dataset_split import DatasetSplit
+    from pfund.backtest.cv.fold import Fold
 
 from pathlib import Path
 
@@ -37,7 +37,7 @@ from pfund.components.bar_dataframe import (
     validate_spine_df,
 )
 from pfund.enums import BacktestMode
-from pfund._backtest.cv.indexing import DataT
+from pfund.backtest.cv.indexing import DataT
 
 
 class BacktestMixin:
@@ -97,8 +97,8 @@ class BacktestMixin:
         return None if dataset_split is None else dataset_split.X_test
 
     def _resolve_dataset_splits(self) -> None:
-        from pfund._backtest.cv.dataset_split import DatasetSplit
-        from pfund._backtest.cv.resolver import resolve_dataset_splits
+        from pfund.backtest.cv.dataset_split import DatasetSplit
+        from pfund.backtest.cv.resolver import resolve_dataset_splits
 
         resolved = resolve_dataset_splits(
             self.X,
@@ -203,9 +203,9 @@ class BacktestMixin:
         """
         import narwhals as nw
 
-        from pfund._backtest import portfolio_backtest_mixin, product_backtest_mixin
-        from pfund._backtest.portfolio_backtest_mixin import PortfolioBacktestMixin
-        from pfund._backtest.product_backtest_mixin import ProductBacktestMixin
+        from pfund.backtest import portfolio_backtest_mixin, product_backtest_mixin
+        from pfund.backtest.portfolio_backtest_mixin import PortfolioBacktestMixin
+        from pfund.backtest.product_backtest_mixin import ProductBacktestMixin
 
         product_backtest_mixin._clear_registry()
         portfolio_backtest_mixin._clear_registry()
@@ -248,7 +248,7 @@ class BacktestMixin:
 
         import inspect
 
-        from pfund._backtest.backtest_mixin import BacktestMixin
+        from pfund.backtest.backtest_mixin import BacktestMixin
 
         mro = type(self).__mro__
         source_class = mro[mro.index(BacktestMixin) + 1]

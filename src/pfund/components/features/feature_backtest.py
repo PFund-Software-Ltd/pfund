@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pfund.typing import FeatureT
 
-from pfund._backtest.backtest_mixin import BacktestMixin
+from pfund.backtest.backtest_mixin import BacktestMixin
 
 
 def BacktestFeature(Feature: type[FeatureT], *args: Any, **kwargs: Any) -> FeatureT:

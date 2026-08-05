@@ -12,8 +12,8 @@ from pfund.datas.resolution import Resolution
 from pfund.enums import Environment, BacktestMode
 from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
 from pfund.engines.contexts.base_engine_context import BaseEngineContext
-from pfund._backtest.cv.base import CrossValidator
-from pfund._backtest.cv.holdout import Holdout
+from pfund.backtest.cv.base import CrossValidator
+from pfund.backtest.cv.holdout import Holdout
 
 
 class DatasetSplitsDict(TypedDict, total=False):
