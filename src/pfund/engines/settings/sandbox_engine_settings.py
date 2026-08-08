@@ -8,6 +8,23 @@ from pfund.typing import Currency, ProductName
 
 
 class SandboxEngineSettings(TradeEngineSettings):
+    replay_mode: bool = Field(
+        default=True,
+        description="""
+        Replay historical data as if it were live. No real venue connection is
+        made when enabled. When disabled, connect to the real venue for live market
+        data while continuing to use pfund's local fake server for bookkeeping.
+        """,
+    )
+    replay_pace: float | None = Field(
+        default=0.0,
+        ge=0,
+        description="""
+        Seconds between row emissions in replay mode. Use 0 to replay as quickly as
+        possible, a positive number for a fixed cadence, or None to follow the data's
+        timestamps. Ignored when replay_mode is disabled.
+        """,
+    )
     initial_balances: dict[TradingVenue | str, dict[Currency, Decimal]] = Field(
         default_factory=dict
     )

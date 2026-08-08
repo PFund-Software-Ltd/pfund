@@ -1,4 +1,5 @@
 import click
+
 from pfund_kit.cli.commands.config import auto_detect_editor, open_file_with_editor
 
 
@@ -53,6 +54,7 @@ def open_settings(ctx, default_editor, editor):
                     "zed": "Zed",
                     "charm": "PyCharm",
                     "nvim": "Neovim",
+                    "hx": "Helix",
                 }
                 display_name = editor_names.get(editor, editor)
                 click.echo(
@@ -64,7 +66,7 @@ def open_settings(ctx, default_editor, editor):
             # No editor found, print helpful message
             click.echo("No code editor detected.", err=True)
             click.echo(
-                f"Tip: Specify an editor (e.g., '{project_name} settings open -l code' to use VS Code) or use -E for system default editor",
+                f"Tip: Specify an editor (e.g., '{project_name} settings open -e code' to use VS Code) or use -E for system default editor",
                 err=True,
             )
             click.echo(f"\nFile location: {file_path}")

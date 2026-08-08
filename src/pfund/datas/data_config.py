@@ -5,7 +5,7 @@ from typing import Annotated, ClassVar, cast
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 from pfeed.enums import DataSource
 from pfeed.storages.storage_config import StorageConfig
-from pfeed._io.io_config import IOConfig
+from pfeed.io.io_config import IOConfig
 
 from pfund.datas.resolution import Resolution
 from pfund.datas.timeframe import Timeframe

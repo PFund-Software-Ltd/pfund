@@ -31,8 +31,6 @@ class SandboxEngine(TradeEngine[SandboxEngineSettings, SandboxEngineContext]):
         | Literal["ytd"]
         | None = None,
         settings: SandboxEngineSettings | None = None,
-        replay_mode: bool = True,
-        replay_pace: float | None = 0,
     ):
         """
         Args:
@@ -43,21 +41,6 @@ class SandboxEngine(TradeEngine[SandboxEngineSettings, SandboxEngineContext]):
                     e.g. {'start_date': '2024-01-01', 'end_date': '2024-12-31'}
                 when it is a tuple, it is (start_date, end_date),
                     e.g. ('2024-01-01', '2024-12-31')
-            replay_mode: if True (default), replay historical data as if it were live,
-                for getting a feel of live trading without live-data access. No real
-                venue connection is made, so no credentials are loaded — the safe default.
-                If False, connect to the real venue to receive genuine live market data
-                (still book-kept on pfund's local fake server, never sending real orders).
-            replay_pace: Pacing between row emissions when replaying. Ignored otherwise.
-                - 0 (default): ASAP — no sleep between rows. Backtests process the whole
-                    range as fast as possible regardless of resolution or row count.
-                - >0: fixed cadence in seconds (e.g. 1.0 → one row per wall-second).
-                    Useful for watching a replay at a steady, human-readable rate.
-                - None: realistic — for bars, sleep one resolution period between rows;
-                    for ticks, sleep the timestamp difference between consecutive rows.
-                    Opt-in only: for fine resolutions or tick data a per-row sleep
-                    multiplied by row count can take hours, so it is not the default.
-                Ignored when not in replay mode.
             settings:
                 if not provided, settings.toml will be used.
                 if provided, will override the settings in settings.toml.
@@ -71,8 +54,6 @@ class SandboxEngine(TradeEngine[SandboxEngineSettings, SandboxEngineContext]):
         import pfeed as pe
 
         self._feed = pe.PFund().engine_feed
-        self._replay_mode = replay_mode
-        self._replay_pace = replay_pace
 
     @override
     def _assert_env(self):
@@ -81,12 +62,12 @@ class SandboxEngine(TradeEngine[SandboxEngineSettings, SandboxEngineContext]):
 
     @override
     def _get_pfeed_stream_kwargs(self) -> dict[str, Any]:
-        if not self._replay_mode:
+        if not self.settings.replay_mode:
             return {"env": Environment.LIVE}
         else:
             return {
                 "env": Environment.BACKTEST,
-                "replay_pace": self._replay_pace,
+                "replay_pace": self.settings.replay_pace,
                 "start_date": self._context.data_start,
                 "end_date": self._context.data_end,
             }
@@ -101,7 +82,7 @@ class SandboxEngine(TradeEngine[SandboxEngineSettings, SandboxEngineContext]):
                 venue=venue,
                 engine_feed=self._feed,
                 storage_config=self._context.database_storage_config,
-                replay_mode=self._replay_mode,
+                replay_mode=self.settings.replay_mode,
                 config=config,
             )
             trading_venue._set_queue(self._queue)

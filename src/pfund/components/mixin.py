@@ -738,8 +738,6 @@ class ComponentMixin:
         self._resolution = resolution
 
     def _set_name(self, name: str):
-        if not name:
-            return
         self._name = name
         if not self._name.lower().endswith(self.component_type):
             self._name += f"_{self.component_type}"
@@ -936,7 +934,10 @@ class ComponentMixin:
                 f"{component_type} '{ComponentName}' is not an instance of {BaseClass.__name__}. Please create your {component_type} using 'class {ComponentName}(pf.{component_type.capitalize()})'"
             )
             component_name = name or component.name
-            if component_name in components:
+            if any(
+                component_name.casefold() == existing.casefold()
+                for existing in components
+            ):
                 raise ValueError(f"{component_name} already exists")
 
             # enforce GLOBAL name uniqueness (across other Ray actors too), not just this parent's dict

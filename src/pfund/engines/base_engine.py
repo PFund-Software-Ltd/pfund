@@ -109,7 +109,9 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
         )
 
         strat = name or strategy.name
-        if strat in self._strategies:
+        if any(
+            strat.casefold() == existing.casefold() for existing in self._strategies
+        ):
             raise ValueError(f"{strat} already exists")
 
         # enforce GLOBAL name uniqueness (across other Ray actors too), not just this engine's dict
@@ -242,6 +244,8 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
             self.context._save_settings(self.settings)
 
     def run(self, *, overwrite: bool = True, run: MTFlowRun | None = None):
+        if self.is_running():
+            raise RuntimeError("Engine is already running")
         try:
             import mtflow
         except ImportError:
@@ -275,8 +279,10 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
         for strategy in self._strategies.values():
             strategy.start()
 
-    def end(self):
-        self._logger.warning(f"{self.env} {self.name} is ending...")
+    def end(self, reason: str = ""):
+        if not self.is_running():
+            raise RuntimeError("Engine is not running")
+        self._logger.warning(f"{self.env} {self.name} is ending...({reason=})")
         for strategy in self._strategies.values():
             strategy.stop()
         self._is_running = False

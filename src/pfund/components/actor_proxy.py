@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Generic, cast
 
-from typing_extensions import override
-
 if TYPE_CHECKING:
     from ray.actor import ActorClass, ActorHandle
 
@@ -34,8 +32,8 @@ class ActorProxy(Generic[ComponentT]):
         if ray_kwargs["num_cpus"] <= 0:
             raise ValueError("`num_cpus` must be greater than 0")
         ray_actor_options = ray_actor_options or {}
-        if "name" not in ray_actor_options:
-            ray_actor_options["name"] = name
+        ray_actor_options.setdefault("name", name)
+
         setup_ray()
         self._actor: ActorHandle[ComponentT] = self._create_actor(
             component, ray_actor_options, **ray_kwargs
@@ -61,7 +59,9 @@ class ActorProxy(Generic[ComponentT]):
                 ComponentClass
             )
         except ValueError as err:
-            raise ValueError(f"{ComponentClass.__name__} {ray_kwargs=}:\n{err}")
+            raise ValueError(
+                f"{ComponentClass.__name__} {ray_kwargs=}:\n{err}"
+            ) from err
 
         actor = cast(
             "ActorHandle[ComponentT]",
@@ -82,33 +82,32 @@ class ActorProxy(Generic[ComponentT]):
     def actor(self) -> ActorHandle[ComponentT]:
         return self._actor
 
-    # NOTE: added __setstate__ and __getstate__ to avoid ray's serialization issues when returning ActorProxy objects
-    def __setstate__(self, state: dict[str, Any]):
-        self.__dict__.update(state)
-
-    @override
     def __getstate__(self) -> dict[str, Any]:
         return self.__dict__
+
+    # NOTE: added __setstate__ and __getstate__ to avoid ray's serialization issues when returning ActorProxy objects
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        self.__dict__.update(state)
 
     def __getattr__(self, name: str) -> Any:
         if name in self.__dict__:
             return self.__dict__[name]
-        else:
-            import ray
 
-            actor = self.__dict__["_actor"]
-            attr = getattr(actor, name)
+        import ray
 
-            def remote_method(*args: Any, **kwargs: Any) -> Any:
-                try:
-                    return ray.get(attr.remote(*args, **kwargs))
-                except TypeError as err:
-                    # NOTE: catch TypeError when trying to pickle and return a component
-                    # e.g. model = strategy.add_model(...), where strategy is a ray actor but model is not, so model can't be serialized and returned correctly
-                    # if 'cannot pickle' in str(err):
-                    #     print_error(f'Ray Actor "{self.name}" error when calling "{name}": {err}')
-                    #     return None
-                    # else:
-                    raise err
+        actor = self.__dict__["_actor"]
+        attr = getattr(actor, name)
 
-            return remote_method
+        def remote_method(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return ray.get(attr.remote(*args, **kwargs))
+            except TypeError as err:
+                # NOTE: catch TypeError when trying to pickle and return a component
+                # e.g. model = strategy.add_model(...), where strategy is a ray actor but model is not, so model can't be serialized and returned correctly
+                # if 'cannot pickle' in str(err):
+                #     print_error(f'Ray Actor "{self.name}" error when calling "{name}": {err}')
+                #     return None
+                # else:
+                raise err
+
+        return remote_method
