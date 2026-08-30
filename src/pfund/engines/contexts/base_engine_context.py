@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 if TYPE_CHECKING:
     import datetime
+    from pathlib import Path
 
     from pfund.engines.base_engine import DataRangeDict
     from pfund.engines.settings.base_engine_settings import BaseEngineSettings
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
 
 from pfeed.enums import DataStorage
 from pfeed.storages.storage_config import StorageConfig
+from pfeed.utils.file_path import FilePath
 
 from pfund.config import get_config, get_logging_config
 from pfund.datas.resolution import Resolution
@@ -70,15 +72,20 @@ class BaseEngineContext(Generic[SettingsT]):
         else:
             return RunMode.LOCAL
 
-    def _get_pfund_config(self):
-        pfund_config = get_config()
-        pfund_config.log_path /= self.name
-        pfund_config.data_path /= self.name
-        pfund_config.cache_path /= self.name
-        return pfund_config
+    def _get_pfund_config(self) -> PFundConfig:
+        return get_config().scoped(self.name)
 
     def _create_datalake_storage_config(self) -> StorageConfig:
-        datalake_path = self.settings.datalake_path
+        # Unset means data_path, which the engine's config has already scoped by
+        # name; an explicit root has not, so it gets the engine name appended.
+        if self.settings.datalake_path is None:
+            datalake_path = str(self.pfund_config.data_path)
+        else:
+            file_path = FilePath(self.settings.datalake_path)
+            # Already ends in the engine name when hand-written that way.
+            if file_path.name != self.name:
+                file_path = file_path / self.name
+            datalake_path = str(file_path)
         scheme = urlparse(datalake_path).scheme
         storage = DataStorage[scheme.upper()] if scheme else DataStorage.LOCAL
         return StorageConfig(
@@ -119,11 +126,18 @@ class BaseEngineContext(Generic[SettingsT]):
             rollback_period=data_range if not is_data_range_dict else "",
         )
 
+    @property
+    def settings_file_path(self) -> Path:
+        """Where this engine's settings.toml lives, one directory per engine."""
+        path = self.pfund_config.get_settings_file_path(self.name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
+
     def _load_settings(self) -> SettingsT:
         """Load settings from settings.toml"""
         from pfund_kit.utils import toml
 
-        settings_file_path = self.pfund_config.get_settings_file_path(self.name)
+        settings_file_path = self.settings_file_path
 
         if self.env == Environment.BACKTEST:
             from pfund.engines.settings.backtest_engine_settings import (
@@ -167,8 +181,12 @@ class BaseEngineContext(Generic[SettingsT]):
         """saves current settings to settings.toml"""
         from pfund_kit.utils import toml
 
-        settings_file_path = self.pfund_config.get_settings_file_path(self.name)
-        data = {self.env: settings.model_dump()}
+        settings_file_path = self.settings_file_path
+        # Drop unset values: toml has no null, and the dumper would write them
+        # as the string "None", which reloads as a literal path named "None".
+        data = {
+            self.env: {k: v for k, v in settings.model_dump().items() if v is not None}
+        }
         toml.dump(data, settings_file_path, mode="update", auto_inline=True)
 
     def set_project_name(self, name: str):

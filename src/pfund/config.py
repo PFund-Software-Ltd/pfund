@@ -22,9 +22,17 @@ project_name = "pfund"
 _config: PFundConfig | None = None
 
 
-def setup_logging(env: Environment | str, reset: bool = False) -> None:
+def setup_logging(
+    env: Environment | str,
+    reset: bool = False,
+    config: PFundConfig | None = None,
+) -> None:
+    """Args:
+    config: the engine's config, whose paths are scoped to its name. Defaults
+        to the global config, which is not scoped to any engine.
+    """
     env = Environment[env.upper()]
-    kit_logging.setup_logging(get_config(), env=env, reset=reset)
+    kit_logging.setup_logging(config or get_config(), env=env, reset=reset)
 
 
 def get_config() -> PFundConfig:
@@ -92,17 +100,19 @@ class PFundConfig(Configuration):
         """Initialize PFundConfig-specific attributes from config data."""
         self.show_progress_bar = self._data.get("show_progress_bar", True)
 
+    def get_settings_file_path(self, engine_name: str) -> Path:
+        """Where an engine's settings.toml lives, one directory per engine.
+
+        Here rather than on the engine context so that the CLI, which has no
+        engine, resolves the same path from the same place.
+        """
+        return self.config_path / engine_name / self.SETTINGS_FILENAME
+
     def to_dict(self) -> dict[str, Any]:
         return {
             **super().to_dict(),
             "show_progress_bar": self.show_progress_bar,
         }
-
-    def get_settings_file_path(self, engine_name: str) -> Path:
-        settings_file_path = self.config_path / engine_name / self.SETTINGS_FILENAME
-        settings_file_path.parent.mkdir(parents=True, exist_ok=True)
-        settings_file_path.touch(exist_ok=True)
-        return settings_file_path
 
     def prepare_docker_context(self):
         pass

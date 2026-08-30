@@ -32,8 +32,7 @@ if TYPE_CHECKING:
 
 import logging
 
-from pfund_kit.utils.singleton import SingletonMeta
-
+from pfund.engines.engine_meta import EngineMeta
 from pfund.enums import ComponentType, Environment, RunMode
 from pfund.engines.contexts.base_engine_context import BaseEngineContext, SettingsT
 
@@ -41,14 +40,14 @@ from pfund.engines.contexts.base_engine_context import BaseEngineContext, Settin
 ContextT = TypeVar("ContextT", bound="BaseEngineContext[Any]")
 
 
-class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
+class BaseEngine(Generic[SettingsT, ContextT], metaclass=EngineMeta):
     Context: ClassVar[type[BaseEngineContext[Any]]] = BaseEngineContext
 
     def __init__(self, **kwargs: Any):
         from pfund.config import setup_logging
 
         self._context = self.Context(**kwargs)
-        setup_logging(env=self.env)
+        setup_logging(env=self.env, config=self._context.pfund_config)
         self._logger: ColoredLogger = cast("ColoredLogger", logging.getLogger("pfund"))
         self._is_running = False
         self._strategies: dict[
@@ -74,6 +73,12 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=SingletonMeta):
     @property
     def settings(self) -> SettingsT:
         return self._context.settings
+
+    @property
+    def strategies(
+        self,
+    ) -> dict[ComponentName, BaseStrategy | ActorProxy[BaseStrategy]]:
+        return self._strategies
 
     def is_running(self) -> bool:
         return self._is_running

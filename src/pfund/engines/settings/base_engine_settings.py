@@ -2,7 +2,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from pfund.config import get_config
 from pfund.enums import DataLake
 
 
@@ -13,9 +12,13 @@ class BaseEngineSettings(BaseModel):
         default=DataLake.DELTALAKE,
         description="data lake for writing and appending component data",
     )
-    datalake_path: str = Field(
-        default_factory=lambda: str(get_config().data_path),
-        description="data lake path, such as /data/pfund or s3://bucket/prefix",
+    datalake_path: str | None = Field(
+        default=None,
+        description=(
+            "data lake path, such as /data/pfund or s3://bucket/prefix. "
+            + "Unset means the engine's data_path, resolved on every run so it "
+            + "follows a later pf.configure(data_path=...)."
+        ),
     )
     # datalake_storage_options: dict[str, Any] = Field(
     #     default_factory=dict,

@@ -3,6 +3,15 @@ import click
 from pfund_kit.cli.commands.config import auto_detect_editor, open_file_with_editor
 
 
+_engine_name_option = click.option(
+    "--engine-name",
+    "-e",
+    default="engine",
+    show_default=True,
+    help="Engine name whose settings file to use",
+)
+
+
 @click.group()
 def settings():
     """Manage engine settings toml file."""
@@ -11,22 +20,24 @@ def settings():
 
 @settings.command()
 @click.pass_context
-def where(ctx):
+@_engine_name_option
+def where(ctx, engine_name):
     """Print the engine settings toml file path."""
     config = ctx.obj["config"]
-    click.echo(config.settings_file_path)
+    click.echo(config.get_settings_file_path(engine_name))
 
 
 @settings.command("open")
 @click.pass_context
+@_engine_name_option
 @click.option(
     "--default-editor",
-    "-e",
+    "-E",
     is_flag=True,
     help="Use system default editor ($VISUAL or $EDITOR)",
 )
 @click.argument("editor", required=False)
-def open_settings(ctx, default_editor, editor):
+def open_settings(ctx, engine_name, default_editor, editor):
     """Opens the engine settings toml file."""
     import subprocess
 
@@ -34,7 +45,14 @@ def open_settings(ctx, default_editor, editor):
     paths = config._paths
     project_name = paths.project_name
 
-    file_path = config.settings_file_path
+    file_path = config.get_settings_file_path(engine_name)
+    if not file_path.exists():
+        click.echo(
+            f"No settings file for engine '{engine_name}' at {file_path}; "
+            + "run the engine once to create it.",
+            err=True,
+        )
+        return
 
     # Handle opening the file
     if default_editor:

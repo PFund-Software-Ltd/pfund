@@ -15,10 +15,10 @@ def _resolve_paths(
 ) -> DeltaLakePaths:
     from pfund.config import get_config
 
-    config = get_config()
+    config = get_config().scoped(engine_name)
     return DeltaLakePaths(
-        data_path=data_path or config.data_path / engine_name,
-        cache_path=cache_path or config.cache_path / engine_name,
+        data_path=data_path or config.data_path,
+        cache_path=cache_path or config.cache_path,
     )
 
 

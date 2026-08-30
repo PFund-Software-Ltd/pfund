@@ -4,8 +4,8 @@ channels = ["conda-forge"]
 name = "pfund"
 # macos = min version of macOS required by torch>=2.12.0
 platforms = [{ platform = "osx-arm64", macos = "14.0" }, "linux-64"]
-# NOTE: the minimum supports relative exclude-newer; the maximum matches setup-pixi in ci.yml
-requires-pixi = ">=0.67.0,<=0.72.2"
+# NOTE: should match with setup-pixi in ci.yml
+requires-pixi = ">=0.78.0,<0.79.0"
 # FIXME: set it back to "14 days" when the package is stable
 exclude-newer = "0d"
 
@@ -38,9 +38,9 @@ py313 = ["py313", "test", "optional"]
 pfund-kit = ">=0.1.17"
 pfeed = ">=0.0.19"
 apscheduler = ">=3.11.3"
-httpx2 = { version = ">=2.9.1", extras = ["http2"] }
+httpx2 = { version = ">=2.12.0", extras = ["http2"] }
 websockets = ">=16.1.1"
-numba = ">=0.66.0"
+numba = ">=0.67.0"
 
 [feature.optional.pypi-dependencies]
 pfeed = { version = ">=0.0.19", extras = ["yfinance"] }
@@ -48,8 +48,8 @@ pfolio = ">=0.0.4"
 pfund-plot = {version = ">=0.0.5", extras = ["marimo"]}
 # TODO: enable when ready
 # mtflow = ">=0.0.1.dev2"
-pfund-ibapi = "==10.49.1"
-alpaca-py = ">=0.43.5"
+pfund-ibapi = "==10.50.1"
+alpaca-py = ">=0.44.0"
 hyperliquid-python-sdk = ">=0.24.0"
 joblib = ">=1.5.3"
 scikit-learn = ">=1.9.0"
@@ -63,7 +63,7 @@ pfund = { path = ".", editable = true }
 # TEMP
 pfeed = { path = "../pfeed", editable = true, extras = ["yfinance"] }
 # pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo"] }
-# pfund-kit = { path = "../pfund-kit", editable = true }
+pfund-kit = { path = "../pfund-kit", editable = true }
 # pfolio = { path = "../pfolio", editable = true }
 mtflow = { path = "../mtflow", editable = true }
 afterpython = ">=0.3.19"
