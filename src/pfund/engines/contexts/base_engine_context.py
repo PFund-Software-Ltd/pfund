@@ -6,7 +6,6 @@ from urllib.parse import urlparse
 
 if TYPE_CHECKING:
     import datetime
-    from pathlib import Path
 
     from pfund.engines.base_engine import DataRangeDict
     from pfund.engines.settings.base_engine_settings import BaseEngineSettings
@@ -91,7 +90,7 @@ class BaseEngineContext(Generic[SettingsT]):
         if settings is None:
             return self._load_settings()
         if settings.persist:
-            self._save_settings(settings)
+            settings.save(self.name, self.env)
         return settings
 
     def _parse_data_range(
@@ -120,19 +119,8 @@ class BaseEngineContext(Generic[SettingsT]):
             rollback_period=data_range if not is_data_range_dict else "",
         )
 
-    @property
-    def settings_file_path(self) -> Path:
-        """Where this engine's settings.toml lives, one directory per engine."""
-        path = self.config.get_settings_file_path(self.name)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        return path
-
     def _load_settings(self) -> SettingsT:
-        """Load settings from settings.toml"""
-        from pfund_kit.utils import toml
-
-        settings_file_path = self.settings_file_path
-
+        """Load this environment's settings from settings.toml"""
         if self.env == Environment.BACKTEST:
             from pfund.engines.settings.backtest_engine_settings import (
                 BacktestEngineSettings,
@@ -152,36 +140,7 @@ class BaseEngineContext(Generic[SettingsT]):
         else:
             raise ValueError(f"Unsupported environment: {self.env}")
 
-        if settings_file_path.exists():
-            settings_toml = toml.load(settings_file_path)
-            env_settings = settings_toml.get(self.env, {})
-            settings = cast(
-                "SettingsT",
-                EngineSettings(
-                    **{
-                        k: v
-                        for k, v in env_settings.items()
-                        if k in EngineSettings.model_fields
-                    }
-                ),
-            )
-        else:
-            settings = cast("SettingsT", EngineSettings())
-        # Always write back — this adds new fields with defaults and drops removed fields automatically
-        self._save_settings(settings)
-        return settings
-
-    def _save_settings(self, settings: SettingsT):
-        """saves current settings to settings.toml"""
-        from pfund_kit.utils import toml
-
-        settings_file_path = self.settings_file_path
-        # Drop unset values: toml has no null, and the dumper would write them
-        # as the string "None", which reloads as a literal path named "None".
-        data = {
-            self.env: {k: v for k, v in settings.model_dump().items() if v is not None}
-        }
-        toml.dump(data, settings_file_path, mode="update", auto_inline=True)
+        return cast("SettingsT", EngineSettings.load(self.name, self.env))
 
     def set_project_name(self, name: str):
         self.project_name = name

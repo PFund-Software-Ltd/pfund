@@ -246,7 +246,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=EngineMeta):
 
         if choice == "d":
             self.settings.warn_overwrite = False
-            self.context._save_settings(self.settings)
+            self.settings.save(self.name, self.env)
 
     def run(self, *, overwrite: bool = True, run: MTFlowRun | None = None):
         if self.is_running():
