@@ -16,5 +16,5 @@ class TradeEngineContext(BaseEngineContext[SettingsT]):
         self.database_storage_config = StorageConfig(
             storage=self.settings.database,
             data_path=self.settings.database_uri
-            or self.pfund_config.data_path.resolve().as_uri(),
+            or self.config.data_path.resolve().as_uri(),
         )

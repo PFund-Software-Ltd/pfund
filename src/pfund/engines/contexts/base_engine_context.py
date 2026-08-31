@@ -43,8 +43,6 @@ class BaseEngineContext(Generic[SettingsT]):
         | None,
         settings: SettingsT | None = None,
     ):
-        import pfeed as pe
-
         self.env = Environment[env.upper()]
         self.name = name
         self.run_mode = self._detect_run_mode()
@@ -53,8 +51,7 @@ class BaseEngineContext(Generic[SettingsT]):
         self.data_start, self.data_end = self._parse_data_range(data_range)
         # NOTE: config obtained by get_config() inside ray actor could be different from the one in the main thread (e.g. after calling pf.configure())
         # so we create the config object here in the context and treat it as the source of truth
-        self.pfund_config: PFundConfig = self._get_pfund_config()
-        self.pfeed_config = pe.get_config()
+        self.config: PFundConfig = get_config().scoped(self.name)
         self.logging_config: dict[str, Any] = get_logging_config()
         self.settings = self._resolve_settings(settings)
         self.datalake_storage_config = self._create_datalake_storage_config()
@@ -72,14 +69,11 @@ class BaseEngineContext(Generic[SettingsT]):
         else:
             return RunMode.LOCAL
 
-    def _get_pfund_config(self) -> PFundConfig:
-        return get_config().scoped(self.name)
-
     def _create_datalake_storage_config(self) -> StorageConfig:
         # Unset means data_path, which the engine's config has already scoped by
         # name; an explicit root has not, so it gets the engine name appended.
         if self.settings.datalake_path is None:
-            datalake_path = str(self.pfund_config.data_path)
+            datalake_path = str(self.config.data_path)
         else:
             file_path = FilePath(self.settings.datalake_path)
             # Already ends in the engine name when hand-written that way.
@@ -129,7 +123,7 @@ class BaseEngineContext(Generic[SettingsT]):
     @property
     def settings_file_path(self) -> Path:
         """Where this engine's settings.toml lives, one directory per engine."""
-        path = self.pfund_config.get_settings_file_path(self.name)
+        path = self.config.get_settings_file_path(self.name)
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
 

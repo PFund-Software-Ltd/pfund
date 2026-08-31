@@ -336,7 +336,7 @@ class BacktestMixin:
             total=df.shape[0],
             description=description,
             bar_style=RichColor.BRIGHT_YELLOW,
-            disable=not self.context.pfund_config.show_progress_bar,
+            disable=not self.context.config.show_progress_bar,
         ):
             ts, resolution, product_name, source_type, o, h, l, c, v = row  # pyright: ignore[reportUnusedVariable]  # noqa: E741
             data = cast("BarData", self.get_data(product_name, resolution))

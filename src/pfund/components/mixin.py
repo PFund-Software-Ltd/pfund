@@ -247,7 +247,7 @@ class ComponentMixin:
 
         # configure logging based on pfund's logging config, e.g. log_level, log_file, log_format, etc.
         logging_configurator = LoggingDictConfigurator.create(
-            log_path=self.context.pfund_config.log_path / self.env,
+            log_path=self.context.config.log_path / self.env,
             logging_config=self.context.logging_config,
             lazy=True,
             use_colored_logger=True,
@@ -1166,7 +1166,7 @@ class ComponentMixin:
         # NOTE: must use pfund_config from context, config from get_config() could be different from what user has set in Ray Actor
         # .parent drops the engine name: markets.yml is venue data, shared by
         # every engine, and that is where the venues wrote it.
-        data_path = self.context.pfund_config.data_path.parent
+        data_path = self.context.config.data_path.parent
         for product in self.products.values():
             if product.venue is None:
                 continue

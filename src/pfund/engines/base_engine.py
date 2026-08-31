@@ -47,7 +47,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=EngineMeta):
         from pfund.config import setup_logging
 
         self._context = self.Context(**kwargs)
-        setup_logging(env=self.env, config=self._context.pfund_config)
+        setup_logging(env=self.env, config=self._context.config)
         self._logger: ColoredLogger = cast("ColoredLogger", logging.getLogger("pfund"))
         self._is_running = False
         self._strategies: dict[
