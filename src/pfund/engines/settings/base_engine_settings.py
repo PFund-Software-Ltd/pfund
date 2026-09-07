@@ -1,16 +1,19 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, Self
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import ConfigDict, Field, field_validator
+from pfund_kit.settings import Settings
 
 from pfund.enums import DataLake, Environment
 
 
-class BaseEngineSettings(BaseModel):
+class BaseEngineSettings(Settings):
+    __version__: ClassVar[str] = "0.1.0"
+
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
     datalake: DataLake | str = Field(
@@ -66,6 +69,28 @@ class BaseEngineSettings(BaseModel):
         """,
     )
 
+    @classmethod
+    def _validate_file(cls, data: dict[str, Any]) -> None:
+        # One version covers every environment. Validate all sections before
+        # advancing it, including environments not being loaded by this call.
+        from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
+        from pfund.engines.settings.sandbox_engine_settings import SandboxEngineSettings
+        from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
+
+        models = {
+            Environment.BACKTEST: BacktestEngineSettings,
+            Environment.SANDBOX: SandboxEngineSettings,
+            Environment.PAPER: TradeEngineSettings,
+            Environment.LIVE: TradeEngineSettings,
+        }
+        for env, fields in data.items():
+            if env not in models:
+                raise ValueError(f"Unknown engine settings section {env!r}")
+            try:
+                models[env].model_validate(fields)
+            except ValueError as error:
+                raise ValueError(f"Invalid settings for {env}: {error}") from error
+
     @staticmethod
     def file_path(engine_name: str) -> Path:
         from pfund.config import get_config
@@ -76,22 +101,10 @@ class BaseEngineSettings(BaseModel):
 
     @classmethod
     def load(cls, engine_name: str, env: Environment) -> Self:
-        from pfund_kit.utils import toml
-
-        data = toml.load(cls.file_path(engine_name)) or {}
-        env_data = data.get(env, {})
-        settings = cls(**{k: v for k, v in env_data.items() if k in cls.model_fields})
-        # Always write back — this adds new fields with defaults and drops removed fields automatically
-        settings.save(engine_name, env)
-        return settings
+        return cls.load_file(cls.file_path(engine_name), section=env)
 
     def save(self, engine_name: str, env: Environment) -> None:
-        from pfund_kit.utils import toml
-
-        # Drop unset values: toml has no null, and the dumper would write them
-        # as the string "None", which reloads as a literal path named "None".
-        data = {env: {k: v for k, v in self.model_dump().items() if v is not None}}
-        toml.dump(data, self.file_path(engine_name), mode="update", auto_inline=True)
+        self.save_file(self.file_path(engine_name), section=env)
 
     @field_validator("cache_materialized_data", mode="before")
     @classmethod

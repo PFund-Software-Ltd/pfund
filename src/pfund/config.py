@@ -64,7 +64,6 @@ def configure(
     """
     config = get_config()
     config_dict = config.to_dict()
-    config_dict.pop("__version__")
 
     # Apply updates for non-None values
     for k in config_dict:

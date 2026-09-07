@@ -23,8 +23,6 @@ class ActorProxy(Generic[ComponentT]):
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
     ):
-        from pfeed.utils.ray import setup_ray
-
         from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 
         if "num_cpus" not in ray_kwargs:
@@ -34,10 +32,13 @@ class ActorProxy(Generic[ComponentT]):
         ray_actor_options = ray_actor_options or {}
         ray_actor_options.setdefault("name", name)
 
-        setup_ray()
-        self._actor: ActorHandle[ComponentT] = self._create_actor(
-            component, ray_actor_options, **ray_kwargs
-        )
+        # Adding a component must not cost a process: the actor is created on
+        # first use, so a component tree can be built or loaded without running it.
+        self._component = component
+        self._ray_actor_options = ray_actor_options
+        self._ray_kwargs = ray_kwargs
+        self._actor: ActorHandle[ComponentT] | None = None
+        self._hydrate_fields: dict[str, Any] | None = None
         self.name: str = name
         self.resolution: Resolution = Resolution(resolution)
         self.component_type: ComponentType = component_type
@@ -45,6 +46,22 @@ class ActorProxy(Generic[ComponentT]):
         if isinstance(self.context.settings, TradeEngineSettings):
             self.context.settings.zmq_urls.enable_ray()
             self.context.settings.zmq_ports.enable_ray()
+
+    def _ensure_actor(self) -> ActorHandle[ComponentT]:
+        if self._actor is None:
+            import ray
+            from pfeed.utils.ray import setup_ray
+
+            assert self._hydrate_fields is not None, "ActorProxy is not hydrated"
+            setup_ray()
+            self._actor = self._create_actor(
+                self._component, self._ray_actor_options, **self._ray_kwargs
+            )
+            ray.get(getattr(self._actor, "_hydrate").remote(**self._hydrate_fields))
+        return self._actor
+
+    def _hydrate(self, **kwargs: Any) -> None:
+        self._hydrate_fields = kwargs
 
     @staticmethod
     def _create_actor(
@@ -80,9 +97,11 @@ class ActorProxy(Generic[ComponentT]):
 
     @property
     def actor(self) -> ActorHandle[ComponentT]:
-        return self._actor
+        return self._ensure_actor()
 
     def __getstate__(self) -> dict[str, Any]:
+        # A copy in another process must share the actor, not spawn its own.
+        self._ensure_actor()
         return self.__dict__
 
     # NOTE: added __setstate__ and __getstate__ to avoid ray's serialization issues when returning ActorProxy objects
@@ -95,7 +114,7 @@ class ActorProxy(Generic[ComponentT]):
 
         import ray
 
-        actor = self.__dict__["_actor"]
+        actor = self._ensure_actor()
         attr = getattr(actor, name)
 
         def remote_method(*args: Any, **kwargs: Any) -> Any:
