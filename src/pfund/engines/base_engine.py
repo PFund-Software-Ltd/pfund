@@ -50,6 +50,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=EngineMeta):
         setup_logging(env=self.env, config=self._context.config)
         self._logger: ColoredLogger = cast("ColoredLogger", logging.getLogger("pfund"))
         self._is_running = False
+        self._owns_ray = False
         self._strategies: dict[
             ComponentName, BaseStrategy | ActorProxy[BaseStrategy]
         ] = {}
@@ -279,6 +280,11 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=EngineMeta):
             f"{self.env} {self.name} is running (data_range=({self._context.data_start}, {self._context.data_end}))",
             style=self.env._color,
         )
+        from pfeed.utils.ray import is_ray_initialized
+
+        # Ray already running means someone else owns it, e.g. this engine
+        # runs inside a Ray actor; shutting it down would kill that actor.
+        self._owns_ray = not is_ray_initialized()
         self._is_running = True
         self._setup()
         for strategy in self._strategies.values():
@@ -301,4 +307,5 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=EngineMeta):
     def _teardown(self):
         from pfeed.utils.ray import shutdown_ray
 
-        shutdown_ray()
+        if self._owns_ray:
+            shutdown_ray()
