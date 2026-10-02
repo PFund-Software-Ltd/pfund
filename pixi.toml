@@ -36,13 +36,17 @@ py314 = ["py314", "test", "optional"]
 
 [dependencies]
 
+# TEMP
+[pypi-options]
+prerelease-mode = "allow"
+
 [pypi-dependencies]
-pfund-kit = ">=0.1.20"
+pfund-kit = ">=0.1.21"
 pfeed = ">=0.0.20"
 apscheduler = ">=3.11.3"
 httpx2 = { version = ">=2.13.1", extras = ["http2"] }
 websockets = ">=16.1.0"
-numba = ">=0.67.0"
+numba = ">=0.68.0"
 
 [feature.optional.pypi-dependencies]
 pfeed = { version = ">=0.0.20", extras = ["yfinance"] }
@@ -51,11 +55,10 @@ pfund-plot = {version = ">=0.0.5", extras = ["marimo"]}
 # TODO: enable when ready
 # mtflow = ">=0.0.1.dev2"
 hyperliquid-python-sdk = ">=0.24.0"
-# pfund-ibapi = "==10.50.2"
 alpaca-py = ">=0.44.0"
 joblib = ">=1.6.0"
 scikit-learn = ">=1.9.1"
-torch = ">=2.14.0"
+torch = ">=2.14.1"
 safetensors = ">=0.8.0"
 jax = ">=0.11.2"
 ta-lib = ">=0.8.1"
@@ -64,22 +67,14 @@ ta-lib = ">=0.8.1"
 pfund = { path = ".", editable = true }
 # TEMP
 pfeed = { path = "../pfeed", editable = true, extras = ["yfinance"] }
-# pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo"] }
+pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo"] }
 pfund-kit = { path = "../pfund-kit", editable = true }
 # pfolio = { path = "../pfolio", editable = true }
 mtflow = { path = "../mtflow", editable = true }
-# TEMP
-afterpython = { path = "../../afterpython.org/afterpython", editable = true }
-# afterpython = ">=0.3.19"
-basedpyright = ">=1.40.1"
+afterpython = ">=0.4.0"
 memray = ">=1.19.3"
 pandas-stubs = ">=3.0.3.260530"
 pybit = ">=5.17.0"
-lightning = ">=2.6.6"
-flax = ">=0.12.9"
-equinox = ">=0.13.8"
-optax = ">=0.2.8"
-transformers = ">=5.17.0"
 
 [feature.dev.dependencies]
 graphviz = ">=14.1.2"
