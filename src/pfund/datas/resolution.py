@@ -160,6 +160,7 @@ class Resolution:
                 return self
         else:
             return Resolution("1" + repr(self.timeframe.lower()))
+    finer = higher
 
     def lower(self) -> Resolution:
         """Rotate to the next lower resolution. e.g. 1h < 1m, lower resolution = higher timeframe"""
@@ -173,6 +174,7 @@ class Resolution:
             )
         else:
             return Resolution("1" + repr(self.timeframe.higher()))
+    coarser = lower
 
     def to_unit(self) -> Resolution:
         """Convert to unit resolution. e.g. 5m -> 1m"""

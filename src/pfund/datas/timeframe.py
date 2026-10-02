@@ -51,6 +51,7 @@ class Timeframe(IntEnum):
         if next_index < len(members):
             return members[next_index]
         return self  # Already at the highest
+    coarser = higher
 
     def lower(self) -> Timeframe:
         """Rotate to the next lower timeframe."""
@@ -60,6 +61,7 @@ class Timeframe(IntEnum):
         if prev_index >= 0:
             return members[prev_index]
         return self  # Already at the lowest
+    finer = lower
 
     def is_quote(self):
         return self == Timeframe.QUOTE
