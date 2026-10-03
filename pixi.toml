@@ -84,10 +84,11 @@ python-graphviz = ">=0.21"
 pfund = { path = ".", editable = true }
 pytest = ">=9.1.1"
 pytest-cov = ">=7.1.0"
-pytest-mock = ">=3.15.1"
+pytest-mock = ">=3.16.0"
 pytest-xdist = ">=3.8.0"
 pytest-asyncio = ">=1.4.0"
-pytest-recording = ">=0.13.4"
+pytest-recording = ">=0.14.0"
+pytest-markdown-docs = ">=0.9.2"
 # testcontainers = ">=4.14.2"
 [feature.test.tasks]
 test = "pytest"
