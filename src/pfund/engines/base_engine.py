@@ -175,7 +175,6 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=EngineMeta):
         import pyarrow.fs as pa_fs
 
         from pfeed.storages.file_based_storage import FileBasedStorage
-        from pfeed.enums import DataStorage
 
         storage_config = self.context.datalake_storage_config
         Storage = DataStorage[storage_config.storage].storage_class

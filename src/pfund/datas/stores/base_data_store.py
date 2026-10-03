@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 from abc import ABC, abstractmethod
 
 import narwhals as nw
-from pfeed.enums import DataLayer, DataStorage
+from pfeed.enums import DataLayer
 from pfeed.feeds.base_feed import BaseFeed
 
 from pfund.datas.data_base import BaseData

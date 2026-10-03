@@ -4,8 +4,6 @@ from typing import Annotated, ClassVar, cast
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 from pfeed.enums import DataSource
-from pfeed.storages.storage_config import StorageConfig
-from pfeed.io.io_config import IOConfig
 
 from pfund.datas.resolution import Resolution
 from pfund.datas.timeframe import Timeframe
@@ -22,8 +20,6 @@ class DataConfig(BaseModel):
         arbitrary_types_allowed=True,
         validate_assignment=True,
     )
-    storage_config: StorageConfig = Field(default_factory=StorageConfig)
-    io_config: IOConfig = Field(default_factory=IOConfig)
 
     @staticmethod
     def default_stale_bar_timeout(resolution: Resolution) -> float:

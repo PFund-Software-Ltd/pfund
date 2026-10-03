@@ -12,7 +12,6 @@ if TYPE_CHECKING:
     from pfund.config import PFundConfig
     from pfund.engines.component_registry import RegistryProxy
 
-from pfeed.enums import DataStorage
 from pfeed.storages.storage_config import StorageConfig
 from pfeed.utils.file_path import FilePath
 
