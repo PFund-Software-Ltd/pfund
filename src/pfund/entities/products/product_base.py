@@ -7,7 +7,6 @@ if TYPE_CHECKING:
 
 from pathlib import Path
 
-from pfeed.enums import DataSource
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from pfund.entities.markets.market_base import BaseMarket
@@ -29,7 +28,7 @@ class BaseProduct(BaseModel):
         arbitrary_types_allowed=True, extra="forbid"
     )
 
-    source: DataSource
+    source: str
     venue: TradingVenue | None = None
     exchange: str | None = None
     basis: ProductBasis

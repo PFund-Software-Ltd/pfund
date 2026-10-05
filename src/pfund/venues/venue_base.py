@@ -253,10 +253,9 @@ class BaseVenue(
         symbol: str = "",
         **specs: Any,
     ) -> ProductT:
-        from pfeed.enums import DataSource
         from pfund.entities.products import ProductFactory, ProductBasis
 
-        source = DataSource[cls.name.upper()]
+        source = cls.name.upper()
         Product = cast("type[ProductT]", ProductFactory(source=source, basis=basis))
         return Product(
             source=source,

@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Annotated, ClassVar, cast
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
-from pfeed.enums import DataSource
 
 from pfund.datas.resolution import Resolution
 from pfund.datas.timeframe import Timeframe
@@ -25,7 +24,7 @@ class DataConfig(BaseModel):
     def default_stale_bar_timeout(resolution: Resolution) -> float:
         return resolution.to_seconds() * DEFAULT_STALE_BAR_TIMEOUT_RATIO
 
-    data_source: DataSource | str | None = Field(default=None)
+    data_source: str | None = Field(default=None)
     data_origin: str = ""
     # data_resolutions = primary_resolution + extra_resolutions defined in data store's add_data()
     _data_resolutions: list[Resolution] = PrivateAttr(init=False)
@@ -78,9 +77,9 @@ class DataConfig(BaseModel):
 
     @field_validator("data_source", mode="before")
     @classmethod
-    def validate_data_source(cls, v: DataSource | str | None) -> DataSource | None:
+    def validate_data_source(cls, v: str | None) -> str | None:
         if v is not None:
-            return DataSource[v.upper()]
+            return v.upper()
         return None
 
     @field_validator("resample", mode="before")

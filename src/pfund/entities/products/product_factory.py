@@ -7,8 +7,6 @@ if TYPE_CHECKING:
 
 from functools import cache
 
-from pfeed.enums import DataSource
-
 from pfund.enums import TradingVenue
 
 
@@ -25,16 +23,17 @@ def _build_product_class(
     return type(class_name, (Product, *mixins), {"__module__": __name__})
 
 
-def ProductFactory(source: DataSource | str, basis: str) -> type[BaseProduct]:
+def ProductFactory(source: str, basis: str) -> type[BaseProduct]:
     from pfund.entities.products.product_basis import ProductBasis
     from pfund.enums import AllAssetType, AssetTypeModifier
 
-    source = DataSource[str(source).upper()]
-    if source.value in TradingVenue.__members__:
-        VenueClass = TradingVenue[source.value].venue_class
+    source = source.upper()
+    if source in TradingVenue.__members__:
+        VenueClass = TradingVenue[source].venue_class
         Product = VenueClass.Product
     else:
-        Product = source.product_class
+        # FIXME: get the product class of a non-venue data source from its pfeed plugin (pfeed.registry)
+        raise NotImplementedError(f"{source} is not a trading venue, products of non-venue data sources are not supported yet")
     asset_type = ProductBasis(basis=basis.upper()).asset_type
     if asset_type is None:
         raise ValueError(f"asset type is None for product basis {basis}")

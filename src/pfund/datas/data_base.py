@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
-from pfeed.enums import DataCategory, DataSource
+from pfeed.enums import DataCategory
 
 from pfund.datas.data_config import DataConfig
 
@@ -15,9 +15,9 @@ class BaseData:
         self.extra: dict[str, Any] = {}
 
     @property
-    def source(self) -> DataSource:
+    def source(self) -> str:
         assert self.config.data_source is not None
-        return DataSource[self.config.data_source.upper()]
+        return self.config.data_source
 
     @property
     def origin(self) -> str:

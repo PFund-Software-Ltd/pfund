@@ -8,7 +8,6 @@ if TYPE_CHECKING:
     from ibapi.contract import Contract
 
 from pydantic import Field, PrivateAttr
-from pfeed.enums import DataSource
 
 from pfund.errors import MissingSymbolError
 from pfund.entities.products.product_base import BaseProduct
@@ -16,7 +15,7 @@ from pfund.enums import TradingVenue, TraditionalAssetType
 
 
 class InteractiveBrokersProduct(BaseProduct):
-    source: DataSource = DataSource.IBKR
+    source: str = "IBKR"
     venue: TradingVenue = TradingVenue.IBKR
     exchange: str = Field(default="", description="")
 
