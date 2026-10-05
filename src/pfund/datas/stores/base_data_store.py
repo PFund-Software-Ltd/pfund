@@ -68,10 +68,14 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
             )
 
     def _create_feed(self, data: DataT) -> FeedT:
-        from pfeed import registry
+        import pfeed as pe
 
-        Feed = registry.get_feed(data.source, data.category)
-        return Feed(pipeline_mode=True, num_workers=data.config.num_batch_workers)  # pyright: ignore[reportReturnType]
+        return pe.get_feed(  # pyright: ignore[reportReturnType]
+            data.source,
+            data.category,
+            pipeline_mode=True,
+            num_workers=data.config.num_batch_workers,
+        )
 
     @staticmethod
     def _create_cache_storage_config(storage_config: StorageConfig) -> StorageConfig:
