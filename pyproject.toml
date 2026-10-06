@@ -35,12 +35,10 @@ dependencies = [
 
 [project.optional-dependencies]
 core = [
-    'pfeed[yfinance]>=0.0.20',
-    'pfolio>=0.0.4',
     'pfund-plot[marimo]>=0.0.5',
     # 'mtflow>=0.0.1.dev2',
-    "hyperliquid-python-sdk>=0.24.0"
 ]
+ray = ["ray[default]>=2.59.0"]
 ta-lib = ["ta-lib>=0.8.1"]
 sklearn = [
     "joblib>=1.6.0",
@@ -50,6 +48,7 @@ torch = [
     "torch>=2.14.1",
     "safetensors>=0.8.0",
 ]
+# hyperliquid = ["pfund-hyperliquid>=0.0.1"]
 
 [project.scripts]
 pfund = "pfund.__main__:run_cli"
@@ -63,13 +62,13 @@ repository = "https://github.com/PFund-Software-Ltd/pfund"
 documentation = "https://pfund.pfund.ai/doc"
 
 [build-system]
-requires = ["uv_build>=0.12.22,<0.13.0"]
+requires = ["uv_build>=0.12.23,<0.13.0"]
 build-backend = "uv_build"
 
 [tool.uv]
 # FIXME: set it back to "14 days" when the package is stable
 exclude-newer = "0 days"
-exclude-newer-package = { pfeed = false, pfolio = false, pfund-kit = false, pfund-plot = false, mtflow = false }
+exclude-newer-package = { pfeed = false, pfund-kit = false, pfund-plot = false, mtflow = false }
 
 [tool.pyright]
 # typeCheckingMode = "basic"
