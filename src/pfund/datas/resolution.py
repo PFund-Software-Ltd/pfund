@@ -209,6 +209,7 @@ class Resolution:
                 break
             higher_resolutions.append(higher_resolution)
         return higher_resolutions
+    get_finer_resolutions = get_higher_resolutions
 
     def get_lower_resolutions(self, exclude_quote: bool = False) -> list[Resolution]:
         """Get all resolutions with lower granularity (coarser time intervals) than this one.
@@ -228,6 +229,7 @@ class Resolution:
                 continue
             lower_resolutions.append(lower_resolution)
         return lower_resolutions
+    get_coarser_resolutions = get_lower_resolutions
 
     def __str__(self):
         resolution = f"{self.period}_{self.timeframe.name}"
