@@ -62,9 +62,8 @@ class Resolution:
             tuple[str, str, str | None]: period string, timeframe string, orderbook level string
         """
         # Reject invalid characters before transformation
-        assert not resolution.strip().startswith("-"), (
-            f"Invalid {resolution=}, period cannot be negative"
-        )
+        if resolution.strip().startswith("-"):
+            raise ValueError(f"Invalid {resolution=}, period cannot be negative")
 
         # Add "1" if the resolution doesn't start with a number
         if not re.match(r"^\d", resolution):
@@ -74,11 +73,12 @@ class Resolution:
         resolution = re.sub(r"^(\d+)[-_]", r"\1", resolution)
 
         # validate resolution pattern
-        assert re.match(
+        if not re.match(
             rf"^[1-9]\d*({Timeframe.pattern()})(?:_L[1-3])?$", resolution, re.IGNORECASE
-        ), (
-            f"Invalid {resolution=}, pattern should be e.g. '1d', '2m', '3h', '1quote_L1' etc."
-        )
+        ):
+            raise ValueError(
+                f"Invalid {resolution=}, pattern should be e.g. '1d', '2m', '3h', '1quote_L1' etc."
+            )
 
         # extract orderbook level if it exists
         resolution, *orderbook_level = resolution.strip().split("_")
