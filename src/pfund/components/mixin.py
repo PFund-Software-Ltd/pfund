@@ -477,13 +477,13 @@ class ComponentMixin:
 
     @property
     def X_pandas(self) -> pd.DataFrame:
-        from pfeed._etl.base import convert_dataframe
+        from pfeed.utils.dataframe import convert_dataframe
 
         return convert_dataframe(self.X, data_tool="pandas")
 
     @property
     def X_polars(self) -> pl.DataFrame:
-        from pfeed._etl.base import convert_dataframe
+        from pfeed.utils.dataframe import convert_dataframe
 
         return convert_dataframe(self.X, data_tool="polars").collect()
 
@@ -499,7 +499,7 @@ class ComponentMixin:
 
     @property
     def df_pandas(self) -> pd.DataFrame:
-        from pfeed._etl.base import convert_dataframe
+        from pfeed.utils.dataframe import convert_dataframe
 
         return convert_dataframe(self.df, data_tool="pandas")
 
@@ -507,7 +507,7 @@ class ComponentMixin:
     # which messes up with pl.DataFrame type hints.
     @property
     def df_polars(self) -> pl.DataFrame:
-        from pfeed._etl.base import convert_dataframe
+        from pfeed.utils.dataframe import convert_dataframe
 
         return convert_dataframe(self.df, data_tool="polars").collect()
 
