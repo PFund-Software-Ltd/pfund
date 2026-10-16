@@ -5,7 +5,7 @@ name = "pfund"
 # macos = min version of macOS required by torch>=2.12.0
 platforms = [{ platform = "osx-arm64", macos = "14.0" }, "linux-aarch64", "linux-64", "win-64"]
 # NOTE: should match with setup-pixi in ci.yml
-requires-pixi = ">=0.81.0,<0.82.0"
+requires-pixi = ">=0.82.0,<0.83.0"
 # FIXME: set it back to "14 days" when the package is stable
 exclude-newer = "0d"
 
@@ -22,38 +22,38 @@ mtflow = "0d"
 depends-on = [
   { task = "test", environment = "py313" },
   { task = "test", environment = "py314" },
-  # { task = "test", environment = "py315" },
+  { task = "test", environment = "py315" },
 ]
 
 [environments]
 default = ["py313", "dev", "test", "optional"]
 py313 = ["py313", "test", "optional"]
 py314 = ["py314", "test", "optional"]
-# py315 = ["py315", "test", "optional"]
+py315 = ["py315", "test", "optional"]
 
 [dependencies]
 
-# TEMP
-[pypi-options]
-prerelease-mode = "allow"
+# [pypi-options]
+# prerelease-mode = "allow"
 
 [pypi-dependencies]
 pfund-kit = ">=0.1.21"
 pfeed = ">=0.0.20"
 apscheduler = ">=3.11.3"
 httpx2 = { version = ">=2.13.1", extras = ["http2"] }
-websockets = ">=16.1.0"
+websockets = ">=17.2.0"
 numba = ">=0.68.0"
 
 [feature.optional.pypi-dependencies]
-pfund-plot = {version = ">=0.0.5", extras = ["marimo"]}
 # TODO: enable when ready
 # mtflow = ">=0.0.1.dev2"
-ray = { version = ">=2.59.0", extras = ["default"] }
-ta-lib = ">=0.8.1"
+# TODO: remove the env-markers when ray supports python 3.15
+ray = { version = ">=2.59.0", extras = ["default"], env-markers = "python_version < '3.15'" }
+ta-lib = ">=0.8.2"
 joblib = ">=1.6.0"
 scikit-learn = ">=1.9.1"
-torch = ">=2.14.1"
+# TODO: remove env-markers when torch supports python 3.15
+torch = { version = ">=2.14.1", env-markers = "python_version < '3.15'" }
 safetensors = ">=0.8.0"
 # Trading Venues:
 # pfund-hyperliquid = ">=0.0.1"
@@ -66,6 +66,8 @@ safetensors = ">=0.8.0"
 pfund = { path = ".", editable = true }
 # TEMP
 pfeed = { path = "../pfeed", editable = true }
+# TODO: remove the env-markers when ray supports python 3.15, add "ray" back to pfeed extras
+ray = { version = ">=2.59.0", extras = ["default"], env-markers = "python_version < '3.15'" }
 pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo"] }
 pfund-kit = { path = "../pfund-kit", editable = true }
 mtflow = { path = "../mtflow", editable = true }
@@ -78,6 +80,8 @@ python-graphviz = ">=0.21"
 
 [feature.test.pypi-dependencies]
 pfund = { path = ".", editable = true }
+# TEMP
+pfeed = { path = "../pfeed", editable = true }
 pytest = ">=9.1.1"
 pytest-cov = ">=7.1.0"
 pytest-mock = ">=3.16.0"
@@ -97,5 +101,5 @@ python = "3.13.*"
 [feature.py314.dependencies]
 python = "3.14.*"
 
-# [feature.py315.dependencies]
-# python = "3.15.*"
+[feature.py315.dependencies]
+python = "3.15.*"
