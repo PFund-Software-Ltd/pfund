@@ -41,7 +41,7 @@ pfund-kit = ">=0.1.21"
 pfeed = ">=0.0.20"
 apscheduler = ">=3.11.3"
 httpx2 = { version = ">=2.13.1", extras = ["http2"] }
-websockets = ">=17.2.0"
+websockets = ">=16.1.1"
 numba = ">=0.68.0"
 
 [feature.optional.pypi-dependencies]

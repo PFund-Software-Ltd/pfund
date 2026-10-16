@@ -149,7 +149,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/96/92447566d16df59b2a776c0fb82dbc4d9e07cd95062562af01e408583fc4/itsdangerous-2.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/e5/0ae74c83c1cab2c14daadf28bd0143eb14bb81503834af987b66badc7b61/griffelib-2.3.2-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/08/bb/28e3106ee586e5b2f5ecf211eec1348055f0f926314b13fe23b9cffa9039/sqlalchemy-2.1.5.tar.gz
       - pypi: https://files.pythonhosted.org/packages/09/ba/a4568248771ce81957bfb7cc600264a40fbcda092391ee1c415c50be4bea/httpcore2-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/09/ed/559d2915dce85794bc0c36064043da170da50cd98746dcbddd85d5932017/nest_asyncio2-1.7.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl
@@ -410,6 +409,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f2/53/b01894b835ec46cf01ed36a3de8132a7d0771e769b7f2f3184b3e9ceaa0b/ta_lib-0.8.2-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/f2/cf/77d3e19b7fabd03895caca7857ef51e4c409e0ca6b37ee6e9f7daa50b642/proxy_tools-0.1.0.tar.gz
+      - pypi: https://files.pythonhosted.org/packages/f3/6d/04f4ffc5038571e712c4f88f20d7022091bafab082e85ea5b37a7e8270f1/sqlalchemy-2.1.5-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/f4/b8/a6803ed425482c2cc9941540f2bfa03fbe24e50277bfa999330620613a36/git_cliff-2.14.2-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/f7/62/de5bdd77d935331f4f802edc11e4d82950f642caad6cb2f949837b8560e2/pillow-12.3.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/f9/34/dd7d3c763a00b7b965e25a5eab0acd1a345dbaf0f45fffe595278873a1c0/py_spy-0.4.2-py2.py3-none-manylinux_2_5_x86_64.manylinux1_x86_64.whl
@@ -538,7 +538,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/04/e5/0ae74c83c1cab2c14daadf28bd0143eb14bb81503834af987b66badc7b61/griffelib-2.3.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/07/42/a687e7091928806e514f89fa2666f25ec9bfe0a902fc4402b25e51ce408b/nh3-0.3.7-cp38-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl
       - pypi: https://files.pythonhosted.org/packages/08/6a/e5fc57136e8bacccb2b39627dea2cd546540a06181e22fe6db90e15b3ae4/msgpack-1.2.3-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl
-      - pypi: https://files.pythonhosted.org/packages/08/bb/28e3106ee586e5b2f5ecf211eec1348055f0f926314b13fe23b9cffa9039/sqlalchemy-2.1.5.tar.gz
       - pypi: https://files.pythonhosted.org/packages/09/7d/65a7de0af421317bb36a067241e4235fff194eed60b961ed6d3f59a3fc60/safetensors-0.8.0-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl
       - pypi: https://files.pythonhosted.org/packages/09/ba/a4568248771ce81957bfb7cc600264a40fbcda092391ee1c415c50be4bea/httpcore2-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/09/ed/559d2915dce85794bc0c36064043da170da50cd98746dcbddd85d5932017/nest_asyncio2-1.7.4-py3-none-any.whl
@@ -787,6 +786,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/e7/e7/80988e32bf6f73919a113473a604f5a8f09094de312b9d52b79c2df7612b/jupyter_core-5.9.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e8/cf/22794a399d99480486120e26e879ef008e21f5e85274c2ed591d568bb326/cattrs-26.2.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/eb/0d/d395e310e36b5bd39a121cd455504aa1e9111f419efaa88be6b814b4e54d/sqlalchemy-2.1.5-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl
       - pypi: https://files.pythonhosted.org/packages/eb/a3/87fe9b7203ec2e56ea6a57c75e6d632eaf9487c7f7978cdad1d801bee0af/google_auth-2.62.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/eb/a3/b69efbf4143b5b9859b977770bbbabcc2796b702fa69dc40271e45cd5a56/prometheus_client-0.26.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl
@@ -881,7 +881,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/04/96/92447566d16df59b2a776c0fb82dbc4d9e07cd95062562af01e408583fc4/itsdangerous-2.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/e5/0ae74c83c1cab2c14daadf28bd0143eb14bb81503834af987b66badc7b61/griffelib-2.3.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/05/e6/df7f2c9ebb94760113debbcea2bd3afe5fdab88a4f7bec1b618755517460/msgpack-1.2.3-cp313-cp313-macosx_11_0_arm64.whl
-      - pypi: https://files.pythonhosted.org/packages/08/bb/28e3106ee586e5b2f5ecf211eec1348055f0f926314b13fe23b9cffa9039/sqlalchemy-2.1.5.tar.gz
       - pypi: https://files.pythonhosted.org/packages/09/ba/a4568248771ce81957bfb7cc600264a40fbcda092391ee1c415c50be4bea/httpcore2-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/09/ed/559d2915dce85794bc0c36064043da170da50cd98746dcbddd85d5932017/nest_asyncio2-1.7.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl
@@ -1131,6 +1130,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f2/cf/77d3e19b7fabd03895caca7857ef51e4c409e0ca6b37ee6e9f7daa50b642/proxy_tools-0.1.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/f5/b1/fa7c600e7dceae12e9606c7578cbc9ff1e1ed55844883ee5c92205e86226/safetensors-0.8.0-cp310-abi3-macosx_11_0_arm64.whl
+      - pypi: https://files.pythonhosted.org/packages/f6/aa/f10fc142d2db255249107ee8b21bfbabc10b90f7fadf13c3cf898acc6179/sqlalchemy-2.1.5-cp313-cp313-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/f7/b9/c720e56858d4e1539503297ed37063e0c08e0f3541c41b777f6a800f75fa/pydantic_core-2.50.1-cp313-cp313-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/fa/b8/6a82f95c7987f6f660a35b73d5fdb28521cf2e3e3b680a777ef838c6b248/ray-2.59.0-cp313-cp313-macosx_12_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/fb/76/641ae371508676492379f16e2fa48f4e2c11741bd63c48be4b12a6b09cba/aiosignal-1.4.0-py3-none-any.whl
@@ -1225,7 +1225,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/04/96/92447566d16df59b2a776c0fb82dbc4d9e07cd95062562af01e408583fc4/itsdangerous-2.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/e5/0ae74c83c1cab2c14daadf28bd0143eb14bb81503834af987b66badc7b61/griffelib-2.3.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/05/19/55a89733b9078a88605f5884763e0457409fd8d04d2e47d4d761052e28d6/ujson-6.0.0-cp313-cp313-win_amd64.whl
-      - pypi: https://files.pythonhosted.org/packages/08/bb/28e3106ee586e5b2f5ecf211eec1348055f0f926314b13fe23b9cffa9039/sqlalchemy-2.1.5.tar.gz
       - pypi: https://files.pythonhosted.org/packages/09/ba/a4568248771ce81957bfb7cc600264a40fbcda092391ee1c415c50be4bea/httpcore2-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/09/ed/559d2915dce85794bc0c36064043da170da50cd98746dcbddd85d5932017/nest_asyncio2-1.7.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl
@@ -1395,6 +1394,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/a7/03/921a3d3c75785aca9ebfbfcabfbc3a1be12e2ab5265deb026d55a5a3f83e/tqdm-4.70.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/a7/c9/c3161313b4ca0c601eeefabd3d3b576edaa9afdefd32da97210700e47652/pytokens-0.4.1-cp313-cp313-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/a8/71/9219fe65ef32bddc0b5d14e1d98dfefe9d2c9c1b1d1e93efca1f29fcbd4d/xyzservices-2026.9.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/a9/f6/c48924aafae616d59a2eb0375feeaf4bc4356327a442bda3b9205861b543/sqlalchemy-2.1.5-cp313-cp313-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/ab/84/02fc1827e8cdded4aa65baef11296a9bbe595c474f0d6d758af082d849fd/execnet-2.1.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ab/9a/42ec8180a769516ae757e893b69736826efceac7332553915b4528a91c6d/opentelemetry_proto-1.45.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ab/9e/0f9412498fa72a016226e34dfff0c2c85383bb78133d8c1e55edf3c97106/python_lsp_ruff-2.3.4-py3-none-any.whl
@@ -8629,7 +8629,7 @@ packages:
   - pfeed>=0.0.20
   - apscheduler>=3.11.3
   - httpx2[http2]>=2.13.1
-  - websockets>=17.2.0 ; sys_platform != 'emscripten'
+  - websockets>=16.1.1 ; sys_platform != 'emscripten'
   - numba>=0.68.0
   - ray[default]>=2.59.0 ; extra == 'ray'
   - ta-lib>=0.8.2 ; extra == 'ta-lib'
@@ -8803,45 +8803,6 @@ packages:
   version: 1.2.3
   sha256: 5e0d7950ca3c1bbae291d0552dd3bb2792fc680629c4c0d44e47e5bab969f3ca
   requires_python: '>=3.10'
-- pypi: https://files.pythonhosted.org/packages/08/bb/28e3106ee586e5b2f5ecf211eec1348055f0f926314b13fe23b9cffa9039/sqlalchemy-2.1.5.tar.gz
-  name: sqlalchemy
-  version: 2.1.5
-  sha256: 0df76cf1ca680ad745bd378a6299a058611a8a784eeaeb4ed78ad4a0b7ce2003
-  requires_dist:
-  - typing-extensions>=4.6.0
-  - greenlet>=1 ; extra == 'asyncio'
-  - mypy>=2.4 ; extra == 'mypy'
-  - types-greenlet>=2 ; extra == 'mypy'
-  - pyodbc ; extra == 'mssql'
-  - pymssql ; extra == 'mssql-pymssql'
-  - pyodbc ; extra == 'mssql-pyodbc'
-  - mssql-python>=1.9.0 ; extra == 'mssql-python'
-  - mysqlclient>=1.4.0 ; extra == 'mysql'
-  - mysql-connector-python ; extra == 'mysql-connector'
-  - mariadb>=1.0.1,!=1.1.2,!=1.1.5,!=1.1.10 ; extra == 'mariadb-connector'
-  - oracledb>=2.0.1 ; extra == 'oracle'
-  - cx-oracle>=8 ; extra == 'oracle-cxoracle'
-  - oracledb>=2.0.1 ; extra == 'oracle-oracledb'
-  - psycopg>=3.0.7,!=3.1.15 ; extra == 'postgresql'
-  - pg8000>=1.29.3 ; extra == 'postgresql-pg8000'
-  - sqlalchemy[asyncio] ; extra == 'postgresql-asyncpg'
-  - asyncpg ; extra == 'postgresql-asyncpg'
-  - psycopg2-binary ; extra == 'postgresql-psycopg2binary'
-  - psycopg2cffi ; extra == 'postgresql-psycopg2cffi'
-  - psycopg>=3.0.7,!=3.1.15 ; extra == 'postgresql-psycopg'
-  - psycopg[binary]>=3.0.7,!=3.1.15 ; extra == 'postgresql-psycopgbinary'
-  - pymysql ; extra == 'pymysql'
-  - cymysql ; extra == 'cymysql'
-  - sqlalchemy[asyncio] ; extra == 'aiomysql'
-  - aiomysql ; extra == 'aiomysql'
-  - sqlalchemy[asyncio] ; extra == 'aioodbc'
-  - aioodbc ; extra == 'aioodbc'
-  - sqlalchemy[asyncio] ; extra == 'asyncmy'
-  - asyncmy>=0.2.12 ; extra == 'asyncmy'
-  - sqlalchemy[asyncio] ; extra == 'aiosqlite'
-  - aiosqlite ; extra == 'aiosqlite'
-  - sqlcipher3-binary ; extra == 'sqlcipher'
-  requires_python: '>=3.11'
 - pypi: https://files.pythonhosted.org/packages/09/7d/65a7de0af421317bb36a067241e4235fff194eed60b961ed6d3f59a3fc60/safetensors-0.8.0-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl
   name: safetensors
   version: 0.8.0
@@ -15804,6 +15765,45 @@ packages:
   - pyparsing>=3
   - python-dateutil>=2.7
   requires_python: '>=3.11'
+- pypi: https://files.pythonhosted.org/packages/a9/f6/c48924aafae616d59a2eb0375feeaf4bc4356327a442bda3b9205861b543/sqlalchemy-2.1.5-cp313-cp313-win_amd64.whl
+  name: sqlalchemy
+  version: 2.1.5
+  sha256: fb8dcd5e1cc12fdd4d490819ec7a56e8c02e86ca9087a472e28b422ff932bae0
+  requires_dist:
+  - typing-extensions>=4.6.0
+  - greenlet>=1 ; extra == 'asyncio'
+  - mypy>=2.4 ; extra == 'mypy'
+  - types-greenlet>=2 ; extra == 'mypy'
+  - pyodbc ; extra == 'mssql'
+  - pymssql ; extra == 'mssql-pymssql'
+  - pyodbc ; extra == 'mssql-pyodbc'
+  - mssql-python>=1.9.0 ; extra == 'mssql-python'
+  - mysqlclient>=1.4.0 ; extra == 'mysql'
+  - mysql-connector-python ; extra == 'mysql-connector'
+  - mariadb>=1.0.1,!=1.1.2,!=1.1.5,!=1.1.10 ; extra == 'mariadb-connector'
+  - oracledb>=2.0.1 ; extra == 'oracle'
+  - cx-oracle>=8 ; extra == 'oracle-cxoracle'
+  - oracledb>=2.0.1 ; extra == 'oracle-oracledb'
+  - psycopg>=3.0.7,!=3.1.15 ; extra == 'postgresql'
+  - pg8000>=1.29.3 ; extra == 'postgresql-pg8000'
+  - sqlalchemy[asyncio] ; extra == 'postgresql-asyncpg'
+  - asyncpg ; extra == 'postgresql-asyncpg'
+  - psycopg2-binary ; extra == 'postgresql-psycopg2binary'
+  - psycopg2cffi ; extra == 'postgresql-psycopg2cffi'
+  - psycopg>=3.0.7,!=3.1.15 ; extra == 'postgresql-psycopg'
+  - psycopg[binary]>=3.0.7,!=3.1.15 ; extra == 'postgresql-psycopgbinary'
+  - pymysql ; extra == 'pymysql'
+  - cymysql ; extra == 'cymysql'
+  - sqlalchemy[asyncio] ; extra == 'aiomysql'
+  - aiomysql ; extra == 'aiomysql'
+  - sqlalchemy[asyncio] ; extra == 'aioodbc'
+  - aioodbc ; extra == 'aioodbc'
+  - sqlalchemy[asyncio] ; extra == 'asyncmy'
+  - asyncmy>=0.2.12 ; extra == 'asyncmy'
+  - sqlalchemy[asyncio] ; extra == 'aiosqlite'
+  - aiosqlite ; extra == 'aiosqlite'
+  - sqlcipher3-binary ; extra == 'sqlcipher'
+  requires_python: '>=3.11'
 - pypi: https://files.pythonhosted.org/packages/aa/a0/e784d7a9fd277a2ee395490ec4df96608b7fe218bb1ef7dced2a1caea490/wrapt-2.5.1-cp314-cp314-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl
   name: wrapt
   version: 2.5.1
@@ -18117,6 +18117,45 @@ packages:
   - xlsxwriter>=3.2.0 ; extra == 'all'
   - zstandard>=0.23.0 ; extra == 'all'
   requires_python: '>=3.11'
+- pypi: https://files.pythonhosted.org/packages/eb/0d/d395e310e36b5bd39a121cd455504aa1e9111f419efaa88be6b814b4e54d/sqlalchemy-2.1.5-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl
+  name: sqlalchemy
+  version: 2.1.5
+  sha256: 6c229afac414d691d2f69a6f4e294ac5b5fd334c49da1f4fb86ab7f2a466271d
+  requires_dist:
+  - typing-extensions>=4.6.0
+  - greenlet>=1 ; extra == 'asyncio'
+  - mypy>=2.4 ; extra == 'mypy'
+  - types-greenlet>=2 ; extra == 'mypy'
+  - pyodbc ; extra == 'mssql'
+  - pymssql ; extra == 'mssql-pymssql'
+  - pyodbc ; extra == 'mssql-pyodbc'
+  - mssql-python>=1.9.0 ; extra == 'mssql-python'
+  - mysqlclient>=1.4.0 ; extra == 'mysql'
+  - mysql-connector-python ; extra == 'mysql-connector'
+  - mariadb>=1.0.1,!=1.1.2,!=1.1.5,!=1.1.10 ; extra == 'mariadb-connector'
+  - oracledb>=2.0.1 ; extra == 'oracle'
+  - cx-oracle>=8 ; extra == 'oracle-cxoracle'
+  - oracledb>=2.0.1 ; extra == 'oracle-oracledb'
+  - psycopg>=3.0.7,!=3.1.15 ; extra == 'postgresql'
+  - pg8000>=1.29.3 ; extra == 'postgresql-pg8000'
+  - sqlalchemy[asyncio] ; extra == 'postgresql-asyncpg'
+  - asyncpg ; extra == 'postgresql-asyncpg'
+  - psycopg2-binary ; extra == 'postgresql-psycopg2binary'
+  - psycopg2cffi ; extra == 'postgresql-psycopg2cffi'
+  - psycopg>=3.0.7,!=3.1.15 ; extra == 'postgresql-psycopg'
+  - psycopg[binary]>=3.0.7,!=3.1.15 ; extra == 'postgresql-psycopgbinary'
+  - pymysql ; extra == 'pymysql'
+  - cymysql ; extra == 'cymysql'
+  - sqlalchemy[asyncio] ; extra == 'aiomysql'
+  - aiomysql ; extra == 'aiomysql'
+  - sqlalchemy[asyncio] ; extra == 'aioodbc'
+  - aioodbc ; extra == 'aioodbc'
+  - sqlalchemy[asyncio] ; extra == 'asyncmy'
+  - asyncmy>=0.2.12 ; extra == 'asyncmy'
+  - sqlalchemy[asyncio] ; extra == 'aiosqlite'
+  - aiosqlite ; extra == 'aiosqlite'
+  - sqlcipher3-binary ; extra == 'sqlcipher'
+  requires_python: '>=3.11'
 - pypi: https://files.pythonhosted.org/packages/eb/7f/dd88365bb279d87b91c58aa3abbdfd31eef09d226bdfb6a9293a4096f766/git_cliff-2.14.2-py3-none-win_amd64.whl
   name: git-cliff
   version: 2.14.2
@@ -18599,6 +18638,45 @@ packages:
   name: proxy-tools
   version: 0.1.0
   sha256: ccb3751f529c047e2d8a58440d86b205303cf0fe8146f784d1cbcd94f0a28010
+- pypi: https://files.pythonhosted.org/packages/f3/6d/04f4ffc5038571e712c4f88f20d7022091bafab082e85ea5b37a7e8270f1/sqlalchemy-2.1.5-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
+  name: sqlalchemy
+  version: 2.1.5
+  sha256: 1cf433bcb77696cc915552d7f1e8d9117a5dae5aff9fceb06a69d74b3b3c2bd1
+  requires_dist:
+  - typing-extensions>=4.6.0
+  - greenlet>=1 ; extra == 'asyncio'
+  - mypy>=2.4 ; extra == 'mypy'
+  - types-greenlet>=2 ; extra == 'mypy'
+  - pyodbc ; extra == 'mssql'
+  - pymssql ; extra == 'mssql-pymssql'
+  - pyodbc ; extra == 'mssql-pyodbc'
+  - mssql-python>=1.9.0 ; extra == 'mssql-python'
+  - mysqlclient>=1.4.0 ; extra == 'mysql'
+  - mysql-connector-python ; extra == 'mysql-connector'
+  - mariadb>=1.0.1,!=1.1.2,!=1.1.5,!=1.1.10 ; extra == 'mariadb-connector'
+  - oracledb>=2.0.1 ; extra == 'oracle'
+  - cx-oracle>=8 ; extra == 'oracle-cxoracle'
+  - oracledb>=2.0.1 ; extra == 'oracle-oracledb'
+  - psycopg>=3.0.7,!=3.1.15 ; extra == 'postgresql'
+  - pg8000>=1.29.3 ; extra == 'postgresql-pg8000'
+  - sqlalchemy[asyncio] ; extra == 'postgresql-asyncpg'
+  - asyncpg ; extra == 'postgresql-asyncpg'
+  - psycopg2-binary ; extra == 'postgresql-psycopg2binary'
+  - psycopg2cffi ; extra == 'postgresql-psycopg2cffi'
+  - psycopg>=3.0.7,!=3.1.15 ; extra == 'postgresql-psycopg'
+  - psycopg[binary]>=3.0.7,!=3.1.15 ; extra == 'postgresql-psycopgbinary'
+  - pymysql ; extra == 'pymysql'
+  - cymysql ; extra == 'cymysql'
+  - sqlalchemy[asyncio] ; extra == 'aiomysql'
+  - aiomysql ; extra == 'aiomysql'
+  - sqlalchemy[asyncio] ; extra == 'aioodbc'
+  - aioodbc ; extra == 'aioodbc'
+  - sqlalchemy[asyncio] ; extra == 'asyncmy'
+  - asyncmy>=0.2.12 ; extra == 'asyncmy'
+  - sqlalchemy[asyncio] ; extra == 'aiosqlite'
+  - aiosqlite ; extra == 'aiosqlite'
+  - sqlcipher3-binary ; extra == 'sqlcipher'
+  requires_python: '>=3.11'
 - pypi: https://files.pythonhosted.org/packages/f3/a5/28b76a7449eb702966b88bef599e2360b411fbb3afeee8fe560939be06ec/markupsafe-3.0.4-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl
   name: markupsafe
   version: 3.0.4
@@ -18682,6 +18760,45 @@ packages:
   - joblib>=1.4.0
   - narwhals>=2.0.1
   - threadpoolctl>=3.5.0
+  requires_python: '>=3.11'
+- pypi: https://files.pythonhosted.org/packages/f6/aa/f10fc142d2db255249107ee8b21bfbabc10b90f7fadf13c3cf898acc6179/sqlalchemy-2.1.5-cp313-cp313-macosx_11_0_arm64.whl
+  name: sqlalchemy
+  version: 2.1.5
+  sha256: dc1c86db97372e6bba18a7bcf0f6150dbdd808237f0f52802ef0bec676a94642
+  requires_dist:
+  - typing-extensions>=4.6.0
+  - greenlet>=1 ; extra == 'asyncio'
+  - mypy>=2.4 ; extra == 'mypy'
+  - types-greenlet>=2 ; extra == 'mypy'
+  - pyodbc ; extra == 'mssql'
+  - pymssql ; extra == 'mssql-pymssql'
+  - pyodbc ; extra == 'mssql-pyodbc'
+  - mssql-python>=1.9.0 ; extra == 'mssql-python'
+  - mysqlclient>=1.4.0 ; extra == 'mysql'
+  - mysql-connector-python ; extra == 'mysql-connector'
+  - mariadb>=1.0.1,!=1.1.2,!=1.1.5,!=1.1.10 ; extra == 'mariadb-connector'
+  - oracledb>=2.0.1 ; extra == 'oracle'
+  - cx-oracle>=8 ; extra == 'oracle-cxoracle'
+  - oracledb>=2.0.1 ; extra == 'oracle-oracledb'
+  - psycopg>=3.0.7,!=3.1.15 ; extra == 'postgresql'
+  - pg8000>=1.29.3 ; extra == 'postgresql-pg8000'
+  - sqlalchemy[asyncio] ; extra == 'postgresql-asyncpg'
+  - asyncpg ; extra == 'postgresql-asyncpg'
+  - psycopg2-binary ; extra == 'postgresql-psycopg2binary'
+  - psycopg2cffi ; extra == 'postgresql-psycopg2cffi'
+  - psycopg>=3.0.7,!=3.1.15 ; extra == 'postgresql-psycopg'
+  - psycopg[binary]>=3.0.7,!=3.1.15 ; extra == 'postgresql-psycopgbinary'
+  - pymysql ; extra == 'pymysql'
+  - cymysql ; extra == 'cymysql'
+  - sqlalchemy[asyncio] ; extra == 'aiomysql'
+  - aiomysql ; extra == 'aiomysql'
+  - sqlalchemy[asyncio] ; extra == 'aioodbc'
+  - aioodbc ; extra == 'aioodbc'
+  - sqlalchemy[asyncio] ; extra == 'asyncmy'
+  - asyncmy>=0.2.12 ; extra == 'asyncmy'
+  - sqlalchemy[asyncio] ; extra == 'aiosqlite'
+  - aiosqlite ; extra == 'aiosqlite'
+  - sqlcipher3-binary ; extra == 'sqlcipher'
   requires_python: '>=3.11'
 - pypi: https://files.pythonhosted.org/packages/f7/62/de5bdd77d935331f4f802edc11e4d82950f642caad6cb2f949837b8560e2/pillow-12.3.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
   name: pillow
