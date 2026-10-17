@@ -10,7 +10,7 @@ from pfund.enums import Environment, TradingVenue
 class InteractiveBrokersAccount(BaseAccount):
     _default_client_id: ClassVar[int] = 0
     DEFAULT_HOST: ClassVar[str] = "127.0.0.1"
-    # default host-side ports, mirrors `IBKR_LIVE_PORT`/`IBKR_PAPER_PORT` in compose.yml
+    # default host-side ports, mirrors `IBKR_LIVE_PORT`/`IBKR_PAPER_PORT` in compose.yaml
     DEFAULT_PORTS: ClassVar[dict[Environment, int]] = {
         Environment.LIVE: 4001,
         Environment.PAPER: 4002,

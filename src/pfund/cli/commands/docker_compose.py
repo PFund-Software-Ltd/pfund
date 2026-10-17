@@ -53,7 +53,7 @@ def docker_compose(ctx):
 
     This guards against starting the gateway with the wrong (or no) trading-env
     credentials. The flag is passed straight through to `docker compose`, which
-    uses it to interpolate ${IBKR_*} variables in compose.yml. Lifecycle commands
+    uses it to interpolate ${IBKR_*} variables in compose.yaml. Lifecycle commands
     that don't (re)create containers (down, ps, logs, stop, ...) need no env file.
     """
     launches_containers = any(arg in _ENV_FILE_REQUIRED_SUBCOMMANDS for arg in ctx.args)
