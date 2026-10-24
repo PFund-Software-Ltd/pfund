@@ -18,7 +18,8 @@ from pfund.venues.bybit.config import BybitConfig
 from pfund.venues.bybit.product import BybitProduct
 from pfund.venues._apis.typing import Endpoint, EndpointName
 from pfund.venues._apis.rest_api_base import BaseRestAPI
-from pfund.enums import TradingVenue, CryptoAssetType, OptionType
+from pfund.enums import TradingVenue, OptionType
+from pfund_blocks.enums.asset_type import CryptoAssetType
 from pfund_blocks.enums.env import Environment
 
 

@@ -25,7 +25,7 @@ def _build_product_class(
 
 def ProductFactory(source: str, basis: str) -> type[BaseProduct]:
     from pfund.entities.products.product_basis import ProductBasis
-    from pfund.enums import AllAssetType, AssetTypeModifier
+    from pfund_blocks.enums.asset_type import AllAssetType, AssetTypeModifier
 
     source = source.upper()
     if source in TradingVenue.__members__:

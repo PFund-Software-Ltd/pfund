@@ -17,7 +17,8 @@ from pfund.venues.hyperliquid.balance import HyperliquidBalance
 from pfund.venues.hyperliquid.order import HyperliquidOrder
 from pfund.venues.hyperliquid.product import HyperliquidProduct
 from pfund.venues.hyperliquid.position import HyperliquidPosition
-from pfund.enums import TradingVenue, AssetTypeModifier, CryptoAssetType
+from pfund.enums import TradingVenue
+from pfund_blocks.enums.asset_type import AssetTypeModifier, CryptoAssetType
 from pfund_blocks.enums.env import Environment
 
 

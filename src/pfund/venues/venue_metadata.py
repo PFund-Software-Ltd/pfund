@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 from pydantic import BaseModel, Field, GetCoreSchemaHandler
 from pydantic_core import core_schema
 
-from pfund.enums import AllAssetType
+from pfund_blocks.enums.asset_type import AllAssetType
 from pfund_blocks.resolution import Resolution
 from pfund_blocks.enums.timeframe import Timeframe
 

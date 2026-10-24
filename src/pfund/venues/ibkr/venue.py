@@ -13,12 +13,11 @@ from pfund_blocks.resolution import Resolution
 from pfund_blocks.enums.timeframe import Timeframe
 from pfund.venues.venue_metadata import VenueMetadata, _All
 from pfund.venues.venue_base import BaseVenue
-from pfund.enums import (
-    PrivateDataChannel,
+from pfund.enums import PrivateDataChannel, TradingVenue
+from pfund_blocks.enums.env import Environment
+from pfund_blocks.enums.asset_type import (
     TraditionalAssetType,
     PredictionMarketAssetType,
-    TradingVenue,
-    Environment,
 )
 from pfund.venues.ibkr.api import InteractiveBrokersAPI
 from pfund.venues.ibkr.adapter import InteractiveBrokersAdapter

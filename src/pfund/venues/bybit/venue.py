@@ -22,7 +22,8 @@ from pfund.venues.bybit.order import BybitOrder
 from pfund.venues.bybit.product import BybitProduct
 from pfund.venues.bybit.position import BybitPosition
 from pfund.entities.products.asset_type import AssetType
-from pfund.enums import AssetTypeModifier, CryptoAssetType, TradingVenue
+from pfund.enums import TradingVenue
+from pfund_blocks.enums.asset_type import AssetTypeModifier, CryptoAssetType
 
 
 class Bybit(

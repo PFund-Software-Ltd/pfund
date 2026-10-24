@@ -5,15 +5,8 @@ from pfund.venues.adapter_base import (
     ExternalName,
     OrderStatusRepr,
 )
-from pfund.enums import (
-    MarginMode,
-    CryptoAssetType,
-    AssetTypeModifier,
-    OptionType,
-    OrderType,
-    Side,
-    DataChannel,
-)
+from pfund.enums import MarginMode, OptionType, OrderType, Side, DataChannel
+from pfund_blocks.enums.asset_type import CryptoAssetType, AssetTypeModifier
 
 
 class BybitAdapter(BaseAdapter):

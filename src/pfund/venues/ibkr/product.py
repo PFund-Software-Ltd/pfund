@@ -11,7 +11,8 @@ from pydantic import Field, PrivateAttr
 
 from pfund.errors import MissingSymbolError
 from pfund.entities.products.product_base import BaseProduct
-from pfund.enums import TradingVenue, TraditionalAssetType
+from pfund.enums import TradingVenue
+from pfund_blocks.enums.asset_type import TraditionalAssetType
 
 
 class InteractiveBrokersProduct(BaseProduct):

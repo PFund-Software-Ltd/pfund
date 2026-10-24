@@ -18,7 +18,8 @@ from pfund.venues.binance.balance import BinanceBalance
 from pfund.venues.binance.order import BinanceOrder
 from pfund.venues.binance.product import BinanceProduct
 from pfund.venues.binance.position import BinancePosition
-from pfund.enums import TradingVenue, AssetTypeModifier, CryptoAssetType
+from pfund.enums import TradingVenue
+from pfund_blocks.enums.asset_type import AssetTypeModifier, CryptoAssetType
 from pfund_blocks.enums.env import Environment
 
 

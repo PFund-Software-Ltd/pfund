@@ -3,7 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
-from pfund.enums.asset_type import (
+from pfund_blocks.enums.asset_type import (
     ASSET_TYPE_ALIASES,
     AllAssetType,
     AssetTypeModifier,

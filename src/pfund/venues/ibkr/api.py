@@ -28,14 +28,9 @@ from pfund.venues.ibkr.config import InteractiveBrokersConfig
 from pfund.venues.ibkr._ibapi.client import InteractiveBrokersClient as IBClient
 from pfund.venues.ibkr._ibapi.wrapper import InteractiveBrokersWrapper as IBWrapper
 from pfund.venues.ibkr._ibapi.wrapper import *  # noqa: F403  # pyright: ignore[reportWildcardImportFromLibrary]
-from pfund.enums import (
-    Environment,
-    TradingVenue,
-    DataChannel,
-    DataChannelType,
-    PrivateDataChannel,
-    TraditionalAssetType,
-)
+from pfund.enums import TradingVenue, DataChannel, DataChannelType, PrivateDataChannel
+from pfund_blocks.enums.env import Environment
+from pfund_blocks.enums.asset_type import TraditionalAssetType
 
 
 class InteractiveBrokersAPI(IBClient, IBWrapper):  # pyright: ignore[reportUnsafeMultipleInheritance]

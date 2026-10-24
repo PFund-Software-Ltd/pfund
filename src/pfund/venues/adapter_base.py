@@ -7,13 +7,13 @@ from pfund.typing import Currency
 from pfund_blocks.resolution import Resolution
 from pfund.enums import (
     MarginMode,
-    AllAssetType,
     OptionType,
     OrderType,
     Side,
     TimeInForce,
     DataChannel,
 )
+from pfund_blocks.enums.asset_type import AllAssetType
 
 
 OrderStatusRepr: TypeAlias = str

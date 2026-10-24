@@ -7,7 +7,8 @@ from enum import StrEnum
 from datetime import date
 
 from pfund.entities import BaseProduct
-from pfund.enums import AssetTypeModifier, CryptoAssetType, OptionType
+from pfund.enums import OptionType
+from pfund_blocks.enums.asset_type import AssetTypeModifier, CryptoAssetType
 
 
 class BybitProduct(BaseProduct):
