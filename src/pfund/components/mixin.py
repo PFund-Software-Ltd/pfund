@@ -1172,8 +1172,7 @@ class ComponentMixin:
             if product.venue is None:
                 continue
             VenueClass = TradingVenue(product.venue).venue_class
-            file_path = VenueClass._create_markets_yml_file_path(data_path)
-            product.load_market(file_path)
+            VenueClass.load_market(product, data_path)
 
     def _materialize(self):
         """Materialize historical frames only when a data range was requested."""

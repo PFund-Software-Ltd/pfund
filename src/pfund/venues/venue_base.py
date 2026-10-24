@@ -13,6 +13,8 @@ from typing import (
 )
 
 if TYPE_CHECKING:
+    from pfund_kit.utils.yaml import YAMLDocument
+
     from pfund.typing import (
         AccountName,
         ProductName,
@@ -263,7 +265,7 @@ class BaseVenue(
             )
         source = cls.name.upper()
         Product = cast("type[ProductT]", ProductFactory(basis, Product=cls.Product))
-        return Product(
+        product = Product(
             source=source,
             venue=source,
             basis=product_basis,
@@ -272,6 +274,21 @@ class BaseVenue(
             symbol=symbol,
             specs=specs,
         )
+        cls.load_market(product)
+        return product
+
+    @classmethod
+    def load_market(cls, product: BaseProduct, data_path: Path | None = None) -> None:
+        from pfund_kit.utils.yaml import load
+
+        file_path = cls._create_markets_yml_file_path(data_path)
+        if not file_path.exists():
+            return
+        document: YAMLDocument = load(file_path) or {}
+        market_data = document.get(str(product.key))  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
+        if market_data is None:
+            return
+        product.market = cls.Market(**market_data)  # pyright: ignore[reportUnknownArgumentType]
 
     @property
     def account(self) -> AccountT:
@@ -321,7 +338,7 @@ class BaseVenue(
             self._logger.debug(f"added {product.desc_str()}")
             if self.METADATA.has_markets and product.market is None:
                 file_path = self._create_markets_yml_file_path()
-                product.load_market(file_path)
+                self.load_market(product)
                 if product.market is None:
                     self._logger.error(
                         f"no market found for {product.desc_str()} "

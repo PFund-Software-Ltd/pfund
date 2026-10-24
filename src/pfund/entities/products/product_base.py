@@ -1,18 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, ClassVar, NamedTuple, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pfund_kit.utils.yaml import YAMLDocument
-
-from pathlib import Path
+from typing import Any, ClassVar, NamedTuple
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from pfund.entities.markets.market_base import BaseMarket
 from pfund.entities.products.asset_type import AssetType
 from pfund.entities.products.product_basis import ProductBasis
-from pfund.enums import TradingVenue
 
 
 class ProductKey(NamedTuple):
@@ -90,7 +84,6 @@ class BaseProduct(BaseModel):
         self.specs = self._create_specs()
         self.name = self.name or self._create_name()
         self.symbol = self.symbol or self._create_symbol()
-        self.load_market()
 
     @property
     def key(self) -> ProductKey:
@@ -102,22 +95,6 @@ class BaseProduct(BaseModel):
     # Override this method to customize the symbol creation logic
     def _create_symbol(self) -> str:
         return self.symbol
-
-    def load_market(self, file_path: Path | None = None) -> BaseMarket | None:
-        from pfund_kit.utils.yaml import load
-
-        if self.venue is None:
-            return None
-        VenueClass = TradingVenue(self.venue).venue_class
-        if file_path is None:
-            file_path = VenueClass._create_markets_yml_file_path()
-        if not file_path.exists():
-            return None
-        document: YAMLDocument = load(file_path) or {}
-        market_data = document.get(str(self.key))  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
-        if market_data is None:
-            return None
-        self.market = VenueClass.Market(**market_data)  # pyright: ignore[reportUnknownArgumentType]
 
     @property
     def base_asset(self) -> str:
