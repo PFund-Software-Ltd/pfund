@@ -33,7 +33,8 @@ if TYPE_CHECKING:
 import logging
 
 from pfund.engines.engine_meta import EngineMeta
-from pfund.enums import ComponentType, Environment, RunMode
+from pfund.enums import ComponentType, RunMode
+from pfund_blocks.enums.env import Environment
 from pfund.engines.contexts.base_engine_context import BaseEngineContext, SettingsT
 
 
@@ -277,7 +278,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=EngineMeta):
             self._context.set_run_name(run.name)
         self._logger.warning(
             f"{self.env} {self.name} is running (data_range=({self._context.data_start}, {self._context.data_end}))",
-            style=self.env._color,
+            style=self.env.color,
         )
         from pfeed.utils.ray import is_ray_initialized
 

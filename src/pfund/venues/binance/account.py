@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from pfund.entities.accounts import APIKeyAccount
-from pfund.enums import Environment, TradingVenue
+from pfund.enums import TradingVenue
+from pfund_blocks.enums.env import Environment
 
 
 class BinanceAccount(APIKeyAccount):

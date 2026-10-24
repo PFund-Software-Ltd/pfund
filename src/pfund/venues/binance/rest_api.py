@@ -19,7 +19,8 @@ from pfund.venues.binance._rest_apis import (
     RestAPISpot,
 )
 from pfund.venues._apis.rest_api_base import BaseRestAPI
-from pfund.enums import CeFiProductType, Environment
+from pfund.enums import CeFiProductType
+from pfund_blocks.enums.env import Environment
 
 
 # TODO: "portfolio margin" is not supported yet, can only do it when its included in the testnet

@@ -6,7 +6,7 @@ from decimal import Decimal
 from pfund.utils.zmq_graph import show_zmq_graph
 
 if TYPE_CHECKING:
-    from pfund.enums import Environment
+    from pfund_blocks.enums.env import Environment
 
 
 __all__ = [
@@ -32,7 +32,7 @@ class DotenvStore:
     """
 
     def __init__(self, env: Environment | str):
-        from pfund.enums import Environment
+        from pfund_blocks.enums.env import Environment
 
         self._env = Environment[env.upper()]
         self._vars: dict[str, str] = self._load(self._env)

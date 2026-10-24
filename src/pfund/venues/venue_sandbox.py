@@ -16,7 +16,8 @@ import queue
 import logging
 from decimal import Decimal
 
-from pfund.enums import Environment, TradingVenue
+from pfund.enums import TradingVenue
+from pfund_blocks.enums.env import Environment
 from pfund.venues.venue_base import BaseVenue
 from pfund.venues.venue_config import VenueConfig
 from pfund.entities import (

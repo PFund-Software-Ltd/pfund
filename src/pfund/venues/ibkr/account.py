@@ -4,7 +4,8 @@ from typing import ClassVar
 import warnings
 
 from pfund.entities import BaseAccount
-from pfund.enums import Environment, TradingVenue
+from pfund.enums import TradingVenue
+from pfund_blocks.enums.env import Environment
 
 
 class InteractiveBrokersAccount(BaseAccount):

@@ -8,7 +8,8 @@ if TYPE_CHECKING:
 from pydantic import ConfigDict, Field, field_validator
 from pfund_kit.settings import Settings
 
-from pfund.enums import DataLake, Environment
+from pfund.enums import DataLake
+from pfund_blocks.enums.env import Environment
 
 
 class BaseEngineSettings(Settings):

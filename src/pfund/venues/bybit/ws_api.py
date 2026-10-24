@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from pfund.venues._apis.ws_api_base import RawMessage, WebSocketName
     from pfund.venues.bybit._ws_apis.ws_api_base import BybitBaseWebSocketAPI
     from pfund.datas.resolution import Resolution
-    from pfund.enums import Environment
+    from pfund_blocks.enums.env import Environment
     from pfund.typing import FullDataChannel
 
 import asyncio

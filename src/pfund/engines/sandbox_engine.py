@@ -11,7 +11,8 @@ if TYPE_CHECKING:
     from pfund.engines.base_engine import DataRangeDict
 
 from pfund.engines.trade_engine import TradeEngine
-from pfund.enums import Environment, TradingVenue
+from pfund.enums import TradingVenue
+from pfund_blocks.enums.env import Environment
 from pfund.engines.settings.sandbox_engine_settings import SandboxEngineSettings
 from pfund.engines.contexts.sandbox_engine_context import SandboxEngineContext
 

@@ -3,7 +3,8 @@ from typing import Any, ClassVar
 
 from abc import ABC, abstractmethod
 
-from pfund.enums import Environment, TradingVenue
+from pfund.enums import TradingVenue
+from pfund_blocks.enums.env import Environment
 from pfund.utils import DotenvStore
 
 

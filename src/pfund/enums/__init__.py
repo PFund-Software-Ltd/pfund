@@ -17,7 +17,6 @@ from pfund.enums.data_channel import (
 )
 from pfund.enums.database import Database
 from pfund.enums.datalake import DataLake
-from pfund.enums.env import Environment
 from pfund.enums.month_code import CryptoMonthCode, FutureMonthCode
 from pfund.enums.option_type import OptionType
 from pfund.enums.order_type import OrderType
@@ -45,7 +44,6 @@ __all__ = [
     "PFundDataChannel",
     "Database",
     "DataLake",
-    "Environment",
     "FutureMonthCode",
     "ModelComponentType",
     "OptionType",

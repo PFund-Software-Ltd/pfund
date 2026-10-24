@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from pfund.entities.accounts.account_base import BaseAccount
-from pfund.enums import Environment, TradingVenue
+from pfund.enums import TradingVenue
+from pfund_blocks.enums.env import Environment
 from pfund.utils import DotenvStore
 
 

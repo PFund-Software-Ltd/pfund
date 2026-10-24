@@ -18,7 +18,8 @@ from pfund.venues.okx.balance import OKXBalance
 from pfund.venues.okx.order import OKXOrder
 from pfund.venues.okx.product import OKXProduct
 from pfund.venues.okx.position import OKXPosition
-from pfund.enums import TradingVenue, Environment, AssetTypeModifier, CryptoAssetType
+from pfund.enums import TradingVenue, AssetTypeModifier, CryptoAssetType
+from pfund_blocks.enums.env import Environment
 
 
 class OKX(

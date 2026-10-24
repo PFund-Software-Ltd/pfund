@@ -2,7 +2,8 @@ from typing import ClassVar
 
 from pfund.venues.bybit._ws_apis.ws_api_base import BybitBaseWebSocketAPI
 from pfund.venues.bybit.product import BybitProduct
-from pfund.enums import DataChannelType, Environment
+from pfund.enums import DataChannelType
+from pfund_blocks.enums.env import Environment
 
 
 class BybitSpotWebSocketAPI(BybitBaseWebSocketAPI):

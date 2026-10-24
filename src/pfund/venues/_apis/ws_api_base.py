@@ -36,7 +36,8 @@ from msgspec import json
 from websockets.asyncio.client import ClientConnection as WebSocket
 
 from pfund.errors import WebSocketTimeoutError
-from pfund.enums import Environment, TradingVenue, DataChannelType, PrivateDataChannel
+from pfund.enums import TradingVenue, DataChannelType, PrivateDataChannel
+from pfund_blocks.enums.env import Environment
 from pfund.venues.venue_base import ConfigT, AccountT, ProductT
 
 

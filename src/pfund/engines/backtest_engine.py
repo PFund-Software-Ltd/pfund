@@ -27,7 +27,8 @@ from pfund_kit.utils.progress_bar import ProgressBar
 from pfund.engines.base_engine import BaseEngine
 from pfund.engines.contexts.backtest_engine_context import BacktestEngineContext
 from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
-from pfund.enums import BacktestMode, Environment
+from pfund.enums import BacktestMode
+from pfund_blocks.enums.env import Environment
 
 
 def _split_df_into_time_chunks(

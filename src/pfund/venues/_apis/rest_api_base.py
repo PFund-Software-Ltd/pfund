@@ -41,7 +41,8 @@ from pfund_kit.utils.yaml import load, dump
 
 from pfund.venues.venue_base import ConfigT
 from pfund.venues._apis.typing import Endpoint
-from pfund.enums import Environment, TradingVenue
+from pfund.enums import TradingVenue
+from pfund_blocks.enums.env import Environment
 from pfund.errors import ResponseParseError
 from pfund.venues._apis.schema_parser import SchemaParser
 

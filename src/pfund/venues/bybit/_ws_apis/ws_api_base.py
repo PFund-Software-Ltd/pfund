@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from pfund.typing import FullDataChannel
     from pfund.venues._apis.typing import ResponseData, Schema
     from pfund.venues._apis.ws_api_base import RawMessage, WebSocketName
-    from pfund.enums import Environment
+    from pfund_blocks.enums.env import Environment
 
 import inspect
 import os

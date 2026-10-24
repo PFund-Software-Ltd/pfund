@@ -55,7 +55,8 @@ from pfund.datas.data_config import DataConfig
 from pfund.datas.databoy import DataBoy
 from pfund.datas.resolution import Resolution
 from pfund.datas.stores.trading_store import TradingStore
-from pfund.enums import ComponentType, Environment, RunMode, TradingVenue
+from pfund.enums import ComponentType, RunMode, TradingVenue
+from pfund_blocks.enums.env import Environment
 from pfund.utils.decorators import ray_method
 
 

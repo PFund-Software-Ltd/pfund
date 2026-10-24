@@ -9,7 +9,8 @@ if TYPE_CHECKING:
 from pfund_kit.style import RichColor, TextStyle, cprint
 
 from pfund.datas.resolution import Resolution
-from pfund.enums import Environment, BacktestMode
+from pfund.enums import BacktestMode
+from pfund_blocks.enums.env import Environment
 from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
 from pfund.engines.contexts.base_engine_context import BaseEngineContext
 from pfund.backtest.cv.base import CrossValidator

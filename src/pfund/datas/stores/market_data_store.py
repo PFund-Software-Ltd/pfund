@@ -46,7 +46,7 @@ from pfund.datas.data_config import DataConfig
 from pfund.datas.data_market import MarketData
 from pfund.datas.resolution import Resolution
 from pfund.datas.stores.base_data_store import BaseDataStore
-from pfund.enums import Environment
+from pfund_blocks.enums.env import Environment
 
 
 class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):

@@ -5,7 +5,8 @@ from pfund.venues.binance._ws_apis import (
     BinanceSpotWebSocketAPI,
 )
 from pfund.venues._apis.ws_api_base import BaseWebSocketAPI
-from pfund.enums import Environment, PrivateDataChannel, DataChannel
+from pfund.enums import PrivateDataChannel, DataChannel
+from pfund_blocks.enums.env import Environment
 
 
 # TODO

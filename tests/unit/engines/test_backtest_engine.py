@@ -4,7 +4,7 @@ import pytest
 
 import pfund as pf
 from pfund import BacktestEngine
-from pfund.enums import Environment
+from pfund_blocks.enums.env import Environment
 
 
 @pytest.mark.smoke

@@ -28,7 +28,8 @@ from pfund.venues.venue_base import (
     PositionT,
     PositionSnapshotT,
 )
-from pfund.enums import Environment, PrivateDataChannel
+from pfund.enums import PrivateDataChannel
+from pfund_blocks.enums.env import Environment
 
 
 RestAPITypeVar = TypeVar("RestAPITypeVar", bound="BaseRestAPI[Any]")

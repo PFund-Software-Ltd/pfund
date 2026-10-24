@@ -46,7 +46,8 @@ from pfund.entities.balances.balance_base import BalanceUpdate, BalanceUpdateSou
 from pfund.errors import NotSupportedByVenueError
 from pfund.entities.products.product_base import ProductKey
 from pfund.venues.venue_metadata import VenueMetadata
-from pfund.enums import Environment, TradingVenue
+from pfund.enums import TradingVenue
+from pfund_blocks.enums.env import Environment
 
 
 ConfigT = TypeVar("ConfigT", bound="VenueConfig")
