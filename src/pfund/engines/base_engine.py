@@ -32,6 +32,8 @@ if TYPE_CHECKING:
 
 import logging
 
+from pfund_kit.style import RichColor, TextStyle
+
 from pfund.engines.engine_meta import EngineMeta
 from pfund.enums import ComponentType, RunMode
 from pfund_blocks.enums.env import Environment
@@ -39,6 +41,13 @@ from pfund.engines.contexts.base_engine_context import BaseEngineContext, Settin
 
 
 ContextT = TypeVar("ContextT", bound="BaseEngineContext[Any]")
+
+_ENV_COLORS: dict[Environment, str] = {
+    Environment.BACKTEST: TextStyle.BOLD + RichColor.BLUE,
+    Environment.SANDBOX: TextStyle.BOLD + RichColor.GREY0,
+    Environment.PAPER: TextStyle.BOLD + RichColor.RED,
+    Environment.LIVE: TextStyle.BOLD + RichColor.GREEN,
+}
 
 
 class BaseEngine(Generic[SettingsT, ContextT], metaclass=EngineMeta):
@@ -278,7 +287,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=EngineMeta):
             self._context.set_run_name(run.name)
         self._logger.warning(
             f"{self.env} {self.name} is running (data_range=({self._context.data_start}, {self._context.data_end}))",
-            style=self.env.color,
+            style=_ENV_COLORS[self.env],
         )
         from pfeed.utils.ray import is_ray_initialized
 
