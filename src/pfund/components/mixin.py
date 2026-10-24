@@ -681,9 +681,7 @@ class ComponentMixin:
     def _get_supported_resolutions(
         self, product: BaseProduct
     ) -> dict[Timeframe, list[int]]:
-        venue = product.venue
-        assert venue is not None, "product venue is not None"
-        VenueClass = TradingVenue(venue).venue_class
+        VenueClass = TradingVenue(product.source).venue_class
         assert VenueClass is not None, "venue class is not None"
         return cast(
             "dict[Timeframe, list[int]]",
@@ -1169,9 +1167,9 @@ class ComponentMixin:
         # every engine, and that is where the venues wrote it.
         data_path = self.context.config.data_path.parent
         for product in self.products.values():
-            if product.venue is None:
+            if product.source not in TradingVenue.__members__:
                 continue
-            VenueClass = TradingVenue(product.venue).venue_class
+            VenueClass = TradingVenue(product.source).venue_class
             VenueClass.load_market(product, data_path)
 
     def _materialize(self):

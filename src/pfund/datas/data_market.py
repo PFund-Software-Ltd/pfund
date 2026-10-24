@@ -49,9 +49,9 @@ class MarketData(TimeBasedData, ABC):
     def venue(self) -> TradingVenue | None:
         from pfund.enums import TradingVenue
 
-        if self.product.venue is None:
+        if self.product.source not in TradingVenue.__members__:
             return None
-        return TradingVenue(self.product.venue)
+        return TradingVenue(self.product.source)
 
     def is_quote_l1(self):
         return self.is_quote() and self.resolution.orderbook_level == 1

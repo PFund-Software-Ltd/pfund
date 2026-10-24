@@ -35,8 +35,7 @@ class BasePosition(BaseModel):
 
     @property
     def venue(self) -> TradingVenue:
-        assert self.product.venue is not None, "venue is None"
-        return TradingVenue(self.product.venue)
+        return TradingVenue(self.product.source)
 
     @computed_field
     @property

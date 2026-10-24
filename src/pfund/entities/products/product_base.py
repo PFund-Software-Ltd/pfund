@@ -22,8 +22,13 @@ class BaseProduct(BaseModel):
         arbitrary_types_allowed=True, extra="forbid"
     )
 
-    source: str
-    venue: str | None = None
+    source: str = Field(
+        description="""
+            where the product comes from, either a trading venue (e.g. BYBIT, IBKR) or a data source (e.g. YAHOO_FINANCE).
+            It is part of the product's identity (default name, equality and hash).
+            Whether the source is a trading venue is up to the consumer to decide, e.g. pfund checks it against its TradingVenue enum.
+        """,
+    )
     exchange: str | None = None
     basis: ProductBasis
     specs: dict[str, Any] = Field(
@@ -40,7 +45,7 @@ class BaseProduct(BaseModel):
     )
     name: str = Field(
         default="",
-        description="unique product name, if not provided, venue + symbol will be used",
+        description="unique product name, if not provided, source + symbol will be used",
     )
     market: BaseMarket | None = Field(
         default=None, description="market this product belongs to"
