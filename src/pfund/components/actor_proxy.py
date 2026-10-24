@@ -50,7 +50,7 @@ class ActorProxy(Generic[ComponentT]):
     def _ensure_actor(self) -> ActorHandle[ComponentT]:
         if self._actor is None:
             import ray
-            from pfeed.utils.ray import setup_ray
+            from pfund_kit.utils.ray import setup_ray
 
             assert self._hydrate_fields is not None, "ActorProxy is not hydrated"
             setup_ray()

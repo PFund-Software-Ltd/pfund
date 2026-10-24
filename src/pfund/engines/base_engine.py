@@ -289,7 +289,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=EngineMeta):
             f"{self.env} {self.name} is running (data_range=({self._context.data_start}, {self._context.data_end}))",
             style=_ENV_COLORS[self.env],
         )
-        from pfeed.utils.ray import is_ray_initialized
+        from pfund_kit.utils.ray import is_ray_initialized
 
         # Ray already running means someone else owns it, e.g. this engine
         # runs inside a Ray actor; shutting it down would kill that actor.
@@ -314,7 +314,7 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=EngineMeta):
             strategy._gather()
 
     def _teardown(self):
-        from pfeed.utils.ray import shutdown_ray
+        from pfund_kit.utils.ray import shutdown_ray
 
         if self._owns_ray:
             shutdown_ray()
