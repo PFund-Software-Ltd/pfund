@@ -262,7 +262,7 @@ class BaseVenue(
                 f"{cls.name} does not support asset type {product_basis.asset_type}"
             )
         source = cls.name.upper()
-        Product = cast("type[ProductT]", ProductFactory(source=source, basis=basis))
+        Product = cast("type[ProductT]", ProductFactory(basis, Product=cls.Product))
         return Product(
             source=source,
             basis=product_basis,
