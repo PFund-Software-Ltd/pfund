@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, TypeAlias
 
 if TYPE_CHECKING:
     from pfund.datas.data_config import DataConfig
-    from pfund.datas.resolution import Resolution
+    from pfund_blocks.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
 
 from pfund.datas.data_market import MarketData

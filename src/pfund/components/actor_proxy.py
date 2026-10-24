@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 
     from pfund.engines.contexts.trade_engine_context import TradeEngineContext
 
-from pfund.datas.resolution import Resolution
+from pfund_blocks.resolution import Resolution
 from pfund.enums import ComponentType
 from pfund.typing import ComponentT
 

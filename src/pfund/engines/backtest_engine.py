@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from pfund.components.models.model_base import BaseModel, UnderlyingModel
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.components.features.feature_base import BaseFeature
-    from pfund.datas.resolution import Resolution
+    from pfund_blocks.resolution import Resolution
     from pfund.engines.base_engine import DataRangeDict
     from pfund.engines.contexts.backtest_engine_context import DatasetSplits
     from pfund.typing import FeatureT, ModelT, StrategyT

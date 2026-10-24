@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     from pfund.datas.data_config import DataConfig
-    from pfund.datas.resolution import Resolution
-    from pfund.datas.timeframe import Timeframe
+    from pfund_blocks.resolution import Resolution
+    from pfund_blocks.enums.timeframe import Timeframe
     from pfund.entities.products.product_base import BaseProduct
     from pfund.enums import TradingVenue
 

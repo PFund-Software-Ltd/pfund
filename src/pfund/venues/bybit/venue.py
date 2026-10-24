@@ -7,8 +7,8 @@ if TYPE_CHECKING:
     from pfund.venues._apis.typing import Result
 
 from pfund.entities.products import ProductKey
-from pfund.datas.resolution import Resolution
-from pfund.datas.timeframe import Timeframe
+from pfund_blocks.resolution import Resolution
+from pfund_blocks.enums.timeframe import Timeframe
 from pfund.venues.crypto_exchange import CryptoExchange
 from pfund.venues.bybit.rest_api import BybitRestAPI
 from pfund.venues.bybit.ws_api import BybitWebSocketAPI

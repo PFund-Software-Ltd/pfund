@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
     from pfund.entities import BaseProduct, BaseAccount
     from pfund.venues.adapter_base import BaseAdapter
-    from pfund.datas.resolution import Resolution
+    from pfund_blocks.resolution import Resolution
     from pfund.venues.crypto_exchange import CryptoExchangeSigner
     from pfund.venues._apis.typing import ResponseData
     from pfund.typing import AccountName, FullDataChannel, ProductName

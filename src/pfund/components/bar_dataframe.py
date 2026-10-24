@@ -15,7 +15,7 @@ from typing import Any, Literal
 
 import narwhals as nw
 
-from pfund.datas.resolution import Resolution
+from pfund_blocks.resolution import Resolution
 
 
 BarAlignmentMode = Literal["exact", "event", "asof"]

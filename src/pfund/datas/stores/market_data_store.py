@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from pfeed.dataflow.result import RunResult
 
     from pfund.datas.databoy import DataBoy
-    from pfund.datas.resolution import Resolution
+    from pfund_blocks.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
     from pfund.typing import ProductName
 
@@ -44,7 +44,7 @@ from pfund.components.bar_dataframe import (
 )
 from pfund.datas.data_config import DataConfig
 from pfund.datas.data_market import MarketData
-from pfund.datas.resolution import Resolution
+from pfund_blocks.resolution import Resolution
 from pfund.datas.stores.base_data_store import BaseDataStore
 from pfund_blocks.enums.env import Environment
 

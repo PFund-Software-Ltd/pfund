@@ -16,7 +16,7 @@ from pfeed.storages.storage_config import StorageConfig
 from pfeed.utils.file_path import FilePath
 
 from pfund.config import get_config, get_logging_config
-from pfund.datas.resolution import Resolution
+from pfund_blocks.resolution import Resolution
 from pfund.engines.component_registry import ComponentRegistry
 from pfund.enums import RunMode
 from pfund_blocks.enums.env import Environment

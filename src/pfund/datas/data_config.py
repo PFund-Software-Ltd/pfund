@@ -4,8 +4,8 @@ from typing import Annotated, ClassVar, cast
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
-from pfund.datas.resolution import Resolution
-from pfund.datas.timeframe import Timeframe
+from pfund_blocks.resolution import Resolution
+from pfund_blocks.enums.timeframe import Timeframe
 
 
 # fraction of a bar's duration to wait past its close (bar.end_ts) for delayed

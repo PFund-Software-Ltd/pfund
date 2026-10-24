@@ -9,7 +9,7 @@ from typing_extensions import override
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
 
-    from pfund.datas.timeframe import Timeframe
+    from pfund_blocks.enums.timeframe import Timeframe
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_bar import BarData
     from pfund.datas.stores.market_data_store import BarUpdate

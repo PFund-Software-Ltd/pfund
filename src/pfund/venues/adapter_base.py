@@ -4,7 +4,7 @@ from typing import TypeAlias, ClassVar, Any
 from pydantic import BaseModel, Field, ConfigDict, PrivateAttr, field_validator
 
 from pfund.typing import Currency
-from pfund.datas.resolution import Resolution
+from pfund_blocks.resolution import Resolution
 from pfund.enums import (
     MarginMode,
     AllAssetType,

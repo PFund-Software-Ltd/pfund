@@ -8,8 +8,8 @@ from pydantic import BaseModel, Field, GetCoreSchemaHandler
 from pydantic_core import core_schema
 
 from pfund.enums import AllAssetType
-from pfund.datas.resolution import Resolution
-from pfund.datas.timeframe import Timeframe
+from pfund_blocks.resolution import Resolution
+from pfund_blocks.enums.timeframe import Timeframe
 
 
 ProductCategory: TypeAlias = str

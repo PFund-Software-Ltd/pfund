@@ -6,14 +6,14 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from pfund.datas.data_config import DataConfig
-    from pfund.datas.resolution import Resolution
-    from pfund.datas.timeframe import Timeframe
+    from pfund_blocks.resolution import Resolution
+    from pfund_blocks.enums.timeframe import Timeframe
     from pfund.entities.products.product_base import BaseProduct
 
 from pfund_kit.utils.temporal import convert_ts_to_dt
 
 from pfund.datas.data_market import MarketData
-from pfund.datas.resolution import Resolution
+from pfund_blocks.resolution import Resolution
 
 
 # OPTIMIZE: too slow for second data

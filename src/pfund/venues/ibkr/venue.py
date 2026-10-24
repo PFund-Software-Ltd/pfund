@@ -9,8 +9,8 @@ if TYPE_CHECKING:
 
 import queue
 
-from pfund.datas.resolution import Resolution
-from pfund.datas.timeframe import Timeframe
+from pfund_blocks.resolution import Resolution
+from pfund_blocks.enums.timeframe import Timeframe
 from pfund.venues.venue_metadata import VenueMetadata, _All
 from pfund.venues.venue_base import BaseVenue
 from pfund.enums import (

@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
     from pfund.typing import Component
     from pfund.engines.base_engine import DataRangeDict
-    from pfund.datas.resolution import Resolution
+    from pfund_blocks.resolution import Resolution
 
 import time
 import queue

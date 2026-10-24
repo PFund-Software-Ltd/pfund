@@ -17,7 +17,7 @@ from pprint import pformat
 from msgspec import json
 
 from pfund.venues._apis.ws_api_base import BaseWebSocketAPI, NamedWebSocket
-from pfund.datas.resolution import Resolution
+from pfund_blocks.resolution import Resolution
 from pfund.venues.bybit.product import BybitProduct
 from pfund.venues.bybit.account import BybitAccount
 from pfund.venues.bybit.signer import BybitSigner

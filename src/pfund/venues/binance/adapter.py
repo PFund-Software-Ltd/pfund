@@ -1,4 +1,4 @@
-from pfund.datas.resolution import Resolution
+from pfund_blocks.resolution import Resolution
 from pfund.venues.adapter_base import (
     BaseAdapter,
     InternalName,

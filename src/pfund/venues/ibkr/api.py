@@ -22,8 +22,8 @@ from collections import defaultdict
 from threading import Thread
 
 from pfund.errors import InteractiveBrokersError
-from pfund.datas.resolution import Resolution
-from pfund.datas.timeframe import Timeframe
+from pfund_blocks.resolution import Resolution
+from pfund_blocks.enums.timeframe import Timeframe
 from pfund.venues.ibkr.config import InteractiveBrokersConfig
 from pfund.venues.ibkr._ibapi.client import InteractiveBrokersClient as IBClient
 from pfund.venues.ibkr._ibapi.wrapper import InteractiveBrokersWrapper as IBWrapper

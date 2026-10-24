@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, ClassVar, Any, Literal
 if TYPE_CHECKING:
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 
-from pfund.datas.timeframe import Timeframe
+from pfund_blocks.enums.timeframe import Timeframe
 from pfund.venues.crypto_exchange import CryptoExchange
 from pfund.venues.hyperliquid.rest_api import HyperliquidRestAPI
 from pfund.venues.hyperliquid.ws_api import HyperliquidWebSocketAPI

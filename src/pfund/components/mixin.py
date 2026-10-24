@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from pfund.datas.data_market import MarketData
     from pfund.datas.stores.base_data_store import BaseDataStore
     from pfund.datas.stores.market_data_store import MarketDataStore
-    from pfund.datas.timeframe import Timeframe
+    from pfund_blocks.enums.timeframe import Timeframe
     from pfund.engines.contexts.trade_engine_context import TradeEngineContext
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.entities.products.product_base import BaseProduct
@@ -53,7 +53,7 @@ from pfund.components.bar_dataframe import (
 )
 from pfund.datas.data_config import DataConfig
 from pfund.datas.databoy import DataBoy
-from pfund.datas.resolution import Resolution
+from pfund_blocks.resolution import Resolution
 from pfund.datas.stores.trading_store import TradingStore
 from pfund.enums import ComponentType, RunMode, TradingVenue
 from pfund_blocks.enums.env import Environment
