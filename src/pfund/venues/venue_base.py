@@ -256,11 +256,16 @@ class BaseVenue(
     ) -> ProductT:
         from pfund.entities.products import ProductFactory, ProductBasis
 
+        product_basis = ProductBasis(basis=basis)
+        if str(product_basis.asset_type) not in cls.METADATA.asset_types:
+            raise ValueError(
+                f"{cls.name} does not support asset type {product_basis.asset_type}"
+            )
         source = cls.name.upper()
         Product = cast("type[ProductT]", ProductFactory(source=source, basis=basis))
         return Product(
             source=source,
-            basis=ProductBasis(basis=basis),
+            basis=product_basis,
             exchange=exchange,
             name=name,
             symbol=symbol,

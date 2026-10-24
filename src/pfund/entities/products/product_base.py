@@ -83,15 +83,6 @@ class BaseProduct(BaseModel):
             data[field_name] = provided_specs[field_name]
         return data
 
-    @model_validator(mode="after")
-    def _validate_asset_type(self):
-        if self.venue is None:
-            return self
-        VenueClass = self.venue.venue_class
-        if str(self.asset_type) not in VenueClass.METADATA.asset_types:
-            raise ValueError(f"Invalid asset type: {self.asset_type}")
-        return self
-
     def model_post_init(self, __context: Any):
         # calls __mixin_post_init__ in e.g. StockMixin if exists
         if hasattr(self, "__mixin_post_init__"):
