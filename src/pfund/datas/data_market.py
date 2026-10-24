@@ -47,7 +47,11 @@ class MarketData(TimeBasedData, ABC):
 
     @property
     def venue(self) -> TradingVenue | None:
-        return self.product.venue
+        from pfund.enums import TradingVenue
+
+        if self.product.venue is None:
+            return None
+        return TradingVenue(self.product.venue)
 
     def is_quote_l1(self):
         return self.is_quote() and self.resolution.orderbook_level == 1

@@ -29,7 +29,7 @@ class BaseProduct(BaseModel):
     )
 
     source: str
-    venue: TradingVenue | None = None
+    venue: str | None = None
     exchange: str | None = None
     basis: ProductBasis
     specs: dict[str, Any] = Field(
@@ -90,8 +90,6 @@ class BaseProduct(BaseModel):
         self.specs = self._create_specs()
         self.name = self.name or self._create_name()
         self.symbol = self.symbol or self._create_symbol()
-        if self.venue is None and self.source in TradingVenue.__members__:
-            self.venue = TradingVenue[self.source]
         self.load_market()
 
     @property
@@ -110,7 +108,7 @@ class BaseProduct(BaseModel):
 
         if self.venue is None:
             return None
-        VenueClass = self.venue.venue_class
+        VenueClass = TradingVenue(self.venue).venue_class
         if file_path is None:
             file_path = VenueClass._create_markets_yml_file_path()
         if not file_path.exists():

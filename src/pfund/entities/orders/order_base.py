@@ -365,8 +365,10 @@ class BaseOrder(BaseModel):
 
     @property
     def venue(self) -> TradingVenue:
+        from pfund.enums import TradingVenue
+
         assert self.product.venue is not None, "product venue is not set"
-        return self.product.venue
+        return TradingVenue(self.product.venue)
 
     @property
     def tick_size(self) -> Decimal | None:

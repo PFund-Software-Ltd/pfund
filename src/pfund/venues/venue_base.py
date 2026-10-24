@@ -265,6 +265,7 @@ class BaseVenue(
         Product = cast("type[ProductT]", ProductFactory(basis, Product=cls.Product))
         return Product(
             source=source,
+            venue=source,
             basis=product_basis,
             exchange=exchange,
             name=name,

@@ -683,7 +683,7 @@ class ComponentMixin:
     ) -> dict[Timeframe, list[int]]:
         venue = product.venue
         assert venue is not None, "product venue is not None"
-        VenueClass = venue.venue_class
+        VenueClass = TradingVenue(venue).venue_class
         assert VenueClass is not None, "venue class is not None"
         return cast(
             "dict[Timeframe, list[int]]",
@@ -1171,7 +1171,7 @@ class ComponentMixin:
         for product in self.products.values():
             if product.venue is None:
                 continue
-            VenueClass = product.venue.venue_class
+            VenueClass = TradingVenue(product.venue).venue_class
             file_path = VenueClass._create_markets_yml_file_path(data_path)
             product.load_market(file_path)
 
