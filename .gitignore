@@ -181,11 +181,6 @@ cython_debug/
 # gzip files
 *.gz
 
-# jupyter-book build
-docs/_build/*
-!docs/_build/html/_static/custom.css
-!docs/_build/html/_static/dark_theme.css
-
 # MyST build outputs
 docs/_build/*
 
@@ -206,3 +201,6 @@ afterpython/_website.backup/
 
 # zed settings
 **/.zed/
+
+# other trading venues' repos
+/venues/
