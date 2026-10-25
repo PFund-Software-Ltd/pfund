@@ -20,14 +20,9 @@ from pfund.enums import TradingVenue
 from pfund_blocks.enums.env import Environment
 from pfund.venues.venue_base import BaseVenue
 from pfund.venues.venue_config import VenueConfig
-from pfund.entities import (
-    BaseMarket,
-    BaseAccount,
-    BaseProduct,
-    BaseOrder,
-    BaseBalance,
-    BasePosition,
-)
+from pfund.entities import BaseAccount, BaseOrder, BaseBalance, BasePosition
+from pfund_blocks.entities.markets.market_base import BaseMarket
+from pfund_blocks.entities.products.product_base import BaseProduct
 
 
 class SandboxVenue(

@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from pfund.entities.accounts.account_base import BaseAccount
     from pfund.entities.balances.balance_base import BaseBalance
     from pfund.entities.positions.position_base import BasePosition
-    from pfund.entities.products.product_base import BaseProduct
+    from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund.engines.trade_engine import TradeEngine
     from pfund.typing import (
         AccountName,

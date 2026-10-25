@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
 if TYPE_CHECKING:
-    from pfund.entities.products.product_base import BaseProduct
+    from pfund_blocks.entities.products.product_base import BaseProduct
 
 from pydantic import BaseModel, Field, GetCoreSchemaHandler
 from pydantic_core import core_schema

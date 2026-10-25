@@ -22,14 +22,9 @@ if TYPE_CHECKING:
         FullDataChannel,
     )
     from pfund.datas.data_market import MarketData
-    from pfund.entities import (
-        BaseAccount,
-        BaseProduct,
-        BaseBalance,
-        BasePosition,
-        BaseOrder,
-        BaseMarket,
-    )
+    from pfund.entities import BaseAccount, BaseBalance, BasePosition, BaseOrder
+    from pfund_blocks.entities.products.product_base import BaseProduct
+    from pfund_blocks.entities.markets.market_base import BaseMarket
     from pfund.venues.venue_config import VenueConfig
     from pfund.venues.adapter_base import BaseAdapter
     from pfund.venues._apis.typing import Result, ResponseData
@@ -46,7 +41,7 @@ from concurrent.futures import Future
 
 from pfund.entities.balances.balance_base import BalanceUpdate, BalanceUpdateSource
 from pfund.errors import NotSupportedByVenueError
-from pfund.entities.products.product_base import ProductKey
+from pfund_blocks.entities.products.product_base import ProductKey
 from pfund.venues.venue_metadata import VenueMetadata
 from pfund.enums import TradingVenue
 from pfund_blocks.enums.env import Environment
@@ -256,7 +251,7 @@ class BaseVenue(
         symbol: str = "",
         **specs: Any,
     ) -> ProductT:
-        from pfund.entities.products import ProductFactory, ProductBasis
+        from pfund_blocks.entities.products import ProductFactory, ProductBasis
 
         product_basis = ProductBasis(basis=basis)
         if str(product_basis.asset_type) not in cls.METADATA.asset_types:

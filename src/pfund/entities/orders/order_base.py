@@ -3,7 +3,8 @@ from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypedDict, ClassVar
 
 if TYPE_CHECKING:
     from pfund.venues.adapter_base import BaseAdapter
-    from pfund.entities import BaseProduct, BaseAccount
+    from pfund.entities import BaseAccount
+    from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund.enums import TradingVenue
 
     # TODO
@@ -34,7 +35,7 @@ from pydantic import (
 from pfund.entities.orders.trailing_stop import TrailingStop
 from pfund.entities.trades.trade import Trade
 from pfund.entities.trades.quantity import Quantity
-from pfund.utils import trim_trailing_zeros
+from pfund_blocks.utils import trim_trailing_zeros
 from pfund.entities.orders.order_status import OrderStatus
 from pfund.enums import (
     Side,

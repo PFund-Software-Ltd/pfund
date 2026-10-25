@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from pfund.datas.stores.market_data_store import BarUpdate
     from pfund.engines.contexts.backtest_engine_context import BacktestEngineContext
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
-    from pfund.entities.products.product_base import BaseProduct
+    from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund.typing import ComponentT, Signals, Component, ComponentName
     from pfund.backtest.cv.dataset_split import DatasetSplit
     from pfund.backtest.cv.fold import Fold

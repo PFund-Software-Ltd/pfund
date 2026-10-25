@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from pfund_blocks.enums.timeframe import Timeframe
     from pfund.engines.contexts.trade_engine_context import TradeEngineContext
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
-    from pfund.entities.products.product_base import BaseProduct
+    from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund.typing import (
         Component,
         ComponentName,

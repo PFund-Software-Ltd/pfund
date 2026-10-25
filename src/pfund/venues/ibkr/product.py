@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 from pydantic import Field, PrivateAttr
 
 from pfund.errors import MissingSymbolError
-from pfund.entities.products.product_base import BaseProduct
+from pfund_blocks.entities.products.product_base import BaseProduct
 from pfund.enums import TradingVenue
 from pfund_blocks.enums.asset_type import TraditionalAssetType
 

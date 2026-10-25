@@ -5,14 +5,8 @@ from pydantic import BaseModel, Field, ConfigDict, PrivateAttr, field_validator
 
 from pfund.typing import Currency
 from pfund_blocks.resolution import Resolution
-from pfund.enums import (
-    MarginMode,
-    OptionType,
-    OrderType,
-    Side,
-    TimeInForce,
-    DataChannel,
-)
+from pfund.enums import MarginMode, OrderType, Side, TimeInForce, DataChannel
+from pfund_blocks.enums.option_type import OptionType
 from pfund_blocks.enums.asset_type import AllAssetType
 
 

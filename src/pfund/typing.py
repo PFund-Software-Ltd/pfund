@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel
     from pfund.components.strategies.strategy_base import BaseStrategy
-    from pfund.entities.products.product_base import BaseProduct
+    from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund.entities.accounts.account_base import BaseAccount
 
 

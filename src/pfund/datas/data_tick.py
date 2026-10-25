@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pfund.datas.data_config import DataConfig
     from pfund_blocks.resolution import Resolution
-    from pfund.entities.products.product_base import BaseProduct
+    from pfund_blocks.entities.products.product_base import BaseProduct
 
 
 from pfund.datas.data_market import MarketData

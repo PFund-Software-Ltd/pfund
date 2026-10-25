@@ -13,7 +13,8 @@ if TYPE_CHECKING:
     from pfund.venues.venue_config import VenueConfig
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_market import MarketData
-    from pfund.entities import BaseAccount, BaseProduct
+    from pfund.entities import BaseAccount
+    from pfund_blocks.entities.products.product_base import BaseProduct
 
     from pfund.typing import Component
     from pfund.engines.base_engine import DataRangeDict

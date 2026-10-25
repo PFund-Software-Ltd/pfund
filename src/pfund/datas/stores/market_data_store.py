@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
     from pfund.datas.databoy import DataBoy
     from pfund_blocks.resolution import Resolution
-    from pfund.entities.products.product_base import BaseProduct
+    from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund.typing import ProductName
 
     ResolutionRepr: TypeAlias = str

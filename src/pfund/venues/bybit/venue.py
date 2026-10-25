@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 if TYPE_CHECKING:
     from pfund.venues._apis.typing import Result
 
-from pfund.entities.products import ProductKey
+from pfund_blocks.entities.products import ProductKey
 from pfund_blocks.resolution import Resolution
 from pfund_blocks.enums.timeframe import Timeframe
 from pfund.venues.crypto_exchange import CryptoExchange
@@ -21,7 +21,7 @@ from pfund.venues.bybit.balance import BybitBalance
 from pfund.venues.bybit.order import BybitOrder
 from pfund.venues.bybit.product import BybitProduct
 from pfund.venues.bybit.position import BybitPosition
-from pfund.entities.products.asset_type import AssetType
+from pfund_blocks.entities.products.asset_type import AssetType
 from pfund.enums import TradingVenue
 from pfund_blocks.enums.asset_type import AssetTypeModifier, CryptoAssetType
 

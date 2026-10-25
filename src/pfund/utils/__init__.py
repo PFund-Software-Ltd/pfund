@@ -1,8 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, NamedTuple, Literal
 
-from decimal import Decimal
-
 from pfund.utils.zmq_graph import show_zmq_graph
 
 if TYPE_CHECKING:
@@ -12,7 +10,6 @@ if TYPE_CHECKING:
 __all__ = [
     "Timestamp",
     "DotenvStore",
-    "trim_trailing_zeros",
     "show_zmq_graph",
 ]
 
@@ -50,15 +47,3 @@ class DotenvStore:
 
     def get(self, key: str, default: str | None = None) -> str | None:
         return self._vars.get(key, default)
-
-
-def trim_trailing_zeros(value: Decimal) -> Decimal:
-    """Trims unnecessary trailing zeros from a Decimal without changing its value.
-
-    e.g. 0.010 -> 0.01, 25000.00 -> 25000
-
-    For whole numbers, `to_integral()` is used instead of `normalize()` to avoid
-    the exponent form normalize() produces for integers (e.g. 25000 -> 2.5E+4).
-    """
-    integral = value.to_integral()
-    return integral if value == integral else value.normalize()

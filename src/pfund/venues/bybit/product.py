@@ -6,8 +6,8 @@ from typing_extensions import override
 from enum import StrEnum
 from datetime import date
 
-from pfund.entities import BaseProduct
-from pfund.enums import OptionType
+from pfund_blocks.entities.products.product_base import BaseProduct
+from pfund_blocks.enums.option_type import OptionType
 from pfund_blocks.enums.asset_type import AssetTypeModifier, CryptoAssetType
 
 

@@ -6,7 +6,8 @@ from pfund.venues.adapter_base import (
     ExternalName,
     OrderStatusRepr,
 )
-from pfund.enums import OptionType, OrderType, Side, DataChannel
+from pfund.enums import OrderType, Side, DataChannel
+from pfund_blocks.enums.option_type import OptionType
 from pfund_blocks.enums.asset_type import TraditionalAssetType
 
 
