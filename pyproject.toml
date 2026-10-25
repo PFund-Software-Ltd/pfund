@@ -25,14 +25,17 @@ classifiers = [
 requires-python = ">=3.13"
 dependencies = [
     "pfund-blocks>=0.0.1",
-    "pfund-kit>=0.1.21",
+    "pfund-kit>=0.1.22",
     'pfeed>=0.0.20',
-    "numba>=0.68.0",
     "apscheduler>=3.11.3",
 ]
 
 [project.optional-dependencies]
-ray = ["ray[default]>=2.59.0"]
+core = [
+    # "mtflow>=0.0.1.dev2"
+    "numba>=0.68.0",
+    "ray[default]>=2.59.0",
+]
 ta-lib = ["ta-lib>=0.8.2"]
 sklearn = [
     "joblib>=1.6.0",
@@ -63,7 +66,7 @@ build-backend = "uv_build"
 [tool.uv]
 # FIXME: set it back to "14 days" when the package is stable
 exclude-newer = "0 days"
-exclude-newer-package = { uv_build = false, pfund-blocks = false, pfund-kit = false, pfeed = false }
+exclude-newer-package = { uv_build = false, pfund-blocks = false, pfund-kit = false, pfeed = false, mtflow = false }
 
 [tool.uv.build-backend]
 module-name = "pfund"

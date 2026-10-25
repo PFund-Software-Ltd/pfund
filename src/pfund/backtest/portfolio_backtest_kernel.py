@@ -1,7 +1,14 @@
 # pyright: reportUnknownVariableType=false, reportUntypedFunctionDecorator=false
 import numpy as np
-from numba import jit
 from numpy.typing import NDArray
+
+try:
+    from numba import jit
+except ImportError as exc:
+    raise ImportError(
+        "numba is required for backtesting; "
+        + "install pfund with the 'core' extra, e.g. pip install pfund[core]"
+    ) from exc
 
 
 @jit(nopython=True, cache=True)
