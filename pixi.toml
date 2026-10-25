@@ -5,16 +5,16 @@ name = "pfund"
 # macos = min version of macOS required by torch>=2.12.0
 platforms = [{ platform = "osx-arm64", macos = "14.0" }, "linux-aarch64", "linux-64", "win-64"]
 # NOTE: should match with setup-pixi in ci.yml
-requires-pixi = ">=0.82.0,<0.83.0"
+requires-pixi = ">=0.83.0"
 # FIXME: set it back to "14 days" when the package is stable
 exclude-newer = "0d"
 
 [pypi-exclude-newer]
 afterpython = "0d"
-pfeed = "0d"
+uv_build = "0d"
+pfund-blocks = "0d"
 pfund-kit = "0d"
-pfund-plot = "0d"
-mtflow = "0d"
+pfeed = "0d"
 
 [tasks]
 
@@ -37,12 +37,11 @@ py315 = ["py315", "test", "optional"]
 # prerelease-mode = "allow"
 
 [pypi-dependencies]
+pfund-blocks = ">=0.0.1"
 pfund-kit = ">=0.1.21"
 pfeed = ">=0.0.20"
-apscheduler = ">=3.11.3"
-httpx2 = { version = ">=2.13.1", extras = ["http2"] }
-websockets = ">=16.1.1"
 numba = ">=0.68.0"
+apscheduler = ">=3.11.3"
 
 [feature.optional.pypi-dependencies]
 # TODO: enable when ready

@@ -24,16 +24,14 @@ classifiers = [
 ]
 requires-python = ">=3.13"
 dependencies = [
+    "pfund-blocks>=0.0.1",
     "pfund-kit>=0.1.21",
     'pfeed>=0.0.20',
-    "apscheduler>=3.11.3",
-    "httpx2[http2]>=2.13.1",
-    "websockets>=16.1.1 ; sys_platform != 'emscripten'",
     "numba>=0.68.0",
+    "apscheduler>=3.11.3",
 ]
 
 [project.optional-dependencies]
-# mtflow = ['mtflow>=0.0.1.dev2']
 ray = ["ray[default]>=2.59.0"]
 ta-lib = ["ta-lib>=0.8.2"]
 sklearn = [
@@ -44,7 +42,8 @@ torch = [
     "torch>=2.14.1",
     "safetensors>=0.8.0",
 ]
-# hyperliquid = ["pfund-hyperliquid>=0.0.1"]
+# hyperliquid = ["pfund-hyperliquid>=0.0.1", "pfeed-hyperliquid>=..."]
+# bybit = ["pfund-bybit>=...", "pfeed-bybit>=..."]
 
 [project.scripts]
 pfund = "pfund.__main__:run_cli"
@@ -58,29 +57,13 @@ repository = "https://github.com/PFund-Software-Ltd/pfund"
 documentation = "https://pfund.pfund.ai/doc"
 
 [build-system]
-requires = ["uv_build>=0.13.1,<0.14.0"]
+requires = ["uv_build>=0.13.5,<0.14.0"]
 build-backend = "uv_build"
 
 [tool.uv]
 # FIXME: set it back to "14 days" when the package is stable
 exclude-newer = "0 days"
-exclude-newer-package = { pfeed = false, pfund-kit = false, pfund-plot = false, mtflow = false }
-
-[tool.pyright]
-# typeCheckingMode = "basic"
-reportAny = false
-reportExplicitAny = false
-reportIncompatibleVariableOverride = false
-reportIncompatibleMethodOverride = false
-reportUnreachable = false
-reportRedeclaration = false
-reportImportCycles = false
-reportPrivateUsage = false
-reportUnusedCallResult = false
-reportImplicitOverride = false
-reportMissingTypeStubs = false
-reportUnannotatedClassAttribute = false
-reportUnnecessaryIsInstance = false
+exclude-newer-package = { uv_build = false, pfund-blocks = false, pfund-kit = false, pfeed = false }
 
 [tool.uv.build-backend]
 module-name = "pfund"
