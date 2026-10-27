@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
 
     from pfund.components.actor_proxy import ActorProxy
-    from pfund.entities.accounts.account_base import BaseAccount
+    from pfund_blocks.entities.accounts.account_base import BaseAccount
     from pfund.entities.balances.balance_base import BaseBalance
     from pfund.entities.positions.position_base import BasePosition
     from pfund_blocks.entities.products.product_base import BaseProduct

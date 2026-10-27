@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypedDict, ClassVar
 
 if TYPE_CHECKING:
     from pfund.venues.adapter_base import BaseAdapter
-    from pfund.entities import BaseAccount
+    from pfund_blocks.entities.accounts.account_base import BaseAccount
     from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund.enums import TradingVenue
 

@@ -22,7 +22,8 @@ if TYPE_CHECKING:
         FullDataChannel,
     )
     from pfund.datas.data_market import MarketData
-    from pfund.entities import BaseAccount, BaseBalance, BasePosition, BaseOrder
+    from pfund.entities import BaseBalance, BasePosition, BaseOrder
+    from pfund_blocks.entities.accounts.account_base import BaseAccount
     from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund_blocks.entities.markets.market_base import BaseMarket
     from pfund.venues.venue_config import VenueConfig

@@ -20,7 +20,7 @@ if TYPE_CHECKING:
         HeaderTypes,
         CookieTypes,
     )
-    from pfund.entities import BaseAccount
+    from pfund_blocks.entities.accounts.account_base import BaseAccount
     from pfund.venues.adapter_base import BaseAdapter
     from pfund.venues.crypto_exchange import CryptoExchangeSigner
     from pfund.venues._apis.typing import Schema, Result, RawResponse, EndpointName

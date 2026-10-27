@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from pfund.components.models.model_base import BaseModel
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund_blocks.entities.products.product_base import BaseProduct
-    from pfund.entities.accounts.account_base import BaseAccount
+    from pfund_blocks.entities.accounts.account_base import BaseAccount
 
 
 Component: TypeAlias = "BaseStrategy | BaseModel | BaseFeature"

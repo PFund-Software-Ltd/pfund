@@ -3,7 +3,7 @@ from typing import ClassVar
 
 import warnings
 
-from pfund.entities import BaseAccount
+from pfund_blocks.entities.accounts.account_base import BaseAccount
 from pfund.enums import TradingVenue
 from pfund_blocks.enums.env import Environment
 

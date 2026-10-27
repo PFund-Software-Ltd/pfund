@@ -14,7 +14,7 @@ from typing import (
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from pfund.entities import BaseAccount
+    from pfund_blocks.entities.accounts.account_base import BaseAccount
     from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund.venues.adapter_base import BaseAdapter
     from pfund_blocks.resolution import Resolution

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pfund.entities.accounts import APIKeyAccount
+from pfund_blocks.entities.accounts import APIKeyAccount
 from pfund.enums import TradingVenue
 from pfund_blocks.enums.env import Environment
 
