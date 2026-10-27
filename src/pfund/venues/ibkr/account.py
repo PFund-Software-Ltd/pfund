@@ -75,6 +75,10 @@ class InteractiveBrokersAccount(BaseAccount):
                     stacklevel=2,
                 )
 
+    def _assert_credentials_provided_in_paper_or_live_trading_env(self):
+        # IBKR authenticates in TWS / IB Gateway, nothing is required here
+        pass
+
     def _assert_no_credential_leak_in_simulated_env(self):
         if self._env != Environment.BACKTEST:
             return
