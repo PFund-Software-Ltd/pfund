@@ -62,6 +62,6 @@ class VenueMetadata(BaseModel):
                 "ProductCategory | None", getattr(product, "category", None)
             )
             if category is None or category not in resolutions_by_category:
-                raise ValueError(f"{product.desc_str()} has unsupported {category=}")
+                raise ValueError(f"{product} has unsupported {category=}")
             return resolutions_by_category[category]
         return cast("SupportedResolutions", supported_resolutions)

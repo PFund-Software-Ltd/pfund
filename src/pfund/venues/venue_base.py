@@ -329,13 +329,13 @@ class BaseVenue(
                 internal=product.name,
                 external=product.symbol,
             )
-            self._logger.debug(f"added {product.desc_str()}")
+            self._logger.debug(f"added {product}")
             if self.METADATA.has_markets and product.market is None:
                 file_path = self._create_markets_yml_file_path()
                 self.load_market(product)
                 if product.market is None:
                     self._logger.error(
-                        f"no market found for {product.desc_str()} "
+                        f"no market found for {product} "
                         + f"in {file_path}; the product might be delisted, or the file is outdated "
                         + "- set refetch_markets=True in the venue config to refetch"
                     )

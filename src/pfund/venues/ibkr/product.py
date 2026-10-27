@@ -52,7 +52,7 @@ class InteractiveBrokersProduct(BaseProduct):
             return default_exchange
         else:
             raise ValueError(
-                f'{self.desc_str()} is missing "exchange", please add "exchange" as a kwarg, e.g. exchange="NASDAQ"'
+                f'{self} is missing "exchange", please add "exchange" as a kwarg, e.g. exchange="NASDAQ"'
             )
 
     @override
@@ -98,7 +98,7 @@ class InteractiveBrokersProduct(BaseProduct):
         else:
             # e.g. BOND (identified by CUSIP/ISIN), prediction market OUTCOME
             raise MissingSymbolError(
-                f"symbol must be provided in add_data(..., symbol=...) for {self.desc_str()}"
+                f"symbol must be provided in add_data(..., symbol=...) for {self}"
             )
         return symbol
 

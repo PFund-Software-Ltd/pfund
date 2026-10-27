@@ -802,7 +802,7 @@ class ComponentMixin:
         )
         if product.name not in self.products:
             self.products[product.name] = product
-            self.logger.debug(f"added {product.desc_str()}")
+            self.logger.debug(f"added {product}")
         else:
             existing_product = self.products[product.name]
             assert existing_product == product, (
