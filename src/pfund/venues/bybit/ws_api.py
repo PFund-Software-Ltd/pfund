@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from pfund.venues.bybit._ws_apis.ws_api_base import BybitBaseWebSocketAPI
     from pfund_blocks.resolution import Resolution
     from pfund_blocks.enums.env import Environment
-    from pfund.typing import FullDataChannel
+    from pfund_blocks.typing import FullChannel
 
 import asyncio
 
@@ -115,7 +115,7 @@ class BybitWebSocketAPI(BaseWebSocketAPI[BybitConfig, BybitAccount, BybitProduct
 
     def add_channel(
         self,
-        channel: FullDataChannel,
+        channel: FullChannel,
         *,
         channel_type: Literal["public", "private"],
         category: BybitProduct.Category | str | None = None,

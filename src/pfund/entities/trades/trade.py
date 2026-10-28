@@ -5,9 +5,9 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field, ConfigDict, computed_field, field_validator
 
-from pfund.typing import Currency
+from pfund_blocks.typing import Currency
 from pfund.entities.trades.quantity import Quantity
-from pfund.enums import Side
+from pfund_blocks.enums.side import Side
 
 
 class Trade(BaseModel):

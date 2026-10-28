@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from pfund.typing import AccountName, ProductName, Currency
+    from pfund_blocks.typing import AccountName, Currency, ProductName
     from pfund.entities.balances.balance_base import BaseBalance, BalanceUpdate
     from pfund.entities.positions.position_base import BasePosition
 

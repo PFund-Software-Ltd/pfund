@@ -6,7 +6,7 @@ from typing_extensions import override
 
 if TYPE_CHECKING:
     from pfund_blocks.resolution import Resolution
-    from pfund.venues.venue_config import VenueConfig
+    from pfund.venue.venue import VenueConfig
     from pfund.venues.venue_sandbox import SandboxVenue
     from pfund.engines.base_engine import DataRangeDict
 

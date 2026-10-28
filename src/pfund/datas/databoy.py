@@ -26,7 +26,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from pfeed.enums import DataCategory
 from pfeed.streaming.zeromq import ZeroMQDataChannel
-from pfund.enums import PrivateDataChannel, PFundDataChannel
+from pfund_blocks.enums.channel import PrivateChannel
+from pfund.enums import PFundChannel
 
 
 class DataBoy:
@@ -165,7 +166,7 @@ class DataBoy:
         # subscribe to private channels: positions, balances, orders, etc.
         if self._component.is_strategy():
             accounts = list(self._component.accounts.values())
-            channels = list(PrivateDataChannel.__members__)
+            channels = list(PrivateChannel.__members__)
             for account, channel in zip(accounts, channels):
                 zmq_channel: str = ZeroMQDataChannel.create_private_channel(
                     account=account,
@@ -185,7 +186,7 @@ class DataBoy:
                 raise NotImplementedError(f"Unhandled data type: {type(data)}")
 
         self._signals_zmq.receiver.setsockopt(
-            zmq.SUBSCRIBE, str(PFundDataChannel.signal).encode()
+            zmq.SUBSCRIBE, str(PFundChannel.signal).encode()
         )
         for component in self._component.get_components():
             component_zmq_url = settings.zmq_urls.get(
@@ -302,13 +303,13 @@ class DataBoy:
             from pfund.entities.balances.balance_base import BalanceUpdate
 
             # rebuild-by-topic map for private updates; market data falls through to the
-            # store. Symmetric with market data discriminating on PublicDataChannel.
+            # store. Symmetric with market data discriminating on PublicChannel.
             # TODO(#2): add PositionUpdate/OrderUpdate/TradeUpdate once the taxonomy exists.
             update_types = {
-                PrivateDataChannel.balance: BalanceUpdate,
-                # PrivateDataChannel.position: PositionUpdate,
-                # PrivateDataChannel.order: OrderUpdate,
-                # PrivateDataChannel.trade: TradeUpdate,
+                PrivateChannel.balance: BalanceUpdate,
+                # PrivateChannel.position: PositionUpdate,
+                # PrivateChannel.order: OrderUpdate,
+                # PrivateChannel.trade: TradeUpdate,
             }
             while self._component.is_running():
                 if msg_tuple := self._data_zmq.recv():
@@ -409,7 +410,7 @@ class DataBoy:
             name: np.asarray(values).tolist() for name, values in signals.items()
         }
         self._signals_zmq.send(
-            channel=PFundDataChannel.signal,
+            channel=PFundChannel.signal,
             topic=self._component.name,
             data={"bar_end_ts": data.end_ts, "signals": latest_signals},
         )

@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, computed_field
 
-from pfund.typing import AccountName, Currency
+from pfund_blocks.typing import AccountName, Currency
 
 
 SnapshotT = TypeVar("SnapshotT", bound="BaseBalance.Snapshot")

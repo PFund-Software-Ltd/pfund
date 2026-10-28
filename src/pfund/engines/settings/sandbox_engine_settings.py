@@ -4,7 +4,7 @@ from pydantic import Field, field_validator
 
 from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 from pfund.enums import TradingVenue
-from pfund.typing import Currency, ProductName
+from pfund_blocks.typing import Currency, ProductName
 
 
 class SandboxEngineSettings(TradeEngineSettings):

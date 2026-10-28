@@ -21,11 +21,7 @@ AccountT = TypeVar("AccountT", bound="BaseAccount")
 
 EngineName: TypeAlias = str
 ComponentName: TypeAlias = str
-ProductName: TypeAlias = str
-AccountName: TypeAlias = str
 ColumnName: TypeAlias = str
-Currency: TypeAlias = str
-FullDataChannel: TypeAlias = str
 Signals: TypeAlias = dict[ColumnName, Any]
 
 

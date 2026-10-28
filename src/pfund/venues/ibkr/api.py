@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from pfund.venues.adapter_base import BaseAdapter
     from pfund.venues.ibkr.account import InteractiveBrokersAccount
     from pfund.venues.ibkr.product import InteractiveBrokersProduct
-    from pfund.typing import AccountName, FullDataChannel, ProductName
+    from pfund_blocks.typing import AccountName, FullChannel, ProductName
 
 import queue
 import logging
@@ -28,7 +28,8 @@ from pfund.venues.ibkr.config import InteractiveBrokersConfig
 from pfund.venues.ibkr._ibapi.client import InteractiveBrokersClient as IBClient
 from pfund.venues.ibkr._ibapi.wrapper import InteractiveBrokersWrapper as IBWrapper
 from pfund.venues.ibkr._ibapi.wrapper import *  # noqa: F403  # pyright: ignore[reportWildcardImportFromLibrary]
-from pfund.enums import TradingVenue, DataChannel, DataChannelType, PrivateDataChannel
+from pfund_blocks.enums.channel import Channel, ChannelType, PrivateChannel
+from pfund.enums import TradingVenue
 from pfund_blocks.enums.env import Environment
 from pfund_blocks.enums.asset_type import TraditionalAssetType
 
@@ -36,7 +37,7 @@ from pfund_blocks.enums.asset_type import TraditionalAssetType
 class InteractiveBrokersAPI(IBClient, IBWrapper):  # pyright: ignore[reportUnsafeMultipleInheritance]
     venue: ClassVar[TradingVenue] = TradingVenue.IBKR
 
-    # default channels to subscribe to other than the ones in PrivateDataChannel
+    # default channels to subscribe to other than the ones in PrivateChannel
     DEFAULT_PRIVATE_CHANNELS: ClassVar[Sequence[str]] = ("reqAccountSummary",)
 
     ASSET_TYPES_WITHOUT_TICK_BY_TICK_DATA = [
@@ -82,9 +83,9 @@ class InteractiveBrokersAPI(IBClient, IBWrapper):  # pyright: ignore[reportUnsaf
 
         self._products: dict[ProductName, InteractiveBrokersProduct] = {}
         self._accounts: dict[AccountName, InteractiveBrokersAccount] = {}
-        self._channels: dict[DataChannelType, list[str]] = {
-            DataChannelType.public: [],
-            DataChannelType.private: [],
+        self._channels: dict[ChannelType, list[str]] = {
+            ChannelType.public: [],
+            ChannelType.private: [],
         }
 
         self._queue: queue.Queue[Any] | None = None
@@ -218,9 +219,9 @@ class InteractiveBrokersAPI(IBClient, IBWrapper):  # pyright: ignore[reportUnsaf
             raise ValueError(f"product name {product.name} has already been registered")
 
     def add_channel(
-        self, channel: FullDataChannel, *, channel_type: Literal["public", "private"]
+        self, channel: FullChannel, *, channel_type: Literal["public", "private"]
     ):
-        channel_type: DataChannelType = DataChannelType[channel_type.lower()]
+        channel_type: ChannelType = ChannelType[channel_type.lower()]
         if channel not in self._channels[channel_type]:
             self._channels[channel_type].append(channel)
             self._logger.debug(f"added {channel_type} channel {channel}")
@@ -242,7 +243,7 @@ class InteractiveBrokersAPI(IBClient, IBWrapper):  # pyright: ignore[reportUnsaf
                 raise ValueError(
                     f"{self.name} {product.symbol} {resolution=} is not supported"
                 )
-            channel = DataChannel.orderbook
+            channel = Channel.orderbook
             if resolution.orderbook_level == 2:
                 if not self._config.reqMktDepthL2:
                     echannel = self.adapter(channel, group="channels")
@@ -258,11 +259,11 @@ class InteractiveBrokersAPI(IBClient, IBWrapper):  # pyright: ignore[reportUnsaf
                 )
             full_channel = ".".join([echannel, str(orderbook_depth), product.symbol])
         elif resolution.is_tick():
-            channel = DataChannel.tradebook
+            channel = Channel.tradebook
             echannel = self.adapter(channel, group="channels")
             full_channel = ".".join([echannel, product.symbol])
         elif resolution.is_bar():
-            channel = DataChannel.candlestick
+            channel = Channel.candlestick
             echannel = self.adapter(channel, group="channels")
             period = resolution.period
             if resolution.timeframe not in supported_resolutions:
@@ -284,8 +285,8 @@ class InteractiveBrokersAPI(IBClient, IBWrapper):  # pyright: ignore[reportUnsaf
         return full_channel
 
     def _create_private_channel(
-        self, channel: PrivateDataChannel | str
-    ) -> FullDataChannel:
+        self, channel: PrivateChannel | str
+    ) -> FullChannel:
         return str(self.adapter(channel, group="channels"))
 
     def connect(self, account: InteractiveBrokersAccount):
@@ -310,11 +311,11 @@ class InteractiveBrokersAPI(IBClient, IBWrapper):  # pyright: ignore[reportUnsaf
         super().disconnect()
         # self._unsubscribe()
 
-    def _subscribe(self, channels: list[str], channel_type: DataChannelType):
+    def _subscribe(self, channels: list[str], channel_type: ChannelType):
         # TODO
         # ib_params = self._ib_params_for_channels_subscription[full_channel]
         for channel in channels:
-            if channel_type == DataChannelType.public:
+            if channel_type == ChannelType.public:
                 pass
                 # if channel == 'kline':
                 #     self._request_real_time_bar(**ib_params)

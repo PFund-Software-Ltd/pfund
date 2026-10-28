@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.streaming.zeromq import ZeroMQ
     from pfund.venues.venue_base import AnyVenue
-    from pfund.venues.venue_config import VenueConfig
+    from pfund.venue.venue import VenueConfig
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_market import MarketData
     from pfund_blocks.entities.accounts.account_base import BaseAccount

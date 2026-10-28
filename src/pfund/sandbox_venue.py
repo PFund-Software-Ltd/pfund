@@ -7,7 +7,7 @@ from typing_extensions import override
 if TYPE_CHECKING:
     from pfeed.storages.storage_config import StorageConfig
     from pfeed.sources.pfund.engine_feed import PFundEngineFeed
-    from pfund.typing import FullDataChannel
+    from pfund_blocks.typing import FullChannel
     from pfund.datas.data_market import MarketData
     from pfund.venues.venue_base import AnyVenue
     from pfund.venues._apis.typing import Result, ResponseData
@@ -19,7 +19,7 @@ from decimal import Decimal
 from pfund.enums import TradingVenue
 from pfund_blocks.enums.env import Environment
 from pfund.venues.venue_base import BaseVenue
-from pfund.venues.venue_config import VenueConfig
+from pfund.venue.venue import VenueConfig
 from pfund.entities import BaseOrder, BaseBalance, BasePosition
 from pfund_blocks.entities.accounts.account_base import BaseAccount
 from pfund_blocks.entities.markets.market_base import BaseMarket
@@ -93,7 +93,7 @@ class SandboxVenue(
     @override
     def add_channel(
         self,
-        channel: FullDataChannel,
+        channel: FullChannel,
         *,
         channel_type: Literal["public", "private"] = "public",
     ) -> None:

@@ -5,7 +5,8 @@ import logging
 from ibapi.order import Order as IBOrder
 
 from pfund.entities.orders.order_base import BaseOrder
-from pfund.enums import OrderType, Side
+from pfund_blocks.enums.order_type import OrderType
+from pfund_blocks.enums.side import Side
 
 
 logger = logging.getLogger("pfund.ibkr")

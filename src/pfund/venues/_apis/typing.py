@@ -4,7 +4,7 @@ from typing_extensions import TypedDict  # need it to use "extra_items"
 from http import HTTPMethod
 from collections.abc import Sequence
 
-from pfund.typing import AccountName
+from pfund_blocks.typing import AccountName
 from pfund.enums import TradingVenue
 
 

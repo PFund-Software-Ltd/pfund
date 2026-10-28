@@ -12,14 +12,12 @@ if TYPE_CHECKING:
     from pfund.entities.positions.position_base import BasePosition
     from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund.engines.trade_engine import TradeEngine
+    from pfund_blocks.typing import AccountName, Currency, ProductName
     from pfund.typing import (
-        AccountName,
         Component,
         ComponentName,
         StrategyT,
         Signals,
-        Currency,
-        ProductName,
     )
 
 from abc import ABC, abstractmethod

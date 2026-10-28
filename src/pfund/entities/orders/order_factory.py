@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.entities.orders.order_base import BaseOrder
 
-from pfund.enums import OrderType, TradingVenue
+from pfund_blocks.enums.order_type import OrderType
+from pfund.enums import TradingVenue
 
 
 def OrderFactory(

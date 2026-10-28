@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar, Literal, Any, cast
 
 if TYPE_CHECKING:
-    from pfund.typing import FullDataChannel
+    from pfund_blocks.typing import FullChannel
     from pfund.datas.data_market import MarketData
     from ibapi.contract import Contract, ContractDetails
 
@@ -13,7 +13,8 @@ from pfund_blocks.resolution import Resolution
 from pfund_blocks.enums.timeframe import Timeframe
 from pfund.venues.venue_metadata import VenueMetadata, _All
 from pfund.venues.venue_base import BaseVenue
-from pfund.enums import PrivateDataChannel, TradingVenue
+from pfund_blocks.enums.channel import PrivateChannel
+from pfund.enums import TradingVenue
 from pfund_blocks.enums.env import Environment
 from pfund_blocks.enums.asset_type import (
     TraditionalAssetType,
@@ -93,24 +94,24 @@ class InteractiveBrokers(
 
     def add_channel(
         self,
-        channel: FullDataChannel,
+        channel: FullChannel,
         *,
         channel_type: Literal["public", "private"] = "public",
     ) -> None:
         self.api.add_channel(channel, channel_type=channel_type)
 
     def _add_market_data_channel(self, data: MarketData) -> None:
-        full_channel: FullDataChannel = self.api._create_market_data_channel(
+        full_channel: FullChannel = self.api._create_market_data_channel(
             cast("InteractiveBrokersProduct", data.product),
             data.resolution,
         )
         self.add_channel(full_channel, channel_type="public")
 
     def _add_private_channels(self) -> None:
-        for channel in list(PrivateDataChannel) + list(
+        for channel in list(PrivateChannel) + list(
             self.api.DEFAULT_PRIVATE_CHANNELS
         ):
-            full_channel: FullDataChannel = self.api._create_private_channel(channel)
+            full_channel: FullChannel = self.api._create_private_channel(channel)
             self.add_channel(full_channel, channel_type="private")
 
     async def get_contract_details(

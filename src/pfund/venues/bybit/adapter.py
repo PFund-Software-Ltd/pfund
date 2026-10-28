@@ -5,7 +5,10 @@ from pfund.venues.adapter_base import (
     ExternalName,
     OrderStatusRepr,
 )
-from pfund.enums import MarginMode, OrderType, Side, DataChannel
+from pfund_blocks.enums.margin_mode import MarginMode
+from pfund_blocks.enums.order_type import OrderType
+from pfund_blocks.enums.side import Side
+from pfund_blocks.enums.channel import Channel
 from pfund_blocks.enums.option_type import OptionType
 from pfund_blocks.enums.asset_type import CryptoAssetType, AssetTypeModifier
 
@@ -44,14 +47,14 @@ class BybitAdapter(BaseAdapter):
         OptionType.CALL: "Call",
         OptionType.PUT: "Put",
     }
-    channels: dict[DataChannel, ExternalName] = {
-        DataChannel.orderbook: "orderbook",
-        DataChannel.tradebook: "publicTrade",
-        DataChannel.candlestick: "kline",
-        DataChannel.balance: "wallet",
-        DataChannel.position: "position",
-        DataChannel.order: "order",
-        DataChannel.trade: "execution",
+    channels: dict[Channel, ExternalName] = {
+        Channel.orderbook: "orderbook",
+        Channel.tradebook: "publicTrade",
+        Channel.candlestick: "kline",
+        Channel.balance: "wallet",
+        Channel.position: "position",
+        Channel.order: "order",
+        Channel.trade: "execution",
     }
     channel_resolutions: dict[Resolution | str, ExternalName] = {
         "1m": "1",

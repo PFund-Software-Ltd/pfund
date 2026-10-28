@@ -5,7 +5,7 @@ from pfund.venues.binance._ws_apis import (
     BinanceSpotWebSocketAPI,
 )
 from pfund.venues._apis.ws_api_base import BaseWebSocketAPI
-from pfund.enums import PrivateDataChannel, DataChannel
+from pfund_blocks.enums.channel import PrivateChannel, Channel
 from pfund_blocks.enums.env import Environment
 
 
@@ -30,10 +30,10 @@ class BinanceWebSocketAPI(BaseWebSocketAPI):
     def _create_ws_url(self, ws_name: str) -> str:
         pass
 
-    def _create_public_channel(self, channel: DataChannel, product, **kwargs):
+    def _create_public_channel(self, channel: Channel, product, **kwargs):
         pass
 
-    def _create_private_channel(self, channel: PrivateDataChannel, **kwargs):
+    def _create_private_channel(self, channel: PrivateChannel, **kwargs):
         pass
 
     def _subscribe(self, ws, full_channels: list[str]):

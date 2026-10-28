@@ -19,13 +19,13 @@ if TYPE_CHECKING:
     from pfund.engines.contexts.trade_engine_context import TradeEngineContext
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund_blocks.entities.products.product_base import BaseProduct
+    from pfund_blocks.typing import ProductName
     from pfund.typing import (
         Component,
         ComponentName,
         ComponentT,
         FeatureT,
         ModelT,
-        ProductName,
         Signals,
     )
 

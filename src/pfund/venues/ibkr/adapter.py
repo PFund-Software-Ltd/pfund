@@ -6,7 +6,9 @@ from pfund.venues.adapter_base import (
     ExternalName,
     OrderStatusRepr,
 )
-from pfund.enums import OrderType, Side, DataChannel
+from pfund_blocks.enums.order_type import OrderType
+from pfund_blocks.enums.side import Side
+from pfund_blocks.enums.channel import Channel
 from pfund_blocks.enums.option_type import OptionType
 from pfund_blocks.enums.asset_type import TraditionalAssetType
 
@@ -49,16 +51,16 @@ class InteractiveBrokersAdapter(BaseAdapter):
         OptionType.CALL: "C",
         OptionType.PUT: "P",
     }
-    channels: dict[DataChannel, ExternalName] = {
+    channels: dict[Channel, ExternalName] = {
         # NOTE: reqMktData will be used if data resolution is QUOTE_L1 (level-1 orderbook)
-        DataChannel.orderbook: "reqMktDepth",
-        DataChannel.tradebook: "reqTickByTickData",
-        DataChannel.candlestick: "reqRealTimeBars",  # NOTE: only 5s bars are supported by IB
-        DataChannel.balance: "reqAccountUpdates",
-        DataChannel.position: "reqPositions",
+        Channel.orderbook: "reqMktDepth",
+        Channel.tradebook: "reqTickByTickData",
+        Channel.candlestick: "reqRealTimeBars",  # NOTE: only 5s bars are supported by IB
+        Channel.balance: "reqAccountUpdates",
+        Channel.position: "reqPositions",
         # no channel for "order" and "trade", only callbacks: openOrder, orderStatus, execDetails, commissionReport etc.
-        # DataChannel.order: ...,
-        # DataChannel.trade: ...,
+        # Channel.order: ...,
+        # Channel.trade: ...,
     }
 
     def model_post_init(self, __context: Any) -> None:

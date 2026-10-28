@@ -69,6 +69,7 @@ pfeed = { path = "../pfeed", editable = true }
 ray = { version = ">=2.59.0", extras = ["default"], env-markers = "python_version < '3.15'" }
 pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo"] }
 pfund-kit = { path = "../pfund-kit", editable = true }
+pfund-blocks = { path = "../pfund-blocks", editable = true }
 mtflow = { path = "../mtflow", editable = true }
 afterpython = ">=0.4.0"
 memray = ">=1.19.3"
@@ -81,6 +82,7 @@ python-graphviz = ">=0.21"
 pfund = { path = ".", editable = true }
 # TEMP
 pfeed = { path = "../pfeed", editable = true }
+pfund-blocks = { path = "../pfund-blocks", editable = true }
 pytest = ">=9.1.1"
 pytest-mock = ">=3.17.0"
 pytest-xdist = ">=3.8.0"

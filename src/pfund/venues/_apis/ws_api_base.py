@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from pfund_blocks.resolution import Resolution
     from pfund.venues.crypto_exchange import CryptoExchangeSigner
     from pfund.venues._apis.typing import ResponseData
-    from pfund.typing import AccountName, FullDataChannel, ProductName
+    from pfund_blocks.typing import AccountName, FullChannel, ProductName
 
     WebSocketName: TypeAlias = str
     RawMessage: TypeAlias = dict[str, Any]
@@ -37,7 +37,8 @@ from msgspec import json
 from websockets.asyncio.client import ClientConnection as WebSocket
 
 from pfund.errors import WebSocketTimeoutError
-from pfund.enums import TradingVenue, DataChannelType, PrivateDataChannel
+from pfund_blocks.enums.channel import ChannelType, PrivateChannel
+from pfund.enums import TradingVenue
 from pfund_blocks.enums.env import Environment
 from pfund.venues.venue_base import ConfigT, AccountT, ProductT
 
@@ -52,7 +53,7 @@ class BaseWebSocketAPI(ABC, Generic[ConfigT, AccountT, ProductT]):
 
     VERSION: ClassVar[str | None] = None  # e.g. "v5" for str
     URLS: ClassVar[
-        dict[Literal[Environment.PAPER, Environment.LIVE], dict[DataChannelType, str]]
+        dict[Literal[Environment.PAPER, Environment.LIVE], dict[ChannelType, str]]
     ] = {}
     PING_FREQ: ClassVar[int] = 20  # application-level ping to exchange (in seconds)
     RETRY_FREQ: ClassVar[int] = 3  # handshake retry backoff (in seconds)
@@ -81,9 +82,9 @@ class BaseWebSocketAPI(ABC, Generic[ConfigT, AccountT, ProductT]):
 
         self._products: dict[ProductName, ProductT] = {}
         self._accounts: dict[AccountName, AccountT] = {}
-        self._channels: dict[DataChannelType, list[str]] = {
-            DataChannelType.public: [],
-            DataChannelType.private: [],
+        self._channels: dict[ChannelType, list[str]] = {
+            ChannelType.public: [],
+            ChannelType.private: [],
         }
 
         self._websockets: dict[WebSocketName, NamedWebSocket] = {}
@@ -110,8 +111,8 @@ class BaseWebSocketAPI(ABC, Generic[ConfigT, AccountT, ProductT]):
     async def _subscribe(
         self,
         ws: NamedWebSocket,
-        channels: list[FullDataChannel],
-        channel_type: DataChannelType,
+        channels: list[FullChannel],
+        channel_type: ChannelType,
     ):
         pass
 
@@ -119,8 +120,8 @@ class BaseWebSocketAPI(ABC, Generic[ConfigT, AccountT, ProductT]):
     async def _unsubscribe(
         self,
         ws: NamedWebSocket,
-        channels: list[FullDataChannel],
-        channel_type: DataChannelType,
+        channels: list[FullChannel],
+        channel_type: ChannelType,
     ):
         pass
 
@@ -139,11 +140,11 @@ class BaseWebSocketAPI(ABC, Generic[ConfigT, AccountT, ProductT]):
     @abstractmethod
     def _create_market_data_channel(
         self, product: ProductT, resolution: Resolution
-    ) -> FullDataChannel:
+    ) -> FullChannel:
         pass
 
-    def _create_private_channel(self, channel: PrivateDataChannel) -> FullDataChannel:
-        channel = PrivateDataChannel[channel.lower()]
+    def _create_private_channel(self, channel: PrivateChannel) -> FullChannel:
+        channel = PrivateChannel[channel.lower()]
         return str(self.adapter(channel, group="channels"))
 
     @abstractmethod
@@ -176,8 +177,8 @@ class BaseWebSocketAPI(ABC, Generic[ConfigT, AccountT, ProductT]):
         self._callback = callback
         self._callback_raw_msg = raw_msg
 
-    def _get_url(self, channel_type: DataChannelType) -> str:
-        return self.URLS[self.env][DataChannelType[channel_type.lower()]]
+    def _get_url(self, channel_type: ChannelType) -> str:
+        return self.URLS[self.env][ChannelType[channel_type.lower()]]
 
     def add_account(self, account: AccountT) -> None:
         if account.env != self.env:
@@ -200,9 +201,9 @@ class BaseWebSocketAPI(ABC, Generic[ConfigT, AccountT, ProductT]):
             raise ValueError(f"product name {product.name} has already been registered")
 
     def add_channel(
-        self, channel: FullDataChannel, *, channel_type: Literal["public", "private"]
+        self, channel: FullChannel, *, channel_type: Literal["public", "private"]
     ):
-        channel_type: DataChannelType = DataChannelType[channel_type.lower()]
+        channel_type: ChannelType = ChannelType[channel_type.lower()]
         if channel not in self._channels[channel_type]:
             self._channels[channel_type].append(channel)
             self._logger.debug(f"added {channel_type} channel '{channel}'")
@@ -301,7 +302,7 @@ class BaseWebSocketAPI(ABC, Generic[ConfigT, AccountT, ProductT]):
             if not channels:
                 continue
             url = self._get_url(channel_type)
-            if channel_type == DataChannelType.public:
+            if channel_type == ChannelType.public:
                 self._num_conns += 1
                 self._spawn_connect(url)
             else:
@@ -350,9 +351,9 @@ class BaseWebSocketAPI(ABC, Generic[ConfigT, AccountT, ProductT]):
             self._logger.debug(f"websocket {ws_name} has no callback set")
 
         if account is None:
-            channel_type = DataChannelType.public
+            channel_type = ChannelType.public
         else:
-            channel_type = DataChannelType.private
+            channel_type = ChannelType.private
 
         # initial connection: bounded handshake retries. if it never comes up, give up so
         # _checkup() times out and startup aborts cleanly.
@@ -371,7 +372,7 @@ class BaseWebSocketAPI(ABC, Generic[ConfigT, AccountT, ProductT]):
                 async with ws:
                     ws = self._add_ws(ws_name, ws)
 
-                    if channel_type == DataChannelType.private:
+                    if channel_type == ChannelType.private:
                         await self._authenticate(ws, account)  # pyright: ignore[reportArgumentType]
 
                     if channels := self._channels[channel_type]:

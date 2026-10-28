@@ -35,13 +35,11 @@ from pydantic import (
 from pfund.entities.orders.trailing_stop import TrailingStop
 from pfund.entities.trades.trade import Trade
 from pfund.entities.trades.quantity import Quantity
+from pfund_blocks.enums.time_in_force import TimeInForce
 from pfund_blocks.utils import trim_trailing_zeros
 from pfund.entities.orders.order_status import OrderStatus
-from pfund.enums import (
-    Side,
-    OrderType,
-    TimeInForce,
-)
+from pfund_blocks.enums.side import Side
+from pfund_blocks.enums.order_type import OrderType
 
 
 OrderKey: TypeAlias = str  # order key = client order id

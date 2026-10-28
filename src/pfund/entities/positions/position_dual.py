@@ -8,7 +8,8 @@ if TYPE_CHECKING:
 from pydantic import PrivateAttr, Field, model_validator
 
 from pfund.entities.positions.position_base import BasePosition, PositionSnapshot
-from pfund.enums import Side, PositionMode
+from pfund_blocks.enums.position_mode import PositionMode
+from pfund_blocks.enums.side import Side
 
 
 class DualPosition(BasePosition):

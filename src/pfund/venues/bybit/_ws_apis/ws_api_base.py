@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
-    from pfund.typing import FullDataChannel
+    from pfund_blocks.typing import FullChannel
     from pfund.venues._apis.typing import ResponseData, Schema
     from pfund.venues._apis.ws_api_base import RawMessage, WebSocketName
     from pfund_blocks.enums.env import Environment
@@ -22,7 +22,8 @@ from pfund.venues.bybit.product import BybitProduct
 from pfund.venues.bybit.account import BybitAccount
 from pfund.venues.bybit.signer import BybitSigner
 from pfund.venues.bybit.config import BybitConfig
-from pfund.enums import TradingVenue, DataChannel, DataChannelType
+from pfund_blocks.enums.channel import Channel, ChannelType
+from pfund.enums import TradingVenue
 from pfund.venues._apis.schema_parser import SchemaParser
 
 
@@ -31,7 +32,7 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitConfig, BybitAccount, BybitPro
     _signer: ClassVar[BybitSigner] = BybitSigner()
 
     VERSION: ClassVar[str] = "v5"
-    URLS: ClassVar[dict[Environment, dict[DataChannelType, str]]] = {}
+    URLS: ClassVar[dict[Environment, dict[ChannelType, str]]] = {}
 
     CATEGORY: ClassVar[BybitProduct.Category]
     # it defines the maximum number of arguments allowed in the 'args' list of a WebSocket message: {'op': '...', 'args': [...]}
@@ -50,7 +51,7 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitConfig, BybitAccount, BybitPro
             return x[0]
 
     def _split_channels_into_batches(
-        self, channels: list[str], channel_type: DataChannelType
+        self, channels: list[str], channel_type: ChannelType
     ) -> list[list[str]]:
         """Split channels into batches if public channel args limit is exceeded.
 
@@ -59,7 +60,7 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitConfig, BybitAccount, BybitPro
         into smaller batches that fit within the limit.
         """
         num_channels = len(channels)
-        is_exceeded_args_limit = (channel_type == DataChannelType.public) and (
+        is_exceeded_args_limit = (channel_type == ChannelType.public) and (
             num_channels > self.PUBLIC_CHANNEL_ARGS_LIMIT
         )
         if not is_exceeded_args_limit:
@@ -74,8 +75,8 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitConfig, BybitAccount, BybitPro
     async def _subscribe(
         self,
         ws: NamedWebSocket,
-        channels: list[FullDataChannel],
-        channel_type: DataChannelType,
+        channels: list[FullChannel],
+        channel_type: ChannelType,
     ):
         batched_channels = self._split_channels_into_batches(channels, channel_type)
         for _channels in batched_channels:
@@ -85,8 +86,8 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitConfig, BybitAccount, BybitPro
     async def _unsubscribe(
         self,
         ws: NamedWebSocket,
-        channels: list[FullDataChannel],
-        channel_type: DataChannelType,
+        channels: list[FullChannel],
+        channel_type: ChannelType,
     ):
         batched_channels = self._split_channels_into_batches(channels, channel_type)
         for _channels in batched_channels:
@@ -149,7 +150,7 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitConfig, BybitAccount, BybitPro
                 raise ValueError(
                     f"{self.name} {product.symbol} {resolution=} is not supported"
                 )
-            channel = DataChannel.orderbook
+            channel = Channel.orderbook
             echannel = self.adapter(channel, group="channels")
             orderbook_depth = resolution.period
             supported_orderbook_depths = supported_resolutions[resolution]
@@ -159,11 +160,11 @@ class BybitBaseWebSocketAPI(BaseWebSocketAPI[BybitConfig, BybitAccount, BybitPro
                 )
             full_channel = ".".join([echannel, str(orderbook_depth), product.symbol])
         elif resolution.is_tick():
-            channel = DataChannel.tradebook
+            channel = Channel.tradebook
             echannel = self.adapter(channel, group="channels")
             full_channel = ".".join([echannel, product.symbol])
         elif resolution.is_bar():
-            channel = DataChannel.candlestick
+            channel = Channel.candlestick
             echannel = self.adapter(channel, group="channels")
             period = resolution.period
             if resolution.timeframe not in supported_resolutions:
