@@ -38,7 +38,7 @@ py315 = ["py315", "test", "optional"]
 # prerelease-mode = "allow"
 
 [pypi-dependencies]
-pfund-blocks = ">=0.0.1"
+pfund-blocks = ">=0.0.2"
 pfund-kit = ">=0.1.22"
 pfeed = ">=0.0.20"
 apscheduler = ">=3.11.3"

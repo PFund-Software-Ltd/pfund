@@ -24,7 +24,7 @@ classifiers = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-    "pfund-blocks>=0.0.1",
+    "pfund-blocks>=0.0.2",
     "pfund-kit>=0.1.22",
     'pfeed>=0.0.20',
     "apscheduler>=3.11.3",
@@ -60,7 +60,7 @@ repository = "https://github.com/PFund-Software-Ltd/pfund"
 documentation = "https://pfund.pfund.ai/doc"
 
 [build-system]
-requires = ["uv_build>=0.13.5,<0.14.0"]
+requires = ["uv_build>=0.13.6,<0.14.0"]
 build-backend = "uv_build"
 
 [tool.uv]
