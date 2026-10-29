@@ -28,8 +28,18 @@ def setup_logging(
     config: the engine's config, whose paths are scoped to its name. Defaults
         to the global config, which is not scoped to any engine.
     """
+    import copy
+
+    from pfund.registry import list_venues
+
     env = Environment[env.upper()]
-    kit_logging.setup_logging(config or get_config(), env=env, reset=reset)
+    config = config or get_config()
+    logging_config = copy.deepcopy(kit_logging.get_logging_config(config))
+    loggers = logging_config["loggers"]
+    # derive a logger (i.e. a log file) per installed trading venue, e.g. "pfund.bybit", unless logging.yaml has it
+    for venue in list_venues():
+        loggers.setdefault(f"pfund.{venue.lower()}", dict(loggers["pfund"]))
+    kit_logging.setup_logging(config, env=env, reset=reset, logging_config=logging_config)
 
 
 def get_config() -> PFundConfig:

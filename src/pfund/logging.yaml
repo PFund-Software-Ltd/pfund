@@ -9,10 +9,10 @@ root:
   handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
   propagate: False
 loggers:
-  ibapi:  # controls ibapi's logger
-    level: 'DEBUG'
-    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
-    propagate: False
+  # ibapi:  # controls ibapi's logger
+  #   level: 'DEBUG'
+  #   handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+  #   propagate: False
   pfund:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
@@ -26,30 +26,6 @@ loggers:
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
   pfund.risk_manager:
-    level: 'DEBUG'
-    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
-    propagate: False
-  pfund.ibkr:
-    level: 'DEBUG'
-    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
-    propagate: False
-  pfund.alpaca:
-    level: 'DEBUG'
-    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
-    propagate: False
-  pfund.hyperliquid:
-    level: 'DEBUG'
-    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
-    propagate: False
-  pfund.binance:
-    level: 'DEBUG'
-    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
-    propagate: False
-  pfund.bybit:
-    level: 'DEBUG'
-    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
-    propagate: False
-  pfund.okx:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
