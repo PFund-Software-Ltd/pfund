@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from pfund_blocks.enums.timeframe import Timeframe
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_bar import BarData
-    from pfund.datas.stores.market_data_store import BarUpdate
+    from pfund.stores.market_data_store import BarUpdate
     from pfund.engines.contexts.backtest_engine_context import BacktestEngineContext
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund_blocks.entities.products.product_base import BaseProduct

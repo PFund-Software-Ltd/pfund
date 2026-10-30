@@ -204,3 +204,5 @@ afterpython/_website.backup/
 
 # other trading venues' repos
 /venues/
+
+.claude/

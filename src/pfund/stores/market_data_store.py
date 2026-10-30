@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
     from pfeed.dataflow.result import RunResult
 
-    from pfund.datas.databoy import DataBoy
+    from pfund.databoy import DataBoy
     from pfund_blocks.resolution import Resolution
     from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund_blocks.typing import ProductName
@@ -42,10 +42,10 @@ from pfund.components.bar_dataframe import (
     reorder_key_cols,
     validate_spine_df,
 )
-from pfund.datas.data_config import DataConfig
+from pfund.data_config import DataConfig
 from pfund.datas.data_market import MarketData
 from pfund_blocks.resolution import Resolution
-from pfund.datas.stores.base_data_store import BaseDataStore
+from pfund.stores.base_data_store import BaseDataStore
 from pfund_blocks.enums.env import Environment
 
 

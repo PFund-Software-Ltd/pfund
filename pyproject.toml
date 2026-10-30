@@ -36,6 +36,11 @@ core = [
     "numba>=0.68.0",
     "ray[default]>=2.59.0",
 ]
+# TEMP: until ray supports python 3.15
+core-without-ray = [
+    # "mtflow>=0.0.1.dev2"
+    "numba>=0.68.0",
+]
 ta-lib = ["ta-lib>=0.8.2"]
 sklearn = [
     "joblib>=1.6.0",
@@ -45,8 +50,8 @@ torch = [
     "torch>=2.14.1",
     "safetensors>=0.8.0",
 ]
-# hyperliquid = ["pfund-hyperliquid>=0.0.1", "pfeed-hyperliquid>=..."]
-# bybit = ["pfund-bybit>=...", "pfeed-bybit>=..."]
+# hyperliquid = ["pfund-hyperliquid>=0.0.1", "pfeed[hyperliquid]>=..."]
+# bybit = ["pfund-bybit>=...", "pfeed[bybit]>=..."]
 
 [project.scripts]
 pfund = "pfund.__main__:run_cli"

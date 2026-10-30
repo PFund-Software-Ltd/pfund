@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
     from pfeed.storages.storage_config import StorageConfig
 
-    from pfund.datas.databoy import DataBoy
+    from pfund.databoy import DataBoy
 
 from abc import ABC, abstractmethod
 

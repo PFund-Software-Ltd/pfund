@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
     from pfund.datas.data_bar import BarData
     from pfund.datas.data_market import MarketData
-    from pfund.datas.stores.base_data_store import BaseDataStore
+    from pfund.stores.base_data_store import BaseDataStore
     from pfund.typing import (
         Component,
         ComponentName,
@@ -53,7 +53,7 @@ class DataBoy:
         return self._data_zmq is not None and self._signals_zmq is not None
 
     def _create_data_store(self, category: DataCategory) -> BaseDataStore[Any, Any]:
-        from pfund.datas.stores.market_data_store import MarketDataStore
+        from pfund.stores.market_data_store import MarketDataStore
 
         if category == DataCategory.MARKET_DATA:
             return MarketDataStore(self)

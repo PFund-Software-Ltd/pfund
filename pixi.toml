@@ -55,7 +55,8 @@ scikit-learn = ">=1.9.1"
 torch = { version = ">=2.14.1", env-markers = "python_version < '3.15'" }
 safetensors = ">=0.8.0"
 # Trading Venues:
-# pfund-hyperliquid = ">=0.0.1"
+# pfeed = { version = ">=0.0.20", extras = ["hyperliquid", "bybit", "binance", "okx"]
+# pfund-hyperliquid = ">=0.0.1.dev1"
 # pfund-alpaca = ">=0.0.1.dev1"
 # pfund-bybit = ">=0.0.1.dev1"
 # pfund-binance = ">=0.0.1.dev1"

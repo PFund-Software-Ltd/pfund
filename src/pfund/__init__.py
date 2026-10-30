@@ -39,7 +39,7 @@ if TYPE_CHECKING:
         SKLearnModel as SklearnModel,
     )
     from pfund.components.strategies.strategy_base import BaseStrategy as Strategy
-    from pfund.datas.data_config import DataConfig
+    from pfund.data_config import DataConfig
     from pfund.engines.backtest_engine import BacktestEngine
     from pfund.engines.sandbox_engine import SandboxEngine
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
@@ -69,7 +69,7 @@ def __getattr__(name: str):
 
         return hub
     elif name == "DataConfig":
-        from pfund.datas.data_config import DataConfig
+        from pfund.data_config import DataConfig
 
         return DataConfig
     elif name == "BacktestEngine":
