@@ -165,14 +165,13 @@ class DataBoy:
 
         # subscribe to private channels: positions, balances, orders, etc.
         if self._component.is_strategy():
-            accounts = list(self._component.accounts.values())
-            channels = list(PrivateChannel.__members__)
-            for account, channel in zip(accounts, channels):
-                zmq_channel: str = ZeroMQDataChannel.create_private_channel(
-                    account=account,
-                    channel=channel,
-                )
-                self._data_zmq.receiver.setsockopt(zmq.SUBSCRIBE, zmq_channel.encode())
+            for account in self._component.accounts.values():
+                for channel in PrivateChannel:
+                    zmq_channel: str = ZeroMQDataChannel.create_private_channel(
+                        account=account,
+                        channel=channel,
+                    )
+                    self._data_zmq.receiver.setsockopt(zmq.SUBSCRIBE, zmq_channel.encode())
 
         # subscribe to data channels: quote, tick, bar, etc.
         for data in self._component.get_datas():
