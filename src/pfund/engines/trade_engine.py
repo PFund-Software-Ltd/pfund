@@ -177,6 +177,11 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
             )
             feed.stream(
                 product=str(data.product.basis),
+                # NOTE: VERY IMPORTANT, pfeed must build the same product name as pfund, since the name is part of the zmq channel
+                # (see ZeroMQDataChannel.create_market_data_channel). If they differ, e.g. pfund's product has a custom name,
+                # pfeed publishes on a channel pfund isn't subscribed to, and pfund silently receives no data.
+                symbol=data.product.symbol,
+                name=data.product.name,
                 resolution=repr(data.resolution),
                 data_origin=data.origin,
                 storage_config=data.config.storage_config,
