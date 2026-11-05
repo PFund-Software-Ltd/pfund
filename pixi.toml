@@ -42,12 +42,12 @@ pfund-blocks = ">=0.0.2"
 pfund-kit = ">=0.1.22"
 pfeed = ">=0.0.20"
 apscheduler = ">=3.11.3"
+numba = ">=0.68.0"
 
 [feature.optional.pypi-dependencies]
 # mtflow = ">=0.0.1.dev2"
-numba = ">=0.68.0"
 # TODO: remove the env-markers when ray supports python 3.15
-ray = { version = ">=2.59.0", extras = ["default"], env-markers = "python_version < '3.15'" }
+pfeed = { version = ">=0.0.20", extras = ["ray"], env-markers = "python_version < '3.15'" }
 ta-lib = ">=0.8.2"
 joblib = ">=1.6.0"
 scikit-learn = ">=1.9.1"
@@ -67,7 +67,6 @@ pfund = { path = ".", editable = true }
 # TEMP
 pfeed = { path = "../pfeed", editable = true }
 # TODO: remove the env-markers when ray supports python 3.15, add "ray" back to pfeed extras
-ray = { version = ">=2.59.0", extras = ["default"], env-markers = "python_version < '3.15'" }
 pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo"] }
 pfund-kit = { path = "../pfund-kit", editable = true }
 pfund-blocks = { path = "../pfund-blocks", editable = true }

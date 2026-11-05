@@ -8526,7 +8526,7 @@ packages:
   - narwhals>=2.27.1 ; sys_platform != 'emscripten'
   - beautifulsoup4>=4.15.0
   - pyzmq>=27.2.0 ; sys_platform != 'emscripten'
-  - ray[default]>=2.59.0 ; extra == 'ray'
+  - ray[default]>=2.59.0 ; python_full_version < '3.15' and extra == 'ray'
   - huggingface-hub>=2.2.0 ; extra == 'huggingface'
   - prefect>=3.8.8 ; extra == 'prefect'
   - lancedb>=0.40.0 ; extra == 'lancedb'
@@ -8575,13 +8575,12 @@ packages:
   - pfund-kit>=0.1.22
   - pfeed>=0.0.20
   - apscheduler>=3.11.3
-  - numba>=0.68.0 ; extra == 'core'
-  - ray[default]>=2.59.0 ; extra == 'core'
-  - numba>=0.68.0 ; extra == 'core-without-ray'
+  - numba>=0.68.0
+  - pfeed[ray]>=0.0.20 ; python_full_version < '3.15' and extra == 'ray'
   - ta-lib>=0.8.2 ; extra == 'ta-lib'
   - joblib>=1.6.0 ; extra == 'sklearn'
   - scikit-learn>=1.9.1 ; extra == 'sklearn'
-  - torch>=2.14.1 ; extra == 'torch'
+  - torch>=2.14.1 ; python_full_version < '3.15' and extra == 'torch'
   - safetensors>=0.8.0 ; extra == 'torch'
   requires_python: '>=3.13'
 - pypi: git+https://github.com/litestar-org/litestar.git?branch=main#574e436d2a629a1a8775ea0bed11091a80f50703
