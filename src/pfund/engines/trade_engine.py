@@ -7,7 +7,7 @@ from typing_extensions import TypeVar
 if TYPE_CHECKING:
     from mtflow.tracking.run import MTFlowRun
     from pfeed.engine import DataEngine
-    from pfeed.streaming.streaming_message import StreamingMessage
+    from pfund_blocks.typing import Message
     from pfeed.streaming.zeromq import ZeroMQ
     from pfund.venues.venue_base import AnyVenue
     from pfund.venue.venue import VenueConfig
@@ -135,15 +135,20 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
         import pfeed as pe
         from pfeed.streaming.zeromq import ZeroMQ
 
-        self._data_engine = pe.DataEngine()
+        def _collect_msg(msg: Message):
+            for strategy in self._strategies.values():
+                strategy._databoy._collect(msg=msg)
+
         is_using_zmq = self._is_using_zmq()
+        # NOTE: with zmq, the components receive the data on the data engine's XPUB, otherwise via the callback (with or without Ray)
+        self._data_engine = pe.DataEngine(callback=None if is_using_zmq else _collect_msg)
 
         if is_using_zmq:
-            # setup messaging for data engine
+            # set up publishing for data engine
             sender_name = "data_engine"
             zmq_url = self.settings.zmq_urls.get(sender_name, ZeroMQ.DEFAULT_URL)
             zmq_port = self.settings.zmq_ports.get(sender_name, None)
-            self._data_engine.setup_messaging(
+            self._data_engine.setup_publishing(
                 zmq_url=zmq_url,
                 zmq_sender_port=zmq_port,
             )
@@ -155,30 +160,21 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
             ]
             self.settings.zmq_ports.update({sender_name: data_engine_port})
 
-        def _collect_msg_if_not_using_ray(msg: StreamingMessage):
-            for strategy in self._strategies.values():
-                strategy._databoy._collect(msg=msg)
-            return msg
-
         # data engine creates feeds and subscribes to market data to prepare for streaming
         for data in self._get_all_datas():
             if data.category != DataCategory.MARKET_DATA:
                 raise NotImplementedError(f"Unhandled data type: {type(data)}")
             if data.is_resamplee():
                 continue
-            num_stream_workers = data.config.num_stream_workers
-            if is_using_zmq and num_stream_workers is None:
-                num_stream_workers = 1
-                self._logger.debug(f"defaulting {data} num_stream_workers to 1")
             feed = self._data_engine.add_feed(
                 data_source=data.source,
                 data_category=data.category,
-                num_workers=num_stream_workers,
+                num_workers=data.config.num_stream_workers,
             )
             feed.stream(
                 product=str(data.product.basis),
                 # NOTE: VERY IMPORTANT, pfeed must build the same product name as pfund, since the name is part of the zmq channel
-                # (see ZeroMQDataChannel.create_market_data_channel). If they differ, e.g. pfund's product has a custom name,
+                # (see pfeed's MarketDataModel.create_zmq_channel). If they differ, e.g. pfund's product has a custom name,
                 # pfeed publishes on a channel pfund isn't subscribed to, and pfund silently receives no data.
                 symbol=data.product.symbol,
                 name=data.product.name,
@@ -189,14 +185,11 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
                 **self._get_pfeed_stream_kwargs(),
                 **data.product.specs,
             )
-            # if not using zmq, data will be sent via transform()
-            if not is_using_zmq:
-                feed.transform(_collect_msg_if_not_using_ray)
 
     def _setup_proxy(self):
         import zmq
+        from pfeed.market.data_model import MarketDataModel
         from pfeed.streaming.zeromq import ZeroMQ
-        from pfeed.streaming import TickMessage, BarMessage
 
         self._proxy = ZeroMQ(
             name=self.name + "_proxy",
@@ -204,8 +197,17 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
             io_threads=2,
             sender_type=zmq.XPUB,  # publish order updates (from websocket), engine states, to components and external listeners
             receiver_type=zmq.SUB,  # subscribe to data engine, component's logs (if using ray) etc.
-            recv_type=TickMessage | BarMessage,
         )
+        # NOTE: decodes the data engine's market data back into Bar/Tick, other channels (e.g. logging) stay untyped
+        for data in self._get_all_datas():
+            if data.category == DataCategory.MARKET_DATA:
+                market_data = cast("MarketData", data)
+                self._proxy.register_codec(
+                    MarketDataModel.create_zmq_channel(market_data.product, market_data.resolution),
+                    MarketDataModel.StreamMessage,
+                    MarketDataModel.enc_hook,
+                    MarketDataModel.dec_hook,
+                )
         zmq_url = self.settings.zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL)
         zmq_port = self.settings.zmq_ports.get(self.name, None)
         self._proxy.bind(
@@ -268,9 +270,8 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
 
     def _is_using_zmq(self):
         """Returns True if any strategy is remote or has any remote component.
-        Subclasses may extend this (e.g. the trade engine also treats data with
-        num_stream_workers as using Ray). Conceptually: if Ray is being used,
-        then ZeroMQ is also being used.
+        Data streamed with Ray (num_stream_workers) doesn't need ZeroMQ, the data engine's
+        callback receives the Ray workers' outputs too.
         """
 
         def _has_any_remote_component(component: Component) -> bool:
@@ -282,13 +283,6 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
         for strategy in self._strategies.values():
             if strategy.is_remote() or _has_any_remote_component(strategy):
                 return True
-
-        if self._data_engine:
-            return any(
-                data.config.num_stream_workers is not None
-                for strategy in self._strategies.values()
-                for data in strategy.get_datas()
-            )
         return False
 
     def _run_zmq_loop(self):

@@ -84,8 +84,6 @@ class DataBoy:
         zmq_urls = settings.zmq_urls
         zmq_ports = settings.zmq_ports
 
-        from pfeed.streaming import TickMessage, BarMessage
-
         component_name = self.name
         component_zmq_url = zmq_urls.get(component_name, ZeroMQ.DEFAULT_URL)
 
@@ -95,7 +93,6 @@ class DataBoy:
             logger=self._logger,
             sender_type=zmq.PUSH,  # send component created data (e.g. orders) to trade engine
             receiver_type=zmq.SUB,  # receive data from data engine, order updates from trade engine
-            recv_type=TickMessage | BarMessage,
         )
         self._data_zmq.bind(
             socket=self._data_zmq.sender,
@@ -134,6 +131,7 @@ class DataBoy:
 
     def _subscribe(self):
         import zmq
+        from pfeed.market.data_model import MarketDataModel
         from pfeed.streaming.zeromq import ZeroMQ
 
         from pfund.datas.data_market import MarketData
@@ -167,6 +165,8 @@ class DataBoy:
         if self._component.is_strategy():
             for account in self._component.accounts.values():
                 for channel in PrivateChannel:
+                    # FIXME: ZeroMQDataChannel.create_private_channel() no longer exists in pfeed's zeromq.py,
+                    # it was f"{account.venue}.{channel}.{account.name}." (trailing "." marks the end of the account name)
                     zmq_channel: str = ZeroMQDataChannel.create_private_channel(
                         account=account,
                         channel=channel,
@@ -176,9 +176,13 @@ class DataBoy:
         # subscribe to data channels: quote, tick, bar, etc.
         for data in self._component.get_datas():
             if isinstance(data, MarketData):
-                zmq_channel = ZeroMQDataChannel.create_market_data_channel(
-                    product=data.product,
-                    resolution=data.resolution,
+                zmq_channel = MarketDataModel.create_zmq_channel(data.product, data.resolution)
+                # NOTE: decodes the data engine's market data back into Bar/Tick, other channels (e.g. private ones) stay untyped
+                self._data_zmq.register_codec(
+                    zmq_channel,
+                    MarketDataModel.StreamMessage,
+                    MarketDataModel.enc_hook,
+                    MarketDataModel.dec_hook,
                 )
                 self._data_zmq.receiver.setsockopt(zmq.SUBSCRIBE, zmq_channel.encode())
             else:

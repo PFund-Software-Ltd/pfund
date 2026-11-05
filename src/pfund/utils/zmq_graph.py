@@ -98,7 +98,13 @@ def show_zmq_graph(
     if de_msg_queue is not None:
         try:
             de_xpub_port = de_msg_queue.get_ports_in_use(de_msg_queue.sender)[0]
-            de_pull_port = de_msg_queue.get_ports_in_use(de_msg_queue.receiver)[0]
+        except Exception:
+            pass
+    # NOTE: the PULL from the Ray workers is a separate queue, only created while the data engine runs with Ray feeds
+    de_worker_msg_queue = getattr(data_engine, "_worker_msg_queue", None) if data_engine else None
+    if de_worker_msg_queue is not None:
+        try:
+            de_pull_port = de_worker_msg_queue.get_ports_in_use(de_worker_msg_queue.receiver)[0]
         except Exception:
             pass
     has_data_engine: bool = "data_engine" in ports or de_msg_queue is not None
