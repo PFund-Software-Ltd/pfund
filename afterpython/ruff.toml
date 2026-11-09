@@ -1,9 +1,15 @@
 # Ruff configuration
 # See More: https://docs.astral.sh/ruff/configuration/
+#
+# NOTE: relative paths in this file are resolved from afterpython/, not the
+# project root, e.g. use "../tests/*" to target the project's tests/ folder.
+
+# where your own (first-party) packages live, used by import sorting:
+# ".." = project root (flat layout), "../src" = src layout
+src = ["..", "../src"]
 
 line-length = 88
-target-version = "py311"
-extend-exclude = []
+target-version = "py313"
 
 [lint]
 # ruff default rules:
@@ -19,6 +25,7 @@ ignore = [
     "N806",  # variable names should be lowercase
     "RUF059",  # unused-unpacked-variable
     "N815",  # mixed-case-variable-in-class-scope
+    "N817",  # camelcase-imported-as-acronym
 ]
 # extended rules:
 extend-select = [
@@ -30,6 +37,13 @@ extend-select = [
     "N",     # pep8-naming - enforce naming conventions
     "RUF",   # ruff-specific rules
 ]
+
+[lint.isort]
+combine-as-imports = true
+section-order = ["future", "typing", "standard-library", "third-party", "first-party", "local-folder"]
+
+[lint.isort.sections]
+typing = ["typing", "typing_extensions"]
 
 [format]
 quote-style = "double"  # double quotes for strings
