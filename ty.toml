@@ -1,0 +1,19 @@
+# ty configuration
+# See More: https://docs.astral.sh/ty/reference/configuration/
+#
+# NOTE: relative paths in this file are resolved from the project root, not
+# afterpython/, e.g. use "tests/" to target the project's tests/ folder.
+# The Python version is read from requires-python in pyproject.toml.
+
+[rules]
+# change a rule's severity: "error", "warn" or "ignore"
+# see all rules: https://docs.astral.sh/ty/reference/rules/
+# possibly-unresolved-reference = "warn"
+
+[src]
+# files and folders that are not type checked (gitignore-style patterns)
+# exclude = ["tests/"]
+
+[terminal]
+# exit with an error on warnings too, not only on errors
+# error-on-warning = true
