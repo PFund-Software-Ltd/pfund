@@ -51,16 +51,11 @@ safetensors = ">=0.8.0"
 # An extra exists here only for an OFFICIALLY SUPPORTED trading venue, and it pins a verified version:
 #   pip install "pfund[bybit]"  # official, installs `pfund-bybit`
 #   pip install pfund-xxx       # 3rd party, not maintained or verified by pfund
-pfund-bybit = ">=0.0.1"
-pfeed-bybit = ">=0.0.1"
-# pfund-hyperliquid = ">=0.0.1"
-# pfeed-hyperliquid = ">=0.0.1"
-# pfund-alpaca = ">=0.0.1"
-# pfeed-alpaca = ">=0.0.1"
-# pfund-binance = ">=0.0.1"
-# pfeed-binance = ">=0.0.1"
-# pfund-okx = ">=0.0.1"
-# pfeed-okx = ">=0.0.1"
+pfund-bybit = { version = ">=0.0.2", extras = ["data"] }
+# pfund-hyperliquid = { version = ">=0.0.1", extras = ["data"] }
+# pfund-alpaca = { version = ">=0.0.1", extras = ["data"] }
+# pfund-binance = { version = ">=0.0.1", extras = ["data"] }
+# pfund-okx = { version = ">=0.0.1", extras = ["data"] }
 
 [feature.dev.pypi-dependencies]
 pfund = { path = ".", editable = true }

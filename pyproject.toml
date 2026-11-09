@@ -46,8 +46,8 @@ torch = [
 # An extra exists here only for an OFFICIALLY SUPPORTED trading venue, and it pins a verified version:
 #   pip install "pfund[bybit]"  # official, installs `pfund-bybit`
 #   pip install pfund-xxx       # 3rd party, not maintained or verified by pfund
-# hyperliquid = ["pfund-hyperliquid>=0.0.1", "pfeed[hyperliquid]>=..."]
-bybit = ["pfund-bybit>=0.0.1", "pfeed-bybit>=0.0.1"]
+# hyperliquid = ["pfund-hyperliquid[data]>=0.0.1"]
+bybit = ["pfund-bybit[data]>=0.0.2"]
 
 [project.scripts]
 pfund = "pfund.__main__:run_cli"
