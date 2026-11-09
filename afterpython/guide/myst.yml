@@ -1,7 +1,7 @@
 # See docs at: https://mystmd.org/guide/frontmatter
 version: 1
 project:
-  id: 28fa5220-583a-4b04-9d62-62114ad9439d
+  id: 2b750388-6a6d-43da-a1cc-5bb7f316104f
   # title:
   # description:
   # keywords: []
@@ -16,7 +16,7 @@ project:
     title: ''
     url: ''
   copyright: © pfund 2026. All rights reserved.
-  title: ''
+  title: Guide
   description: A Complete Algo-Trading Framework for Machine Learning, enabling trading across TradFi, CeFi and DeFi. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading
   keywords:
   - trading
@@ -27,8 +27,6 @@ project:
   - TradFi
   - CeFi
   - DeFi
-  - portfolio management
-  - investment
   - backtesting
   - machine learning
   thumbnail: ../static/thumbnail.png

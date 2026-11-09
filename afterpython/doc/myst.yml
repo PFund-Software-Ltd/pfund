@@ -1,7 +1,7 @@
 # See docs at: https://mystmd.org/guide/frontmatter
 version: 1
 project:
-  id: 28666b7d-8800-48d0-b0e2-70e8ea20e9af
+  id: 883b56c5-91cf-4cb1-8df2-1d4fc28d30b0
   # title:
   # description:
   # keywords: []
@@ -13,8 +13,8 @@ project:
   authors:
   - stephen_yau
   venue:
-    title: ''
-    url: ''
+    title: 'PFund.ai'
+    url: 'https://pfund.ai'
   copyright: © pfund 2026. All rights reserved.
   title: ''
   description: A Complete Algo-Trading Framework for Machine Learning, enabling trading across TradFi, CeFi and DeFi. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading
@@ -27,8 +27,6 @@ project:
   - TradFi
   - CeFi
   - DeFi
-  - portfolio management
-  - investment
   - backtesting
   - machine learning
   thumbnail: ../static/thumbnail.png
@@ -44,7 +42,7 @@ site:
     logo: ../static/logo.svg
     logo_dark: ../static/logo.svg
     logo_text: pfund
-    logo_url: ''
+    logo_url: 'https://pfund.pfund.ai'
   title: pfund's Doc
   actions:
   - title: ⭐ Star

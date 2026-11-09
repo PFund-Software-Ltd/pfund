@@ -6,7 +6,15 @@ on:
       - 'v*'  # Trigger on all version tags (v0.1.0, v0.1.0rc1, v0.1.0.dev4, etc.)
 
 jobs:
+  # Run the whole CI workflow (lint, tests, build) on the tagged commit first
+  ci:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   release:
+    # Only publish if CI passes, a PyPI upload can't be undone
+    needs: ci
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Required for creating GitHub releases
@@ -15,22 +23,31 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
         with:
-          python-version: '3.13'
+          fetch-depth: 0  # full history and tags, for git-cliff's release notes
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "latest"
+        uses: astral-sh/setup-uv@v10.3.3
 
-      - name: Build package
-        run: uv build
+      - name: Check tag matches version
+        # e.g. a hand-made tag v0.4.0 on a commit whose pyproject.toml says 0.3.20
+        run: |
+          VERSION="$(uv version --short)"
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match version $VERSION in pyproject.toml"
+            exit 1
+          fi
+
+      - name: Download build artifacts
+        # the wheel + sdist that CI built and verified, published as is
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
 
       - name: Publish to PyPI
-        run: uv publish
+        # Skip files already on PyPI so a re-run (e.g. after the GitHub release step failed) doesn't fail here
+        run: uv publish --check-url https://pypi.org/simple/
 
       - name: Determine if pre-release
         id: check_prerelease
@@ -46,11 +63,45 @@ jobs:
             echo "prerelease=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Determine release notes range
+        id: notes_range
+        if: hashFiles('afterpython/cliff.toml') != ''
+        run: |
+          if [ "${{ steps.check_prerelease.outputs.prerelease }}" = "true" ]; then
+            # pre-release: what's new since the previous tag of any kind (e.g. rc0 -> rc1)
+            PREVIOUS="$(git describe --tags --abbrev=0 --match 'v*' "$GITHUB_REF_NAME^" 2>/dev/null || true)"
+            ARGS=""
+          else
+            # stable: everything since the previous stable tag, pre-release tags in between are ignored
+            # (the same section `ap bump` wrote to CHANGELOG.md)
+            PREVIOUS="$(git describe --tags --abbrev=0 --match 'v*' \
+              --exclude '*a[0-9]*' --exclude '*b[0-9]*' --exclude '*rc[0-9]*' --exclude '*dev[0-9]*' \
+              "$GITHUB_REF_NAME^" 2>/dev/null || true)"
+            ARGS="--ignore-tags '(a|b|rc|dev)[0-9]+'"
+          fi
+          # without a previous tag, the whole history up to this tag is this release
+          if [ -n "$PREVIOUS" ]; then
+            ARGS="$ARGS $PREVIOUS..$GITHUB_REF_NAME"
+          fi
+          echo "args=$ARGS" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: git-cliff
+        if: hashFiles('afterpython/cliff.toml') != ''
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: afterpython/cliff.toml
+          args: --strip header ${{ steps.notes_range.outputs.args }}
+        env:
+          # the tag is checked out without a branch, so git-cliff needs the repo for its links
+          GITHUB_REPO: ${{ github.repository }}
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
+          body: ${{ steps.git-cliff.outputs.content }}  # empty without afterpython/cliff.toml
           generate_release_notes: false
           prerelease: ${{ steps.check_prerelease.outputs.prerelease }}
           files: dist/*  # Attach built packages (wheel + sdist)

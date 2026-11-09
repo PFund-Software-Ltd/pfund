@@ -1,54 +1,12 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
-	import MarkdownRenderer from '$components/MarkdownRenderer.svelte';
-	import Announcement from '$components/Announcement.svelte';
-	import StarIcon from '$components/StarIcon.svelte';
-	import { dev } from '$app/environment';
-	import { env } from '$env/dynamic/public';
-	import { resolve } from '$app/paths';
+	import MarkdownRenderer from '#lib/components/MarkdownRenderer.svelte';
+	import Announcement from '#lib/components/Announcement.svelte';
+	import StarIcon from '#lib/components/StarIcon.svelte';
+	import { devContentUrl } from '#lib/utils/index.ts';
+	import { asset, resolve } from '$app/paths';
 
 	const { data }: PageProps = $props();
-
-	let readmeIframeEl = $state<HTMLIFrameElement | null>(null);
-	let readmeIframeHeight = $state(800);
-
-	function handleReadmeIframeLoad() {
-		const doc = readmeIframeEl?.contentDocument;
-		if (!doc) return;
-
-		// Marimo's wasm app shell sets html/body to 100vh with internal scrolling,
-		// which prevents the iframe from sizing to real content. Override so the
-		// document flows naturally and scrollHeight reflects actual content height.
-		const style = doc.createElement('style');
-		style.textContent = `
-			html, body {
-				height: auto !important;
-				min-height: 0 !important;
-				max-height: none !important;
-				overflow: visible !important;
-			}
-			#App, #root, marimo-mount, [class*="marimo"] {
-				height: auto !important;
-				min-height: 0 !important;
-				max-height: none !important;
-				overflow: visible !important;
-			}
-		`;
-		(doc.head ?? doc.documentElement).appendChild(style);
-
-		const update = () => {
-			const h = Math.max(
-				doc.documentElement?.scrollHeight ?? 0,
-				doc.body?.scrollHeight ?? 0
-			);
-			if (h > 0) readmeIframeHeight = h;
-		};
-
-		update();
-		const ro = new ResizeObserver(update);
-		if (doc.documentElement) ro.observe(doc.documentElement);
-		if (doc.body) ro.observe(doc.body);
-	}
 
 	// Extract repository URL safely
 	const repositoryUrl = $derived(
@@ -67,7 +25,7 @@
 		<meta property="og:title" content={pageTitle} />
 		<meta property="og:description" content={data.summary} />
 		<meta property="og:type" content="website" />
-		<meta property="og:image" content="/thumbnail.png" />
+		<meta property="og:image" content={asset('thumbnail.png')} />
 		<!-- Twitter Card -->
 		<meta name="twitter:card" content="summary_large_image" />
 		<meta name="twitter:title" content={pageTitle} />
@@ -131,7 +89,7 @@
 			{/if}
 			{#if data.contentTypes?.doc}
 				<a
-					href={dev ? env.PUBLIC_DOC_URL : resolve('/doc')}
+					href={devContentUrl('doc') || resolve('doc')}
 					rel="external noopener noreferrer"
 					class="rounded-lg bg-pm500 px-6 py-3 font-medium text-white transition-colors hover:bg-pm600"
 				>
@@ -142,13 +100,10 @@
 
 		{#if data.readme_py}
 			<iframe
-				bind:this={readmeIframeEl}
-				src={resolve('/readme_py/readme_py.html')}
+				src={resolve('readme_py/readme_py.html')}
 				title="README"
 				loading="lazy"
-				onload={handleReadmeIframeLoad}
-				class="w-full max-w-4xl rounded-2xl border border-bg300 bg-bg100 text-left shadow-lg"
-				style="height: {readmeIframeHeight}px;"
+				class="mb-28 h-[96vh] w-full max-w-4xl rounded-2xl border border-bg300 bg-bg100 text-left shadow-lg"
 			></iframe>
 		{:else if data.description}
 			<div

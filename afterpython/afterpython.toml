@@ -1,14 +1,39 @@
+# Extra information that pyproject.toml doesn't support should be stored in afterpython.toml
 [company]
-name = "PFund.ai"
-url = "https://pfund.ai"
+name = "PFund.ai"  # used in myst.yml's venue.title
+url = "https://pfund.ai"  # used in myst.yml's venue.url
 
 [website]
 url = "https://pfund.pfund.ai"
 favicon = "favicon.svg"
 logo = "logo.svg"
-logo_dark = "logo.svg"
-thumbnail = "thumbnail.png"
+logo_dark = "logo-dark.svg"
+thumbnail = "thumbnail.png"  # thumbnail for the website, also used as default thumbnail for all content types, e.g. blog posts, tutorials, examples, and guides
 announcement = ""
-readme_py = "wasm"
+readme_py = "wasm"  # marimo html export format: "wasm" or "static"
 execute_readme_py = true  # execute README.py cells at build time and embed outputs as a preview (wasm mode only)
-api_reference = false
+api_reference = false  # set to true to enable the pdoc-generated API reference
+# api_reference_docformat = "google"  # docstring format for pdoc: "google", "numpy", "restructuredtext" or "markdown"
+
+[website.comments]  # giscus comment section on blog posts, tutorials, examples and guides
+enabled = true
+# Discussions category for comments. Announcement format means only maintainers can start discussions there; visitors can only reply.
+category = "Announcements"
+
+# [website.blog]
+# thumbnail = "blog_default_thumbnail.png"  # inside blog/static/ folder, default thumbnail for blog posts
+# featured_post = "blog1.md"
+
+# allowed commit types, e.g. "feat: add X"; add or remove lines freely
+[commit.types]
+feat = "A new feature"
+fix = "A bug fix"
+docs = "Documentation only changes"
+style = "Formatting, no code meaning change"
+refactor = "Neither fixes a bug nor adds a feature"
+perf = "Performance improvement"
+test = "Adding or fixing tests"
+build = "Build system or dependencies"
+ci = "CI configuration"
+chore = "Other changes that don't modify src or tests"
+wip = "Work in progress"

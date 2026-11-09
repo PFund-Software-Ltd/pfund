@@ -1,5 +1,6 @@
 default_install_hook_types:
 - pre-commit
+- prepare-commit-msg
 - commit-msg
 - pre-push
 - post-checkout
@@ -24,31 +25,48 @@ repos:
     stages:
     - pre-commit
 - repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.15.12
+  rev: v0.16.9
   hooks:
-  # TODO: re-enable it when ready
-  # - id: ruff-check
-  #   stages:
-  #   - pre-commit
-  #   args:
-  #   - --config
-  #   - ./afterpython/ruff.toml
+  - id: ruff-check
+    stages:
+    - pre-commit
   - id: ruff-format
     stages:
     - pre-commit
-    args:
-    - --config
-    - ./afterpython/ruff.toml
-# NOTE: buggy commitizen, skip it, not useful anyways
-# - repo: https://github.com/commitizen-tools/commitizen
-#   rev: v4.16.0
+# TODO: re-enable it when the codebase is ready
+# - repo: local
+#   # not the official hook (astral-sh/ty-pre-commit), at least for now: it runs `uv check`,
+#   # which always type checks against its own environment built from pyproject.toml,
+#   # so packages only installed by e.g. pixi (like pytest in a pixi feature) can't be found.
+#   # `ap check` uses the project's own environment and ty version, like the editor does.
+#   # It type checks the whole project (like the official hook), not only the staged files,
+#   # since a change in one file can break types in another.
 #   hooks:
-#   - id: commitizen
+#   - id: ty
+#     name: ty
+#     entry: sh -c 'PATH="$PWD/.venv/bin:$PWD/.venv/Scripts:$PATH" exec ap check'
+#     language: system
+#     types_or: [python, pyi, jupyter]
+#     pass_filenames: false
+#     require_serial: true
 #     stages:
-#     - commit-msg
-#   - id: commitizen-branch
-#     stages:
-#     - pre-push
+#     - pre-commit
+- repo: local
+  hooks:
+  # same id twice so that SKIP=ap-commit skips both
+  # git GUIs run hooks with a minimal PATH (no uv/venv), so put the project venv on PATH ourselves
+  - id: ap-commit
+    name: commit message template
+    entry: sh -c 'PATH="$PWD/.venv/bin:$PWD/.venv/Scripts:$PATH" exec ap commit-msg --template "$@"' --
+    language: system
+    stages:
+    - prepare-commit-msg
+  - id: ap-commit
+    name: check commit message
+    entry: sh -c 'PATH="$PWD/.venv/bin:$PWD/.venv/Scripts:$PATH" exec ap commit-msg "$@"' --
+    language: system
+    stages:
+    - commit-msg
 - repo: local
   hooks:
   # runs after `git worktree add` (also used by Zed) and every `git switch`;

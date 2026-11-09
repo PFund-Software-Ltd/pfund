@@ -6,6 +6,8 @@ on:
       - main  # Deploy when pushing to main branch
     paths:
       # Trigger deployment only when content or website files change
+      # Code changes (src/) don't trigger it, so a docstring change doesn't update the API reference (pdoc).
+      # To update it, run this workflow manually (Actions tab, workflow_dispatch).
       - 'afterpython/doc/**'
       - 'afterpython/blog/**'
       - 'afterpython/tutorial/**'
@@ -16,6 +18,10 @@ on:
       - 'afterpython/authors.yml'
       - 'afterpython/faq.yml'
       - 'afterpython/README.py'
+      - 'afterpython/afterpython.toml'
+      # metadata.json (name, version, urls) and the homepage description
+      - 'pyproject.toml'
+      - 'README.md'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:  # Allow manual deployment from Actions tab
 
@@ -41,7 +47,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 10
+          version: 12
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -50,31 +56,21 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: './afterpython/_website/pnpm-lock.yaml'
 
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: '3.11'
-
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "latest"
+        uses: astral-sh/setup-uv@v10.3.3
 
-      - name: Install afterpython
-        run: uv pip install --system afterpython
-
-      - name: Install marimo
-        # Needed by `ap build` when afterpython/README.py is a marimo notebook;
-        # afterpython shells out to the `marimo` CLI for the WASM export.
-        run: uv pip install --system marimo
+      - name: Install the project
+        # your package + its dependencies (pdoc imports it for the API reference)
+        # + the dev group, which has afterpython (`uv add --dev afterpython`), at uv.lock's versions.
+        # A marimo afterpython/README.py needs `uv add --dev "afterpython[marimo]"` instead.
+        run: uv sync --locked
 
       - name: Install website dependencies
         run: pnpm install
         working-directory: ./afterpython/_website
 
       - name: Build website
-        run: |
-          ap build
+        run: uv run --no-sync ap build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5

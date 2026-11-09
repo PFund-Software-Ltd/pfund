@@ -83,3 +83,6 @@ markers = [
 addopts = [
     "--strict-markers",
 ]
+
+[tool.ruff]
+extend = "afterpython/ruff.toml"

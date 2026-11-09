@@ -10,37 +10,34 @@ on:
     # Run on all PRs regardless of target branch
     branches:
       - '**'
+  # Let release.yml run CI before publishing
+  workflow_call:
+
+# CI only reads the code
+permissions:
+  contents: read
 
 jobs:
   # Job 1: Lint and Format Check
-  # Runs ruff to check code quality and formatting
+  # Runs the same ruff hooks (version, args) as prek does locally
   lint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: '3.11'
-
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "latest"
+        uses: astral-sh/setup-uv@v10.3.3
 
-      - name: Install ruff
-        run: uv pip install --system ruff
-
-      # TEMP: re-enable when ready
-      # - name: Run ruff check
-      #   run: ruff check --config ./afterpython/ruff.toml .
-
-      # TEMP: re-enable when ready
-      # - name: Run ruff format check
-      #   # --check flag ensures it only validates, doesn't reformat
-      #   run: ruff format --check --config ./afterpython/ruff.toml .
+      - name: Run ruff
+        # fails if ruff-check finds issues or ruff-format would change a file
+        # No afterpython/ruff.toml means ruff isn't set up (and there are no ruff hooks), pass green.
+        run: |
+          if [ ! -f afterpython/ruff.toml ]; then
+            echo "afterpython/ruff.toml not found (ruff not set up); skipping."
+            exit 0
+          fi
+          uvx prek run --config afterpython/.pre-commit-config.yaml --all-files --show-diff-on-failure ruff-check ruff-format
 
   # Job 2: Detect Test Strategy
   # Determines whether to use pixi or uv based on pixi.toml presence
@@ -65,62 +62,51 @@ jobs:
   # Traditional Python testing with uv for projects without pixi
   test-uv:
     needs: detect-test-strategy
-    # TEMP: tests not ready yet — skip until suite is in shape.
-    if: false && needs.detect-test-strategy.outputs.use_pixi == 'false'
+    if: needs.detect-test-strategy.outputs.use_pixi == 'false'
     runs-on: ubuntu-latest
     strategy:
       matrix:
-      # TODO: support python 3.14
-        python-version: ['3.11', '3.12', '3.13']
+        python-version: ['3.13', '3.14', '3.15']
       fail-fast: false
+
+    env:
+      # every uv command in this job uses this Python (uv downloads it if needed)
+      UV_PYTHON: ${{ matrix.python-version }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v7
-        with:
-          python-version: ${{ matrix.python-version }}
-
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "latest"
+        uses: astral-sh/setup-uv@v10.3.3
 
       - name: Install dependencies
-        run: |
-          # Install package, main dependencies, and test dependencies
-          # If no [dependency-groups] test exists, only the package and main dependencies are installed
-          uv pip install --system . --group test || uv pip install --system .
+        # the package + all [dependency-groups] (e.g. test, dev), at the versions in uv.lock
+        # --locked fails if uv.lock is missing or out of date with pyproject.toml
+        run: uv sync --locked --all-groups
 
       - name: Run tests with pytest
-        # Tolerant by design: if pytest isn't installed, the project has no
-        # [dependency-groups] test (the install step fell back to `uv pip
-        # install --system .`). Treat that the same as "no tests yet" and
-        # pass green — matches the install step's tolerance.
-        # When pytest does run, exit code 5 (no tests collected) is success.
-        # We capture pytest's exit code before any other command clobbers $?.
+        # No pytest in any dependency group means "no tests yet", pass green.
+        # Exit code 5 (no tests collected) is success too.
+        # `|| code=$?` because GitHub runs bash with -e, which would stop at pytest's failure.
         run: |
-          if ! command -v pytest >/dev/null 2>&1; then
-            echo "pytest not installed (no [dependency-groups] test); skipping."
+          if [ ! -x .venv/bin/pytest ]; then
+            echo "pytest not installed (not in any [dependency-groups]); skipping."
             exit 0
           fi
-          pytest -v
-          code=$?
+          code=0
+          uv run --no-sync pytest -v || code=$?
           if [ $code -eq 5 ]; then exit 0; else exit $code; fi
 
   # Job 3.2: Test Suite - Pixi Workflow
   # Pixi-based testing for projects using pixi.toml
   test-pixi:
     needs: detect-test-strategy
-    # TEMP: tests not ready yet — skip until suite is in shape.
-    if: false && needs.detect-test-strategy.outputs.use_pixi == 'true'
+    if: needs.detect-test-strategy.outputs.use_pixi == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
-      # TODO: support python 3.14
-        environment: ['py311', 'py312', 'py313']
+        environment: ['py313', 'py314', 'py315']
       fail-fast: false
 
     steps:
@@ -128,25 +114,24 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up pixi
-        uses: prefix-dev/setup-pixi@v0.10.2
+        uses: prefix-dev/setup-pixi@v0.11.3
         with:
-          pixi-version: v0.81.0
+          pixi-version: v0.84.1
           cache: true
+          # install (and cache) only the environment this matrix run tests
+          environments: ${{ matrix.environment }}
           # Optional: Uncomment if you need prefix.dev authentication
           # auth-host: prefix.dev
           # auth-token: ${{ secrets.PREFIX_DEV_TOKEN }}
 
       - name: Run tests with pixi
-        # Runs test in specific Python environment (py311, py312, py313)
-        # Assumes you have environments defined in pixi.toml with a "test" task
-        # Example pixi.toml:
-        #   [environments]
-        #   py311 = ["py311", "test"]
-        #   [feature.test.tasks]
-        #   test = "pytest -v"
-        # Note: Exit code 5 (no tests collected) is treated as success
+        # Runs the "test" task of pixi.toml in this matrix run's environment (e.g. py313)
+        # Exit code 5 (no tests collected) is success.
+        # `|| code=$?` because GitHub runs bash with -e, which would stop at the failure.
         run: |
-          pixi run -e ${{ matrix.environment }} test || if [ $? -eq 5 ]; then exit 0; else exit $?; fi
+          code=0
+          pixi run -e ${{ matrix.environment }} test || code=$?
+          if [ $code -eq 5 ]; then exit 0; else exit $code; fi
 
   # Job 3.3: Test Suite - Complete
   # Unified test status for branch protection
@@ -159,13 +144,6 @@ jobs:
         run: |
           uv_result="${{ needs.test-uv.result }}"
           pixi_result="${{ needs.test-pixi.result }}"
-          # TEMP: tests not ready yet — both tracks are gated off with `if: false`.
-          # Accept "both skipped" as green until the suite is ready. Remove this
-          # block when test-uv / test-pixi `if:` gates are restored.
-          if [ "$uv_result" == "skipped" ] && [ "$pixi_result" == "skipped" ]; then
-            echo "Tests temporarily skipped (test-uv / test-pixi disabled)."
-            exit 0
-          fi
           # Invariant: exactly one track runs (use_pixi gate) and must succeed;
           # the other is skipped. Any other combination — both skipped (detect
           # job died), both succeeded (broken gating), or anything failing —
@@ -190,42 +168,84 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: '3.11'
-
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "latest"
+        uses: astral-sh/setup-uv@v10.3.3
 
       - name: Build package
-        run: uv build
+        # --no-sources: build like it will be published, ignoring [tool.uv.sources] (local paths, git)
+        run: uv build --no-sources
 
       - name: List build artifacts
         # Show what was built (wheel + sdist)
         # Useful for debugging build issues
         run: ls -lh dist/
 
-      - name: Install built package
-        # Test that the built wheel can be installed
-        # This catches packaging issues like missing files
-        run: uv pip install --system dist/*.whl
-
       - name: Verify installation
-        # Generic verification: assume project.name maps to import name
-        # by replacing '-' with '_'. If a project breaks this rule, CI fails.
+        # Install the wheel into a throwaway env and import it, catches packaging issues like missing files.
+        # Import name: [tool.uv.build-backend] module-name if set, else project.name with '-' -> '_'.
+        # python -P: don't put the current folder on sys.path, so the import can't pick up
+        # the source folder (or the afterpython/ folder) instead of the installed wheel.
         run: |
-          PROJECT_NAME="$(python - <<'PY'
+          uv run --isolated --no-project --with dist/*.whl python -P - <<'PY'
+          import importlib
           import tomllib
+
           with open("pyproject.toml", "rb") as f:
               data = tomllib.load(f)
-          print(data["project"]["name"])
+          backend = data.get("tool", {}).get("uv", {}).get("build-backend", {})
+          names = backend.get("module-name") or data["project"]["name"].replace("-", "_")
+          for name in [names] if isinstance(names, str) else names:
+              importlib.import_module(name)
+              print(f"import {name} OK")
           PY
-          )"
-          IMPORT_NAME="${PROJECT_NAME//-/_}"
-          python -c "import ${IMPORT_NAME}"
+
+      - name: Upload build artifacts
+        # release.yml publishes exactly these files instead of building again
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
 
   # Job 5: Type Check
-  # typecheck:
+  # Runs `ap check` like the ty hook does locally, in the project's own environment
+  # (uv's .venv, or pixi's default environment when pixi.toml exists)
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Check for ty setup
+        # No afterpython/ty.toml means ty isn't set up (and there's no ty hook), pass green.
+        id: ty
+        run: |
+          if [ -f afterpython/ty.toml ]; then
+            echo "enabled=true" >> $GITHUB_OUTPUT
+          else
+            echo "afterpython/ty.toml not found (ty not set up); skipping."
+          fi
+
+      - name: Install uv
+        if: steps.ty.outputs.enabled == 'true' && hashFiles('pixi.toml') == ''
+        uses: astral-sh/setup-uv@v10.3.3
+
+      - name: Run ty (uv)
+        # the package + all [dependency-groups] (incl. afterpython itself), at the versions in uv.lock
+        if: steps.ty.outputs.enabled == 'true' && hashFiles('pixi.toml') == ''
+        run: |
+          uv sync --locked --all-groups
+          uv run --no-sync ap check
+
+      - name: Set up pixi
+        if: steps.ty.outputs.enabled == 'true' && hashFiles('pixi.toml') != ''
+        uses: prefix-dev/setup-pixi@v0.11.3
+        with:
+          pixi-version: v0.84.1
+          cache: true
+          environments: default
+
+      - name: Run ty (pixi)
+        # ty uses the pixi environment it runs in (there's no .venv in CI)
+        if: steps.ty.outputs.enabled == 'true' && hashFiles('pixi.toml') != ''
+        run: pixi run ap check
