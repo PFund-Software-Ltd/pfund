@@ -55,6 +55,9 @@ pfund = "pfund.__main__:run_cli"
 [project.entry-points."pfund_shell.commands"]
 pfund = "pfund.cli:pfund_group"
 
+[project.entry-points."pfeed.sources"]
+pfund = "pfund._pfeed_source:PFund"
+
 [project.urls]
 homepage = "https://pfund.pfund.ai"
 repository = "https://github.com/PFund-Software-Ltd/pfund"
