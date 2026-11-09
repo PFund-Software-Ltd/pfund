@@ -5,17 +5,12 @@ name = "pfund"
 # macos = min version of macOS required by torch>=2.12.0
 platforms = [{ platform = "osx-arm64", macos = "14.0" }, "linux-aarch64", "linux-64", "win-64"]
 # NOTE: should match with setup-pixi in ci.yml
-requires-pixi = ">=0.83.0"
+requires-pixi = ">=0.84.1"
 # FIXME: set it back to "14 days" when the package is stable
 exclude-newer = "0d"
 
-[pypi-exclude-newer]
-afterpython = "0d"
-uv_build = "0d"
-pfund-blocks = "0d"
-pfund-kit = "0d"
-pfeed = "0d"
-mtflow = "0d"
+[workspace.pypi-exclude-newer]
+exemptions = { afterpython = "*", uv_build = "*", pfund-blocks = "*", pfund-kit = "*", pfeed = "*", mtflow = "*" }
 
 [tasks]
 
@@ -38,40 +33,42 @@ py315 = ["py315", "test", "optional"]
 # prerelease-mode = "allow"
 
 [pypi-dependencies]
-pfund-blocks = ">=0.0.2"
-pfund-kit = ">=0.1.22"
-pfeed = ">=0.0.20"
+pfeed = ">=0.0.23"  # TODO: remove it when pfeed-pfund is ready
+# pfeed-pfund = ">=0.0.1"
+# mtflow = ">=0.0.1.dev2"
 apscheduler = ">=3.11.3"
-numba = ">=0.68.0"
+numba = ">=0.68.1"
 
 [feature.optional.pypi-dependencies]
-# mtflow = ">=0.0.1.dev2"
 # TODO: remove the env-markers when ray supports python 3.15
-pfeed = { version = ">=0.0.20", extras = ["ray"], env-markers = "python_version < '3.15'" }
-ta-lib = ">=0.8.2"
+pfeed = { version = ">=0.0.23", extras = ["ray"], env-markers = "python_version < '3.15'" }
+ta-lib = ">=0.8.3"
 joblib = ">=1.6.0"
 scikit-learn = ">=1.9.1"
-# TODO: remove env-markers when torch supports python 3.15
-torch = { version = ">=2.14.1", env-markers = "python_version < '3.15'" }
+torch = ">=2.15.0"
 safetensors = ">=0.8.0"
 # Trading Venues:
-# pfeed = { version = ">=0.0.20", extras = ["hyperliquid", "bybit", "binance", "okx"]
-# pfund-hyperliquid = ">=0.0.1.dev1"
-# pfund-alpaca = ">=0.0.1.dev1"
-# pfund-bybit = ">=0.0.1.dev1"
-# pfund-binance = ">=0.0.1.dev1"
-# pfund-okx = ">=0.0.1.dev1"
+# NOTE: trading venues are plugins, each one is a separate package named `pfund-xxx`.
+# An extra exists here only for an OFFICIALLY SUPPORTED trading venue, and it pins a verified version:
+#   pip install "pfund[bybit]"  # official, installs `pfund-bybit`
+#   pip install pfund-xxx       # 3rd party, not maintained or verified by pfund
+pfund-bybit = ">=0.0.1"
+pfeed-bybit = ">=0.0.1"
+# pfund-hyperliquid = ">=0.0.1"
+# pfeed-hyperliquid = ">=0.0.1"
+# pfund-alpaca = ">=0.0.1"
+# pfeed-alpaca = ">=0.0.1"
+# pfund-binance = ">=0.0.1"
+# pfeed-binance = ">=0.0.1"
+# pfund-okx = ">=0.0.1"
+# pfeed-okx = ">=0.0.1"
 
 [feature.dev.pypi-dependencies]
 pfund = { path = ".", editable = true }
+afterpython = { version = ">=0.4.3", extras = ["marimo"] }
 # TEMP
-pfeed = { path = "../pfeed", editable = true }
-# TODO: remove the env-markers when ray supports python 3.15, add "ray" back to pfeed extras
-pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo"] }
-pfund-kit = { path = "../pfund-kit", editable = true }
-pfund-blocks = { path = "../pfund-blocks", editable = true }
+pfeed-pfund = { path = "../pfeed/sources/pfeed-pfund", editable = true }
 mtflow = { path = "../mtflow", editable = true }
-afterpython = ">=0.4.0"
 memray = ">=1.19.3"
 
 [feature.dev.dependencies]
@@ -80,13 +77,10 @@ python-graphviz = ">=0.21"
 
 [feature.test.pypi-dependencies]
 pfund = { path = ".", editable = true }
-# TEMP
-pfeed = { path = "../pfeed", editable = true }
-pfund-blocks = { path = "../pfund-blocks", editable = true }
-pytest = ">=9.1.1"
+pytest = ">=9.2.0"
 pytest-mock = ">=3.17.0"
 pytest-xdist = ">=3.8.0"
-pytest-asyncio = ">=1.4.0"
+pytest-asyncio = ">=1.4.1"
 # pytest-cov = ">=7.1.0"
 # pytest-markdown-docs = ">=0.9.2"
 # testcontainers = ">=4.14.2"
