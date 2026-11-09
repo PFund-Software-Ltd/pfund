@@ -138,7 +138,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/python_abi-3.13-9_cp313.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026e-h5d301ff_0.conda
       - pypi: ../mtflow
-      - pypi: ../pfeed/sources/pfeed-pfund
       - pypi: ./
       - pypi: git+https://github.com/litestar-org/litestar.git?branch=main#574e436d2a629a1a8775ea0bed11091a80f50703
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
@@ -493,7 +492,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/python_abi-3.13-9_cp313.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026e-h5d301ff_0.conda
       - pypi: ../mtflow
-      - pypi: ../pfeed/sources/pfeed-pfund
       - pypi: ./
       - pypi: git+https://github.com/litestar-org/litestar.git?branch=main#574e436d2a629a1a8775ea0bed11091a80f50703
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
@@ -803,7 +801,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/tk-8.6.13-hbeba79b_4.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
       - pypi: ../mtflow
-      - pypi: ../pfeed/sources/pfeed-pfund
       - pypi: ./
       - pypi: git+https://github.com/litestar-org/litestar.git?branch=main#574e436d2a629a1a8775ea0bed11091a80f50703
       - pypi: https://files.pythonhosted.org/packages/01/b9/41642877fe741db56d240833c8822188b663c4c5d52beb087964774035d4/wrapt-2.5.1-cp313-cp313-macosx_11_0_arm64.whl
@@ -1105,7 +1102,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-1.3.2-hfd05255_3.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_7.conda
       - pypi: ../mtflow
-      - pypi: ../pfeed/sources/pfeed-pfund
       - pypi: ./
       - pypi: git+https://github.com/litestar-org/litestar.git?branch=main#574e436d2a629a1a8775ea0bed11091a80f50703
       - pypi: https://files.pythonhosted.org/packages/01/33/e591f9d3d8d6c9cfc02ae95f3e3c44920f2d18050f3f252c244e0f293a0e/msgspec-0.22.0-cp313-cp313-win_amd64.whl
@@ -8477,12 +8473,6 @@ packages:
   - trackio[cpu,gpu]>=0.40.0
   - optuna>=5.0.0
   - optuna-dashboard>=0.21.0
-  requires_python: '>=3.13'
-- pypi: ../pfeed/sources/pfeed-pfund
-  name: pfeed-pfund
-  requires_dist:
-  - pfeed>=0.0.23
-  - pfund>=0.0.25
   requires_python: '>=3.13'
 - pypi: ./
   name: pfund

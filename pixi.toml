@@ -33,8 +33,7 @@ py315 = ["py315", "test", "optional"]
 # prerelease-mode = "allow"
 
 [pypi-dependencies]
-pfeed = ">=0.0.23"  # TODO: remove it when pfeed-pfund is ready
-# pfeed-pfund = ">=0.0.1"
+pfeed = ">=0.0.23"
 # mtflow = ">=0.0.1.dev2"
 apscheduler = ">=3.11.3"
 numba = ">=0.68.1"
@@ -66,8 +65,6 @@ pfeed-bybit = ">=0.0.1"
 [feature.dev.pypi-dependencies]
 pfund = { path = ".", editable = true }
 afterpython = { version = ">=0.4.3", extras = ["marimo"] }
-# TEMP
-pfeed-pfund = { path = "../pfeed/sources/pfeed-pfund", editable = true }
 mtflow = { path = "../mtflow", editable = true }
 memray = ">=1.19.3"
 
