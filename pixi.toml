@@ -13,6 +13,7 @@ exclude-newer = "0d"
 exemptions = { afterpython = "*", uv_build = "*", pfund-blocks = "*", pfund-kit = "*", pfeed = "*", mtflow = "*" }
 
 [tasks]
+rmtree = { cmd = "scripts/worktree-remove.sh {{ name }}", args = ["name"] }
 
 [tasks.test-all]
 depends-on = [

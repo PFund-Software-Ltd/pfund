@@ -2,6 +2,7 @@ default_install_hook_types:
 - pre-commit
 - commit-msg
 - pre-push
+- post-checkout
 exclude: ^afterpython/_website/
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -48,3 +49,16 @@ repos:
 #   - id: commitizen-branch
 #     stages:
 #     - pre-push
+- repo: local
+  hooks:
+  # runs after `git worktree add` (also used by Zed) and every `git switch`;
+  # the script is a no-op for the main checkout and idempotent otherwise.
+  # resolved via the main checkout, so it works even if the worktree's commit doesn't have it
+  - id: worktree-symlinks
+    name: worktree symlinks
+    entry: sh -c '"$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/scripts/worktree-symlinks.sh" "$PWD"'
+    language: system
+    pass_filenames: false
+    always_run: true
+    stages:
+    - post-checkout
