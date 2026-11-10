@@ -55,8 +55,25 @@
 	// scrollspy: the active question is the last one whose heading has
 	// scrolled past the top quarter of the viewport
 	let activeId = $state('');
+	// a question the reader jumped to (sidebar, # link, URL hash) stays active
+	// until they scroll themselves. Short questions near the end can't scroll
+	// up to the threshold, so position alone would highlight a neighbour.
+	let pinnedId = '';
+
+	function followHash() {
+		const id = decodeURIComponent(location.hash.slice(1));
+		if (!entries.some((e) => e.id === id)) return;
+		pinnedId = id;
+		activeId = id;
+	}
+
+	function unpin() {
+		pinnedId = '';
+	}
 
 	function updateActive() {
+		// the jump itself fires scroll events, so only user input unpins
+		if (pinnedId) return;
 		const threshold = window.innerHeight * 0.25;
 		let current = entries[0]?.id ?? '';
 		for (const entry of entries) {
@@ -71,18 +88,35 @@
 	}
 
 	$effect(() => {
+		followHash();
 		updateActive();
 		let frame = 0;
 		const onScroll = () => {
 			cancelAnimationFrame(frame);
 			frame = requestAnimationFrame(updateActive);
 		};
+		// clicking the link of the current hash again fires no hashchange
+		const onClick = (event: MouseEvent) => {
+			const link = (event.target as Element).closest?.('a[href^="#"]');
+			if (link) requestAnimationFrame(followHash);
+		};
+		const userScroll = ['wheel', 'touchmove', 'keydown', 'mousedown'] as const;
 		window.addEventListener('scroll', onScroll, { passive: true });
 		window.addEventListener('resize', onScroll);
+		window.addEventListener('hashchange', followHash);
+		document.addEventListener('click', onClick);
+		for (const type of userScroll) {
+			window.addEventListener(type, unpin, { passive: true });
+		}
 		return () => {
 			cancelAnimationFrame(frame);
 			window.removeEventListener('scroll', onScroll);
 			window.removeEventListener('resize', onScroll);
+			window.removeEventListener('hashchange', followHash);
+			document.removeEventListener('click', onClick);
+			for (const type of userScroll) {
+				window.removeEventListener(type, unpin);
+			}
 		};
 	});
 </script>
