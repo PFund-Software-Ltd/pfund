@@ -74,7 +74,7 @@ PFund (/piː fʌnd/), which stands for "**Personal Fund**", is an **algo-trading
 
 ---
 
-<details>
+<details open>
 <summary>Table of Contents</summary>
 
 - [Installation](#installation)
