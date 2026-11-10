@@ -30,6 +30,19 @@ project:
   - backtesting
   - machine learning
   thumbnail: ../static/thumbnail.png
+  toc:
+    - file: overview.md
+    - file: installation.md
+    - file: quickstart.md
+    - title: Concepts
+      children:
+        - file: concepts/product.md
+        - file: concepts/resolution.md
+        - file: concepts/backtesting.md
+    - file: integrations.md
+    - file: commands.md
+    - file: config.md
+    - file: CONTRIBUTING.md
 site:
   template: book-theme
   # options:
@@ -40,10 +53,24 @@ site:
     analytics_google: '{{ GOOGLE_ANALYTICS_ID }}'
     favicon: ../static/favicon.ico
     logo: ../static/logo.svg
-    logo_dark: ../static/logo.svg
-    logo_text: pfund
+    logo_dark: ../static/logo-dark.svg
+    logo_text: Democratize AI Trading
     logo_url: 'https://pfund.pfund.ai'
-  title: pfund's Doc
+    style: ../static/custom.css
+  title: pfund's Documentation
+  nav:
+  - title: PFund.ai
+    url: https://pfund.ai
+  - title: Tutorials
+    url: https://pfund.pfund.ai/tutorial
+  - title: Blogs
+    url: https://pfund.pfund.ai/blog
+  - title: Guides
+    url: https://pfund.pfund.ai/guide
+  - title: Examples
+    url: https://pfund.pfund.ai/example
+  - title: API Reference
+    url: https://pfund.pfund.ai/reference
   actions:
   - title: ⭐ Star
     url: https://github.com/PFund-Software-Ltd/pfund

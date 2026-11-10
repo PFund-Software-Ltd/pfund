@@ -196,6 +196,7 @@ tests/data/
 
 # AfterPython website rules
 **/_build/
+**/__marimo__/
 !afterpython/_website/src/lib/
 afterpython/_website.backup/
 

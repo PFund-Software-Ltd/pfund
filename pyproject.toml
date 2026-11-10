@@ -47,7 +47,7 @@ torch = [
 #   pip install "pfund[bybit]"  # official, installs `pfund-bybit`
 #   pip install pfund-xxx       # 3rd party, not maintained or verified by pfund
 # hyperliquid = ["pfund-hyperliquid[data]>=0.0.1"]
-bybit = ["pfund-bybit[data]>=0.0.2"]
+bybit = ["pfund-bybit[data]>=0.0.3"]
 
 [project.scripts]
 pfund = "pfund.__main__:run_cli"
@@ -80,9 +80,13 @@ module-root = "src"
 markers = [
     "smoke: Run the most important tests",
 ]
-addopts = [
-    "--strict-markers",
-]
+strict_markers = true
+addopts = ["--no-header", "--import-mode=importlib"]
+testpaths = ["tests"]
+# pytest-timeout: last-resort kill for hanging tests (e.g. deadlocked Ray/ZeroMQ), dumps all thread stacks;
+# "thread" because "signal" can't interrupt code blocked in C; it os._exit()s the xdist worker (no teardown)
+timeout = "300"
+timeout_method = "thread"
 
 [tool.ruff]
 extend = "afterpython/ruff.toml"

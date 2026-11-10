@@ -1,0 +1,13 @@
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap");
+
+/* book-theme hardcodes the logo height to h-9 (2.25rem); override it here */
+.myst-home-link-logo img {
+  height: 1.75rem;
+}
+
+/* code block text size is set on <code> by thebe-core.css (--jp-code-font-size, ~13px),
+   so it must be overridden on <code>; setting it on <pre> only grows the line gaps */
+.myst-code-body code {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.9375rem;
+}

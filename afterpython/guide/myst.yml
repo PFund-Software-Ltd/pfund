@@ -30,6 +30,7 @@ project:
   - backtesting
   - machine learning
   thumbnail: ../static/thumbnail.png
+  toc: []
 site:
   template: book-theme
   # options:

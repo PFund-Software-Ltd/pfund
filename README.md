@@ -7,8 +7,8 @@
 [![PyPI](https://img.shields.io/pypi/v/pfund.svg?cacheSeconds=300)](https://pypi.org/project/pfund)
 ![PyPI - Support Python Versions](https://img.shields.io/pypi/pyversions/pfund?cacheSeconds=300)
 [![afterpython](https://afterpython.org/shield.svg)](https://afterpython.org)
-[![Discussions](https://img.shields.io/badge/Discussions-Let's%20Chat-green)](https://github.com/PFund-Software-Ltd/pfund/discussions)
 [![View Code Wiki](https://assets.codewiki.google/readme-badge/static.svg)](https://codewiki.google/github.com/pfund-software-ltd/pfund?utm_source=badge&utm_medium=github&utm_campaign=github.com/pfund-software-ltd/pfund)
+<!--[![Discussions](https://img.shields.io/badge/Discussions-Let's%20Chat-green)](https://github.com/PFund-Software-Ltd/pfund/discussions)-->
 <!--[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/PFund-Software-Ltd/pfund)-->
 <!-- ![GitHub stars](https://img.shields.io/github/stars/PFund-Software-Ltd/pfund?style=social&cacheSeconds=300) -->
 <!-- ![PyPI downloads](https://img.shields.io/pypi/dm/pfund?label=downloads&cacheSeconds=86400) -->
@@ -130,6 +130,7 @@ $ pfund --version
 ```python
 import pfund as pf
 
+
 # NOTE: for more exciting strategies, please visit pfund.ai
 class YourStrategy(pf.Strategy):
     # triggered by bar/kline data (e.g. 1-minute data)
@@ -138,16 +139,20 @@ class YourStrategy(pf.Strategy):
         pass
 
 
-engine = pf.BacktestEngine(mode='fast')
-strategy = engine.add_strategy(YourStrategy(), name='your_strategy')
+engine = pf.BacktestEngine(mode="fast")
+strategy = engine.add_strategy(YourStrategy(), name="your_strategy")
 strategy.add_data(
-  'IB', 'AAPL', 'USD', 'STK', resolutions=['1d'],
-  backtest={
-    # NOTE: since IB does not provide any historical data for backtesting purpose, use data from 'YAHOO_FINANCE'
-    'data_source': 'YAHOO_FINANCE',
-    'start_date': '2024-01-01',
-    'end_date': '2024-02-01',
-  }
+    "IB",
+    "AAPL",
+    "USD",
+    "STK",
+    resolutions=["1d"],
+    backtest={
+        # NOTE: since IB does not provide any historical data for backtesting purpose, use data from 'YAHOO_FINANCE'
+        "data_source": "YAHOO_FINANCE",
+        "start_date": "2024-01-01",
+        "end_date": "2024-02-01",
+    },
 )
 engine.run()
 ```
@@ -158,17 +163,21 @@ engine.run()
 ```python
 import pfund as pf
 
-engine = pf.TradeEngine(env='LIVE')
-strategy = engine.add_strategy(YourStrategy(), name='your_strategy')
+engine = pf.TradeEngine(env="LIVE")
+strategy = engine.add_strategy(YourStrategy(), name="your_strategy")
 strategy.add_data(
-  'IB', 'AAPL', 'USD', 'STK', resolutions=['1d'],
-  # for convenience, you can keep the kwarg `backtest`, `TradeEngine` will ignore it
-  backtest={
-    # NOTE: since IB does not provide any historical data for backtesting purpose, use data from 'YAHOO_FINANCE'
-    'data_source': 'YAHOO_FINANCE',
-    'start_date': '2024-01-01',
-    'end_date': '2024-02-01',
-  }
+    "IB",
+    "AAPL",
+    "USD",
+    "STK",
+    resolutions=["1d"],
+    # for convenience, you can keep the kwarg `backtest`, `TradeEngine` will ignore it
+    backtest={
+        # NOTE: since IB does not provide any historical data for backtesting purpose, use data from 'YAHOO_FINANCE'
+        "data_source": "YAHOO_FINANCE",
+        "start_date": "2024-01-01",
+        "end_date": "2024-02-01",
+    },
 )
 engine.run()
 ```
@@ -190,7 +199,7 @@ engine.run()
 ```python
 import pfund as pf
 
-engine = pf.TradeEngine(env='LIVE')
+engine = pf.TradeEngine(env="LIVE")
 strategy = engine.add_strategy(...)
 strategy.add_data(...)
 model = strategy.add_model(...)

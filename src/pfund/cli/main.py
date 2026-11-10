@@ -14,11 +14,12 @@ def init_context(ctx):
 
 
 pfund_group = create_cli_group("pfund", init_context=init_context)
-pfund_group.add_command(config)
-pfund_group.add_command(docker_compose)
-pfund_group.add_command(docker_compose, name="compose")
-pfund_group.add_command(remove)
-pfund_group.add_command(remove, name="rm")
+# NOTE: the order in which commands are added also determines their order in pfund-shell
 pfund_group.add_command(settings)
 pfund_group.add_command(deltalake)
 pfund_group.add_command(deltalake, name="delta")
+pfund_group.add_command(config)
+pfund_group.add_command(remove)
+pfund_group.add_command(remove, name="rm")
+pfund_group.add_command(docker_compose)
+pfund_group.add_command(docker_compose, name="compose")

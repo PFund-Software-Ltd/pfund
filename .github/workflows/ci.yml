@@ -104,6 +104,8 @@ jobs:
     needs: detect-test-strategy
     if: needs.detect-test-strategy.outputs.use_pixi == 'true'
     runs-on: ubuntu-latest
+    # backstop for hangs outside a test (collection, session teardown, pixi install); default is 360
+    timeout-minutes: 20
     strategy:
       matrix:
         environment: ['py313', 'py314', 'py315']

@@ -49,7 +49,7 @@
 	const sizeClasses = {
 		xs: 'h-6',
 		sm: 'h-10',
-		md: 'h-14',
+		md: 'h-7', // 1.75rem, matches the doc site's logo (static/custom.css)
 		lg: 'h-18',
 		xl: 'h-22'
 	};
