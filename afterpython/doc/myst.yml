@@ -70,7 +70,9 @@ site:
   - title: Examples
     url: https://pfund.pfund.ai/example
   - title: API Reference
-    url: https://pfund.pfund.ai/reference
+    url: https://pfund.pfund.ai/api_reference/pfund.html
+  - title: FAQs
+    url: https://pfund.pfund.ai/faq
   actions:
   - title: ⭐ Star
     url: https://github.com/PFund-Software-Ltd/pfund
