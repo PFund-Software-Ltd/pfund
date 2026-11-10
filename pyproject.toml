@@ -49,6 +49,11 @@ torch = [
 # hyperliquid = ["pfund-hyperliquid[data]>=0.0.1"]
 bybit = ["pfund-bybit[data]>=0.0.3"]
 
+[dependency-groups]
+dev = [
+    "afterpython[marimo]>=0.4.8",
+]
+
 [project.scripts]
 pfund = "pfund.__main__:run_cli"
 
@@ -90,8 +95,3 @@ timeout_method = "thread"
 
 [tool.ruff]
 extend = "afterpython/ruff.toml"
-
-[dependency-groups]
-dev = [
-    "afterpython[marimo]>=0.4.6",
-]
