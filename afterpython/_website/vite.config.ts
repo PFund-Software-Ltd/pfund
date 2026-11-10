@@ -40,6 +40,26 @@ function serveStaticDirIndex(): Plugin {
 	};
 }
 
+// Dev only: static/*.json (faq.json, metadata.json, blog.json, ...) is imported by server
+// load functions only, so Vite never tells the browser to reload when it changes.
+// `ap dev` rewrites these files while running; reload open pages so edits show up.
+function reloadOnStaticData(): Plugin {
+	return {
+		name: 'reload-on-static-data',
+		apply: 'serve',
+		configureServer(server) {
+			const reload = (file: string) => {
+				if (/[/\\]static[/\\][^/\\]+\.json$/.test(file)) {
+					server.ws.send({ type: 'full-reload' });
+				}
+			};
+			server.watcher.on('change', reload);
+			server.watcher.on('add', reload);
+			server.watcher.on('unlink', reload);
+		}
+	};
+}
+
 export default defineConfig(({ mode }) => {
 	const isDev = mode === 'development';
 	return {
@@ -289,6 +309,7 @@ export default defineConfig(({ mode }) => {
 		},
 		plugins: lazyPlugins(() => [
 			serveStaticDirIndex(),
+			reloadOnStaticData(),
 			tailwindcss(),
 			sveltekit({
 				preprocess: [vitePreprocess(), mdsvex()],
