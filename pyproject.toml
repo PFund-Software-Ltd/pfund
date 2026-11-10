@@ -90,3 +90,8 @@ timeout_method = "thread"
 
 [tool.ruff]
 extend = "afterpython/ruff.toml"
+
+[dependency-groups]
+dev = [
+    "afterpython[marimo]>=0.4.6",
+]
