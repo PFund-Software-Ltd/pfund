@@ -103,11 +103,12 @@ jobs:
   test-pixi:
     needs: detect-test-strategy
     if: needs.detect-test-strategy.outputs.use_pixi == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     # backstop for hangs outside a test (collection, session teardown, pixi install); default is 360
     timeout-minutes: 20
     strategy:
       matrix:
+        os: ['ubuntu-latest', 'windows-latest']
         environment: ['py313', 'py314', 'py315']
       fail-fast: false
 
@@ -126,10 +127,19 @@ jobs:
           # auth-host: prefix.dev
           # auth-token: ${{ secrets.PREFIX_DEV_TOKEN }}
 
+      - name: Enable long paths (Windows)
+        # pfeed's data folders (used by pfund) go over Windows' default 260-character path limit;
+        # users have to enable this too, see pfeed's README and installation docs
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+
       - name: Run tests with pixi
         # Runs the "test" task of pixi.toml in this matrix run's environment (e.g. py313)
         # Exit code 5 (no tests collected) is success.
         # `|| code=$?` because GitHub runs bash with -e, which would stop at the failure.
+        # shell: bash, so the script also runs on Windows (whose default shell is PowerShell)
+        shell: bash
         run: |
           code=0
           pixi run -e ${{ matrix.environment }} test || code=$?
