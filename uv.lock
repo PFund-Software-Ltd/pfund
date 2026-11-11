@@ -20,7 +20,7 @@ uv-build = false
 
 [[package]]
 name = "afterpython"
-version = "0.5.1"
+version = "0.5.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -40,9 +40,9 @@ dependencies = [
     { name = "trogon" },
     { name = "ty" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b2/e6/9de400882e8c803efde63a16975fe54f6136df86d73a45271eff48152e4e/afterpython-0.5.1.tar.gz", hash = "sha256:f2c85ff8a1e2a53ea7298a66358e3c36f79316c4e63cbc79ed1be021d8edd504", size = 94797, upload-time = "2026-11-11T23:39:08.417Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/28/91/332bdda833e7ef8481fb7c1c9faa2adff444588da3f215b538ca37ac7337/afterpython-0.5.2.tar.gz", hash = "sha256:227424d5090f12bc3307428423dc57749b9045c9420e400faf345a3b8fee5b9c", size = 94822, upload-time = "2026-11-11T23:51:28.186Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ea/2b/3662b75391b1ee1008233e33b73cf6a958031a6db5e162fcc11e3c4506f8/afterpython-0.5.1-py3-none-any.whl", hash = "sha256:9cd243d0ce355154c5c6323d74462ea27482b787b1f03147729c4e71c7d7821c", size = 122223, upload-time = "2026-11-11T23:39:06.943Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/eb/1b806f145ac06b7484ffdf50f8c95ab8c7c754f84aebc3e450c8ab190c15/afterpython-0.5.2-py3-none-any.whl", hash = "sha256:49cd1c70a7fe64f7d5682cf49bea3917ef4dfa4215e1e6af6464a955333abc9a", size = 122260, upload-time = "2026-11-11T23:51:27.047Z" },
 ]
 
 [package.optional-dependencies]
@@ -2543,7 +2543,7 @@ requires-dist = [
 provides-extras = ["ray", "ta-lib", "sklearn", "torch", "bybit"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "afterpython", extras = ["marimo"], specifier = ">=0.5.1" }]
+dev = [{ name = "afterpython", extras = ["marimo"], specifier = ">=0.5.2" }]
 
 [[package]]
 name = "pfund-blocks"

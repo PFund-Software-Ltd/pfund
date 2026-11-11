@@ -71,7 +71,7 @@ pfund-bybit = { version = ">=0.0.3", extras = ["data"] }
 
 [feature.dev.pypi-dependencies]
 pfund = { path = ".", editable = true }
-afterpython = { version = ">=0.5.1", extras = ["marimo"] }
+afterpython = { version = ">=0.5.2", extras = ["marimo"] }
 mtflow = { path = "../mtflow", editable = true }
 memray = ">=1.19.3"
 
