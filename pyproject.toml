@@ -24,14 +24,14 @@ classifiers = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-    "pfeed>=0.0.23",
+    "pfeed>=0.0.24",
     # "mtflow>=0.0.1.dev2",
     "apscheduler>=3.11.3",
     "numba>=0.68.1",
 ]
 
 [project.optional-dependencies]
-ray = ["pfeed[ray]>=0.0.23; python_version < '3.15'"]
+ray = ["pfeed[ray]>=0.0.24; python_version < '3.15'"]
 ta-lib = ["ta-lib>=0.8.3"]
 sklearn = [
     "joblib>=1.6.0",
@@ -51,7 +51,7 @@ bybit = ["pfund-bybit[data]>=0.0.3"]
 
 [dependency-groups]
 dev = [
-    "afterpython[marimo]>=0.4.8",
+    "afterpython[marimo]>=0.5.0",
 ]
 
 [project.scripts]
@@ -88,6 +88,8 @@ markers = [
 strict_markers = true
 addopts = ["--no-header", "--import-mode=importlib"]
 testpaths = ["tests"]
+# pytest-asyncio: set explicitly, otherwise it warns on every run; "function" is its future default
+asyncio_default_fixture_loop_scope = "function"
 # pytest-timeout: last-resort kill for hanging tests (e.g. deadlocked Ray/ZeroMQ), dumps all thread stacks;
 # "thread" because "signal" can't interrupt code blocked in C; it os._exit()s the xdist worker (no teardown)
 timeout = "300"

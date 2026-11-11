@@ -27,6 +27,7 @@ default = ["py313", "dev", "test", "optional"]
 py313 = ["py313", "test", "optional"]
 py314 = ["py314", "test", "optional"]
 py315 = ["py315", "test", "optional"]
+py313-windows-vm = ["py313", "test", "optional", "windows-vm"]
 
 # links .venv -> .pixi/envs/default on activation, so that ty and afterpython's hooks
 # (which look for the project environment in .venv/) use pixi's default environment,
@@ -40,14 +41,14 @@ scripts = ["scripts/link-venv.sh"]
 # prerelease-mode = "allow"
 
 [pypi-dependencies]
-pfeed = ">=0.0.23"
+pfeed = ">=0.0.24"
 # mtflow = ">=0.0.1.dev2"
 apscheduler = ">=3.11.3"
 numba = ">=0.68.1"
 
 [feature.optional.pypi-dependencies]
 # TODO: remove the env-markers when ray supports python 3.15
-pfeed = { version = ">=0.0.23", extras = ["ray"], env-markers = "python_version < '3.15'" }
+pfeed = { version = ">=0.0.24", extras = ["ray"], env-markers = "python_version < '3.15'" }
 ta-lib = ">=0.8.3"
 joblib = ">=1.6.0"
 scikit-learn = ">=1.9.1"
@@ -66,7 +67,7 @@ pfund-bybit = { version = ">=0.0.3", extras = ["data"] }
 
 [feature.dev.pypi-dependencies]
 pfund = { path = ".", editable = true }
-afterpython = { version = ">=0.4.8", extras = ["marimo"] }
+afterpython = { version = ">=0.5.0", extras = ["marimo"] }
 mtflow = { path = "../mtflow", editable = true }
 memray = ">=1.19.3"
 
@@ -97,3 +98,17 @@ python = "3.14.*"
 
 [feature.py315.dependencies]
 python = "3.15.*"
+
+# Windows ARM VM (x64 under emulation): the default polars build crashes there
+# (illegal instruction), so use polars' compatibility build instead
+[feature.windows-vm]
+platforms = ["win-64"]
+
+[feature.windows-vm.activation.env]
+POLARS_SKIP_CPU_CHECK = "1"
+
+[feature.windows-vm.pypi-dependencies]
+polars = { version = ">=2.1.0", extras = ["rtcompat"] }
+
+[feature.windows-vm.tasks]
+# test-vm = ...

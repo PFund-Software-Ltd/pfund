@@ -20,7 +20,7 @@ uv-build = false
 
 [[package]]
 name = "afterpython"
-version = "0.4.8"
+version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -40,9 +40,9 @@ dependencies = [
     { name = "trogon" },
     { name = "ty" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5c/5f/9d60380d5f8fb49756aefea250964249519439db6368784c27c8995adc0c/afterpython-0.4.8.tar.gz", hash = "sha256:44e67ee1cacdf9b6c2ccb1a214724bfd465bf4357dd5a7c298d757a604d76b5a", size = 90801, upload-time = "2026-11-10T18:48:15.413Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a0/da/6ef7811a8a3e45cc7829c4606979494bbf9d5eb84bd0f0c7df781b070f92/afterpython-0.5.0.tar.gz", hash = "sha256:4512f0f657f6ca3a83efb86b5ce5f80d6ce0609a54196130b9a75e208af476e2", size = 93962, upload-time = "2026-11-10T23:32:02.795Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d1/a1/747bf4fa32fe8c0883751dcc3dad8e54d216ebb492767bd790e15225d1e3/afterpython-0.4.8-py3-none-any.whl", hash = "sha256:24bcc6a26764092d08613653a897f64cb13db9a798164e11be37a0765c5e0090", size = 117667, upload-time = "2026-11-10T18:48:14.143Z" },
+    { url = "https://files.pythonhosted.org/packages/13/f3/9798f92c23ff1bd719feab42620b076b450a0662c1460734ecc45eb43c75/afterpython-0.5.0-py3-none-any.whl", hash = "sha256:885605230f6a8e57bf5677e8243e39bf005e157946c473a1fc2d2bef64521bd5", size = 121321, upload-time = "2026-11-10T23:32:01.543Z" },
 ]
 
 [package.optional-dependencies]
@@ -2457,7 +2457,7 @@ wheels = [
 
 [[package]]
 name = "pfeed"
-version = "0.0.23"
+version = "0.0.24"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -2470,9 +2470,9 @@ dependencies = [
     { name = "pyarrow", marker = "sys_platform != 'emscripten'" },
     { name = "pyzmq", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f2/68/20674595907b66bc8f2cce5070fc0de9a0fe7e11d0cd359663d260294467/pfeed-0.0.23.tar.gz", hash = "sha256:bddd2998ce3be2cdcac9459e93e71ac39a686fb8dd14ec10264ad5328ba6da9a", size = 141258, upload-time = "2026-11-07T23:15:42.333Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b5/ad/17e520aaa2e6cba6bc7a8e4898a18cf7f2228e090c188d01a2d741a84b3f/pfeed-0.0.24.tar.gz", hash = "sha256:24f11e7a38339d53cec4dbe3c2e6ed7d8d35b37b867e8365ded07bfa5df257f3", size = 120361, upload-time = "2026-11-11T02:37:39.158Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/41/21/6a079863ca86624ff655d8acac761d20e46b9d494b1ab86ab156d0e85514/pfeed-0.0.23-py3-none-any.whl", hash = "sha256:b4a123598619fdb05e7ee31bc08f10f60ed651a0473490912c51d0b0632a5bcb", size = 189089, upload-time = "2026-11-07T23:15:41.292Z" },
+    { url = "https://files.pythonhosted.org/packages/a3/81/2bcdde498b4a872057aa92dc166d53496f7befcb8c5f89a56147cd5bce26/pfeed-0.0.24-py3-none-any.whl", hash = "sha256:966644a8d2526db6b9eeade072c37a18601811c2734b131f93d2c69a8386c63b", size = 152289, upload-time = "2026-11-11T02:37:37.602Z" },
 ]
 
 [package.optional-dependencies]
@@ -2532,8 +2532,8 @@ requires-dist = [
     { name = "apscheduler", specifier = ">=3.11.3" },
     { name = "joblib", marker = "extra == 'sklearn'", specifier = ">=1.6.0" },
     { name = "numba", specifier = ">=0.68.1" },
-    { name = "pfeed", specifier = ">=0.0.23" },
-    { name = "pfeed", extras = ["ray"], marker = "python_full_version < '3.15' and extra == 'ray'", specifier = ">=0.0.23" },
+    { name = "pfeed", specifier = ">=0.0.24" },
+    { name = "pfeed", extras = ["ray"], marker = "python_full_version < '3.15' and extra == 'ray'", specifier = ">=0.0.24" },
     { name = "pfund-bybit", extras = ["data"], marker = "extra == 'bybit'", specifier = ">=0.0.3" },
     { name = "safetensors", marker = "extra == 'torch'", specifier = ">=0.8.0" },
     { name = "scikit-learn", marker = "extra == 'sklearn'", specifier = ">=1.9.1" },
@@ -2543,7 +2543,7 @@ requires-dist = [
 provides-extras = ["ray", "ta-lib", "sklearn", "torch", "bybit"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "afterpython", extras = ["marimo"], specifier = ">=0.4.8" }]
+dev = [{ name = "afterpython", extras = ["marimo"], specifier = ">=0.5.0" }]
 
 [[package]]
 name = "pfund-blocks"
@@ -2580,7 +2580,7 @@ data = [
 
 [[package]]
 name = "pfund-kit"
-version = "0.1.23"
+version = "0.1.25"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -2588,15 +2588,16 @@ dependencies = [
     { name = "prompt-toolkit" },
     { name = "pydantic" },
     { name = "python-dotenv" },
+    { name = "pytz" },
     { name = "pyyaml" },
     { name = "rich" },
     { name = "tomlkit" },
     { name = "tqdm" },
     { name = "trogon", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c6/20/cfbe9e32ab2f13ff15b9b30f762785877220f49d2a8e7247d2e523a44156/pfund_kit-0.1.23.tar.gz", hash = "sha256:0482d24a3696007f238c137c989cde12ed132777c528e88a686f62414e30a568", size = 51841, upload-time = "2026-11-07T18:05:24.445Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/10/f0/086ddb273c159123f99bb882d11266531b63e4ed92c96d429bad2aef0086/pfund_kit-0.1.25.tar.gz", hash = "sha256:f0d615fad7dbcd6cfbffc4db66611440e22c9a174362142fc90e249bdf89b775", size = 54795, upload-time = "2026-11-10T04:52:49.78Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6c/41/6455899a0d759e2e546b26a2785ccf6113d6fcaf5edeb19ba6f774283ea6/pfund_kit-0.1.23-py3-none-any.whl", hash = "sha256:1223ffd473959cfcf01626e2063745849f761cd77c823a1c782e8f2daff1cc6b", size = 66406, upload-time = "2026-11-07T18:05:23.363Z" },
+    { url = "https://files.pythonhosted.org/packages/79/2d/e819986fd232b1dd32ed514df129d02bf39e68cab7e3dd925ea42770cee1/pfund_kit-0.1.25-py3-none-any.whl", hash = "sha256:8f0543fec59b179d10411ffe2cfe460a5292f249cafb82101d20717df4818cd6", size = 69417, upload-time = "2026-11-10T04:52:48.638Z" },
 ]
 
 [[package]]
@@ -3243,6 +3244,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/52/a0/07907b6ff512674d9b201859f7d212298c44933633c946703a20c25e9d81/pytokens-0.4.1-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:967cf6e3fd4adf7de8fc73cd3043754ae79c36475c1c11d514fc72cf5490094a", size = 306698, upload-time = "2026-01-30T01:03:29.653Z" },
     { url = "https://files.pythonhosted.org/packages/39/2a/cbbf9250020a4a8dd53ba83a46c097b69e5eb49dd14e708f496f548c6612/pytokens-0.4.1-cp314-cp314t-win_amd64.whl", hash = "sha256:584c80c24b078eec1e227079d56dc22ff755e0ba8654d8383b2c549107528918", size = 116287, upload-time = "2026-01-30T01:03:30.912Z" },
     { url = "https://files.pythonhosted.org/packages/c6/78/397db326746f0a342855b81216ae1f0a32965deccfd7c830a2dbc66d2483/pytokens-0.4.1-py3-none-any.whl", hash = "sha256:26cef14744a8385f35d0e095dc8b3a7583f6c953c2e3d269c7f82484bf5ad2de", size = 13729, upload-time = "2026-01-30T01:03:45.029Z" },
+]
+
+[[package]]
+name = "pytz"
+version = "2026.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f5/b0/168030b0bfcc334cf09fa3313afdb888d892c8a0027324683d1de0ec277e/pytz-2026.6.tar.gz", hash = "sha256:3b0fc2727707663d6e517936f444fd8a8b240f1fc32f4bf7ee03274245945284", size = 318520, upload-time = "2026-10-29T09:05:47.011Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b6/25/564f3fc5b70c1398d706c51f2b1470d0ea0b1b2f96fee67877b6f5bdf3b6/pytz-2026.6-py2.py3-none-any.whl", hash = "sha256:7fed3fee8fd6bd4a2b7b75a8d56021d0624127bf69bd5691f115db929ac570b3", size = 506321, upload-time = "2026-10-29T09:05:45.14Z" },
 ]
 
 [[package]]
