@@ -9,6 +9,8 @@
 src = ["..", "../src"]
 
 line-length = 88
+# content notebooks (marimo examples etc.) are demos, not package code
+extend-exclude = ["../afterpython"]
 target-version = "py313"
 
 [lint]
