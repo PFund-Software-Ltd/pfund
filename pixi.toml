@@ -90,6 +90,11 @@ test = "pytest"
 test-new = "pytest --record-mode=all"  # record new interactions, useful to update recordings in case data formats returned have changed
 test-ci = "pytest --record-mode=none"  # fail a test if no recording is found
 
+[feature.test.activation.env]
+# Ray starts a local cluster; on slow machines (e.g. the windows-latest CI runner), especially with
+# several clusters starting at once (pytest -n), a raylet can miss Ray's default startup wait
+RAY_raylet_start_wait_time_s = "60"
+
 [feature.py313.dependencies]
 python = "3.13.*"
 
