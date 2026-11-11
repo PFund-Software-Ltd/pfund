@@ -4,6 +4,7 @@ name = "PFund.ai"  # used in myst.yml's venue.title
 url = "https://pfund.ai"  # used in myst.yml's venue.url
 
 [website]
+title = "pfund — ML-Powered Algo-Trading Framework for Python"
 url = "https://pfund.pfund.ai"
 favicon = "favicon.svg"
 logo = "logo.svg"

@@ -32,7 +32,7 @@ project:
   thumbnail: ../static/thumbnail.png
   toc: []
 site:
-  template: article-theme
+  template: book-theme
   # options:
   #   favicon: favicon.ico
   #   logo: site_logo.png
