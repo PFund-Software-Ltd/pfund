@@ -17,18 +17,23 @@ project:
     url: ''
   copyright: © pfund 2026. All rights reserved.
   title: Tutorial
-  description: A Complete Algo-Trading Framework for Machine Learning, enabling trading across TradFi, CeFi and DeFi. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading
+  description: An ML-Powered Algo-Trading Framework for Stocks, Futures, Crypto and Anything Tradable. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading
   keywords:
-  - trading
   - algo-trading
-  - stocks
-  - cryptos
-  - cryptocurrencies
-  - TradFi
-  - CeFi
-  - DeFi
+  - algorithmic-trading
+  - quant
+  - quantitative-finance
+  - trading
   - backtesting
-  - machine learning
+  - event-driven
+  - live-trading
+  - paper-trading
+  - machine-learning
+  - stocks
+  - futures
+  - options
+  - crypto
+  - defi
   thumbnail: ../static/thumbnail.png
   toc: []
 site:

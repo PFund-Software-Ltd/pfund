@@ -1,4 +1,4 @@
-# `pfund`: A Unified, ML-Powered Algo-Trading Framework. Code Once, Trade Anything, Anywhere
+# `pfund`: A Unified, ML-Powered Algo-Trading Framework. Code Once, Trade Anything, Anywhere.
 
 
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://discord.gg/vqpS94tpdp)
