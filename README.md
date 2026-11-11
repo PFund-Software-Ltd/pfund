@@ -1,4 +1,4 @@
-# `pfund`: A Complete Algo-Trading Framework powered by Machine Learning and Data Engineering, TradFi, CeFi and DeFi ready.
+# `pfund`: An All-in-One, ML-Powered Algo-Trading Framework. Code Once, Trade Anything, Anywhere
 
 
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://discord.gg/vqpS94tpdp)
