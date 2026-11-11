@@ -67,7 +67,7 @@ bybit = ["pfund-bybit[data]>=0.0.3"]
 
 [dependency-groups]
 dev = [
-    "afterpython[marimo]>=0.5.0",
+    "afterpython[marimo]>=0.5.1",
 ]
 
 [project.scripts]
