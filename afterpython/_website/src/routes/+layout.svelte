@@ -32,7 +32,12 @@
 	<nav class="container mx-auto py-3 text-base font-medium text-tx50">
 		<div class="flex items-center">
 			<Logo size="md" text={data.name} logo={data.logo} logoDark={data.logo_dark} />
-			<ul class="flex flex-1 justify-center gap-18">
+			<ul class="flex flex-1 justify-center gap-10 whitespace-nowrap">
+				<li>
+					<a href="https://pfund.ai" target="_blank" rel="external noopener noreferrer">
+						PFund.ai
+					</a>
+				</li>
 				{#if devContentUrl('doc') || data.contentTypes?.doc}
 					<li>
 						<a
