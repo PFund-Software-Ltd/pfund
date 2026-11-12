@@ -331,7 +331,10 @@ export default defineConfig(({ mode }) => {
 				// GitHub Pages serves sites from a subdirectory (e.g., username.github.io/repo-name/)
 				// Set base path via BASE_PATH env var so all routes and assets are correctly prefixed
 				// Without this, routes like /doc would resolve to username.github.io/doc instead of username.github.io/afterpython/doc
-				paths: { base: (process.env.BASE_PATH || '') as '' | `/${string}` }
+				// relative: false, so resolve()/asset() return absolute paths. With relative paths, the prerendered
+				// redirect in [content_type]/[slug] is e.g. "../example/slug/", which the client router resolves
+				// against /example/slug/ on client-side navigation, landing on /example/example/slug/ (404)
+				paths: { base: (process.env.BASE_PATH || '') as '' | `/${string}`, relative: false }
 				// Path aliases ($lib, $components, $static) are now subpath imports
 				// (#lib/*, #static/*) declared in the "imports" field of package.json
 			})
