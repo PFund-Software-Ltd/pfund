@@ -465,6 +465,18 @@ class ComponentMixin:
             *self.features.values(),
         ]
 
+    def _get_descendant_names(self) -> list[str]:
+        """Names of every component below this one, at any depth.
+
+        Works through `ActorProxy` too: the call is forwarded to the actor,
+        so children added inside a remote component are included.
+        """
+        return [
+            name
+            for component in self.get_components()
+            for name in (component.name, *component._get_descendant_names())
+        ]
+
     @property
     def data_df(self) -> IntoDataFrame:
         return self.get_df(
@@ -939,17 +951,6 @@ class ComponentMixin:
                 for existing in components
             ):
                 raise ValueError(f"{component_name} already exists")
-
-            # enforce GLOBAL name uniqueness (across other Ray actors too), not just this parent's dict
-            if ray_kwargs:
-                # upgrade BEFORE the actor is created, so the shared-registry context is what ships into it
-                from pfund.engines.component_registry import to_registry_proxy
-
-                self.context.component_registry = to_registry_proxy(
-                    self.context.component_registry
-                )
-            # claim before spawning the actor, so a duplicate name aborts without leaking a live actor
-            self.context.component_registry.claim(component_name)
 
             if ray_kwargs:
                 component = ActorProxy(

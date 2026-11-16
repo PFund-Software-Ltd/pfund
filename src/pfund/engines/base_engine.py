@@ -124,17 +124,6 @@ class BaseEngine[
         ):
             raise ValueError(f"{strat} already exists")
 
-        # enforce GLOBAL name uniqueness (across other Ray actors too), not just this engine's dict
-        if ray_kwargs:
-            # upgrade BEFORE the actor is created, so the shared-registry context is what ships into it
-            from pfund.engines.component_registry import to_registry_proxy
-
-            self._context.component_registry = to_registry_proxy(
-                self._context.component_registry
-            )
-        # claim before spawning the actor, so a duplicate name aborts without leaking a live actor
-        self._context.component_registry.claim(strat)
-
         if ray_kwargs:
             strategy: ActorProxy[StrategyT] = ActorProxy(
                 strategy,
@@ -205,6 +194,7 @@ class BaseEngine[
         # Ray already running means someone else owns it, e.g. this engine
         # runs inside a Ray actor; shutting it down would kill that actor.
         self._owns_ray = not is_ray_initialized()
+        self._assert_unique_component_names()
         self._is_running = True
         self._setup()
         for strategy in self._strategies.values():
@@ -218,6 +208,23 @@ class BaseEngine[
             strategy.stop()
         self._is_running = False
         self._teardown()
+
+    def _assert_unique_component_names(self):
+        """Rejects two components with the same name anywhere in the engine.
+
+        Each parent only rejects duplicates among its own children, but ZMQ
+        ports and urls in the engine settings are keyed by bare component name,
+        so e.g. two strategies each with a model named "model_x" would clash.
+        """
+        names = [
+            name.casefold()
+            for strat, strategy in self._strategies.items()
+            for name in (strat, *strategy._get_descendant_names())
+        ]
+        if duplicates := sorted({name for name in names if names.count(name) > 1}):
+            raise ValueError(
+                f"Component names must be unique across the engine, duplicates: {duplicates}"
+            )
 
     def _setup(self):
         for strategy in self._strategies.values():

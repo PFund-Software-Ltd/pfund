@@ -21,6 +21,10 @@ class PFundComponentDataModel(PFundBaseDataModel):
 
     artifact_type: ArtifactType
     component_type: ComponentType
+    # TODO: component names are only checked for uniqueness within one engine
+    # (BaseEngine._assert_unique_component_names), not across engines or runs;
+    # enforce here whatever uniqueness storage needs. Also, component_id leaves
+    # out the name, so two components identical except for their names collide.
     component_id: str
     # the component snapshot stored with the artifact, set when downloading, None when retrieving
     metadata: PFundComponentDataMetadata | None = None

@@ -9,14 +9,12 @@ if TYPE_CHECKING:
 
     from pfund.config import PFundConfig
     from pfund.engines.base_engine import DataRangeDict
-    from pfund.engines.component_registry import RegistryProxy
     from pfund.engines.settings.base_engine_settings import BaseEngineSettings
 
 from pfund_blocks.enums.env import Environment
 from pfund_blocks.resolution import Resolution
 
 from pfund.config import get_config, get_logging_config
-from pfund.engines.component_registry import ComponentRegistry
 from pfund.enums import RunMode
 
 
@@ -45,9 +43,6 @@ class BaseEngineContext[SettingsT: BaseEngineSettings]:
         self.logging_config: dict[str, Any] = get_logging_config()
         self.settings = self._resolve_settings(settings)
         self.datalake: TableIO = self._create_datalake()
-        # starts local; upgraded in-place to the shared actor-backed registry the first
-        # time a remote component is declared (see component_registry.to_registry_proxy)
-        self.component_registry: ComponentRegistry | RegistryProxy = ComponentRegistry()
 
     def _resolve_settings(self, settings: SettingsT | None) -> SettingsT:
         # load settings if it's None

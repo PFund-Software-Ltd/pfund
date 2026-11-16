@@ -8,8 +8,8 @@ class EngineMeta(SingletonMeta):
 
     The `pfund` logger is process-global and is configured with a single log
     path, so a second engine silently redirects the first engine's logs into
-    its own file. Other process-wide state has the same problem: zmq ports,
-    pfeed's auto-created data engine, and the component registry's name claims.
+    its own file. Other process-wide state has the same problem: zmq ports
+    and pfeed's auto-created data engine.
 
     Rejecting in the metaclass rather than in `BaseEngine.__init__` means the
     engine is never partially built: nothing is logged, reconfigured, or
