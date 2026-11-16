@@ -277,7 +277,7 @@ class PFundComponentFeed(BaseFeed):
         match artifact_type:
             case ArtifactType.model:
                 from pfeed.sources.pfund.component_data_model import ModelArtifact
-                from pfund.components.models.jax_model import JAXModel
+                from pfund.components.models._jax_model import JAXModel
                 from pfund.components.models.pytorch_model import PyTorchModel
                 from pfund.components.models.sklearn_model import SKLearnModel
 
@@ -305,7 +305,7 @@ class PFundComponentFeed(BaseFeed):
                 )
             case ArtifactType.checkpoint:
                 from pfeed.sources.pfund.component_data_model import CheckpointArtifact
-                from pfund.components.models.jax_model import JAXModel
+                from pfund.components.models._jax_model import JAXModel
                 from pfund.components.models.pytorch_model import PyTorchModel
 
                 if checkpoint_step is None:

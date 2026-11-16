@@ -57,7 +57,7 @@ class PFundComponentDataModel(PFundBaseDataModel):
         }
         match artifact_type:
             case ArtifactType.model:
-                from pfund.components.models.jax_model import JAXModel
+                from pfund.components.models._jax_model import JAXModel
                 from pfund.components.models.pytorch_model import PyTorchModel
                 from pfund.components.models.sklearn_model import SKLearnModel
 
@@ -75,7 +75,7 @@ class PFundComponentDataModel(PFundBaseDataModel):
                     filename=component._source_artifact.name, **artifact_kwargs
                 )
             case ArtifactType.checkpoint:
-                from pfund.components.models.jax_model import JAXModel
+                from pfund.components.models._jax_model import JAXModel
                 from pfund.components.models.pytorch_model import PyTorchModel
 
                 if checkpoint_step is None:

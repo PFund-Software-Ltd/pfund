@@ -1,3 +1,4 @@
+# TODO: not tested/officially supported
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any

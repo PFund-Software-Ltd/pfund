@@ -4,49 +4,38 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     # need these imports to support IDE hints:
-    import pfund_plot as plot
-    import pfund.hub as hub
 
-    from pfund.venues.ibkr import (
-        InteractiveBrokers,
-        InteractiveBrokers as IB,
-        InteractiveBrokers as IBKR,
-    )
-    from pfund.venues.hyperliquid import Hyperliquid
-    from pfund.venues.bybit import Bybit
-    from pfund.venues.binance import Binance
-    from pfund.venues.okx import OKX
-    from pfund.backtest.typing import PolarsBacktestDataFrame, PandasBacktestDataFrame
+    from pfund_bybit import Bybit
+
+    # from pfund_hyperliquid import Hyperliquid
+    # from pfund_binance import Binance
+    # from pfund_okx import OKX
+    import pfund.hub as hub
     from pfund.backtest.cv.cross_validation import CrossValidation
     from pfund.backtest.cv.holdout import Holdout
+    from pfund.backtest.typing import PandasBacktestDataFrame, PolarsBacktestDataFrame
     from pfund.components.features.feature_base import BaseFeature as Feature
     from pfund.components.features.feature_talib import (
         TALibIndicator,
-        TALibIndicator as TalibIndicator,
         TALibIndicator as Indicator,
+        TALibIndicator as TalibIndicator,
     )
     from pfund.components.models.model_base import BaseModel as Model
     from pfund.components.models.pytorch_model import (
         PyTorchModel,
         PyTorchModel as PytorchModel,
     )
-    from pfund.components.models.jax_model import (
-        JAXModel,
-        JAXModel as JaxModel,
-    )
     from pfund.components.models.sklearn_model import (
         SKLearnModel,
         SKLearnModel as SklearnModel,
     )
     from pfund.components.strategies.strategy_base import BaseStrategy as Strategy
-    from pfund.data_config import DataConfig
     from pfund.engines.backtest_engine import BacktestEngine
     from pfund.engines.sandbox_engine import SandboxEngine
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.engines.settings.sandbox_engine_settings import SandboxEngineSettings
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.engines.trade_engine import TradeEngine
-    from pfund.utils.aliases import ALIASES as alias  # noqa: N811
 
 from pfund.config import configure, configure_logging, get_config
 
@@ -56,22 +45,10 @@ def __getattr__(name: str):
         from importlib.metadata import version
 
         return version("pfund")
-    elif name == "alias":
-        from pfund.utils.aliases import ALIASES
-
-        return ALIASES
-    elif name == "plot":
-        import pfund_plot as plot
-
-        return plot
     elif name == "hub":
         import pfund.hub as hub
 
         return hub
-    elif name == "DataConfig":
-        from pfund.data_config import DataConfig
-
-        return DataConfig
     elif name == "BacktestEngine":
         from pfund.engines.backtest_engine import BacktestEngine
 
@@ -134,55 +111,53 @@ def __getattr__(name: str):
         from pfund.components.models.sklearn_model import SKLearnModel
 
         return SKLearnModel
-    elif name in ("JAXModel", "JaxModel"):
-        from pfund.components.models.jax_model import JAXModel
-
-        return JAXModel
     elif name in ("TALibIndicator", "TalibIndicator", "Indicator"):
         from pfund.components.features.feature_talib import TALibIndicator
 
         return TALibIndicator
-    elif name in ("InteractiveBrokers", "IBKR", "IB"):
-        from pfund.venues.ibkr import InteractiveBrokers
-
-        return InteractiveBrokers
     elif name == "Hyperliquid":
-        from pfund.venues.hyperliquid import Hyperliquid
-
-        return Hyperliquid
+        return _import_official_venue("pfund_hyperliquid", "Hyperliquid")
     elif name == "Binance":
-        from pfund.venues.binance import Binance
-
-        return Binance
+        return _import_official_venue("pfund_binance", "Binance")
     elif name == "Bybit":
-        from pfund.venues.bybit import Bybit
-
-        return Bybit
+        return _import_official_venue("pfund_bybit", "Bybit")
     elif name == "OKX":
-        from pfund.venues.okx import OKX
-
-        return OKX
+        return _import_official_venue("pfund_okx", "OKX")
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
-__all__ = (
-    "alias",
-    "plot",
+def _import_official_venue(module: str, venue: str):
+    """Imports an official trading venue class (e.g. pf.Bybit) from its plugin, e.g. module="pfund_bybit".
+
+    The install hint points to pfund's extra (e.g. "pfund[bybit]"), which pins a verified plugin version.
+    """
+    from pfund_kit.plugins import import_official_plugin
+
+    extra = module.removeprefix("pfund_")
+    return import_official_plugin(
+        module, venue, label=f"pf.{venue}", install=f'"pfund[{extra}]"'
+    )
+
+
+__all__ = (  # noqa: RUF022
     "hub",
     "configure",
     "get_config",
     "configure_logging",
-    "DataConfig",
-    "BacktestEngine",
+    # cv
     "Holdout",
     "CrossValidation",
-    "TradeEngine",
+    # engines
+    "BacktestEngine",
     "SandboxEngine",
+    "TradeEngine",
     "TradeEngineSettings",
     "SandboxEngineSettings",
     "BacktestEngineSettings",
+    # backtest dfs
     "PolarsBacktestDataFrame",
     "PandasBacktestDataFrame",
+    # components
     "Strategy",
     "Model",
     "Feature",
@@ -190,18 +165,11 @@ __all__ = (
     "PytorchModel",
     "SKLearnModel",
     "SklearnModel",
-    "JAXModel",
-    "JaxModel",
     "Indicator",
     "TalibIndicator",
     "TALibIndicator",
-    "InteractiveBrokers",
-    "IBKR",
-    "IB",
-    "Hyperliquid",
-    "Binance",
+    # trading venues
     "Bybit",
-    "OKX",
 )
 
 

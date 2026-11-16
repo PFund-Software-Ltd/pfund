@@ -72,9 +72,13 @@ pfund-bybit = { version = ">=0.0.3", extras = ["data"] }
 [feature.dev.pypi-dependencies]
 pfund = { path = ".", editable = true }
 afterpython = { version = ">=0.5.3", extras = ["marimo"] }
+vectorbt = { version = ">=1.2.1", env-markers = "python_version < '3.15'" }
 mtflow = { path = "../mtflow", editable = true }
 pfund-blocks = { path = '../pfund-blocks', editable = true }
 memray = ">=1.19.3"
+jax = ">=0.12.0.1"
+equinox = ">=0.13.8"
+flax = ">=0.12.12"
 
 [feature.dev.dependencies]
 graphviz = ">=14.1.2"
@@ -83,6 +87,7 @@ python-graphviz = ">=0.21"
 [feature.test.pypi-dependencies]
 pfund = { path = ".", editable = true }
 pandas = ">=3.1.1"
+vectorbt = { version = ">=1.2.1", env-markers = "python_version < '3.15'" }
 pytest = ">=9.2.0"
 pytest-mock = ">=3.17.0"
 pytest-xdist = ">=3.8.0"

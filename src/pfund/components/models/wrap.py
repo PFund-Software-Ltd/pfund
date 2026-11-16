@@ -20,7 +20,7 @@ def wrap_model(
 
     if isinstance(model, (ActorProxy, BaseModel)):
         return model
-    for wrap in (_wrap_sklearn, _wrap_pytorch, _wrap_jax):
+    for wrap in (_wrap_sklearn, _wrap_pytorch):
         if (pfund_model := wrap(model)) is not None:
             pfund_model._set_name(type(model).__name__)
             return cast("ModelT", pfund_model)
@@ -51,28 +51,30 @@ def _wrap_pytorch(model: object) -> BaseModel | None:
     return PyTorchModel(model)
 
 
-def _wrap_jax(model: object) -> BaseModel | None:
-    # jax comes in two flavors JAXModel handles: Flax (linen.Module) and Equinox (eqx.Module)
-    if not _is_jax_model(model):
-        return None
-    from pfund.components.models.jax_model import JAXModel
+# TODO: re-enable when jax is supported
+# def _wrap_jax(model: object) -> BaseModel | None:
+#     # jax comes in two flavors JAXModel handles: Flax (linen.Module) and Equinox (eqx.Module)
+#     if not _is_jax_model(model):
+#         return None
+#     from pfund.components.models._jax_model import JAXModel
+#
+#     return JAXModel(model)
 
-    return JAXModel(model)
 
-
-def _is_jax_model(model: object) -> bool:
-    try:
-        from flax import linen
-
-        if isinstance(model, linen.Module):
-            return True
-    except ImportError:
-        pass
-    try:
-        import equinox as eqx
-
-        if isinstance(model, eqx.Module):
-            return True
-    except ImportError:
-        pass
-    return False
+# TODO: re-enable when jax is supported
+# def _is_jax_model(model: object) -> bool:
+#     try:
+#         from flax import linen
+#
+#         if isinstance(model, linen.Module):
+#             return True
+#     except ImportError:
+#         pass
+#     try:
+#         import equinox as eqx
+#
+#         if isinstance(model, eqx.Module):
+#             return True
+#     except ImportError:
+#         pass
+#     return False
