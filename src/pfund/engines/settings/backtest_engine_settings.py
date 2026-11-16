@@ -1,10 +1,9 @@
 from decimal import Decimal
 
+from pfund_blocks.typing import Currency, ProductName, TradingVenue
 from pydantic import Field, field_validator
 
 from pfund.engines.settings.base_engine_settings import BaseEngineSettings
-from pfund.enums import TradingVenue
-from pfund_blocks.typing import Currency, ProductName
 
 
 class BacktestEngineSettings(BaseEngineSettings):
@@ -34,7 +33,7 @@ class BacktestEngineSettings(BaseEngineSettings):
         cls, v: dict[TradingVenue | str, dict[str, Decimal]]
     ):
         return {
-            TradingVenue[venue.upper()]: {
+            venue.upper(): {
                 ccy_or_pdt.upper(): Decimal(amount)
                 for ccy_or_pdt, amount in bal_or_pos.items()
             }

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, ClassVar, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 from typing_extensions import TypeVar
 
 if TYPE_CHECKING:
@@ -47,7 +47,7 @@ ContextT = TypeVar(
 
 
 class TradeEngine(BaseEngine[SettingsT, ContextT]):
-    Context: ClassVar[type[TradeEngineContext]] = TradeEngineContext
+    Context = TradeEngineContext
 
     def __init__(
         self,

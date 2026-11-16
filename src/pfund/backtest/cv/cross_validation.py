@@ -1,10 +1,34 @@
+# ruff: noqa: N803
 from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
+
+if TYPE_CHECKING:
+    from narwhals.typing import IntoDataFrame
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, cast
 
-from pfund.backtest.cv.base import CrossValidator
+from pfund.backtest.cv.cv_fold import CVFold
+from pfund.backtest.cv.indexing import expand_time_indices, resolve_time_spine
+
+
+@runtime_checkable
+class CrossValidator(Protocol):
+    """Minimal sklearn-compatible splitter interface."""
+
+    def get_n_splits(
+        self,
+        X: object | None = None,
+        y: object | None = None,
+        groups: object | None = None,
+    ) -> int: ...
+
+    # index arrays are typed Any: sklearn yields numpy ndarrays, and this is an
+    # external contract we adapt rather than own.
+    def split(
+        self, X: object, y: object | None = None, groups: object | None = None
+    ) -> Iterator[tuple[Any, Any]]: ...
 
 
 @dataclass(frozen=True)
@@ -73,3 +97,49 @@ class CrossValidation(CrossValidator):
     ) -> int:
         _ = X, y, groups
         return self.n_splits
+
+
+def resolve_folds(
+    X: IntoDataFrame,
+    cross_validator: CrossValidator,
+) -> tuple[CVFold, ...]:
+    """Resolve a cross-validator against the actual ordered timestamps in ``X``.
+
+    The cross-validator sees one sample per unique ``date`` value. Its time-level
+    selectors are then expanded into positional row selectors, keeping every row
+    at the same timestamp in the same side of a fold.
+    """
+    time_spine, row_time_indices = resolve_time_spine(
+        X,
+        operation="cross-validation",
+    )
+    num_times = len(time_spine)
+
+    folds: list[CVFold] = []
+    for index, (train_time_indices, val_time_indices) in enumerate(
+        cross_validator.split(time_spine)
+    ):
+        train_indices = expand_time_indices(
+            train_time_indices,
+            row_time_indices=row_time_indices,
+            num_times=num_times,
+            name="train indices",
+        )
+        val_indices = expand_time_indices(
+            val_time_indices,
+            row_time_indices=row_time_indices,
+            num_times=num_times,
+            name="validation indices",
+        )
+        folds.append(
+            CVFold(
+                index=index,
+                X=X,
+                train_indices=train_indices,
+                val_indices=val_indices,
+            )
+        )
+
+    if not folds:
+        raise ValueError("cross-validator produced no folds")
+    return tuple(folds)

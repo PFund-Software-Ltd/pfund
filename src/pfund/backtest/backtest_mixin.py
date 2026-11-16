@@ -16,8 +16,8 @@ if TYPE_CHECKING:
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund.typing import ComponentT, Signals, Component, ComponentName
-    from pfund.backtest.cv.dataset_split import DatasetSplit
-    from pfund.backtest.cv.fold import Fold
+    from pfund.backtest.cv.holdout_split import HoldoutSplit
+    from pfund.backtest.cv.cv_fold import CVFold
 
 from pathlib import Path
 
@@ -36,7 +36,7 @@ from pfund.components.bar_dataframe import (
     validate_spine_df,
 )
 from pfund.enums import BacktestMode
-from pfund.backtest.cv.indexing import DataT
+from pfund.backtest.cv.indexing import SplittableData
 
 
 class BacktestMixin:
@@ -46,8 +46,8 @@ class BacktestMixin:
         super().__mixin_post_init__(*args, **kwargs)
         # top components are the ones added by engine.add_strategy/model/feature()
         self._is_top_component = False
-        self._dataset_split: DatasetSplit | None = None
-        self._folds: tuple[Fold, ...] = ()
+        self._holdout_split: HoldoutSplit | None = None
+        self._folds: tuple[CVFold, ...] = ()
 
     @property
     def context(self) -> BacktestEngineContext:
@@ -63,7 +63,7 @@ class BacktestMixin:
         return self._context.mode
 
     @property
-    def folds(self) -> tuple[Fold, ...]:
+    def folds(self) -> tuple[CVFold, ...]:
         return self._folds
 
     @property
@@ -73,8 +73,8 @@ class BacktestMixin:
         Cross-validation has multiple training splits, so access them through
         ``fold.X_train`` instead.
         """
-        dataset_split = self._get_dataset_split()
-        return None if dataset_split is None else dataset_split.X_train
+        holdout_split = self._get_holdout_split()
+        return None if holdout_split is None else holdout_split.X_train
 
     @property
     def X_val(self) -> IntoDataFrame | None:
@@ -83,8 +83,8 @@ class BacktestMixin:
         Cross-validation has multiple validation splits, so access them through
         ``fold.X_val`` instead.
         """
-        dataset_split = self._get_dataset_split()
-        return None if dataset_split is None else dataset_split.X_val
+        holdout_split = self._get_holdout_split()
+        return None if holdout_split is None else holdout_split.X_val
 
     @property
     def X_test(self) -> IntoDataFrame | None:
@@ -92,28 +92,26 @@ class BacktestMixin:
 
         Cross-validation does not define a test split.
         """
-        dataset_split = self._get_dataset_split()
-        return None if dataset_split is None else dataset_split.X_test
+        holdout_split = self._get_holdout_split()
+        return None if holdout_split is None else holdout_split.X_test
 
     def _resolve_dataset_splits(self) -> None:
-        from pfund.backtest.cv.dataset_split import DatasetSplit
-        from pfund.backtest.cv.resolver import resolve_dataset_splits
+        from pfund.backtest.cv.cross_validation import resolve_folds
+        from pfund.backtest.cv.holdout_split import HoldoutSplit
+        from pfund.backtest.cv.holdout import Holdout, resolve_holdout
 
-        resolved = resolve_dataset_splits(
-            self.X,
-            self.context.dataset_splits,
-        )
-        if isinstance(resolved, DatasetSplit):
-            self._dataset_split = resolved
-            self._folds = ()
+        splits = self.context.dataset_splits
+        if splits is None:
+            self._holdout_split, self._folds = HoldoutSplit(self.X), ()
+        elif isinstance(splits, Holdout):
+            self._holdout_split, self._folds = resolve_holdout(self.X, splits), ()
         else:
-            self._dataset_split = None
-            self._folds = resolved
+            self._holdout_split, self._folds = None, resolve_folds(self.X, splits)
 
-    def _get_dataset_split(self) -> DatasetSplit | None:
-        if self._dataset_split is None and not self._folds:
+    def _get_holdout_split(self) -> HoldoutSplit | None:
+        if self._holdout_split is None and not self._folds:
             self._resolve_dataset_splits()
-        return self._dataset_split
+        return self._holdout_split
 
     @staticmethod
     def _validate_backtest_signature(
@@ -355,7 +353,7 @@ class BacktestMixin:
         # TODO: return the backtested dataframe, how?
         return df
 
-    def split(
+    def split[DataT: SplittableData](
         self,
         data: DataT,
     ) -> tuple[DataT | None, DataT | None, DataT | None]:
@@ -382,13 +380,13 @@ class BacktestMixin:
         Cross-validation has multiple splits, so call ``fold.split(data)`` on
         each item in ``component.folds`` instead.
         """
-        dataset_split = self._get_dataset_split()
-        if dataset_split is None:
+        holdout_split = self._get_holdout_split()
+        if holdout_split is None:
             raise ValueError(
                 "component.split() is undefined under cross-validation; "
                 + "iterate over component.folds and call fold.split(data)"
             )
-        return dataset_split.split(data)
+        return holdout_split.split(data)
 
     @override
     def _add_component(

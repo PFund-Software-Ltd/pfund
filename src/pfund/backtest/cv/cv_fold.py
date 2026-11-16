@@ -1,3 +1,4 @@
+# ruff: noqa: N802, N803
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -9,7 +10,7 @@ if TYPE_CHECKING:
 import numpy as np
 
 from pfund.backtest.cv.indexing import (
-    DataT,
+    SplittableData,
     normalize_indices,
     row_count,
     take_rows,
@@ -17,7 +18,7 @@ from pfund.backtest.cv.indexing import (
 )
 
 
-class Fold:
+class CVFold:
     """One resolved cross-validation train/validation split.
 
     A fold is bound to a materialized feature dataframe and stores only
@@ -83,7 +84,7 @@ class Fold:
     def X_val(self) -> IntoDataFrame:
         return take_rows(self._X, self._val_indices)
 
-    def split(self, data: DataT) -> tuple[DataT, DataT]:
+    def split[DataT: SplittableData](self, data: DataT) -> tuple[DataT, DataT]:
         """Apply this fold's selectors to data aligned row-for-row with ``X``."""
         validate_aligned(data, self._X)
         return (

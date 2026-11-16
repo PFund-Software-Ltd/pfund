@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, ClassVar, Any
+from typing import TYPE_CHECKING, Any, Literal
 from typing_extensions import override
 
 if TYPE_CHECKING:
@@ -17,7 +17,7 @@ from pfund.engines.contexts.sandbox_engine_context import SandboxEngineContext
 
 
 class SandboxEngine(TradeEngine[SandboxEngineSettings, SandboxEngineContext]):
-    Context: ClassVar[type[SandboxEngineContext]] = SandboxEngineContext
+    Context = SandboxEngineContext
     _context: SandboxEngineContext
     _venues: dict[TradingVenue, SandboxVenue]
 

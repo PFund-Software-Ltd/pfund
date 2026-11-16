@@ -1,3 +1,4 @@
+# ruff: noqa: N802, N803
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
@@ -9,7 +10,7 @@ if TYPE_CHECKING:
 import numpy as np
 
 from pfund.backtest.cv.indexing import (
-    DataT,
+    SplittableData,
     normalize_indices,
     row_count,
     take_rows,
@@ -17,11 +18,11 @@ from pfund.backtest.cv.indexing import (
 )
 
 
-class DatasetSplit:
+class HoldoutSplit:
     """One component-bound train/validation/test partition.
 
     With no positional selectors, the complete feature dataset is the training
-    set. Cross-validation is represented separately by ``Fold`` objects.
+    set. Cross-validation is represented separately by ``CVFold`` objects.
     """
 
     def __init__(
@@ -98,7 +99,7 @@ class DatasetSplit:
     def X_test(self) -> IntoDataFrame | None:
         return self._get_X_split(2)
 
-    def split(
+    def split[DataT: SplittableData](
         self,
         data: DataT,
     ) -> tuple[DataT, DataT | None, DataT | None]:

@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeAlias, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 if TYPE_CHECKING:
     from mtflow.tracking.run import MTFlowRun
     from narwhals.typing import IntoDataFrame
     from pfund_blocks.resolution import Resolution
 
+    from pfund.backtest.cv.dataset_splits import DatasetSplits
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel, UnderlyingModel
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.engines.base_engine import DataRangeDict
-    from pfund.engines.contexts.backtest_engine_context import DatasetSplits
     from pfund.typing import FeatureT, ModelT, StrategyT
 
-    BacktesteeName: TypeAlias = str
+    type BacktesteeName = str
 
 import os
 
@@ -75,7 +75,7 @@ def _split_df_into_time_chunks(
 
 
 class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
-    Context: ClassVar[type[BacktestEngineContext]] = BacktestEngineContext
+    Context = BacktestEngineContext
 
     def __init__(
         self,
@@ -89,7 +89,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         settings: BacktestEngineSettings | None = None,
         mode: BacktestMode
         | Literal["vectorized", "event_driven"] = BacktestMode.VECTORIZED,
-        dataset_splits: DatasetSplits = 721,
+        dataset_splits: DatasetSplits | None = None,
         # TODO:
         # profiling: bool=False,
     ):
@@ -106,10 +106,11 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 if not provided, settings.toml will be used.
                 if provided, will override the settings in settings.toml.
             dataset_splits:
-                None to use the complete dataset as training data, a three-digit
-                legacy ratio such as 721, a ratio dict, Holdout, or an
-                sklearn-compatible cross-validator. Dataset splitting is only
-                available in vectorized mode.
+                how to split the dataset into train/val/test sets, e.g. a
+                three-digit ratio such as 721, a ratio dict, Holdout, or an
+                sklearn-compatible cross-validator. Defaults to None (no split),
+                i.e. the complete dataset is the training data. Dataset
+                splitting is only available in vectorized mode.
         """
         env = Environment.BACKTEST
         mode = BacktestMode[mode.upper()]
@@ -132,7 +133,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
 
     @property
     def backtest_mode(self) -> BacktestMode:
-        return self._context.mode
+        return self.context.mode
 
     def add_strategy(
         self,
