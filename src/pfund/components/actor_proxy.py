@@ -1,18 +1,19 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Generic, cast
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from ray.actor import ActorClass, ActorHandle
 
     from pfund.engines.contexts.base_engine_context import BaseEngineContext
+    from pfund.typing import Component
 
 from pfund_blocks.resolution import Resolution
+
 from pfund.enums import ComponentType
-from pfund.typing import ComponentT
 
 
-class ActorProxy(Generic[ComponentT]):
+class ActorProxy[ComponentT: Component]:
     def __init__(
         self,
         component: ComponentT,
@@ -57,7 +58,9 @@ class ActorProxy(Generic[ComponentT]):
             self._actor = self._create_actor(
                 self._component, self._ray_actor_options, **self._ray_kwargs
             )
-            ray.get(getattr(self._actor, "_hydrate").remote(**self._hydrate_fields))
+            # NOTE: ray types ActorHandle.__getattr__ as Never, which makes the
+            # rest unreachable for type checkers, getattr() returns Any instead
+            ray.get(getattr(self._actor, "_hydrate").remote(**self._hydrate_fields))  # noqa: B009
         return self._actor
 
     def _hydrate(self, **kwargs: Any) -> None:
@@ -89,7 +92,8 @@ class ActorProxy(Generic[ComponentT]):
             ),
         )
         ray.get(
-            getattr(actor, "_set_source_artifact_path").remote(
+            # NOTE: getattr() for the same reason as in _ensure_actor()
+            getattr(actor, "_set_source_artifact_path").remote(  # noqa: B009
                 str(source_artifact_path)
             )
         )
