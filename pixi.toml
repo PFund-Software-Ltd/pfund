@@ -82,6 +82,7 @@ python-graphviz = ">=0.21"
 
 [feature.test.pypi-dependencies]
 pfund = { path = ".", editable = true }
+pandas = ">=3.1.1"
 pytest = ">=9.2.0"
 pytest-mock = ">=3.17.0"
 pytest-xdist = ">=3.8.0"

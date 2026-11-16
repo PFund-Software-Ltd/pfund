@@ -1,22 +1,27 @@
 """Bar-centric dataframe transformations and alignment.
 
-Bar dataframes use the canonical long-form key ``(date, product, resolution)``.
-A spine contains the receiving bar universe; contributors are aligned to it
-without being allowed to add rows. Precise events map to their containing bar,
-while bar contributors align by the time their bars become available.
+A spine defines the bars that other data can attach to:
+
+    date   | product | resolution | example event
+    -------|---------|------------|--------------
+    10:00  | BTC     | 1 minute   |
+    10:01  | BTC     | 1 minute   | news at 10:01:30
+    10:02  | BTC     | 1 minute   |
+
+The spine's key is ``(date, product, resolution)``. Other data is matched
+to the existing bars in this table.
 
 These operations are stateless. Callers must pass the spine explicitly.
 """
 
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import Any, Literal
 
+from datetime import timedelta
+
 import narwhals as nw
-
 from pfund_blocks.resolution import Resolution
-
 
 BarAlignmentMode = Literal["exact", "event", "asof"]
 
@@ -461,6 +466,11 @@ def _align_events(
     contributor = contributor_df.rename({time_col: source_time_col}).with_columns(
         nw.col(source_time_col).cast(spine_schema[INDEX_COL]).alias(source_time_col)
     )
+    # The bar's date and resolution come from the spine. A contributor's own
+    # columns with those names would shadow them in the as-of join.
+    contributor = contributor.drop(
+        [col for col in (INDEX_COL, "resolution") if col in contributor.columns]
+    )
     has_product = "product" in contributor.columns
     if has_product:
         contributor = contributor.with_columns(
@@ -523,11 +533,12 @@ def _align_events(
             )
         )
 
-    aligned = nw.concat(aligned_dfs, how="diagonal")
-    aligned = aligned.rename({source_time_col: time_col})
-    return aligned.select(KEY_COLS + value_cols).sort(
-        KEY_COLS + ([time_col] if time_col not in KEY_COLS else [])
-    )
+    aligned = nw.concat(aligned_dfs, how="diagonal").sort([*KEY_COLS, source_time_col])
+    # A time column named like a bar key (the default "date") is replaced by
+    # the bar's own key, so only a semantically named one is restored.
+    if time_col not in KEY_COLS:
+        aligned = aligned.rename({source_time_col: time_col})
+    return aligned.select(KEY_COLS + value_cols)
 
 
 def _join_events_to_intervals(
@@ -542,20 +553,21 @@ def _join_events_to_intervals(
     # join is partitioned with ``by``. Time-first sorting also leaves each
     # product partition ordered, which satisfies Polars.
     sort_cols = [source_time_col] + ([by] if by else [])
-    interval_sort_cols = [close_col] + ([by] if by else [])
+    interval_sort_cols = [INDEX_COL] + ([by] if by else [])
+    # Match each event to the latest bar that opened at or before it.
     aligned = events.sort(sort_cols).join_asof(
         intervals.sort(interval_sort_cols),
         left_on=source_time_col,
-        right_on=close_col,
+        right_on=INDEX_COL,
         by=by,
-        strategy="forward",
+        strategy="backward",
     )
-    # A forward as-of join could select the next bar across a market gap.
-    # Keep only events that actually fall inside the selected bar interval.
+    # A backward as-of join could select the previous bar across a market
+    # gap. Keep only events inside the half-open interval [open, next open),
+    # so sub-millisecond timestamps after the bar close still belong to it.
+    next_open = nw.col(close_col) + timedelta(milliseconds=1)
     return aligned.filter(
-        ~nw.col(INDEX_COL).is_null()
-        & (nw.col(source_time_col) >= nw.col(INDEX_COL))
-        & (nw.col(source_time_col) <= nw.col(close_col))
+        ~nw.col(INDEX_COL).is_null() & (nw.col(source_time_col) < next_open)
     )
 
 
