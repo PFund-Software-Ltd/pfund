@@ -11,12 +11,14 @@ if TYPE_CHECKING:
 import datetime
 
 import polars as pl
-from pfeed.base.data_handler import BaseDataHandler, BaseDataMetadata
+from pfeed.base.data_handler import BaseDataMetadata
 from pfeed.enums import DataCategory, DataLayer
 from pfeed.io.base_io import DatasetKey
 from pfund.enums import ArtifactType, ComponentType
 from pfund_blocks.enums.env import Environment
 from pydantic import BaseModel, Field
+
+from pfeed_pfund.base_data_handler import PFundBaseDataHandler
 
 
 # FIXME: restructure it in pfeed-pfund
@@ -70,7 +72,9 @@ class PFundComponentDataMetadata(BaseDataMetadata):
     run: RunMetadata
 
 
-class PFundComponentDataHandler(BaseDataHandler["PFundComponentDataModel", PFundComponentDataMetadata]):
+class PFundComponentDataHandler(
+    PFundBaseDataHandler["PFundComponentDataModel", PFundComponentDataMetadata]
+):
     """Persists pfund component artifacts on file-based storage.
 
     The artifact arrives already in its owner's currency — opaque bytes for
@@ -114,12 +118,18 @@ class PFundComponentDataHandler(BaseDataHandler["PFundComponentDataModel", PFund
         data_domain: str = DataCategory.COMPONENT_DATA,
         sink: Sink | None = None,
     ):
-        super().__init__(data_model, io, data_domain=data_domain, data_layer=data_layer, sink=sink)
+        super().__init__(
+            data_model, io, data_domain=data_domain, data_layer=data_layer, sink=sink
+        )
         # FIXME: BaseIO only stores frames, source/model/checkpoint artifacts are opaque bytes and need a bytes IO
         if data_model.artifact_type != ArtifactType.data:
-            raise NotImplementedError(f'storing {data_model.artifact_type} artifacts is not supported yet, no IO stores bytes')
+            raise NotImplementedError(
+                f"storing {data_model.artifact_type} artifacts is not supported yet, no IO stores bytes"
+            )
         if sink is not None:
-            raise NotImplementedError('storing streamed component data is not supported yet')
+            raise NotImplementedError(
+                "storing streamed component data is not supported yet"
+            )
 
     def _requires_partitioning(self) -> bool:
         """Partition standalone strategy backtests within one data artifact.
@@ -131,20 +141,23 @@ class PFundComponentDataHandler(BaseDataHandler["PFundComponentDataModel", PFund
         their existing unpartitioned layout.
         """
         data_model = self._data_model
-        return data_model.env == Environment.BACKTEST and data_model.component_type == ComponentType.strategy
+        return (
+            data_model.env == Environment.BACKTEST
+            and data_model.component_type == ComponentType.strategy
+        )
 
     def _create_dataset_key(self) -> DatasetKey:
         data_model = self._data_model
         return DatasetKey(
             namespace={
-                'env': str(data_model.env),
-                'project_name': data_model.project_name,
-                'run_name': data_model.run_name,
+                "env": str(data_model.env),
+                "project_name": data_model.project_name,
+                "run_name": data_model.run_name,
             },
             name={
-                'component_type': str(data_model.component_type),
-                'component_id': data_model.component_id,
-                'artifact_type': str(data_model.artifact_type),
+                "component_type": str(data_model.component_type),
+                "component_id": data_model.component_id,
+                "artifact_type": str(data_model.artifact_type),
             },
             partition_by=(self.CHUNK_COL,) if self._requires_partitioning() else (),
         )
@@ -153,20 +166,28 @@ class PFundComponentDataHandler(BaseDataHandler["PFundComponentDataModel", PFund
         if not self._requires_partitioning():
             return df
         if self.CHUNK_COL not in df.columns:
-            raise ValueError(f"BACKTEST strategy data is missing the required partition column '{self.CHUNK_COL}'")
+            raise ValueError(
+                f"BACKTEST strategy data is missing the required partition column '{self.CHUNK_COL}'"
+            )
         chunk_num = df.get_column(self.CHUNK_COL)
         if not chunk_num.dtype.is_integer():
-            raise TypeError(f"BACKTEST strategy data column '{self.CHUNK_COL}' must have an integer dtype, got {chunk_num.dtype}")
+            raise TypeError(
+                f"BACKTEST strategy data column '{self.CHUNK_COL}' must have an integer dtype, got {chunk_num.dtype}"
+            )
         if chunk_num.null_count() > 0:
-            raise ValueError(f"BACKTEST strategy data column '{self.CHUNK_COL}' cannot contain nulls")
-        if not chunk_num.is_empty() and cast('int', chunk_num.min()) < 0:
-            raise ValueError(f"BACKTEST strategy data column '{self.CHUNK_COL}' cannot contain negative values")
+            raise ValueError(
+                f"BACKTEST strategy data column '{self.CHUNK_COL}' cannot contain nulls"
+            )
+        if not chunk_num.is_empty() and cast("int", chunk_num.min()) < 0:
+            raise ValueError(
+                f"BACKTEST strategy data column '{self.CHUNK_COL}' cannot contain negative values"
+            )
         return df
 
     def _create_metadata(self) -> PFundComponentDataMetadata:
         metadata = self._data_model.metadata
         if metadata is None:
-            raise ValueError('component metadata is required when writing an artifact')
+            raise ValueError("component metadata is required when writing an artifact")
         return metadata
 
     def write_batch(self, df: pl.DataFrame) -> None:
@@ -179,15 +200,25 @@ class PFundComponentDataHandler(BaseDataHandler["PFundComponentDataModel", PFund
         df = self._validate_schema(df)
         metadata = self._create_metadata()
         if self._requires_partitioning():
-            partitions: set[Partition] = {(chunk_num,) for chunk_num in df.get_column(self.CHUNK_COL).unique()}
+            partitions: set[Partition] = {
+                (chunk_num,) for chunk_num in df.get_column(self.CHUNK_COL).unique()
+            }
         else:
             partitions = {()}
         if self._data_model.env == Environment.BACKTEST:
             # existing partitions not in df are written as empty partitions, i.e. their rows are deleted
             _, existing = self._read()
-            self._write(df, {partition: metadata for partition in partitions | existing.keys()}, mode='replace')
+            self._write(
+                df,
+                {partition: metadata for partition in partitions | existing.keys()},
+                mode="replace",
+            )
         else:
-            self._write(df, {partition: metadata for partition in partitions}, mode='append')
+            self._write(
+                df, {partition: metadata for partition in partitions}, mode="append"
+            )
 
-    def read(self) -> tuple[pl.LazyFrame | None, dict[Partition, PFundComponentDataMetadata]]:
+    def read(
+        self,
+    ) -> tuple[pl.LazyFrame | None, dict[Partition, PFundComponentDataMetadata]]:
         return self._read()

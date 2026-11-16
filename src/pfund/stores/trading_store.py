@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 if TYPE_CHECKING:
     from datetime import timedelta
 
+    from pfeed.io.table_io import TableIO
     from deltalake.table import FilterConjunctionType
     from deltalake.transaction import CommitProperties, PostCommitHookProperties
     from deltalake.writer.properties import WriterProperties
@@ -13,13 +14,11 @@ if TYPE_CHECKING:
     from pfeed.sources.pfund.component_feed import PFundComponentFeed
     from pfeed.sources.pfund.component_metadata import PFundComponentDataMetadata
     from pfeed.dataflow.result import RunResult
-    from pfeed.storages.base_storage import BaseStorage
 
     from pfund.datas import BarData
     from pfund.typing import Component, Signals, ColumnName
 
 import narwhals as nw
-from pfeed.storages.storage_config import StorageConfig
 
 from pfund.components.bar_dataframe import KEY_COLS
 from pfund.enums import ArtifactType
@@ -48,8 +47,8 @@ class TradingStore:
         return self._component.logger
 
     @property
-    def storage_config(self) -> StorageConfig:
-        return self._component.context.datalake_storage_config
+    def datalake(self) -> TableIO:
+        return self._component.context.datalake
 
     def setup_lakehouse(self) -> None:
         storage_config = self.storage_config

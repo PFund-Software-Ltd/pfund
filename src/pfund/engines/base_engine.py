@@ -1,29 +1,23 @@
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportArgumentType=false
 from __future__ import annotations
 
 from typing import (
     TYPE_CHECKING,
     Any,
-    cast,
-    TypeVar,
-    Generic,
-    TypedDict,
     ClassVar,
-    Required,
     NotRequired,
+    Required,
+    TypedDict,
+    cast,
 )
 
-
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from mtflow.tracking.run import MTFlowRun
     from pfund_kit.logging.loggers import ColoredLogger
-    from pfeed.utils.file_path import FilePath
 
     from pfund.components.actor_proxy import ActorProxy
     from pfund.components.strategies.strategy_base import BaseStrategy
-    from pfund.typing import StrategyT, ComponentName
+    from pfund.engines.settings.base_engine_settings import BaseEngineSettings
+    from pfund.typing import ComponentName, StrategyT
 
     class DataRangeDict(TypedDict, total=False):
         start_date: Required[str]
@@ -32,15 +26,12 @@ if TYPE_CHECKING:
 
 import logging
 
+from pfund_blocks.enums.env import Environment
 from pfund_kit.style import RichColor, TextStyle
 
+from pfund.engines.contexts.base_engine_context import BaseEngineContext
 from pfund.engines.engine_meta import EngineMeta
 from pfund.enums import ComponentType, RunMode
-from pfund_blocks.enums.env import Environment
-from pfund.engines.contexts.base_engine_context import BaseEngineContext, SettingsT
-
-
-ContextT = TypeVar("ContextT", bound="BaseEngineContext[Any]")
 
 _ENV_COLORS: dict[Environment, str] = {
     Environment.BACKTEST: TextStyle.BOLD + RichColor.BLUE,
@@ -50,7 +41,10 @@ _ENV_COLORS: dict[Environment, str] = {
 }
 
 
-class BaseEngine(Generic[SettingsT, ContextT], metaclass=EngineMeta):
+class BaseEngine[
+    SettingsT: BaseEngineSettings,
+    ContextT: BaseEngineContext[Any],
+](metaclass=EngineMeta):
     Context: ClassVar[type[BaseEngineContext[Any]]] = BaseEngineContext
 
     def __init__(self, **kwargs: Any):
@@ -160,111 +154,25 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=EngineMeta):
             df_form="long",
         )
 
-        self._strategies[strat] = strategy
+        # ActorProxy is invariant in its component type, so widen explicitly
+        self._strategies[strat] = cast(
+            "BaseStrategy | ActorProxy[BaseStrategy]", strategy
+        )
         self._logger.debug(f"added '{strat}'")
         return strategy
 
     def get_strategy(self, name: str) -> BaseStrategy | ActorProxy[BaseStrategy]:
         return self._strategies[name]
 
-    @staticmethod
-    def _create_run_path(
-        *,
-        data_path: Path,
-        env: Environment,
-        project_name: str,
-        run_name: str,
-    ) -> Path:
-        return (
-            data_path / "runs" / f"env={env}" / project_name.lower() / run_name.lower()
-        )
-
-    def _clear_run_path(self, *, confirm: bool = False) -> None:
-        from pathlib import Path
-
-        import pyarrow.fs as pa_fs
-
-        from pfeed.storages.file_based_storage import FileBasedStorage
-
-        storage_config = self.context.datalake_storage_config
-        Storage = DataStorage[storage_config.storage].storage_class
-        storage = Storage.from_storage_config(storage_config)
-
-        if not isinstance(storage, FileBasedStorage):
-            raise TypeError(f"Cannot clear a filesystem run path using {storage.name}")
-
-        run_path = self._create_run_path(
-            data_path=Path(cast("FilePath", storage.data_path).schemeless),
-            env=self.env,
-            project_name=self.context.project_name,
-            run_name=self.context.run_name,
-        )
-
-        filesystem = storage.get_filesystem()
-        file_info = filesystem.get_file_info(str(run_path))
-
-        if file_info.type == pa_fs.FileType.NotFound:
-            return
-
-        if file_info.type != pa_fs.FileType.Directory:
-            raise RuntimeError(f"Run path is not a directory: {run_path}")
-
-        if confirm:
-            self._confirm_clear_run_path(run_path)
-
-        filesystem.delete_dir(str(run_path))
-        self._logger.debug(f"cleared existing run path: {run_path}")
-
-    def _confirm_clear_run_path(self, run_path: Path) -> None:
-        import signal
-
-        from rich.markup import escape
-        from rich.prompt import Prompt
-
-        class _OverwriteCancelled(Exception):
-            pass
-
-        def _handle_sigint(_signum, _frame):
-            raise _OverwriteCancelled
-
-        previous_sigint_handler = signal.getsignal(signal.SIGINT)
-        signal.signal(signal.SIGINT, _handle_sigint)
-        try:
-            choice = Prompt.ask(
-                (
-                    "\n[bold red]WARNING:[/] engine's run(overwrite=True) will permanently delete "
-                    "the whole run folder:\n\n"
-                    f"  {escape(str(run_path))}\n\n"
-                    "This includes all component artifacts (e.g. models).\n\n"
-                    "\\[y] Clear this time\n"
-                    "\\[n] Cancel\n"
-                    "\\[d] Clear and disable this warning in settings.toml"
-                ),
-                choices=["y", "n", "d"],
-                case_sensitive=False,
-                default="n",
-                show_choices=False,
-            ).lower()
-        except _OverwriteCancelled:
-            choice = "n"
-        finally:
-            signal.signal(signal.SIGINT, previous_sigint_handler)
-
-        if choice == "n":
-            print("\nRun cancelled; the existing run folder was not cleared")
-            raise SystemExit(0)
-
-        if choice == "d":
-            self.settings.warn_overwrite = False
-            self.settings.save(self.name, self.env)
-
     def run(self, *, overwrite: bool = True, run: MTFlowRun | None = None):
         if self.is_running():
             raise RuntimeError("Engine is already running")
-        try:
-            import mtflow
-        except ImportError:
-            mtflow = None
+        # try:
+        #     import mtflow
+        # except ImportError:
+        #     mtflow = None
+        # TODO: re-enable mtflow
+        mtflow = None
         if overwrite:
             if mtflow:
                 self._logger.warning(
@@ -272,7 +180,9 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=EngineMeta):
                     + "(every mtflow run gets its own folder, so there is nothing to overwrite)"
                 )
             else:
-                self._clear_run_path(confirm=self.settings.warn_overwrite)
+                # TODO: moved to base_data_handler.py
+                # self._clear_run_path(confirm=self.settings.warn_overwrite)
+                pass
         run = run or (mtflow.get_run() if mtflow else None)
         if run is not None:
             assert mtflow is not None
@@ -283,8 +193,9 @@ class BaseEngine(Generic[SettingsT, ContextT], metaclass=EngineMeta):
                 data_path=str(self._context.datalake_storage_config.data_path)
             )
             client.set_env(self.env)
-            self._context.set_project_name(run.project)
-            self._context.set_run_name(run.name)
+            # TODO: removed these 2 functions, should use data handler
+            # self._context.set_project_name(run.project)
+            # self._context.set_run_name(run.name)
         self._logger.warning(
             f"{self.env} {self.name} is running (data_range=({self._context.data_start}, {self._context.data_end}))",
             style=_ENV_COLORS[self.env],

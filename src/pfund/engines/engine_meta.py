@@ -16,7 +16,7 @@ class EngineMeta(SingletonMeta):
     written to settings.toml before the error is raised.
     """
 
-    def __call__(cls, *args: Any, **kwargs: Any):
+    def __call__(cls, *args: Any, **kwargs: Any):  # noqa: N805
         # Same class is fine: SingletonMeta returns the cached instance, and
         # rebuilds it in a notebook where re-running a cell is expected to.
         other = next((klass for klass in cls._instances if klass is not cls), None)

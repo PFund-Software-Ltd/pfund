@@ -1,17 +1,15 @@
-# pyright: reportUninitializedInstanceVariable=false, reportUnsafeMultipleInheritance=false, reportIncompatibleVariableOverride=false, reportAssignmentType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeAlias, cast
 
 if TYPE_CHECKING:
-    from narwhals.typing import IntoDataFrame
-
     from mtflow.tracking.run import MTFlowRun
+    from narwhals.typing import IntoDataFrame
+    from pfund_blocks.resolution import Resolution
 
+    from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel, UnderlyingModel
     from pfund.components.strategies.strategy_base import BaseStrategy
-    from pfund.components.features.feature_base import BaseFeature
-    from pfund_blocks.resolution import Resolution
     from pfund.engines.base_engine import DataRangeDict
     from pfund.engines.contexts.backtest_engine_context import DatasetSplits
     from pfund.typing import FeatureT, ModelT, StrategyT
@@ -22,13 +20,13 @@ import os
 
 import narwhals as nw
 import numpy as np
+from pfund_blocks.enums.env import Environment
 from pfund_kit.utils.progress_bar import ProgressBar
 
 from pfund.engines.base_engine import BaseEngine
 from pfund.engines.contexts.backtest_engine_context import BacktestEngineContext
 from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
 from pfund.enums import BacktestMode
-from pfund_blocks.enums.env import Environment
 
 
 def _split_df_into_time_chunks(

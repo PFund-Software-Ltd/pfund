@@ -4,7 +4,6 @@ from pydantic import Field, field_serializer, field_validator
 
 from pfund.engines.settings.base_engine_settings import BaseEngineSettings
 from pfund.utils.ray_dict import RayCompatibleDict
-from pfund.enums import Database
 
 
 class TradeEngineSettings(BaseEngineSettings):

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
+
+from pathlib import Path
 
 from pfund_blocks.enums.env import Environment
 from pfund_kit import logging as kit_logging
@@ -39,7 +40,9 @@ def setup_logging(
     # derive a logger (i.e. a log file) per installed trading venue, e.g. "pfund.bybit", unless logging.yaml has it
     for venue in list_venues():
         loggers.setdefault(f"pfund.{venue.lower()}", dict(loggers["pfund"]))
-    kit_logging.setup_logging(config, env=env, reset=reset, logging_config=logging_config)
+    kit_logging.setup_logging(
+        config, env=env, reset=reset, logging_config=logging_config
+    )
 
 
 def get_config() -> PFundConfig:

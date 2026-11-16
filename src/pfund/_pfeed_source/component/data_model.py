@@ -5,24 +5,21 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, assert_never
 if TYPE_CHECKING:
     from pfund.typing import Component
 
-from pfeed.base.data_model import BaseDataModel
 from pfund.enums import ArtifactType, ComponentType
 from pfund_blocks.enums.env import Environment
 from pydantic import Field, field_validator
 
+from pfeed_pfund.base_data_model import PFundBaseDataModel
 from pfeed_pfund.component.data_handler import (
     PFundComponentDataHandler,
     PFundComponentDataMetadata,
 )
 
 
-class PFundComponentDataModel(BaseDataModel):
+class PFundComponentDataModel(PFundBaseDataModel):
     DataHandler: ClassVar[type[PFundComponentDataHandler]] = PFundComponentDataHandler
 
     artifact_type: ArtifactType
-    env: Environment
-    project_name: str
-    run_name: str
     component_type: ComponentType
     component_id: str
     # the component snapshot stored with the artifact, set when downloading, None when retrieving
@@ -70,7 +67,9 @@ class PFundComponentDataModel(BaseDataModel):
             case ArtifactType.data:
                 return DataArtifact(**artifact_kwargs)
             case ArtifactType.source:
-                return SourceArtifact(filename=component._source_artifact.name, **artifact_kwargs)
+                return SourceArtifact(
+                    filename=component._source_artifact.name, **artifact_kwargs
+                )
             case ArtifactType.checkpoint:
                 from pfund.components.models.jax_model import JAXModel
                 from pfund.components.models.pytorch_model import PyTorchModel
@@ -82,8 +81,12 @@ class PFundComponentDataModel(BaseDataModel):
                 elif isinstance(component, JAXModel):
                     extension = ".pkl"
                 else:
-                    raise ValueError(f"Unsupported checkpoint model type: {type(component)}")
-                return CheckpointArtifact(extension=extension, step=checkpoint_step, **artifact_kwargs)
+                    raise ValueError(
+                        f"Unsupported checkpoint model type: {type(component)}"
+                    )
+                return CheckpointArtifact(
+                    extension=extension, step=checkpoint_step, **artifact_kwargs
+                )
             case _:
                 assert_never(artifact_type)
 
@@ -106,19 +109,6 @@ class PFundComponentDataModel(BaseDataModel):
         if isinstance(v, str):
             return ArtifactType[v.lower()]
         return v
-
-    @field_validator("env", mode="before")
-    @classmethod
-    def _validate_env(cls, v: str | Environment) -> Environment:
-        if isinstance(v, str):
-            return Environment(v.upper())
-        return v
-
-    # also lowered by PFundBaseRequest, here too since create_data_model() doesn't go through a request
-    @field_validator("project_name", "run_name", mode="before")
-    @classmethod
-    def _lower_names(cls, value: str) -> str:
-        return value.lower()
 
     @field_validator("component_type", mode="before")
     @classmethod

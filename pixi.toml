@@ -73,6 +73,7 @@ pfund-bybit = { version = ">=0.0.3", extras = ["data"] }
 pfund = { path = ".", editable = true }
 afterpython = { version = ">=0.5.3", extras = ["marimo"] }
 mtflow = { path = "../mtflow", editable = true }
+pfund-blocks = { path = '../pfund-blocks', editable = true }
 memray = ">=1.19.3"
 
 [feature.dev.dependencies]

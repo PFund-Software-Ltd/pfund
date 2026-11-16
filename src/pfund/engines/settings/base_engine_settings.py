@@ -5,11 +5,10 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self
 if TYPE_CHECKING:
     from pathlib import Path
 
-from pydantic import ConfigDict, Field, field_validator
-from pfund_kit.settings import Settings
-
-from pfund.enums import DataLake
+from pfeed.io.table_io import TableIO
 from pfund_blocks.enums.env import Environment
+from pfund_kit.settings import Settings
+from pydantic import ConfigDict, Field, field_validator
 
 
 class BaseEngineSettings(Settings):
@@ -17,22 +16,15 @@ class BaseEngineSettings(Settings):
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
-    datalake: DataLake | str = Field(
-        default=DataLake.DELTALAKE,
-        description="data lake for writing and appending component data",
-    )
-    datalake_path: str | None = Field(
+    # excluded: an IO instance can't be written to settings.toml
+    datalake: TableIO | None = Field(
         default=None,
+        exclude=True,
         description=(
-            "data lake path, such as /data/pfund or s3://bucket/prefix. "
-            + "Unset means the engine's data_path, resolved on every run so it "
-            + "follows a later pf.configure(data_path=...)."
+            "data lake for writing and appending component data, e.g. pe.DuckLakeIO(base_path=...). "
+            + "Unset means pe.DuckLakeIO under the engine's data_path. Not persisted to settings.toml."
         ),
     )
-    # datalake_storage_options: dict[str, Any] = Field(
-    #     default_factory=dict,
-    #     description="non-secret options passed to the data lake storage backend",
-    # )
     persist: bool = Field(
         default=False,
         description="""
@@ -74,21 +66,13 @@ class BaseEngineSettings(Settings):
     def _validate_file(cls, data: dict[str, Any]) -> None:
         # One version covers every environment. Validate all sections before
         # advancing it, including environments not being loaded by this call.
-        from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
-        from pfund.engines.settings.sandbox_engine_settings import SandboxEngineSettings
-        from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
+        from pfund.engines.settings import ENGINE_SETTINGS
 
-        models = {
-            Environment.BACKTEST: BacktestEngineSettings,
-            Environment.SANDBOX: SandboxEngineSettings,
-            Environment.PAPER: TradeEngineSettings,
-            Environment.LIVE: TradeEngineSettings,
-        }
         for env, fields in data.items():
-            if env not in models:
+            if env not in ENGINE_SETTINGS:
                 raise ValueError(f"Unknown engine settings section {env!r}")
             try:
-                models[env].model_validate(fields)
+                ENGINE_SETTINGS[env].model_validate(fields)
             except ValueError as error:
                 raise ValueError(f"Invalid settings for {env}: {error}") from error
 
@@ -112,11 +96,4 @@ class BaseEngineSettings(Settings):
     def _normalize_cache_materialized_data(cls, v: Any) -> bool | str:
         if isinstance(v, str):
             return v.lower()
-        return v
-
-    @field_validator("datalake", mode="before")
-    @classmethod
-    def _validate_datalake(cls, v: DataLake | str) -> DataLake:
-        if not isinstance(v, DataLake):
-            return DataLake[v.upper()]
         return v

@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from pfund.stores.base_data_store import BaseDataStore
     from pfund.stores.market_data_store import MarketDataStore
     from pfund_blocks.enums.timeframe import Timeframe
+    from pfund.engines.contexts.base_engine_context import BaseEngineContext
     from pfund.engines.contexts.trade_engine_context import TradeEngineContext
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund_blocks.entities.products.product_base import BaseProduct
@@ -77,7 +78,7 @@ class ComponentMixin:
         self._run_mode: RunMode | None = None
         self._df_form: Literal["wide", "long"] | None = None
         self._resolution: Resolution | None = None
-        self._context: TradeEngineContext | None = None
+        self._context: BaseEngineContext[Any] | None = None
         self._source_artifact_path: Path | None = None
 
         self.logger: logging.Logger = logging.getLogger("pfund")
@@ -117,7 +118,8 @@ class ComponentMixin:
     @property
     def context(self) -> TradeEngineContext:
         assert self._context is not None, "context is not set"
-        return self._context
+        # backtesting overrides this to return BacktestEngineContext (see backtest_mixin.py)
+        return cast("TradeEngineContext", self._context)
 
     @property
     def settings(self) -> TradeEngineSettings:
@@ -160,7 +162,7 @@ class ComponentMixin:
         name: ComponentName,
         run_mode: RunMode,
         resolution: Resolution | str,
-        engine_context: TradeEngineContext,
+        engine_context: BaseEngineContext[Any],
         df_form: Literal["wide", "long"],
     ):
         """
@@ -170,7 +172,7 @@ class ComponentMixin:
             name (ComponentName): The name to assign to this component.
             run_mode (RunMode): The mode in which the component will run (e.g., local or remote).
             resolution (Resolution | str): The data resolution used by this component.
-            engine_context (TradeEngineContext): The engine context associated with this component. It is None if the component is running in a remote process.
+            engine_context (BaseEngineContext): The engine context associated with this component. It is None if the component is running in a remote process.
             df_form: DataFrame layout used by this component.
         """
         self._context = engine_context
