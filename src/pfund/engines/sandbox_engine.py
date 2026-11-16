@@ -1,4 +1,3 @@
-# pyright: reportIncompatibleVariableOverride=false
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal, ClassVar, Any
@@ -47,7 +46,7 @@ class SandboxEngine(TradeEngine[SandboxEngineSettings, SandboxEngineContext]):
                 if provided, will override the settings in settings.toml.
         """
         super().__init__(
-            env=Environment.SANDBOX,  # pyright: ignore[reportArgumentType]
+            env=Environment.SANDBOX,
             name=name,
             data_range=data_range,
             settings=settings,

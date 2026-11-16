@@ -1,4 +1,3 @@
-# pyright: reportUnknownParameterType=false
 from __future__ import annotations
 
 from typing import Any
@@ -6,7 +5,7 @@ from typing import Any
 from pfund.components.strategies.strategy_base import BaseStrategy
 
 
-class _DummyStrategy(BaseStrategy):  # pyright: ignore[reportUnusedClass]
+class _DummyStrategy(BaseStrategy):
     # add event driven functions to dummy strategy to avoid NotImplementedError in backtesting
     def on_quote(self, *args: Any, **kwargs: Any):
         pass

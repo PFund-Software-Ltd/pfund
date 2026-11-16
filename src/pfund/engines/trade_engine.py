@@ -1,4 +1,3 @@
-# pyright: reportArgumentType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal, ClassVar, cast
@@ -141,7 +140,9 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
 
         is_using_zmq = self._is_using_zmq()
         # NOTE: with zmq, the components receive the data on the data engine's XPUB, otherwise via the callback (with or without Ray)
-        self._data_engine = pe.DataEngine(callback=None if is_using_zmq else _collect_msg)
+        self._data_engine = pe.DataEngine(
+            callback=None if is_using_zmq else _collect_msg
+        )
 
         if is_using_zmq:
             # set up publishing for data engine
@@ -203,7 +204,9 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
             if data.category == DataCategory.MARKET_DATA:
                 market_data = cast("MarketData", data)
                 self._proxy.register_codec(
-                    MarketDataModel.create_zmq_channel(market_data.product, market_data.resolution),
+                    MarketDataModel.create_zmq_channel(
+                        market_data.product, market_data.resolution
+                    ),
                     MarketDataModel.StreamMessage,
                     MarketDataModel.enc_hook,
                     MarketDataModel.dec_hook,

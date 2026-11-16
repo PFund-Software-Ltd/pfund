@@ -83,7 +83,7 @@ class ActorProxy(Generic[ComponentT]):
         actor = cast(
             "ActorHandle[ComponentT]",
             (
-                ComponentActor.options(**ray_actor_options).remote(  # pyright: ignore[reportUnknownMemberType]
+                ComponentActor.options(**ray_actor_options).remote(
                     *component.__pfund_args__, **component.__pfund_kwargs__
                 )
             ),

@@ -1,4 +1,3 @@
-# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportAttributeAccessIssue=false, reportArgumentType=false, reportUnknownArgumentType=false, reportOptionalMemberAccess=false, reportConstantRedefinition=false
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal, cast

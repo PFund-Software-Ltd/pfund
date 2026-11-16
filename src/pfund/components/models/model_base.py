@@ -1,4 +1,3 @@
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false, reportArgumentType=false, reportUnknownParameterType=false
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -129,7 +128,7 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             dict[ColumnName, Any]: The predicted signals.
         """
         pred: Tensor | NDArray[Any] = self.predict(X)
-        if pred is None:  # pyright: ignore[reportUnnecessaryComparison]
+        if pred is None:
             raise ValueError(
                 f"{self.name} predict() returned None, did you forget the return statement?"
             )

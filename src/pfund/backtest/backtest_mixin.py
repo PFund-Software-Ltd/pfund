@@ -1,4 +1,3 @@
-# pyright: reportUninitializedInstanceVariable=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false, reportArgumentType=false, reportUnusedParameter=false, reportUnknownParameterType=false, reportUnknownArgumentType=false, reportGeneralTypeIssues=false
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -338,7 +337,7 @@ class BacktestMixin:
             bar_style=RichColor.BRIGHT_YELLOW,
             disable=not self.context.config.show_progress_bar,
         ):
-            ts, resolution, product_name, source_type, o, h, l, c, v = row  # pyright: ignore[reportUnusedVariable]  # noqa: E741
+            ts, resolution, product_name, source_type, o, h, l, c, v = row
             data = cast("BarData", self.get_data(product_name, resolution))
             update: BarUpdate = {
                 "ts": ts,

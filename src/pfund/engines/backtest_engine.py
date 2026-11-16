@@ -451,7 +451,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                         for batch_num, batch in enumerate(batches):
                             futures = [
                                 ray_task.remote(
-                                    log_queue=log_queue,  # pyright: ignore[reportCallIssue]
+                                    log_queue=log_queue,
                                     backtestee_ref=backtestee_ref,
                                     df_chunk=df_chunk,
                                     chunk_num=chunk_num,

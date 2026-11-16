@@ -1,4 +1,3 @@
-# pyright: reportAttributeAccessIssue=false, reportUnknownVariableType=false, reportUnknownParameterType=false, reportUnknownMemberType=false, reportUnknownArgumentType=false
 from __future__ import annotations
 
 from collections.abc import Callable

@@ -1,4 +1,3 @@
-# pyright: reportAttributeAccessIssue=false, reportUnknownMemberType=false, reportFunctionMemberAccess=false, reportUnknownArgumentType=false
 from __future__ import annotations
 
 from typing import Any, Callable, Literal

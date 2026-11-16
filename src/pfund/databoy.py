@@ -1,4 +1,3 @@
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownVariableType=false, reportAssignmentType=false, reportArgumentType=false, reportUnnecessaryComparison=false
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias
@@ -171,12 +170,16 @@ class DataBoy:
                         account=account,
                         channel=channel,
                     )
-                    self._data_zmq.receiver.setsockopt(zmq.SUBSCRIBE, zmq_channel.encode())
+                    self._data_zmq.receiver.setsockopt(
+                        zmq.SUBSCRIBE, zmq_channel.encode()
+                    )
 
         # subscribe to data channels: quote, tick, bar, etc.
         for data in self._component.get_datas():
             if isinstance(data, MarketData):
-                zmq_channel = MarketDataModel.create_zmq_channel(data.product, data.resolution)
+                zmq_channel = MarketDataModel.create_zmq_channel(
+                    data.product, data.resolution
+                )
                 # NOTE: decodes the data engine's market data back into Bar/Tick, other channels (e.g. private ones) stay untyped
                 self._data_zmq.register_codec(
                     zmq_channel,

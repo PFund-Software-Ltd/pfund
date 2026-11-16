@@ -70,7 +70,7 @@ class BaseDataStore(ABC, Generic[DataT, FeedT]):
     def _create_feed(self, data: DataT) -> FeedT:
         import pfeed as pe
 
-        return pe.get_feed(  # pyright: ignore[reportReturnType]
+        return pe.get_feed(
             data.source,
             data.category,
             pipeline_mode=True,
