@@ -8,7 +8,7 @@ from typing_extensions import override
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
 
-    from pfund_blocks.enums.timeframe import Timeframe
+    from pfund_blocks.resolution import Resolution
     from pfund.datas.data_base import BaseData
     from pfund.datas.data_bar import BarData
     from pfund.stores.market_data_store import BarUpdate
@@ -513,13 +513,11 @@ class BacktestMixin:
             return super()._gather()
 
     @override
-    def _get_supported_resolutions(
-        self, product: BaseProduct
-    ) -> dict[Timeframe, list[int]]:
+    def _get_streaming_resolutions(self, product: BaseProduct) -> list[Resolution]:
         """Gets supported resolutions for the product based on the trading venue.
         Overrides it in backtesting, supports only the primary resolution.
         """
-        return {self.resolution.timeframe: [self.resolution.period]}
+        return [self.resolution]
 
     def _merge_signals_dfs(self) -> nw.DataFrame[Any]:
         """Build this component's historical feature frame.

@@ -1,39 +1,40 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
-from typing_extensions import override
+from typing import TYPE_CHECKING, Any, Literal, override
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
+    from pfund_blocks.entities import BaseBalance, BasePosition, BaseProduct
+    from pfund_blocks.typing import AccountName, Currency, ProductName, TradingVenue
 
     from pfund.components.actor_proxy import ActorProxy
-    from pfund_blocks.entities.accounts.account_base import BaseAccount
-    from pfund.entities.balances.balance_base import BaseBalance
-    from pfund.entities.positions.position_base import BasePosition
-    from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund.engines.trade_engine import TradeEngine
-    from pfund_blocks.typing import AccountName, Currency, ProductName
+    from pfund.simulated.account_protocol import AccountProtocol
+    from pfund.simulated.venue_protocol import VenueProtocol
     from pfund.typing import (
         Component,
         ComponentName,
-        StrategyT,
         Signals,
+        StrategyT,
     )
 
 from abc import ABC, abstractmethod
 
-from pfund.entities.orders.order_base import BaseOrder
-from pfund.utils.decorators import ray_method
+from pfund_blocks.entities.orders.order_base import BaseOrder
+
 from pfund.components.mixin import ComponentMixin
 from pfund.components.strategies.strategy_meta import MetaStrategy
 from pfund.managers import OrderManager, PortfolioManager, RiskManager
+from pfund.utils.decorators import ray_method
 
 
 class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def __init__(self, *args: Any, **kwargs: Any):
-        self._accounts: dict[AccountName, BaseAccount] = {}
+        self._accounts: dict[AccountName, AccountProtocol] = {}
         self.strategies: dict[str, BaseStrategy] = {}  # NOTE: sub-strategies
         self._is_substrategy = False
+        # TODO: add venue
+        self._venues: dict[TradingVenue, VenueProtocol] = {}
         self._order_manager = OrderManager()
         self._portfolio_manager = PortfolioManager()
         self._risk_manager = RiskManager()
@@ -49,7 +50,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         pass
 
     @property
-    def accounts(self) -> dict[AccountName, BaseAccount]:
+    def accounts(self) -> dict[AccountName, AccountProtocol]:
         return self._accounts
 
     @property
@@ -90,7 +91,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         return [*self.strategies.values(), *super().get_components()]
 
     @ray_method
-    def get_accounts(self) -> list[BaseAccount]:
+    def get_accounts(self) -> list[AccountProtocol]:
         return list(self._accounts.values())
 
     def is_substrategy(self) -> bool:
@@ -109,13 +110,10 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def _set_engine(self, engine: TradeEngine):
         self._engine = engine
 
-    def add_account(self, account: BaseAccount) -> BaseAccount:
+    def add_account(self, account: AccountProtocol) -> AccountProtocol:
         if self.is_substrategy():
             raise ValueError(f"Sub-strategy '{self.name}' cannot add accounts")
-        if account.env != self.env:
-            raise ValueError(
-                f"account env {account.env} does not match strategy env {self.env}"
-            )
+        account._set_env(self.env)
         if account.name not in self._accounts:
             self._accounts[account.name] = account
             self.logger.debug(f"added account name={account.name}")
@@ -238,7 +236,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
 
     def place_orders(
         self,
-        account: BaseAccount,
+        account: AccountProtocol,
         product: BaseProduct,
         orders: list[BaseOrder] | BaseOrder,
     ):
@@ -280,21 +278,21 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def add_accounts(self):
         pass
 
-    def on_position(self, account: BaseAccount, position: BasePosition):
+    def on_position(self, account: AccountProtocol, position: BasePosition):
         pass
 
-    def on_balance(self, account: BaseAccount, balance: BaseBalance):
+    def on_balance(self, account: AccountProtocol, balance: BaseBalance):
         pass
 
     def on_order(
         self,
-        account: BaseAccount,
+        account: AccountProtocol,
         order: BaseOrder,
         type_: Literal["submitted", "opened", "closed", "amended"],
     ):
         pass
 
     def on_trade(
-        self, account: BaseAccount, trade: dict, type_: Literal["partial", "filled"]
+        self, account: AccountProtocol, trade: dict, type_: Literal["partial", "filled"]
     ):
         pass

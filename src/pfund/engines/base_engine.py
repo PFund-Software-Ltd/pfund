@@ -12,11 +12,17 @@ from typing import (
 
 if TYPE_CHECKING:
     from mtflow.tracking.run import MTFlowRun
+    from pfund_blocks.entities import BaseProduct
+    from pfund_blocks.entities.venues.venue_base import VenueConfig
+    from pfund_blocks.typing import TradingVenue
     from pfund_kit.logging.loggers import ColoredLogger
 
+    from pfund._pfeed_source.engine.feed import PFundEngineFeed
     from pfund.components.actor_proxy import ActorProxy
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.engines.settings.base_engine_settings import BaseEngineSettings
+    from pfund.simulated.account_protocol import AccountProtocol
+    from pfund.simulated.venue_protocol import VenueProtocol
     from pfund.typing import ComponentName, StrategyT
 
     class DataRangeDict(TypedDict, total=False):
@@ -32,6 +38,7 @@ from pfund_kit.style import RichColor, TextStyle
 from pfund.engines.contexts.base_engine_context import BaseEngineContext
 from pfund.engines.engine_meta import EngineMeta
 from pfund.enums import ComponentType, RunMode
+from pfund.managers import OrderManager, PortfolioManager, RiskManager
 
 _ENV_COLORS: dict[Environment, str] = {
     Environment.BACKTEST: TextStyle.BOLD + RichColor.BLUE,
@@ -48,6 +55,8 @@ class BaseEngine[
     Context: ClassVar[type[BaseEngineContext[Any]]] = BaseEngineContext
 
     def __init__(self, **kwargs: Any):
+        import pfeed as pe
+
         from pfund.config import setup_logging
 
         self._context = self.Context(**kwargs)
@@ -58,6 +67,11 @@ class BaseEngine[
         self._strategies: dict[
             ComponentName, BaseStrategy | ActorProxy[BaseStrategy]
         ] = {}
+        self._feed = cast("PFundEngineFeed", pe.PFund().engine_feed)
+        self._venues: dict[TradingVenue, VenueProtocol] = {}
+        self._order_manager = OrderManager()
+        self._portfolio_manager = PortfolioManager()
+        self._risk_manager = RiskManager()
 
     @property
     def env(self) -> Environment:
@@ -80,6 +94,24 @@ class BaseEngine[
         return self._context.settings
 
     @property
+    def order_manager(self) -> OrderManager:
+        return self._order_manager
+
+    om = order_manager
+
+    @property
+    def portfolio_manager(self) -> PortfolioManager:
+        return self._portfolio_manager
+
+    pm = portfolio_manager
+
+    @property
+    def risk_manager(self) -> RiskManager:
+        return self._risk_manager
+
+    rm = risk_manager
+
+    @property
     def strategies(
         self,
     ) -> dict[ComponentName, BaseStrategy | ActorProxy[BaseStrategy]]:
@@ -87,6 +119,74 @@ class BaseEngine[
 
     def is_running(self) -> bool:
         return self._is_running
+
+    def _add_product(self, product: BaseProduct):
+        for _venue in self._venues.values():
+            if (existing := _venue.products.get(product.name)) is not None:
+                raise ValueError(
+                    f'product name "{product.name}" is already used by {existing!r}; '
+                    + "product names must be unique across the engine"
+                )
+        venue: VenueProtocol = self.add_venue(product.source)
+        venue.add_product(product)
+
+    def _add_account(self, account: AccountProtocol):
+        if self.env.is_simulated():
+            from pfund.simulated.simulated_account import SimulatedAccount
+
+            if not isinstance(account, SimulatedAccount):
+                raise TypeError(
+                    f"env={self.env} only accepts pf.SimulatedAccount, got {account.__class__.__name__}, "
+                    + f"e.g. pf.SimulatedAccount(venue={account.venue!r}, balances=..., positions=...)"
+                )
+
+        for _venue in self._venues.values():
+            if (existing := _venue.accounts.get(account.name)) is not None:
+                raise ValueError(
+                    f'account name "{account.name}" is already used by {existing!r}; '
+                    + "account names must be unique across the engine"
+                )
+        if account.env != self.env:
+            raise ValueError(
+                f"account env {account.env} does not match engine env {self.env}"
+            )
+        venue: VenueProtocol = self.add_venue(account.venue)
+        venue.add_account(account)
+
+    # TODO
+    def _create_venue(
+        self, venue: TradingVenue, config: VenueConfig | None = None
+    ) -> VenueProtocol:
+        """Creates the venue the engine plugs in, the ONLY place that decides real vs simulated venue by env.
+
+        env=BACKTEST/SANDBOX plugs in the simulated venue (the fake exchange), env=PAPER/LIVE plugs in the real venue.
+        """
+        if self.env.is_simulated():
+            from pfund.simulated.simulated_venue import SimulatedVenue
+
+            # TODO: pass self._simulated_venue_configs.get(venue) and config (for the internal read-only real venue)
+            # when SimulatedVenue accepts them
+            return SimulatedVenue(env=self.env, venue=venue, engine_feed=self._feed)
+        else:
+            from pfund.registry import get_venue
+
+            Venue = get_venue(venue)
+            # TODO: pass env and config when BaseVenue's __init__ accepts them
+            return Venue(read_only=False)
+
+    def add_venue(
+        self, venue: TradingVenue, config: VenueConfig | None = None
+    ) -> VenueProtocol:
+        venue = venue.upper()
+        if venue not in self._venues:
+            self._venues[venue] = self._create_venue(venue, config=config)
+            self._logger.debug(f"added trading venue {venue}")
+        elif config is not None:
+            raise ValueError(f"{venue} already exists and cannot be configured")
+        return self._venues[venue]
+
+    def get_venue(self, venue: TradingVenue) -> VenueProtocol:
+        return self._venues[venue.upper()]
 
     def add_strategy(
         self,

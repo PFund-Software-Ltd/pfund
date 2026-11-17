@@ -28,6 +28,8 @@ ignore = [
     "RUF059",  # unused-unpacked-variable
     "N815",  # mixed-case-variable-in-class-scope
     "N817",  # camelcase-imported-as-acronym
+    "N802",  # invalid-function-name (function names should be lowercase)
+    "N803",  # invalid-argument-name (argument names should be lowercase)
 ]
 # extended rules:
 extend-select = [

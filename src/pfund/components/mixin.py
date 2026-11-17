@@ -6,20 +6,17 @@ if TYPE_CHECKING:
     import pandas as pd
     import polars as pl
     from narwhals.typing import IntoDataFrame
+    from pfund_blocks.datas import BarData, BaseData, MarketData, QuoteData, TickData
+    from pfund_blocks.entities.products.product_base import BaseProduct
+    from pfund_blocks.typing import ProductName, TradingVenue
 
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel, UnderlyingModel
-    from pfund.datas import BarData, QuoteData, TickData
-    from pfund.datas.data_base import BaseData
-    from pfund.datas.data_market import MarketData
-    from pfund.stores.base_data_store import BaseDataStore
-    from pfund.stores.market_data_store import MarketDataStore
-    from pfund_blocks.enums.timeframe import Timeframe
     from pfund.engines.contexts.base_engine_context import BaseEngineContext
     from pfund.engines.contexts.trade_engine_context import TradeEngineContext
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
-    from pfund_blocks.entities.products.product_base import BaseProduct
-    from pfund_blocks.typing import ProductName
+    from pfund.stores.base_data_store import BaseDataStore
+    from pfund.stores.market_data_store import MarketDataStore
     from pfund.typing import (
         Component,
         ComponentName,
@@ -33,11 +30,13 @@ import datetime
 import hashlib
 import json
 import logging
-from pathlib import Path
 from functools import cached_property
+from pathlib import Path
 
 import narwhals as nw
 from pfeed.enums import DataCategory
+from pfund_blocks.enums.env import Environment
+from pfund_blocks.resolution import Resolution
 from pfund_kit.style import RichColor, TextStyle, cprint
 from pfund_kit.utils import toml
 
@@ -53,10 +52,8 @@ from pfund.components.bar_dataframe import (
 )
 from pfund.data_config import DataConfig
 from pfund.databoy import DataBoy
-from pfund_blocks.resolution import Resolution
+from pfund.enums import ComponentType, RunMode
 from pfund.stores.trading_store import TradingStore
-from pfund.enums import ComponentType, RunMode, TradingVenue
-from pfund_blocks.enums.env import Environment
 from pfund.utils.decorators import ray_method
 
 
@@ -134,9 +131,9 @@ class ComponentMixin:
 
     @property
     def component_type(self) -> str:
-        from pfund.components.strategies.strategy_base import BaseStrategy
-        from pfund.components.models.model_base import BaseModel
         from pfund.components.features.feature_base import BaseFeature
+        from pfund.components.models.model_base import BaseModel
+        from pfund.components.strategies.strategy_base import BaseStrategy
 
         if isinstance(self, BaseStrategy):
             return ComponentType.strategy
@@ -691,15 +688,10 @@ class ComponentMixin:
             datas.extend(data_store.get_datas())
         return datas
 
-    def _get_supported_resolutions(
-        self, product: BaseProduct
-    ) -> dict[Timeframe, list[int]]:
-        VenueClass = TradingVenue(product.source).venue_class
-        assert VenueClass is not None, "venue class is not None"
-        return cast(
-            "dict[Timeframe, list[int]]",
-            VenueClass.METADATA.get_supported_resolutions(product),
-        )
+    def _get_streaming_resolutions(self, product: BaseProduct) -> list[Resolution]:
+        from pfund.registry import get_venue
+
+        return get_venue(product.source).get_streaming_resolutions(product)
 
     @staticmethod
     def dt(ts: float, tz: datetime.tzinfo = datetime.UTC) -> datetime.datetime:
@@ -801,14 +793,13 @@ class ComponentMixin:
 
     def _add_product(
         self,
-        venue: TradingVenue | str,
+        venue: TradingVenue,
         basis: str,
         exchange: str = "",
         symbol: str = "",
         name: str = "",
         **specs: Any,
     ) -> BaseProduct:
-        venue = TradingVenue[venue.upper()]
         VenueClass = venue.venue_class
         product = VenueClass.create_product(
             basis=basis, exchange=exchange, name=name, symbol=symbol, **specs
@@ -833,7 +824,7 @@ class ComponentMixin:
 
     def add_data(
         self,
-        venue: TradingVenue | str,
+        venue: TradingVenue,
         product: str,
         resolutions: list[Resolution | str] | None = None,
         exchange: str = "",

@@ -8,8 +8,8 @@ if TYPE_CHECKING:
 from pfeed.enums import DataAccessType, DataCategory, DataProviderType
 from pfeed.source import BaseSource, SourceMetadata
 
-from pfeed_pfund.component.feed import PFundComponentFeed
-from pfeed_pfund.engine.feed import PFundEngineFeed
+from pfund._pfeed_source.component.feed import PFundComponentFeed
+from pfund._pfeed_source.engine.feed import PFundEngineFeed
 
 
 class PFund(BaseSource):

@@ -113,14 +113,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 splitting is only available in vectorized mode.
         """
         env = Environment.BACKTEST
-        mode = BacktestMode[mode.upper()]
-        if mode == BacktestMode.EVENT_DRIVEN and dataset_splits is not None:
-            raise ValueError(
-                "event-driven backtesting requires dataset_splits=None; "
-                + "dataset splitting and cross-validation are only supported "
-                + "in vectorized mode"
-            )
-
         super().__init__(
             env=env,
             name=name,

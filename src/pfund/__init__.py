@@ -31,11 +31,10 @@ if TYPE_CHECKING:
     )
     from pfund.components.strategies.strategy_base import BaseStrategy as Strategy
     from pfund.engines.backtest_engine import BacktestEngine
-    from pfund.engines.sandbox_engine import SandboxEngine
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
-    from pfund.engines.settings.sandbox_engine_settings import SandboxEngineSettings
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.engines.trade_engine import TradeEngine
+    from pfund.simulated.simulated_account import SimulatedAccount
 
 from pfund.config import configure, configure_logging, get_config
 
@@ -69,22 +68,18 @@ def __getattr__(name: str):
         from pfund.backtest.typing import PandasBacktestDataFrame
 
         return PandasBacktestDataFrame
+    elif name == "SimulatedAccount":
+        from pfund.simulated.simulated_account import SimulatedAccount
+
+        return SimulatedAccount
     elif name == "TradeEngine":
         from pfund.engines.trade_engine import TradeEngine
 
         return TradeEngine
-    elif name == "SandboxEngine":
-        from pfund.engines.sandbox_engine import SandboxEngine
-
-        return SandboxEngine
     elif name == "TradeEngineSettings":
         from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 
         return TradeEngineSettings
-    elif name == "SandboxEngineSettings":
-        from pfund.engines.settings.sandbox_engine_settings import SandboxEngineSettings
-
-        return SandboxEngineSettings
     elif name == "BacktestEngineSettings":
         from pfund.engines.settings.backtest_engine_settings import (
             BacktestEngineSettings,
@@ -144,15 +139,13 @@ __all__ = (  # noqa: RUF022
     "configure",
     "get_config",
     "configure_logging",
-    # cv
+    "SimulatedAccount",
     "Holdout",
     "CrossValidation",
     # engines
     "BacktestEngine",
-    "SandboxEngine",
     "TradeEngine",
     "TradeEngineSettings",
-    "SandboxEngineSettings",
     "BacktestEngineSettings",
     # backtest dfs
     "PolarsBacktestDataFrame",

@@ -55,6 +55,11 @@ class BacktestEngineContext(BaseEngineContext[BacktestEngineSettings]):
                     os.path.dirname(pfund_kit.__file__),
                 ),
             )
+        if self.mode == BacktestMode.EVENT_DRIVEN and dataset_splits is not None:
+            raise ValueError(
+                "event-driven backtesting requires dataset_splits=None; "
+                + "its trading df is built bar by bar, so there is nothing to split up front"
+            )
         # None means no split: the whole dataset is the training set
         self.dataset_splits: Holdout | CrossValidator | None = (
             None if dataset_splits is None else to_recipe(dataset_splits)

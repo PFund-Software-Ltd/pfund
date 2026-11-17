@@ -1,27 +1,21 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
-    from pfeed.storages.storage_config import StorageConfig
 
     from pfund.databoy import DataBoy
 
 from abc import ABC, abstractmethod
 
 import narwhals as nw
+from pfeed.base.feed import BaseFeed
 from pfeed.enums import DataLayer
-from pfeed.feeds.base_feed import BaseFeed
-
-from pfund.datas.data_base import BaseData
+from pfund_blocks.datas.data_base import BaseData
 
 
-DataT = TypeVar("DataT", bound=BaseData)
-FeedT = TypeVar("FeedT", bound=BaseFeed)
-
-
-class BaseDataStore(ABC, Generic[DataT, FeedT]):
+class BaseDataStore[DataT: BaseData, FeedT: BaseFeed](ABC):
     METADATA_COLS: ClassVar[list[str]] = []
 
     def __init__(self, databoy: DataBoy):

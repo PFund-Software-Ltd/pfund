@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, TypeAlias, TypeVar, Any
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypeVar
 
 if TYPE_CHECKING:
+    from pfund_blocks.entities.products.product_base import BaseProduct
+
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel
     from pfund.components.strategies.strategy_base import BaseStrategy
-    from pfund_blocks.entities.products.product_base import BaseProduct
-    from pfund_blocks.entities.accounts.account_base import BaseAccount
+    from pfund.simulated.account_protocol import AccountProtocol
 
 
 Component: TypeAlias = "BaseStrategy | BaseModel | BaseFeature"
@@ -16,7 +17,7 @@ StrategyT = TypeVar("StrategyT", bound="BaseStrategy")
 ModelT = TypeVar("ModelT", bound="BaseModel")
 FeatureT = TypeVar("FeatureT", bound="BaseFeature")
 ProductT = TypeVar("ProductT", bound="BaseProduct")
-AccountT = TypeVar("AccountT", bound="BaseAccount")
+AccountT = TypeVar("AccountT", bound="AccountProtocol")
 
 
 EngineName: TypeAlias = str

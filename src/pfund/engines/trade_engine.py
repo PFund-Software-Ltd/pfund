@@ -1,63 +1,52 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, cast
-from typing_extensions import TypeVar
+from typing import TYPE_CHECKING, Any, Literal, cast, override
 
 if TYPE_CHECKING:
     from mtflow.tracking.run import MTFlowRun
     from pfeed.engine import DataEngine
-    from pfund_blocks.typing import Message
     from pfeed.streaming.zeromq import ZeroMQ
-    from pfund.venues.venue_base import AnyVenue
-    from pfund.venue.venue import VenueConfig
-    from pfund.datas.data_base import BaseData
-    from pfund.datas.data_market import MarketData
-    from pfund_blocks.entities.accounts.account_base import BaseAccount
-    from pfund_blocks.entities.products.product_base import BaseProduct
-
-    from pfund.typing import Component
-    from pfund.engines.base_engine import DataRangeDict
+    from pfund_blocks.datas import BaseData, MarketData
+    from pfund_blocks.entities.venues.venue_base import VenueConfig
     from pfund_blocks.resolution import Resolution
+    from pfund_blocks.typing import Message, TradingVenue
 
-import time
-import queue
+    from pfund.engines.base_engine import DataRangeDict
+    from pfund.simulated.account_protocol import AccountProtocol
+    from pfund.simulated.venue_protocol import VenueProtocol
+    from pfund.typing import Component
+
 import logging
+import queue
+import time
 from threading import Thread
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from pfeed.enums import DataCategory
 from pfeed.streaming.zeromq import (
     ZeroMQDataChannel,
-    ZeroMQSignal,
 )
-
-from pfund.managers import OrderManager, PortfolioManager, RiskManager
-from pfund.enums import TradingVenue
 from pfund_blocks.enums.env import Environment
+
 from pfund.engines.base_engine import BaseEngine
-from pfund.engines.contexts.trade_engine_context import SettingsT, TradeEngineContext
+from pfund.engines.contexts.trade_engine_context import TradeEngineContext
 from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 
 
-ContextT = TypeVar(
-    "ContextT",
-    bound="TradeEngineContext[Any]",
-    default="TradeEngineContext[TradeEngineSettings]",
-)
-
-
-class TradeEngine(BaseEngine[SettingsT, ContextT]):
+class TradeEngine(BaseEngine[TradeEngineSettings, TradeEngineContext]):
     Context = TradeEngineContext
 
     def __init__(
         self,
         *,
         env: Literal[
+            Environment.SANDBOX,
             Environment.PAPER,
             Environment.LIVE,
+            "SANDBOX",
             "PAPER",
             "LIVE",
-        ] = Environment.PAPER,
+        ] = Environment.SANDBOX,
         name: str = "engine",
         data_range: str
         | Resolution
@@ -81,6 +70,11 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
                 if not provided, settings.toml will be used.
                 if provided, will override the settings in settings.toml.
         """
+        _env = Environment(env.upper())
+
+        if _env not in (Environment.SANDBOX, Environment.PAPER, Environment.LIVE):
+            raise ValueError(f"environment {_env} is not supported")
+
         super().__init__(
             env=env,
             name=name,
@@ -100,32 +94,6 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
         self._queue: queue.Queue[Any] = queue.Queue()
         self._scheduler: BackgroundScheduler = BackgroundScheduler()
         self._schedule_jobs(self._scheduler)
-        self._venues: dict[TradingVenue, AnyVenue] = {}
-        self._order_manager = OrderManager()
-        self._portfolio_manager = PortfolioManager()
-        self._risk_manager = RiskManager()
-
-    def _assert_env(self):
-        if self.env not in (Environment.PAPER, Environment.LIVE):
-            raise ValueError(f"environment {self.env} is not supported")
-
-    @property
-    def order_manager(self) -> OrderManager:
-        return self._order_manager
-
-    om = order_manager
-
-    @property
-    def portfolio_manager(self) -> PortfolioManager:
-        return self._portfolio_manager
-
-    pm = portfolio_manager
-
-    @property
-    def risk_manager(self) -> RiskManager:
-        return self._risk_manager
-
-    rm = risk_manager
 
     def _get_pfeed_stream_kwargs(self) -> dict[str, Any]:
         return {"env": self.env}
@@ -389,7 +357,7 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
     def _get_trading_states(self):
         THROTTLE = 0.5  # seconds between endpoint types, to not hammer the venue
 
-        def _fetch(venue: AnyVenue, func_name: str, account: BaseAccount):
+        def _fetch(venue: VenueProtocol, func_name: str, account: AccountProtocol):
             func = getattr(venue, func_name)
             venue._run_coroutine_threadsafe(func, args=(account,))
 
@@ -399,47 +367,15 @@ class TradeEngine(BaseEngine[SettingsT, ContextT]):
                 _fetch(venue, func_name, account)
             time.sleep(THROTTLE)
 
-    def _add_product(self, product: BaseProduct):
-        for _venue in self._venues.values():
-            if (existing := _venue.products.get(product.name)) is not None:
-                raise ValueError(
-                    f'product name "{product.name}" is already used by {existing!r}; '
-                    + "product names must be unique across the engine"
-                )
-        venue: AnyVenue = self.add_venue(product.source)
-        venue.add_product(product)
-
-    def _add_account(self, account: BaseAccount):
-        for _venue in self._venues.values():
-            if (existing := _venue.accounts.get(account.name)) is not None:
-                raise ValueError(
-                    f'account name "{account.name}" is already used by {existing!r}; '
-                    + "account names must be unique across the engine"
-                )
-        if account.env != self.env:
-            raise ValueError(
-                f"account env {account.env} does not match engine env {self.env}"
-            )
-        venue: AnyVenue = self.add_venue(account.venue)
-        venue.add_account(account)
-
-    def add_venue(
-        self, venue: TradingVenue | str, config: VenueConfig | None = None
-    ) -> AnyVenue:
-        venue = TradingVenue[venue.upper()]
-        if venue not in self._venues:
-            VenueClass = venue.venue_class
-            trading_venue = VenueClass(env=self.env, config=config)
-            trading_venue._set_queue(self._queue)
-            self._venues[venue] = trading_venue
-            self._logger.debug(f"added trading venue {venue}")
-        elif config is not None:
-            raise ValueError(f"{venue} already exists and cannot be configured")
-        return self._venues[venue]
-
-    def get_venue(self, venue: TradingVenue | str) -> AnyVenue:
-        venue = TradingVenue[venue.upper()]
-        return self._venues[venue]
+    @override
+    def _create_venue(
+        self, venue: TradingVenue, config: VenueConfig | None = None
+    ) -> VenueProtocol:
+        trading_venue = super()._create_venue(venue, config=config)
+        # NOTE: the queue is how the venue pushes updates (e.g. fills, balances) back to the updates loop,
+        # needed by both the real venue (PAPER/LIVE) and the simulated venue (SANDBOX)
+        trading_venue._set_queue(self._queue)
+        return trading_venue
 
     def run(self, *, overwrite: bool = True, run: MTFlowRun | None = None):
         """Run the trade engine.
