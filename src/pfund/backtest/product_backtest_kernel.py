@@ -572,11 +572,10 @@ def backtest_loop_kernel(
                         order_size = sig * order_qty
                         # Add offset to close existing opposite position before opening new
                         # e.g. position=+2, signal=-1, qty=1 → order_size = -1 + (-2) = -3
-                        if position != 0.0:
-                            if (position > 0.0 and sig < 0.0) or (
-                                position < 0.0 and sig > 0.0
-                            ):
-                                order_size += -position
+                        if (position > 0.0 and sig < 0.0) or (
+                            position < 0.0 and sig > 0.0
+                        ):
+                            order_size += -position
                         has_order = True
 
                 if has_order:

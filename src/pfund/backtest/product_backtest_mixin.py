@@ -1,6 +1,7 @@
+from typing import Literal
+
 import datetime
 from collections.abc import Callable
-from typing import Literal
 
 import narwhals as nw
 import numpy as np
