@@ -234,7 +234,9 @@ def backtest_loop_kernel(
                         if not sl_immediate and not sl_gap:
                             sl_normal = l <= pending_sl_price
 
-                # --- Check TP stop conditions (skip if SL already triggered) ---
+                # --- Check TP stop conditions (skip if SL triggered at or before the open) ---
+                # An intrabar SL (sl_normal) must NOT skip this: an immediate/gap
+                # TP happens earlier in the bar and outranks it (see combine below).
                 # TP direction: long position → stop above avg (triggers on price UP)
                 #               short position → stop below avg (triggers on price DOWN)
                 tp_immediate = False
@@ -247,7 +249,6 @@ def backtest_loop_kernel(
                     and pos_side != 0.0
                     and not sl_immediate
                     and not sl_gap
-                    and not sl_normal
                 ):
                     tp_direction_up = pos_side == 1.0  # long TP triggers on UP
                     if tp_direction_up:

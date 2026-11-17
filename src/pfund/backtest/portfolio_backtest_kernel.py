@@ -33,56 +33,68 @@ def portfolio_backtest_loop_kernel(
     same analysis engine):
 
         ── Date t opens ────────────────────────────────────────────────
-        1. Fill rebalance orders placed at date t-1, at close[t-1] (the
-           prev close — same price as the product kernel's market fill
-           with fill_price="close"). Fills are always full size: volume
+        1. Fill every order placed at date t-1, at its frozen price:
+           close[t-1] (the prev close — same price as the product kernel's
+           market fill with fill_price="close"), or 0.0 for a delisting
+           write-off (see step 3). Fills are always full size: volume
            is ignored and there are no transaction costs (FAST mode is
            for prototyping; execution realism belongs to EXACT mode).
-           A committed order is filled even if the product has LEFT THE
-           UNIVERSE by date t: a weight is a committed market order, so
-           dropping it now because the product was deselected this period
-           would be look-ahead bias. The position it opens is exited via a
-           close order in step 4. The only order that does NOT fill is one
-           whose product is DELISTED at t (price nan) — genuinely no market.
-        2. Settle any held position whose product is DELISTED at t (price
-           nan = no market): it cannot be sold via an order, so it is
-           written off at 0.0 (the conservative bound modelling a delisting
-           as a bankruptcy wipeout; that trade has no row in the long df, so
-           it reaches the user only as the cash/equity move). Without this
-           step the value would silently vanish from equity (mark-to-market
-           skips nan closes). A still-trading product that merely left the
-           universe is NOT settled here — it is exited by a close order in
-           step 4, after its committed fill is honored in step 1.
+           A committed order ALWAYS fills, whatever happened to the product
+           since — it LEFT THE UNIVERSE by date t, or was even DELISTED at
+           t (price nan; the frozen price is its last real close). A weight
+           is a committed market order, so dropping it with hindsight would
+           be look-ahead bias. The position it opens is exited via a close
+           order in step 3.
 
         ── Date t closes (close[t] and weight[t] known) ────────────────
-        3. Mark to market: equity = cash + Σ_j position[j] * close[t, j].
+        2. Mark to market: equity = cash + Σ_j position[j] * close[t, j].
            Equity is computed ONCE per date, before any order placement,
            so all products' targets are sized from the same number and
            rebalancing is order-independent across products.
+           A held position whose product is DELISTED at t (price nan = no
+           market) is worth 0.0 here, so the loss lands on the delisting
+           date itself (the conservative bound modelling a delisting as a
+           bankruptcy wipeout), not on the later fill of its close order.
            Record position/avg_price/cash/equity for row t.
-        4. Place rebalance orders for every non-nan weight[t, j].
-           Weights are fractions of FREE capital — the sizing capital
-           minus the value of DRIFTING positions (open position, nan
-           weight on this date, i.e. "keep it"). Setting their value
-           aside means explicit weights and kept positions compose
-           without accidental leverage: "keep ABC + 20%/30%/50% in the
-           rest" totals exactly 100% whatever ABC has drifted to. With
-           no drifting positions, free capital == sizing capital.
-               sizing = equity[t] if compound else initial_capital
-               free = sizing - Σ_k position[k] * close[t, k]
-                      over drifting products k
-               target_position = weight[t, j] * free / close[t, j]
-               order_size = target_position - position[j]
-           free <= 0 on a date with weight instructions raises: the
-           drifting positions already consume all capital, so weights
-           cannot be sized (assign them explicit weights instead).
-           Order size/price are frozen at placement and filled at t+1.
-           Last date's orders never fill (same as the product kernel).
+        3. Place orders, frozen at placement and filled at t+1 (the last
+           date's orders never fill, same as the product kernel):
+           a. Close orders — for every position held OUTSIDE the universe
+              at t: order_size = -position[j], priced at close[t, j] if the
+              product still trades, or at 0.0 if it is delisted (price
+              nan), which books the write-off already taken in step 2.
+              The weight of an out-of-universe product is ignored.
+              NOTE: the kernel records this order and its fill in the
+              (T, P) outputs, but a delisted product usually has no row in
+              the long df on those dates — the write-off then reaches the
+              user only as the cash/equity move.
+           b. Rebalance orders — for every in-universe non-nan weight[t, j].
+              Weights are fractions of FREE capital — the sizing capital
+              minus the value of DRIFTING positions (in-universe open
+              position, nan weight on this date, i.e. "keep it"). Setting
+              their value aside means explicit weights and kept positions
+              compose without accidental leverage: "keep ABC + 20%/30%/50%
+              in the rest" totals exactly 100% whatever ABC has drifted
+              to. With no drifting positions, free capital == sizing
+              capital. A position being closed in (a) is NOT set aside:
+              its capital is freed on the same date the new orders fill.
+                  sizing = equity[t] if compound else initial_capital
+                  free = sizing - Σ_k position[k] * close[t, k]
+                         over drifting products k
+                  target_position = weight[t, j] * free / close[t, j]
+                  order_size = target_position - position[j]
+              free <= 0 on a date with a non-zero in-universe weight
+              raises: the drifting positions already consume all capital,
+              so weights cannot be sized (assign them explicit weights
+              instead). A 0.0 weight (close) needs no sizing and never
+              raises.
 
     Notes:
+        - Inputs: in_universe must be True only where price_mat is non-nan
+          (the mixin enforces this) — an in-universe nan price would turn
+          the drift value, free capital and that date's orders into nan.
         - Product lifetimes: leading nan closes = listed mid-period,
           trailing nan closes = gone mid-period. A position whose product
-          leaves the universe is closed (step 2) — at the current close if
+          leaves the universe is closed (step 3a) — at the current close if
           it still trades, or written off to 0 if its data has ended; a
           position held to the GLOBAL last date while still in the universe
           is left open, same as the product kernel.
@@ -211,11 +223,15 @@ def portfolio_backtest_loop_kernel(
         drift_value = 0.0
         is_rebalance = False
         for j in range(P):
-            # nan weight and its still in the universe = hold
-            if np.isnan(weight_mat[t, j]):
-                if in_universe[t, j] and position[j] != 0.0:
+            if not in_universe[t, j]:
+                # weight ignored below too; a held position here is being closed
+                continue
+            w = weight_mat[t, j]
+            if np.isnan(w):
+                # nan weight and still in the universe = hold
+                if position[j] != 0.0:
                     drift_value += position[j] * price_mat[t, j]
-            elif weight_mat[t, j] != 0.0:
+            elif w != 0.0:
                 # weight 0.0 (close) needs no sizing: target is 0 regardless
                 # of free capital, so it never triggers the raise below
                 is_rebalance = True

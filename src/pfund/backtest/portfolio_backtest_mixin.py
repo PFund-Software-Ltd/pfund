@@ -95,9 +95,16 @@ class PortfolioBacktestMixin:
         Pure REGISTRATION step: stores the weights (with their rows' dates) in
         the session registry — no column is written to any df and self is
         returned unchanged. The weights appear as a column in the result df
-        produced by backtest(); rows never covered by any call stay nan
-        (no instruction → drift). Must be called on a df holding exactly one
+        produced by backtest(). Must be called on a df holding exactly one
         product.
+
+        Covered vs uncovered rows: a row covered by a call is IN the universe
+        on that date, so a nan weight there means "keep the position". A row
+        never covered by any call is OUT of the universe: its weight is also
+        nan in the result, but a position still held there is closed (order
+        placed at that date's close, filled the next date), not kept. To keep
+        a position across dates, cover them with a nan weight. A covered row
+        whose close is null counts as uncovered — no price, no universe.
 
         Registration is point-in-time: a row's weight can only be registered
         once — a data_range that overlaps an already-registered range of the
@@ -181,7 +188,8 @@ class PortfolioBacktestMixin:
                 leverage. Pure validation: results are never altered;
                 pass False to silence intentional leverage.
 
-        Result columns (weight nan = no instruction for that row — drift;
+        Result columns (weight nan = no instruction for that row: the position
+        is kept if a create_weight() call covered the row, closed if none did;
         all columns nan = the row's product was never configured):
             weight, order_price, order_size, trade_price, trade_size,
             position, avg_price — per (date, product) row;
@@ -290,7 +298,8 @@ class PortfolioBacktestMixin:
             t_idxs.append(t_idx)
             price_mat[t_idx, j] = close_arr[pos]
             # scatter every registered range of this product onto its rows;
-            # rows covered by no range keep weight nan (no instruction → drift)
+            # rows covered by no range keep weight nan AND stay out of the
+            # universe (in_universe False) — a position held there is closed
             for key_range, reg in entries_by_product[product]:
                 # min. safe guard to avoid attaching weights to the wrong rows:
                 # every registered date must be present in this product's rows
@@ -343,9 +352,19 @@ class PortfolioBacktestMixin:
             )
 
         # ================================================================
-        # check: positive weights are target fractions of total equity, so a
+        # A product is only in the universe where it has a price: a registered
+        # row whose close is null (nan weight, so it passed the check above)
+        # is NOT a "hold" — there is nothing to mark or size it with. Without
+        # this the kernel would value a held position there at nan, turning
+        # free capital and every order sized on that date into nan. As an
+        # out-of-universe cell it is exited instead (written off at 0).
+        # ================================================================
+        in_universe &= ~np.isnan(price_mat)
+
+        # ================================================================
+        # check: positive weights are target fractions of free capital, so a
         # long sum above 100% on a date implies leverage (each segment is a
-        # rebalance to new targets, not a spend of leftover free capital) —
+        # rebalance to new targets, not a spend of leftover cash) —
         # flag it (typo or deliberate), never alter results
         # ================================================================
         if check:
@@ -359,7 +378,7 @@ class PortfolioBacktestMixin:
                 cprint(
                     f"WARNING: positive weights sum above 100% on {over.sum()} date(s) "
                     f"(first: {over_dates[0]}, max: {positive_weight_sums.max():.1%}) — "
-                    "weights are target fractions of total equity, so a long "
+                    "weights are target fractions of free capital, so a long "
                     "sum above 100% means leverage.\n"
                     "Pass check=False to backtest() if leverage is intentional.",
                     style=TextStyle.BOLD + RichColor.YELLOW,

@@ -9,18 +9,18 @@ from narwhals.typing import IntoDataFrameT, IntoSeries
 from pfund.backtest.product_backtest_kernel import backtest_loop_kernel
 from pfund.components.bar_dataframe import PIVOT_COLS
 
-# what a registration is keyed by, minus its data_range: a (resolution, product)
+# what a registration is keyed by, minus its data_range: a (product, resolution)
 # combo for product backtesting, a bare product string for portfolio
 _Identity = tuple[str, str] | str
 
-# (resolution, product) = a combo; one entry per create_signal() call
+# (product, resolution) = a combo; one entry per create_signal() call
 # (= one time SEGMENT of a combo). Registration controls INSTRUCTIONS, never
 # data: backtest() always runs the kernel over a combo's FULL rows and
 # scatters each segment's values onto them, so positions carry across
 # CONTIGUOUS segments and stops are evaluated on every covered bar; a position
 # on an uncovered (gap) row is closed — out of the universe (close-on-exit).
 _registry: dict[tuple, dict] = {}
-# ((start_date, end_date), "1d", "BTC"): {  # key = (data_range, *combo); combo in PIVOT_COLS order
+# ((start_date, end_date), "BTC", "1d"): {  # key = (data_range, *combo); combo in PIVOT_COLS order
 #   "signal": np.array([1.0, nan, -1.0, ...]),  # positional over the entry's rows
 #   "dates":  np.array([date1, date2, ...]),  # the entry's rows' dates, pin row alignment
 #   "open":   {"order_quantity": 2, "order_price": None, "first_only": False, ...},  # open_position kwargs
@@ -31,11 +31,11 @@ _registry: dict[tuple, dict] = {}
 _latest_key_by_combo: dict[tuple, tuple] = {}
 
 _PATTERN = (
-    "# fixed period — configure each (resolution, product) combo once:\n"
-    "for resolution, product in df.select('resolution', 'product').unique().rows():\n"
+    "# fixed period — configure each (product, resolution) combo once:\n"
+    "for product, resolution in df.select('product', 'resolution').unique().rows():\n"
     "    (\n"
     "        df\n"
-    "        .filter(pl.col('resolution') == resolution, pl.col('product') == product)\n"
+    "        .filter(pl.col('product') == product, pl.col('resolution') == resolution)\n"
     "        .create_signal(...)\n"
     "        .open_position(...)\n"
     "        .close_position(...)\n"
@@ -68,11 +68,11 @@ def _clear_registry() -> None:
 
 
 def _get_current_combo(df: nw.DataFrame) -> tuple:
-    """Return the single (resolution, product) combo's values in PIVOT_COLS order."""
+    """Return the single (product, resolution) combo's values in PIVOT_COLS order."""
     combos = df.select(*PIVOT_COLS).unique().rows()
     if len(combos) != 1:
         raise ValueError(
-            "Multiple (resolution, product)s detected — backtest one (resolution, product) at a time:\n"
+            "Multiple (product, resolution)s detected — backtest one (product, resolution) at a time:\n"
             + _PATTERN
         )
     return combos[0]
@@ -81,21 +81,15 @@ def _get_current_combo(df: nw.DataFrame) -> tuple:
 def _get_registry_key(
     df: nw.DataFrame, data_range: tuple[datetime.date, datetime.date] | None
 ) -> tuple[tuple[datetime.date, datetime.date], str, str]:
-    """Build the real registry key (data_range, resolution, product) for one
-    create_signal() call — the combo from the df (which must hold exactly one
-    resolution and one product), the range as passed (None → the df's
+    """Build the real registry key (data_range, *combo) for one create_signal()
+    call — the combo from the df (which must hold exactly one product and one
+    resolution) in PIVOT_COLS order, the range as passed (None → the df's
     first/last dates)."""
-    resolutions = df.get_column("resolution").unique().to_list()
-    products = df.get_column("product").unique().to_list()
-    if len(resolutions) != 1 or len(products) != 1:
-        raise ValueError(
-            "Multiple (resolution, product)s detected — backtest one (resolution, product) at a time:\n"
-            + _PATTERN
-        )
+    combo = _get_current_combo(df)
     if data_range is None:
         date_col = df.get_column("date")
         data_range = (date_col.item(0), date_col.item(len(date_col) - 1))
-    return (data_range, resolutions[0], products[0])
+    return (data_range, *combo)
 
 
 def _validate_data_range(
@@ -176,7 +170,7 @@ def _slice_series_to_data_range(
 
 
 def _group_positions(pivot_arrs: list[np.ndarray], n: int) -> dict[tuple, np.ndarray]:
-    """Map each (resolution, product) combo to its row positions in ONE pass.
+    """Map each (product, resolution) combo to its row positions in ONE pass.
 
     A stable lexsort over the pivot columns groups identical combos into
     contiguous runs (O(n log n)); within a run the original row order is
@@ -403,8 +397,7 @@ class ProductBacktestMixin:
         """
         df = nw.from_native(self)
         key = _get_registry_key(df, data_range)
-        data_range, resolution, product = key
-        combo = (resolution, product)
+        data_range, combo = key[0], key[1:]
         target_pos, target_dates = _resolve_targets(
             _registry,
             combo,
@@ -685,21 +678,21 @@ class ProductBacktestMixin:
         )
 
         # ================================================================
-        # Run the numba kernel ONCE per combo (resolution, product) over the
+        # Run the numba kernel ONCE per combo (product, resolution) over the
         # combo's FULL rows; each registered segment scatters its values onto
         # per-bar input arrays (registration controls instructions, not data:
         # positions carry across segments, stops are evaluated on every bar)
         #
         # Regroup the flat registry into {combo -> [(date_range, reg), ...]},
-        # bucketing every segment under its (resolution, product):
+        # bucketing every segment under its (product, resolution):
         #   _registry = {
-        #       (jan, "1d", "AAPL"): reg1,  reg = {"signal": +1, "stop_loss": 0.02, ...},
-        #       (feb, "1d", "AAPL"): reg2,
-        #       (jan, "1d", "TSLA"): reg3,
+        #       (jan, "AAPL", "1d"): reg1,  reg = {"signal": +1, "stop_loss": 0.02, ...},
+        #       (feb, "AAPL", "1d"): reg2,
+        #       (jan, "TSLA", "1d"): reg3,
         #   }
         #   entries_by_combo = {
-        #       ("1d", "AAPL"): [(jan, reg1), (feb, reg2)],   # 2 segments
-        #       ("1d", "TSLA"): [(jan, reg3)],                # 1 segment
+        #       ("AAPL", "1d"): [(jan, reg1), (feb, reg2)],   # 2 segments
+        #       ("TSLA", "1d"): [(jan, reg3)],                # 1 segment
         #   }
         # ================================================================
         entries_by_combo: dict[tuple, list[tuple]] = {}
@@ -722,7 +715,7 @@ class ProductBacktestMixin:
                 raise ValueError(
                     f"{combo}: duplicate dates in the dataframe passed to backtest() — "
                     "product backtesting requires one row per date per "
-                    "(resolution, product)"
+                    "(product, resolution)"
                 )
 
             # ------------------------------------------------------------
