@@ -200,6 +200,11 @@ class PortfolioBacktestMixin:
                 "backtest() cannot run, setup should have been called properly:\n"
                 + _PATTERN
             )
+        # Consume the configuration: one configuration feeds exactly one
+        # backtest() call (cleared even if this call fails), so nothing is
+        # carried over into a later run that skips the setup step.
+        registry = dict(_registry)
+        _clear_registry()
         if not initial_capital > 0:
             raise ValueError("'initial_capital' must be positive")
 
@@ -236,7 +241,7 @@ class PortfolioBacktestMixin:
         #   }
         # ================================================================
         entries_by_product: dict[str, list[tuple]] = {}
-        for (key_range, product), reg in _registry.items():
+        for (key_range, product), reg in registry.items():
             entries_by_product.setdefault(product, []).append((key_range, reg))
 
         # ================================================================

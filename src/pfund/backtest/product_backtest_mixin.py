@@ -641,6 +641,11 @@ class ProductBacktestMixin:
                 "backtest() cannot run, setup should have been called properly:\n"
                 + _PATTERN
             )
+        # Consume the configuration: one configuration feeds exactly one
+        # backtest() call (cleared even if this call fails), so nothing is
+        # carried over into a later run that skips the setup step.
+        registry = dict(_registry)
+        _clear_registry()
 
         df = nw.from_native(self)
         native_backend = nw.get_native_namespace(df)
@@ -696,7 +701,7 @@ class ProductBacktestMixin:
         #   }
         # ================================================================
         entries_by_combo: dict[tuple, list[tuple]] = {}
-        for registry_key, reg in _registry.items():
+        for registry_key, reg in registry.items():
             entries_by_combo.setdefault(registry_key[1:], []).append(
                 (registry_key[0], reg)
             )

@@ -3,7 +3,7 @@ segments into the kernel's per-bar inputs and scatters its outputs back."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -775,3 +775,48 @@ class TestEndToEnd:
         configure(df, signal=signal, data_range=rows(3, 5))
         # held bars 1-2 → close order placed at bar 2 (still segment 1) → fills at bar 3
         eq(col(Mixin.backtest(df), "position"), [0, 1, 1, 0, 0, 0])
+
+
+class TestRegistryIsConsumed:
+    """One configuration feeds exactly one backtest() call."""
+
+    SIGNAL: ClassVar[list[int | None]] = [1, None, None, None, None, None]
+
+    def test_registry_is_empty_after_backtest(self):
+        df = make_df()
+        configure(df, signal=self.SIGNAL)
+        Mixin.backtest(df)
+        assert m._registry == {}
+        assert m._latest_key_by_combo == {}
+
+    def test_second_backtest_without_reconfiguring_raises(self):
+        df = make_df()
+        configure(df, signal=self.SIGNAL)
+        Mixin.backtest(df)
+        with pytest.raises(ValueError, match="backtest\\(\\) cannot run"):
+            Mixin.backtest(df)
+
+    def test_same_configuration_can_be_rerun_after_backtest(self):
+        df = make_df()
+        configure(df, signal=self.SIGNAL)
+        first = Mixin.backtest(df)
+        configure(df, signal=self.SIGNAL)
+        assert Mixin.backtest(df).equals(first, null_equal=True)
+
+    def test_registry_is_empty_after_a_failed_backtest(self):
+        df = make_df()
+        configure(df, signal=self.SIGNAL, skip_close=True)
+        with pytest.raises(ValueError, match="missing open_position"):
+            Mixin.backtest(df)
+        assert m._registry == {}
+        configure(df, signal=self.SIGNAL)
+        Mixin.backtest(df)
+
+    def test_earlier_run_is_not_carried_into_a_disjoint_later_run(self):
+        df = make_df()
+        configure(df, signal=self.SIGNAL, data_range=rows(0, 2))
+        assert np.nansum(np.abs(col(Mixin.backtest(df), "trade_size"))) > 0
+        configure(df, data_range=rows(3, 5))
+        result = Mixin.backtest(df)
+        assert np.isnan(col(result, "signal")).all()
+        assert np.nansum(np.abs(col(result, "trade_size"))) == 0

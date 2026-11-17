@@ -650,8 +650,10 @@ class TestLeverageCheck:
 
     def test_warning_never_changes_the_result(self, mocker: MockerFixture):
         mocker.patch.object(m, "cprint")
-        df = self._configure(0.6, 0.6)
-        assert backtest(df).equals(backtest(df, check=False), null_equal=True)
+        # backtest() consumes the configuration, so configure once per call
+        checked = backtest(self._configure(0.6, 0.6))
+        unchecked = backtest(self._configure(0.6, 0.6), check=False)
+        assert checked.equals(unchecked, null_equal=True)
 
 
 class TestEndToEnd:
@@ -672,9 +674,12 @@ class TestEndToEnd:
 
     def test_compound_flag_changes_the_sizing_capital(self):
         df = make_df(closes={"BTC": [100, 200, 200, 200, 200, 200]})
-        configure(df, weight=[1.0, 1.0, None, None, None, None])
+        weight: Weights = [1.0, 1.0, None, None, None, None]
+        configure(df, weight=weight)
         # 100% of the doubled equity is still 10 units
         eq(col(backtest(df), "position"), [0, 10, 10, 10, 10, 10])
+        # backtest() consumes the configuration, so configure again
+        configure(df, weight=weight)
         # 100% of the initial 1000 at 200 is 5 units
         eq(col(backtest(df, compound=False), "position"), [0, 10, 5, 5, 5, 5])
 
