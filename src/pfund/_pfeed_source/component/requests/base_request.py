@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from pfeed_pfund.component.data_handler import PFundComponentDataMetadata
     from pfeed_pfund.component.data_model import PFundComponentDataModel
 
-from pfund.components.mixin import ComponentMixin
+from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.enums import ArtifactType
 from pfund_blocks.enums.env import Environment
 from pydantic import Field, field_validator, model_validator

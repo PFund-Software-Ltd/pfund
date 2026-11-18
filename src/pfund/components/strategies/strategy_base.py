@@ -21,7 +21,7 @@ from abc import ABC, abstractmethod
 
 from pfund_blocks.entities.orders.order_base import BaseOrder
 
-from pfund.components.mixin import ComponentMixin
+from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.components.strategies.strategy_meta import MetaStrategy
 from pfund.managers import OrderManager, PortfolioManager, RiskManager
 from pfund.utils.decorators import ray_method
@@ -79,17 +79,14 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
 
     rm = risk_manager
 
-    @ray_method
     def get_component(
         self, name: ComponentName
     ) -> Component | ActorProxy[Component] | None:
         return self.strategies.get(name, None) or super().get_component(name)
 
-    @ray_method
     def get_components(self) -> list[Component | ActorProxy[Component]]:
         return [*self.strategies.values(), *super().get_components()]
 
-    @ray_method
     def get_accounts(self) -> list[BaseAccount]:
         return list(self._accounts.values())
 

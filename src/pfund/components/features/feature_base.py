@@ -16,7 +16,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from pfund.components.mixin import ComponentMixin
+from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.components.features.feature_meta import MetaFeature
 
 

@@ -22,7 +22,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 from pfund.enums import ArtifactType
-from pfund.components.mixin import ComponentMixin
+from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.components.models.model_meta import MetaModel
 
 

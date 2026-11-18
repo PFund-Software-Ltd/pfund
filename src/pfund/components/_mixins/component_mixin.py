@@ -3,23 +3,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 if TYPE_CHECKING:
-    import pandas as pd
-    import polars as pl
     from narwhals.typing import IntoDataFrame
-    from pfund_blocks.datas import BarData, BaseData, MarketData, QuoteData, TickData
+    from pfund_blocks.datas import BarData, BaseData, MarketData
     from pfund_blocks.entities.products.product_base import BaseProduct
-    from pfund_blocks.typing import ProductName, TradingVenue
+    from pfund_blocks.typing import TradingVenue
 
-    from pfund.components.features.feature_base import BaseFeature
-    from pfund.components.models.model_base import BaseModel, UnderlyingModel
+    from pfund.components.models.model_base import UnderlyingModel
     from pfund.engines.contexts.base_engine_context import BaseEngineContext
-    from pfund.engines.contexts.trade_engine_context import TradeEngineContext
-    from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
-    from pfund_blocks.entities import BaseVenue
-    from pfund.stores.base_data_store import BaseDataStore
-    from pfund.stores.market_data_store import MarketDataStore
     from pfund.typing import (
-        Component,
         ComponentName,
         ComponentT,
         FeatureT,
@@ -27,132 +18,31 @@ if TYPE_CHECKING:
         Signals,
     )
 
-import datetime
 import hashlib
 import json
-import logging
 from functools import cached_property
 from pathlib import Path
 
-import narwhals as nw
 from pfeed.enums import DataCategory
-from pfund_blocks.enums.env import Environment
 from pfund_blocks.resolution import Resolution
 from pfund_kit.style import RichColor, TextStyle, cprint
 from pfund_kit.utils import toml
 
+from pfund.components._mixins.base_mixin import ComponentBaseMixin
+from pfund.components._mixins.dataframe_mixin import DataFrameMixin
 from pfund.components.actor_proxy import ActorProxy
-from pfund.components.bar_dataframe import (
-    INDEX_COL as BAR_INDEX_COL,
-    KEY_COLS as BAR_KEY_COLS,
-    PIVOT_COLS as BAR_PIVOT_COLS,
-    aggregate_events_by_bar,
-    align_df_to_spine,
-    pivot_long_to_wide,
-    reorder_key_cols,
-)
 from pfund.data_config import DataConfig
-from pfund.databoy import DataBoy
-from pfund.enums import ComponentType, RunMode
-from pfund.stores.trading_store import TradingStore
+from pfund.enums import RunMode
 from pfund.utils.decorators import ray_method
 
 
-class ComponentMixin:
+class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
     config: ClassVar[dict[str, Any]] = {
         "max_rows": None,  # None means no limit, component will keep all data in memory
         "warmup_period": None,  # None means no warmup period, component will start right away
         "lookback_period": None,  # None means using the whole dataset
     }
     params: ClassVar[dict[str, Any]] = {}
-
-    # custom post init for-common attributes of strategy and model
-    def __mixin_post_init__(self, *args: Any, **kwargs: Any):
-        self.__pfund_args__ = args
-        self.__pfund_kwargs__ = kwargs
-
-        self._name = self._get_default_name()
-        self._run_mode: RunMode | None = None
-        self._df_form: Literal["wide", "long"] | None = None
-        self._resolution: Resolution | None = None
-        self._context: BaseEngineContext[Any] | None = None
-        self._source_artifact_path: Path | None = None
-
-        self.logger: logging.Logger = logging.getLogger("pfund")
-        self.products: dict[ProductName, BaseProduct] = {}
-        self._databoy = DataBoy(self)
-        self.store = TradingStore(self)
-
-        self._signal_cols: list[str] = []
-        # Last successfully computed signals; may not belong to the current bar.
-        self._latest_signals: Signals = {}
-
-        self.models: dict[str, BaseModel | ActorProxy[BaseModel]] = {}
-        self.features: dict[str, BaseFeature | ActorProxy[BaseFeature]] = {}
-
-        self._is_running = False
-        self._is_gathered = False
-
-    @property
-    def env(self) -> Environment:
-        assert self._context is not None, "context is not set"
-        return self._context.env
-
-    @property
-    def name(self) -> ComponentName:
-        return self._name
-
-    @property
-    def run_mode(self) -> RunMode:
-        assert self._run_mode is not None, "run_mode is not set"
-        return self._run_mode
-
-    @property
-    def df_form(self) -> Literal["wide", "long"]:
-        assert self._df_form is not None, "df_form is not set"
-        return self._df_form
-
-    @property
-    def context(self) -> TradeEngineContext:
-        assert self._context is not None, "context is not set"
-        # backtesting overrides this to return BacktestEngineContext (see backtest_mixin.py)
-        return cast("TradeEngineContext", self._context)
-
-    @property
-    def settings(self) -> TradeEngineSettings:
-        return self.context.settings
-
-    @property
-    def market_data_store(self) -> MarketDataStore:
-        return self._databoy.get_data_store(DataCategory.MARKET_DATA)
-
-    @property
-    def data_stores(self) -> dict[DataCategory, BaseDataStore[Any, Any]]:
-        return self._databoy._data_stores
-
-    @property
-    def component_type(self) -> str:
-        from pfund.components.features.feature_base import BaseFeature
-        from pfund.components.models.model_base import BaseModel
-        from pfund.components.strategies.strategy_base import BaseStrategy
-
-        if isinstance(self, BaseStrategy):
-            return ComponentType.strategy
-        elif isinstance(self, BaseModel):
-            return ComponentType.model
-        elif isinstance(self, BaseFeature):
-            return ComponentType.feature
-        else:
-            raise ValueError(f"Unknown component type: {type(self)}")
-
-    def get_data_store(self, category: DataCategory | str) -> BaseDataStore[Any, Any]:
-        return self._databoy.get_data_store(category)
-
-    # useful when user wants to set logger specific to the component. currently 'pfund' is the default logger.
-    def set_logger(self, logger: logging.Logger):
-        self.logger = logger
-        if self.is_remote(direct_only=False):
-            self._setup_logging()
 
     def _hydrate(
         self,
@@ -225,52 +115,6 @@ class ComponentMixin:
     def _publish_signals(self, signals: Signals, data: BarData):
         if self._databoy.is_using_zmq():
             self._databoy._publish_signals(signals, data)
-
-    def _setup_scheduler(self):
-        self._databoy._setup_scheduler()
-        for component in self.components:
-            component._setup_scheduler()
-
-    def _setup_messaging(self):
-        self._databoy._setup_messaging()
-        for component in self.components:
-            component._setup_messaging()
-        self._databoy._subscribe()
-
-    def _setup_logging(self):
-        """Sets up logging for component running in remote process, uses zmq's PUSHHandler to send logs to engine"""
-        from pfeed.streaming.zeromq import ZeroMQ
-        from pfund_kit.logging.configurator import LoggingDictConfigurator
-        from pfund_kit.utils import get_free_port
-
-        from pfund.utils.zmq_pub_handler import ZMQPubHandler
-
-        # configure logging based on pfund's logging config, e.g. log_level, log_file, log_format, etc.
-        logging_configurator = LoggingDictConfigurator.create(
-            log_path=self.context.config.log_path / self.env,
-            logging_config=self.context.logging_config,
-            lazy=True,
-            use_colored_logger=True,
-        )
-        logging_configurator.configure()
-
-        # remove existing handlers
-        for handler in self.logger.handlers[:]:
-            self.logger.removeHandler(handler)
-            handler.close()
-
-        # add zmq PushHandler
-        zmq_url = self.settings.zmq_urls.get(self.name, ZeroMQ.DEFAULT_URL)
-        zmq_port = get_free_port()
-        zmq_handler = ZMQPubHandler(f"{zmq_url}:{zmq_port}")
-        zmq_formatter = logging.Formatter(
-            fmt="%(message)s | from:%(filename)s fn:%(funcName)s ln:%(lineno)d (sent@%(asctime)s.%(msecs)03d)",
-            datefmt="%H:%M:%S",
-        )
-        zmq_handler.setFormatter(zmq_formatter)
-        self.logger.addHandler(zmq_handler)
-        self.settings.zmq_urls.update({self.name: zmq_url})
-        self.settings.zmq_ports.update({self.name + "_logger": zmq_port})
 
     @classmethod
     def load_config(cls, config: dict[str, Any] | None = None, file_path: str = ""):
@@ -449,274 +293,6 @@ class ComponentMixin:
         return f"{identity['class_name']}-{digest}"
 
     @property
-    def components(self) -> list[Component | ActorProxy[Component]]:
-        return self.get_components()
-
-    def get_component(
-        self, name: ComponentName
-    ) -> Component | ActorProxy[Component] | None:
-        return self.models.get(name, None) or self.features.get(name, None)
-
-    def get_components(self) -> list[Component | ActorProxy[Component]]:
-        return [
-            *self.models.values(),
-            *self.features.values(),
-        ]
-
-    def _get_descendant_names(self) -> list[str]:
-        """Names of every component below this one, at any depth.
-
-        Works through `ActorProxy` too: the call is forwarded to the actor,
-        so children added inside a remote component are included.
-        """
-        return [
-            name
-            for component in self.get_components()
-            for name in (component.name, *component._get_descendant_names())
-        ]
-
-    @property
-    def data_df(self) -> IntoDataFrame:
-        return self.get_df(
-            kind="data", data_category=None, window_size=None, to_native=True
-        )
-
-    @property
-    def features_df(self) -> IntoDataFrame:
-        return self.get_df(kind="features", window_size=None, to_native=True)
-
-    X = features_df
-
-    @property
-    def X_pandas(self) -> pd.DataFrame:
-        from pfeed.utils.dataframe import convert_dataframe
-
-        return convert_dataframe(self.X, data_tool="pandas")
-
-    @property
-    def X_polars(self) -> pl.DataFrame:
-        from pfeed.utils.dataframe import convert_dataframe
-
-        return convert_dataframe(self.X, data_tool="polars").collect()
-
-    @property
-    def signals_df(self) -> IntoDataFrame:
-        return self.get_df(kind="signals", window_size=None, to_native=True)
-
-    @property
-    def trading_df(self) -> IntoDataFrame:
-        return self.get_df(kind="trading", window_size=None, to_native=True)
-
-    df = trading_df
-
-    @property
-    def df_pandas(self) -> pd.DataFrame:
-        from pfeed.utils.dataframe import convert_dataframe
-
-        return convert_dataframe(self.df, data_tool="pandas")
-
-    # mainly used to avoid type casting, since self.df will return IntoDataFrame,
-    # which messes up with pl.DataFrame type hints.
-    @property
-    def df_polars(self) -> pl.DataFrame:
-        from pfeed.utils.dataframe import convert_dataframe
-
-        return convert_dataframe(self.df, data_tool="polars").collect()
-
-    @property
-    def full_df(self) -> IntoDataFrame:
-        return self.get_df(kind="full", window_size=None, to_native=True)
-
-    complete_df = full_df
-
-    def get_df(
-        self,
-        *,
-        kind: Literal["data", "features", "signals", "trading", "full"] = "full",
-        data_category: DataCategory | str | None = DataCategory.MARKET_DATA,
-        window_size: int | None = None,
-        to_native: bool = False,
-    ) -> nw.DataFrame[Any] | IntoDataFrame:
-        """Returns one of the stored dataframes in either trading store or data stores.
-
-        Args:
-            kind: Which frame to return.
-                - 'data': input dataframe from a data store (e.g. market data, news).
-                - 'features': features used by this component (signals from child components), features part in trading_df
-                - 'signals': signals generated by this component, signals part in trading_df
-                - 'trading': trading_df = features + signals
-                - 'full': full_df = data_df (merged data dfs from different categories) + trading_df (features + signals)
-            data_category: For kind='data', which data category to return.
-                If None, return a merged data_df from all data categories.
-                Ignored when kind != 'data'.
-                Defaults to market data.
-            window_size: Number of most recent rows to return.
-                Defaults to None, i.e. return the whole dataframe.
-            to_native: If True, return the underlying backend frame (polars/pandas) instead
-                of a Narwhals DataFrame. Defaults to True.
-        """
-        if kind == "data":
-            if data_category is not None:
-                store = self._databoy.get_data_store(data_category)
-                df = store.get_df(window_size=window_size, to_native=to_native)
-            else:
-                data_dfs: dict[DataCategory, nw.DataFrame[Any]] = {
-                    category: store.get_df(window_size=window_size, to_native=False)
-                    for category, store in self.data_stores.items()
-                }
-                df = self._merge_data_dfs(data_dfs)
-                if to_native:
-                    df = df.to_native()
-        elif kind == "features":
-            df = self.store.get_df(
-                kind="features", window_size=window_size, to_native=to_native
-            )
-        elif kind == "signals":
-            df = self.store.get_df(
-                kind="signals", window_size=window_size, to_native=to_native
-            )
-        elif kind == "trading":
-            df = self.store.get_df(
-                kind="trading", window_size=window_size, to_native=to_native
-            )
-        elif kind == "full":
-            data_dfs = {
-                category: data_store.get_df(
-                    window_size=None,
-                    to_native=False,
-                )
-                for category, data_store in self.data_stores.items()
-                if data_store.get_datas() and data_store._df is not None
-            }
-            data_df = self._merge_data_dfs(data_dfs) if data_dfs else None
-
-            # Data stores are canonically long-form. full_df follows the
-            # component's configured form, just like its trading dataframe.
-            if data_df is not None and self.df_form == "wide":
-                data_value_cols = [
-                    col for col in data_df.columns if col not in BAR_KEY_COLS
-                ]
-                if data_value_cols:
-                    data_df = pivot_long_to_wide(
-                        data_df,
-                        index_col=BAR_INDEX_COL,
-                        pivot_cols=BAR_PIVOT_COLS,
-                    )
-                else:
-                    data_df = data_df.select(BAR_INDEX_COL).unique().sort(BAR_INDEX_COL)
-
-            trading_df = self.store._df
-
-            if data_df is None and trading_df is None:
-                raise RuntimeError(f"{self.name} full df is not ready")
-            if data_df is None:
-                assert trading_df is not None
-                df = trading_df
-            elif trading_df is None:
-                df = data_df
-            else:
-                join_cols = BAR_KEY_COLS if self.df_form == "long" else [BAR_INDEX_COL]
-                missing_join_cols = [
-                    col
-                    for col in join_cols
-                    if col not in data_df.columns or col not in trading_df.columns
-                ]
-                if missing_join_cols:
-                    raise ValueError(
-                        f"Cannot build {self.name}'s full df; data_df and "
-                        + f"trading_df must both contain key columns {join_cols}, "
-                        + f"missing {missing_join_cols}"
-                    )
-
-                # Data configured as features is present in both frames. Keep
-                # the canonical data-store copy and remove the duplicate from
-                # trading_df before joining features and signals onto it.
-                overlapping_value_cols = [
-                    col
-                    for col in trading_df.columns
-                    if col not in join_cols and col in data_df.columns
-                ]
-                if overlapping_value_cols:
-                    trading_df = trading_df.drop(overlapping_value_cols)
-
-                df = data_df.join(trading_df, on=join_cols, how="full")
-
-                for key in join_cols:
-                    right_key = f"{key}_right"
-                    if right_key in df.columns:
-                        df = df.with_columns(
-                            nw.coalesce(key, right_key).alias(key)
-                        ).drop(right_key)
-
-            df = reorder_key_cols(
-                df.sort(BAR_KEY_COLS if self.df_form == "long" else [BAR_INDEX_COL]),
-                df_form=self.df_form,
-            )
-            if window_size is not None:
-                df = df.tail(window_size)
-            if to_native:
-                df = df.to_native()
-        else:
-            raise ValueError(f"Invalid {kind=} for component {self.name}")
-        return df
-
-    @ray_method
-    def get_df_form(self) -> Literal["wide", "long"]:
-        return self.df_form
-
-    @ray_method
-    def get_trading_store(self) -> TradingStore:
-        return self.store
-
-    @ray_method
-    def get_latest_signals(self) -> Signals | None:
-        return self._latest_signals
-
-    @ray_method
-    def get_signal_cols(self) -> list[str]:
-        return self._signal_cols
-
-    def _get_default_signal_cols(self, num_cols: int) -> list[str]:
-        if num_cols == 1:
-            columns = [self.name]
-        else:
-            columns = [f"{self.name}-{i}" for i in range(num_cols)]
-        return columns
-
-    def get_datas(self) -> list[BaseData]:
-        datas = []
-        for data_store in self.data_stores.values():
-            datas.extend(data_store.get_datas())
-        return datas
-
-    def _get_venue_class(self, venue: TradingVenue) -> type[BaseVenue]:
-        if self.env.is_simulated():
-            from pfund.simulated import SimulatedVenue
-            return SimulatedVenue
-        else:
-            from pfund.registry import get_venue
-            return get_venue(venue)
-
-    def _get_streaming_resolutions(self, product: BaseProduct):
-        Venue = self._get_venue_class(product.source)
-        return Venue.get_streaming_resolutions(product)
-
-    @staticmethod
-    def dt(ts: float, tz: datetime.tzinfo = datetime.UTC) -> datetime.datetime:
-        from pfund_kit.utils.temporal import convert_ts_to_dt
-
-        return convert_ts_to_dt(ts, tz=tz)
-
-    @staticmethod
-    def now(tz: datetime.tzinfo = datetime.UTC) -> datetime.datetime:
-        return datetime.datetime.now(tz=tz)
-
-    @property
-    def resolution(self) -> Resolution:
-        assert self._resolution is not None, "resolution is not set"
-        return self._resolution
-
-    @property
     def _source_artifact(self) -> Path:
         if self._source_artifact_path is not None:
             return self._source_artifact_path
@@ -736,68 +312,6 @@ class ComponentMixin:
     def _data_artifact(self) -> IntoDataFrame:
         # TODO: extract the latest rows (that have not been written to pfeed) from the trading store's df
         raise NotImplementedError
-
-    def _set_resolution(self, resolution: Resolution | str):
-        if self._resolution:
-            raise ValueError(
-                f"{self.name} already has a resolution {self._resolution}, cannot set to {resolution}"
-            )
-        resolution = Resolution(resolution)
-        if not resolution.is_bar():
-            raise ValueError(
-                f"{self.component_type} must use a bar resolution (e.g. '1s', '1m', '1h', '1d'), got {resolution=}"
-            )
-        self._resolution = resolution
-
-    def _set_name(self, name: str):
-        self._name = name
-        if not self._name.lower().endswith(self.component_type):
-            self._name += f"_{self.component_type}"
-
-    def is_strategy(self) -> bool:
-        return self.component_type == ComponentType.strategy
-
-    def is_model(self) -> bool:
-        return self.component_type == ComponentType.model
-
-    def is_feature(self) -> bool:
-        return self.component_type == ComponentType.feature
-
-    def is_running(self) -> bool:
-        return self._is_running
-
-    def is_remote(self, direct_only: bool = True) -> bool:
-        """
-        Returns whether this component is running in a remote (Ray) process.
-
-        Args:
-            direct_only (bool):
-                - If True (default), only checks the component's own `run_mode`.
-                  Reflects whether the component *itself* is declared to be remote.
-                  e.g. a model running inside a strategy (ray actor) is "local" relative to itself.
-                - If False, also checks whether this component's code is currently
-                  executing inside a Ray actor process via `ray.get_runtime_context()`.
-                  This captures the case where a declaratively local component is
-                  nested inside a remote parent and therefore runs in the parent's
-                  actor process.
-
-        Returns:
-            bool: True if the component is declared remote, or (when `direct_only=False`)
-                  is currently executing inside a Ray actor process.
-        """
-        assert self.run_mode is not None, f"{self.name} has no run mode"
-        is_remote = self.run_mode == RunMode.REMOTE
-        if is_remote or direct_only:
-            return is_remote
-        try:
-            import ray
-
-            if not ray.is_initialized():
-                return False
-            return ray.get_runtime_context().get_actor_id() is not None
-        except Exception:
-            return False
-        return False
 
     def _add_product(
         self,
@@ -821,14 +335,6 @@ class ComponentMixin:
                 f"product name '{product.name}' is already used"
             )
         return self.products[product.name]
-
-    def get_data(
-        self, product: ProductName, resolution: Resolution | str
-    ) -> MarketData | None:
-        return self.market_data_store.get_data(product, resolution)
-
-    def _get_default_name(self):
-        return self.__class__.__name__
 
     def add_data(
         self,
@@ -1049,20 +555,6 @@ class ComponentMixin:
             **ray_kwargs,
         )
 
-    def set_signal_cols(self, signal_cols: list[str]) -> None:
-        self._signal_cols = signal_cols
-
-    def _assert_unique_child_signal_cols(self) -> None:
-        child_signal_cols = [
-            signal_col
-            for component in self.get_components()
-            for signal_col in component.get_signal_cols()
-        ]
-        assert len(child_signal_cols) == len(set(child_signal_cols)), (
-            f"'{self.name}' child components have duplicate signal columns: "
-            f"{child_signal_cols}"
-        )
-
     # FIXME
     # TODO: add a progress bar to it when its not ready
     def is_ready(self, data: BaseData) -> bool:
@@ -1086,80 +578,6 @@ class ComponentMixin:
             raise NotImplementedError(
                 f"is_ready() is not implemented for {data.category=}"
             )
-
-    def _merge_data_dfs(
-        self, data_dfs: dict[DataCategory, nw.DataFrame[Any]]
-    ) -> nw.DataFrame[Any]:
-        """Enrich the component's primary-resolution market-data spine.
-
-        Args:
-            data_dfs: Narwhals dataframes per data category. All dataframes must
-                be in long form.
-        """
-        if not data_dfs:
-            raise ValueError(f"No data dfs provided for {self.name}")
-        market_category = DataCategory.MARKET_DATA
-        if market_category not in data_dfs:
-            raise ValueError(
-                f"Market data is required as the bar spine for {self.name}"
-            )
-
-        def _drop_metadata(
-            category: DataCategory,
-            df: nw.DataFrame[Any],
-        ) -> nw.DataFrame[Any]:
-            data_store = self._databoy.get_data_store(category)
-            metadata_cols = [
-                col for col in data_store.METADATA_COLS if col in df.columns
-            ]
-            return df.drop(metadata_cols) if metadata_cols else df
-
-        market_df = _drop_metadata(
-            market_category,
-            data_dfs[market_category],
-        )
-        data_df = market_df
-
-        for category, contributor_df in data_dfs.items():
-            if category == market_category:
-                continue
-
-            contributor_df = _drop_metadata(category, contributor_df)
-            category_name = category.value.lower().removesuffix("_data")
-            event_time_col = f"{category_name}_date"
-            events_col = f"{category_name}_events"
-            count_col = f"{category_name}_count"
-
-            if "date" not in contributor_df.columns:
-                raise ValueError(
-                    f"{category.value} dataframe is missing its event 'date' column"
-                )
-            if event_time_col in contributor_df.columns:
-                raise ValueError(
-                    f"{category.value} dataframe already contains reserved column "
-                    + repr(event_time_col)
-                )
-
-            contributor_df = contributor_df.rename({"date": event_time_col})
-            aligned_df = align_df_to_spine(
-                market_df,
-                contributor_df,
-                mode="event",
-                time_col=event_time_col,
-                broadcast_null_products=True,
-            )
-            aggregated_df = aggregate_events_by_bar(
-                aligned_df,
-                events_col=events_col,
-                count_col=count_col,
-            )
-            data_df = data_df.join(
-                aggregated_df,
-                on=BAR_KEY_COLS,
-                how="left",
-            ).with_columns(nw.col(count_col).fill_null(0))
-
-        return data_df.sort(BAR_KEY_COLS)
 
     def _reload_markets(self):
         """venues (at engine level) might have refetched the latest markets, reload markets from markets.yml"""
@@ -1242,46 +660,3 @@ class ComponentMixin:
             self.logger.debug(f"'{self.name}' has stopped, ({reason=})")
         else:
             self.logger.debug(f"'{self.name}' has already stopped")
-
-    """
-    ************************************************
-    Override Methods
-    Override these methods in your subclass to implement your custom behavior.
-    ************************************************
-    """
-
-    def on_quote(self, data: QuoteData):
-        pass
-
-    def on_tick(self, data: TickData):
-        pass
-
-    def on_bar(self, data: BarData):
-        pass
-
-    def add_datas(self):
-        pass
-
-    def add_models(self):
-        pass
-
-    def add_features(self):
-        pass
-
-    def on_start(self):
-        pass
-
-    def on_stop(self):
-        pass
-
-    """
-    ************************************************
-    Sugar Functions
-    ************************************************
-    """
-
-    def get_orderbook(self, product: ProductName) -> MarketData | None:
-        return self.get_data(product, Resolution("1q"))
-
-    def get_tradebook(self, product: ProductName) -> MarketData | None:
-        return self.get_data(product, Resolution("1t"))
