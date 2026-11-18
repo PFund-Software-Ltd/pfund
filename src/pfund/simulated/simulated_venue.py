@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Concatenate, Literal
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from pfund_blocks.entities import BaseProduct
     from pfund_blocks.resolution import Resolution
     from pfund_blocks.typing import TradingVenue
@@ -10,13 +12,31 @@ if TYPE_CHECKING:
     from pfund._pfeed_source.engine.feed import PFundEngineFeed
 
 import warnings
-from functools import cache
+from functools import cache, wraps
 
 from pfund_blocks.entities import BaseMarket, BaseVenue
 from pfund_blocks.entities.venues.venue_base import VenueConfig
 from pfund_blocks.enums.env import Environment
 
 from pfund.simulated import SimulatedAccount
+
+
+def sandbox_only[S: SimulatedVenue, **P, R](
+    method: Callable[Concatenate[S, P], R],
+) -> Callable[Concatenate[S, P], R]:
+    """Restricts a SimulatedVenue method to env=SANDBOX."""
+    # NOTE: a Callable isn't guaranteed to have __name__ for type checkers
+    func_name: str = getattr(method, "__name__", repr(method))
+
+    @wraps(method)
+    def wrapper(self: S, *args: P.args, **kwargs: P.kwargs) -> R:
+        if self._env != Environment.SANDBOX:
+            raise RuntimeError(
+                f"{self.__class__.__name__}.{func_name}() is only allowed in env=SANDBOX"
+            )
+        return method(self, *args, **kwargs)
+
+    return wrapper
 
 
 # TODO: backtest engine didn't set queue, need to find another way to return results
@@ -87,15 +107,11 @@ class SimulatedVenue(BaseVenue[SimulatedAccount, BaseMarket, VenueConfig]):
         return super().add_account(account)
 
     # TODO: stream real-time live data, VenueBase should also have this function!
-    def stream(self, replay: bool = True):
-        if self._env != Environment.SANDBOX:
-            raise RuntimeError(
-                f"{self.__class__.__name__}.stream() is only allowed in env=SANDBOX"
-            )
+    @sandbox_only
+    def stream(self):
+        pass
 
     # TODO: copy the replay() params from pfeed
+    @sandbox_only
     def replay(self, replay_mode: bool, replay_pace: float | None):
-        if self._env != Environment.SANDBOX:
-            raise RuntimeError(
-                f"{self.__class__.__name__}.stream() is only allowed in env=SANDBOX"
-            )
+        pass
