@@ -1,4 +1,4 @@
-from pfeed_pfund.source import PFund
+from pfund._pfeed_source.source import PFund
 
 __all__ = [
     "PFund",

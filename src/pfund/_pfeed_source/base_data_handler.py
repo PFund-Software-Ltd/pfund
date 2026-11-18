@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
     from pfeed.storages.storage_config import StorageConfig
     from pfeed.utils.file_path import FilePath
-    from pfeed_pfund.base_data_model import PFundBaseDataModel
+    from pfund._pfeed_source.base_data_model import PFundBaseDataModel
 
 from pfeed.base.data_handler import BaseDataHandler, BaseDataMetadata
 

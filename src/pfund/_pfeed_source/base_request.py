@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pfeed.base.request import BaseRequest
+from pfeed.base.requests.base_request import BaseRequest
 from pfund_blocks.enums.env import Environment
 from pydantic import field_validator
 

@@ -9,8 +9,8 @@ from pfund.enums import ArtifactType, ComponentType
 from pfund_blocks.enums.env import Environment
 from pydantic import Field, field_validator
 
-from pfeed_pfund.base_data_model import PFundBaseDataModel
-from pfeed_pfund.component.data_handler import (
+from pfund._pfeed_source.base_data_model import PFundBaseDataModel
+from pfund._pfeed_source.component.data_handler import (
     PFundComponentDataHandler,
     PFundComponentDataMetadata,
 )

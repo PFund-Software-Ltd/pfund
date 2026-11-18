@@ -3,13 +3,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
-    from pfeed_pfund.component.data_handler import PFundComponentDataHandler
-    from pfeed_pfund.component.data_model import PFundComponentDataModel
+    from pfund._pfeed_source.component.data_handler import PFundComponentDataHandler
+    from pfund._pfeed_source.component.data_model import PFundComponentDataModel
 
 from pfeed.io.base_io import BaseIO
 from pydantic import Field
 
-from pfeed_pfund.component.requests.base_request import PFundComponentFeedBaseRequest
+from pfund._pfeed_source.component.requests.base_request import PFundComponentFeedBaseRequest
 
 
 class PFundComponentFeedRetrieveRequest(PFundComponentFeedBaseRequest):

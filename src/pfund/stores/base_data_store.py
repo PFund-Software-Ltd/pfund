@@ -3,8 +3,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
-    from narwhals.typing import IntoDataFrame
+    from collections.abc import Hashable
 
+    from narwhals.typing import IntoDataFrame, IntoLazyFrame
+    from pfeed.io.parquet_io import ParquetIO
+
+    from pfund.data_config import DataConfig
     from pfund.databoy import DataBoy
     from pfund.typing import Component
 
@@ -12,7 +16,6 @@ from abc import ABC, abstractmethod
 
 import narwhals as nw
 from pfeed.base.feed import BaseFeed
-from pfeed.enums import DataLayer
 from pfund_blocks.datas.data_base import BaseData
 
 
@@ -24,6 +27,11 @@ class BaseDataStore[DataT: BaseData, FeedT: BaseFeed](ABC):
         self._logger = databoy._logger
         self._df: nw.DataFrame[Any] | None = None  # in long form
         self._data_as_features: bool | None = None
+        self._configs: dict[Hashable, DataConfig] = {}
+
+    @abstractmethod
+    def _generate_data_key(self, data: DataT) -> Hashable:
+        """Generates the store's own key of the data, used to look up its config."""
 
     @abstractmethod
     def materialize(self, *args: Any, **kwargs: Any) -> None:
@@ -57,6 +65,9 @@ class BaseDataStore[DataT: BaseData, FeedT: BaseFeed](ABC):
     def data_as_features(self) -> bool:
         return self._data_as_features is True
 
+    def get_config(self, data: DataT) -> DataConfig:
+        return self._configs[self._generate_data_key(data)]
+
     def _set_data_as_features(self, as_features: bool) -> None:
         if self._data_as_features is None:
             self._data_as_features = as_features
@@ -66,27 +77,14 @@ class BaseDataStore[DataT: BaseData, FeedT: BaseFeed](ABC):
                 + f"ignoring inconsistent input {as_features=}"
             )
 
-    def _create_feed(self, data: DataT) -> FeedT:
+    def _create_io_for_caching(self) -> ParquetIO:
+        """Create a cache storage config inheriting io settings from the original storage config."""
         import pfeed as pe
 
-        return pe.get_feed(
-            data.source,
-            data.category,
-            pipeline_mode=True,
-            num_workers=data.config.num_batch_workers,
-        )
+        engine_context = self._component.context
+        return pe.ParquetIO(base_path=engine_context.config.cache_path)
 
-    @staticmethod
-    def _create_cache_storage_config(storage_config: StorageConfig) -> StorageConfig:
-        """Create a cache storage config inheriting io settings from the original storage config."""
-        return storage_config.model_copy(
-            update={
-                "storage": DataStorage.CACHE,
-                "data_layer": DataLayer.CURATED,
-            }
-        )
-
-    def _standardize_df(self, df: IntoDataFrame) -> nw.DataFrame[Any]:
+    def _standardize_df(self, df: IntoLazyFrame) -> nw.LazyFrame[Any]:
         """Adds metadata columns to the dataframe"""
         from pfund.enums import SourceType
 

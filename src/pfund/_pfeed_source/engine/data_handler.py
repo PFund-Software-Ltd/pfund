@@ -3,10 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from pfeed_pfund.engine.data_model import PFundEngineDataModel  # noqa: F401, used as a string forward reference in the class bases
+    from pfund._pfeed_source.engine.data_model import PFundEngineDataModel  # noqa: F401, used as a string forward reference in the class bases
 
 from pfeed.base.data_handler import BaseDataMetadata
-from pfeed_pfund.base_data_handler import PFundBaseDataHandler
+from pfund._pfeed_source.base_data_handler import PFundBaseDataHandler
 
 
 class PFundEngineDataMetadata(BaseDataMetadata):

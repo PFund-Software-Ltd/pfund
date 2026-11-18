@@ -2,8 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from pfund.entities import BaseOrder
-    from pfund.entities.orders.order_base import OrderUpdate, OrderKey
+    from pfund_blocks.entities import BaseOrder
+    from pfund_blocks.entities.orders.order_base import OrderKey
 
 
 import logging
@@ -12,7 +12,7 @@ from collections import defaultdict
 
 import apscheduler
 
-from pfund.entities.orders.order_status import OrderStatus
+from pfund_blocks.entities.orders.order_status import OrderStatus
 
 
 @dataclass

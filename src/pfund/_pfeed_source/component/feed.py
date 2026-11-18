@@ -10,10 +10,10 @@ if TYPE_CHECKING:
     from pfund.components.models.model_base import BaseModel
     from pfund.typing import Component
 
-    from pfeed_pfund.component.requests.base_request import (
+    from pfund._pfeed_source.component.requests.base_request import (
         PFundComponentFeedBaseRequest,
     )
-    from pfeed_pfund.source import PFund  # noqa: F401, used as a string forward reference in the class bases
+    from pfund._pfeed_source.source import PFund  # noqa: F401, used as a string forward reference in the class bases
 
 import polars as pl
 from pfeed.base.feed import BaseFeed, requires
@@ -21,8 +21,8 @@ from pfeed.config import setup_logging
 from pfeed.enums import DataCategory
 from pfund.enums import ArtifactType
 
-from pfeed_pfund.component.data_model import PFundComponentDataModel
-from pfeed_pfund.component.requests import (
+from pfund._pfeed_source.component.data_model import PFundComponentDataModel
+from pfund._pfeed_source.component.requests import (
     PFundComponentFeedDownloadRequest,
     PFundComponentFeedRetrieveRequest,
 )

@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from pfeed.io.base_io import BaseIO, Partition
     from pfeed.streaming.sink import Sink
 
-    from pfeed_pfund.component.data_model import PFundComponentDataModel
+    from pfund._pfeed_source.component.data_model import PFundComponentDataModel
 
 import datetime
 
@@ -18,7 +18,7 @@ from pfund.enums import ArtifactType, ComponentType
 from pfund_blocks.enums.env import Environment
 from pydantic import BaseModel, Field
 
-from pfeed_pfund.base_data_handler import PFundBaseDataHandler
+from pfund._pfeed_source.base_data_handler import PFundBaseDataHandler
 
 
 # FIXME: restructure it in pfeed-pfund

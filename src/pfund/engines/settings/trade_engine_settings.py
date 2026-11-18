@@ -7,10 +7,11 @@ from pfund.utils.ray_dict import RayCompatibleDict
 
 
 class TradeEngineSettings(BaseEngineSettings):
-    database: Database | str = Field(
-        default=Database.SQLITE,
-        description="database used to store engine data, e.g. positions, balances, trades",
-    )
+    # FIXME
+    # database: Database | str = Field(
+    #     default=Database.SQLITE,
+    #     description="database used to store engine data, e.g. positions, balances, trades",
+    # )
     database_uri: str | None = Field(
         default=None,
         description=(
@@ -85,13 +86,6 @@ class TradeEngineSettings(BaseEngineSettings):
         component proceeds without its signals instead of freezing forever.
         """,
     )
-
-    @field_validator("database", mode="before")
-    @classmethod
-    def _validate_database(cls, v: Database | str) -> Database:
-        if not isinstance(v, Database):
-            return Database[v.upper()]
-        return v
 
     @field_validator("auto_stream", mode="after")
     @classmethod

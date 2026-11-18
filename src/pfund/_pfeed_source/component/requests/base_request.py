@@ -3,15 +3,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Self
 
 if TYPE_CHECKING:
-    from pfeed_pfund.component.data_handler import PFundComponentDataMetadata
-    from pfeed_pfund.component.data_model import PFundComponentDataModel
+    from pfund._pfeed_source.component.data_handler import PFundComponentDataMetadata
+    from pfund._pfeed_source.component.data_model import PFundComponentDataModel
 
 from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.enums import ArtifactType
 from pfund_blocks.enums.env import Environment
 from pydantic import Field, field_validator, model_validator
 
-from pfeed_pfund.base_request import PFundBaseRequest
+from pfund._pfeed_source.base_request import PFundBaseRequest
 
 
 class PFundComponentFeedBaseRequest(PFundBaseRequest):
@@ -52,7 +52,7 @@ class PFundComponentFeedBaseRequest(PFundBaseRequest):
         return None
 
     def to_data_model(self) -> PFundComponentDataModel:
-        from pfeed_pfund.component.data_model import PFundComponentDataModel
+        from pfund._pfeed_source.component.data_model import PFundComponentDataModel
 
         return PFundComponentDataModel.for_artifact(
             self.component,

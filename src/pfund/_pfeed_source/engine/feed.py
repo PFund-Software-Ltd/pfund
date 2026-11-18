@@ -7,12 +7,12 @@ if TYPE_CHECKING:
 
     from pfeed.base.request import BaseRequest
 
-    from pfeed_pfund.source import PFund  # noqa: F401, used as a string forward reference in the class bases
+    from pfund._pfeed_source.source import PFund  # noqa: F401, used as a string forward reference in the class bases
 
 from pfeed.base.feed import BaseFeed
 from pfeed.enums import DataCategory
 
-from pfeed_pfund.engine.data_model import PFundEngineDataModel
+from pfund._pfeed_source.engine.data_model import PFundEngineDataModel
 
 
 # TODO: get around the data source issue, since technically its data source is the engine.

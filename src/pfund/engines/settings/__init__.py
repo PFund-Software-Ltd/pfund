@@ -8,13 +8,11 @@ if TYPE_CHECKING:
 from pfund_blocks.enums.env import Environment
 
 from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
-from pfund.engines.settings.sandbox_engine_settings import SandboxEngineSettings
 from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 
 # keyed by str: settings.toml section names are plain strings (Environment is a StrEnum)
 ENGINE_SETTINGS: dict[str, type[BaseEngineSettings]] = {
     Environment.BACKTEST: BacktestEngineSettings,
-    Environment.SANDBOX: SandboxEngineSettings,
     Environment.PAPER: TradeEngineSettings,
     Environment.LIVE: TradeEngineSettings,
 }
@@ -22,6 +20,5 @@ ENGINE_SETTINGS: dict[str, type[BaseEngineSettings]] = {
 __all__ = [
     "ENGINE_SETTINGS",
     "BacktestEngineSettings",
-    "SandboxEngineSettings",
     "TradeEngineSettings",
 ]

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 if TYPE_CHECKING:
-    from narwhals.typing import IntoDataFrame
+    import polars as pl
     from pfeed.dataflow.result import RunResult
     from pfund_blocks.datas import Bar, Quote, Tick
     from pfund_blocks.entities.products.product_base import BaseProduct
@@ -70,13 +70,13 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         data = self.get_data(product.name, resolution)
         if data is not None:
             return data
-        data = self.create_data(
-            product=product,
-            resolution=resolution,
-            config=config,
-        )
+        data = self.create_data(product=product, resolution=resolution)
         self._datas[product.name][repr(resolution)] = data
+        self._configs[self._generate_data_key(data)] = config
         return data
+
+    def _generate_data_key(self, data: MarketData) -> tuple[ProductName, ResolutionRepr]:
+        return (data.product.name, repr(data.resolution))
 
     @staticmethod
     def _validate_resolutions(resolutions: list[Resolution]) -> None:
@@ -154,7 +154,6 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         self,
         product: BaseProduct,
         resolution: Resolution,
-        config: DataConfig,
     ) -> MarketData:
         if resolution.is_quote():
             DataClass = QuoteData
@@ -164,7 +163,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             DataClass = BarData
         else:
             raise ValueError(f"Unsupported resolution: {resolution}")
-        return DataClass(product=product, resolution=resolution, config=config)
+        return DataClass(product=product, resolution=resolution)
 
     # FIXME
     def update_quote(self, update: Quote):
@@ -244,7 +243,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                 _update_data(data)
             else:
                 _update_data(data)
-                if data.config.push_incomplete_bar:
+                if self.get_config(data).push_incomplete_bar:
                     self._databoy._deliver(data)
 
         # update resamplees
@@ -260,7 +259,9 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         print("***update_df", data)
         print("***update_df", self._df)
 
-    def _should_cache_resampled(self, feed: MarketFeed) -> bool:
+    def _should_cache_resampled(
+        self, feed: MarketFeed[Any, Any, Any, Literal[True]]
+    ) -> bool:
         """Determine if the retrieved data should be cached to the CURATED layer."""
         engine_settings = self._component.context.settings
         setting = engine_settings.cache_materialized_data
@@ -290,35 +291,47 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             self._df = None
             return
 
+        from pfeed.enums import DataLayer
         from pfeed.errors import DataNotFoundError
+        from pfeed.registry import get_source
 
-        dfs: list[nw.DataFrame[Any]] = []
+        dfs: list[nw.LazyFrame[Any]] = []
         engine_context = self._component.context
         settings = engine_context.settings
         start_date, end_date = engine_context.data_start, engine_context.data_end
 
         component = self._component
         primary_resolution = component.resolution
-        for product in component.products.values():
+        products = list(component.products.values())
+        sources = {
+            source: get_source(source)(pipeline_mode=True)
+            for source in {product.source for product in products}
+        }
+        for product in products:
             # only materialize data with primary resolution
             data = self.get_data(product.name, primary_resolution)
             if data is None:
                 raise Exception(
                     f"{product.name} {primary_resolution} data has not been added"
                 )
-            # pfund only supports bar data as the main resolution
-            if not data.is_bar():
-                continue
-            feed = self._create_feed(data)
+            assert isinstance(data, BarData), f"primary resolution data must be BarData, got {type(data)}"
+            data_config = self.get_config(data)
+            data_source = sources[product.source]
+            if hasattr(data_source, "market_feed"):
+                feed = cast(
+                    "MarketFeed[Any, Any, Any, Literal[True]]", data_source.market_feed
+                )
+                feed.set_num_workers(data_config.num_batch_workers)
+            else:
+                raise ValueError(
+                    f"data source {data_source.name} has no market feed, cannot materialize {data.product.name} {data.resolution} data"
+                )
             self._logger.debug(
                 f"Materializing market data {data.product.name} {data.resolution}..."
             )
-            data_config = data.config
-            storage_config = data_config.storage_config
-            io_config = data_config.io_config
             product, symbol = str(data.product.basis), data.product.symbol
             product_specs = data.product.specs
-            cache_storage_config = self._create_cache_storage_config(storage_config)
+            io_for_caching = self._create_io_for_caching()
             requires_resampling = data.resolution in data_config.resample
             retrieve = partial(
                 feed.retrieve,
@@ -328,61 +341,51 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                 symbol=symbol,
                 start_date=start_date,
                 end_date=end_date,
-                data_origin=data.origin,
-                dataflow_per_date=True
-                if requires_resampling and data_config.num_batch_workers
-                else False,
+                data_origin=data_config.data_origin,
+                dataflow_per_date=bool(
+                    requires_resampling and data_config.num_batch_workers
+                ),
                 **product_specs,
             )
 
             # check cache first for previously resampled data
             if settings.cache_materialized_data is not False:
                 result: RunResult = retrieve(
-                    storage_config=cache_storage_config,
-                    io_config=io_config,
+                    io=io_for_caching,
+                    data_layer=DataLayer.CURATED,
                 ).run()
                 # cache is best-effort: a miss/failure just falls through to original storage
                 if result.failed:
                     self._logger.debug(
                         f"failed to load cached data for {data.product.name} {data.resolution}: {result.errors}"
                     )
-                _df: IntoDataFrame | None = result.data
+                _df: pl.LazyFrame | None = result.data
                 if _df is not None:
-                    self._logger.debug(
-                        f"loaded data from {storage_config.data_path} for {data.product.name} {data.resolution}"
-                    )
                     dfs.append(self._standardize_df(_df))
                     continue
 
             # cache miss or caching disabled, retrieve from original storage
             result: RunResult = (
-                retrieve(storage_config=storage_config)
+                retrieve(io=data_config.io)
                 .load(
-                    storage_config=(
-                        cache_storage_config
-                        if self._should_cache_resampled(feed)
-                        else None
-                    ),
-                    io_config=io_config,
+                    io=io_for_caching if self._should_cache_resampled(feed) else None,
+                    data_layer=DataLayer.CURATED,
                 )
                 .run()
             )
             # not critical here: a None result falls through to auto-download below
             if result.failed:
                 self._logger.warning(
-                    f"failed to retrieve data for {data.product.name} {data.resolution} from {storage_config.data_path}: {result.errors}"
+                    f"failed to retrieve data for {data.product.name} {data.resolution}: {result.errors}"
                 )
-            _df: IntoDataFrame | None = result.data
+            _df: pl.LazyFrame | None = result.data
             if _df is not None:
                 dfs.append(self._standardize_df(_df))
-                self._logger.debug(
-                    f"loaded data from {storage_config.data_path} for {data.product.name} {data.resolution}"
-                )
             else:
                 if settings.auto_download_data:
                     # PAID data cannot be downloaded automatically, user must download it manually
                     if (
-                        feed.data_source.METADATA.access_type
+                        data_source.metadata.access_type
                         == DataAccessType.PAID_BY_USAGE
                     ):
                         raise DataNotFoundError(
@@ -398,13 +401,12 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                         symbol=symbol,
                         start_date=start_date,
                         end_date=end_date,
-                        data_origin=data.origin,
-                        storage_config=storage_config,
-                        io_config=io_config,
+                        data_origin=data_config.data_origin,
+                        io=data_config.io,
                         **product_specs,
                     ).run()
                     # critical: data is required here, so a failure must raise
-                    _df: IntoDataFrame | None = result.data
+                    _df: pl.LazyFrame | None = result.data
                     if _df is None:
                         raise DataNotFoundError(
                             f"Failed to download data for {data.product.name} {data.resolution}"
@@ -421,9 +423,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         # concat just stacks per-(product, resolution) frames; sort by KEY_COLS
         # (date-leading) so _df holds a deterministic, date-ascending invariant
         # for every downstream consumer (get_df, merge_data_dfs, features_df)
-        df = nw.concat(dfs).sort(KEY_COLS)
-        if isinstance(df, nw.LazyFrame):
-            df = df.collect()
+        df = nw.concat(dfs).sort(KEY_COLS).collect()
 
         validate_spine_df(df)
         self._df = reorder_key_cols(df)

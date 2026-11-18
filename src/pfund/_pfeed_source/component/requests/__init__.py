@@ -1,7 +1,7 @@
-from pfeed_pfund.component.requests.download_request import (
+from pfund._pfeed_source.component.requests.download_request import (
     PFundComponentFeedDownloadRequest,
 )
-from pfeed_pfund.component.requests.retrieve_request import (
+from pfund._pfeed_source.component.requests.retrieve_request import (
     PFundComponentFeedRetrieveRequest,
 )
 

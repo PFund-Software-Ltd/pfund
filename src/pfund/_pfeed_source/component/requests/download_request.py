@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import ClassVar
 
-from pfeed_pfund.component.data_handler import (
+from pfund._pfeed_source.component.data_handler import (
     ComponentMetadata,
     PFundComponentDataMetadata,
     RunMetadata,
 )
-from pfeed_pfund.component.requests.base_request import PFundComponentFeedBaseRequest
+from pfund._pfeed_source.component.requests.base_request import PFundComponentFeedBaseRequest
 
 
 class PFundComponentFeedDownloadRequest(PFundComponentFeedBaseRequest):
