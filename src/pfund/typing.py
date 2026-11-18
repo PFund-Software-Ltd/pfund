@@ -1,37 +1,32 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 if TYPE_CHECKING:
-    from pfund_blocks.entities.products.product_base import BaseProduct
-
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel
     from pfund.components.strategies.strategy_base import BaseStrategy
-    from pfund.simulated.account_protocol import AccountProtocol
 
 
-Component: TypeAlias = "BaseStrategy | BaseModel | BaseFeature"
+type Component = BaseStrategy | BaseModel | BaseFeature
 ComponentT = TypeVar("ComponentT", bound="Component")
 StrategyT = TypeVar("StrategyT", bound="BaseStrategy")
 ModelT = TypeVar("ModelT", bound="BaseModel")
 FeatureT = TypeVar("FeatureT", bound="BaseFeature")
-ProductT = TypeVar("ProductT", bound="BaseProduct")
-AccountT = TypeVar("AccountT", bound="AccountProtocol")
 
 
-EngineName: TypeAlias = str
-ComponentName: TypeAlias = str
-ColumnName: TypeAlias = str
-Signals: TypeAlias = dict[ColumnName, Any]
+type EngineName = str
+type ComponentName = str
+type ColumnName = str
+type Signals = dict[ColumnName, Any]
 
 
-EngineNameWithProxy: TypeAlias = EngineName
-ComponentNameWithData: TypeAlias = ComponentName
-ComponentNameWithLogger: TypeAlias = ComponentName
-ZMQUrlKey = EngineName | Literal["data_engine"] | ComponentName
+type EngineNameWithProxy = EngineName
+type ComponentNameWithData = ComponentName
+type ComponentNameWithLogger = ComponentName
+type ZMQUrlKey = EngineName | Literal["data_engine"] | ComponentName
 # NOTE: only senders need to set ports
-ZMQPortKey = (
+type ZMQPortKey = (
     ZMQUrlKey
     | ComponentNameWithData  # {component_name}_data
     | ComponentNameWithLogger  # {component_name}_logger

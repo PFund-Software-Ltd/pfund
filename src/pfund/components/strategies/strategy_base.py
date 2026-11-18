@@ -4,13 +4,12 @@ from typing import TYPE_CHECKING, Any, Literal, override
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
-    from pfund_blocks.entities import BaseBalance, BasePosition, BaseProduct
+    from pfund_blocks.entities import BaseBalance, BasePosition, BaseProduct, BaseVenue
     from pfund_blocks.typing import AccountName, Currency, ProductName, TradingVenue
 
     from pfund.components.actor_proxy import ActorProxy
     from pfund.engines.trade_engine import TradeEngine
-    from pfund.simulated.account_protocol import AccountProtocol
-    from pfund.simulated.venue_protocol import VenueProtocol
+    from pfund_blocks.entities import BaseAccount
     from pfund.typing import (
         Component,
         ComponentName,
@@ -30,11 +29,11 @@ from pfund.utils.decorators import ray_method
 
 class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def __init__(self, *args: Any, **kwargs: Any):
-        self._accounts: dict[AccountName, AccountProtocol] = {}
+        self._accounts: dict[AccountName, BaseAccount] = {}
         self.strategies: dict[str, BaseStrategy] = {}  # NOTE: sub-strategies
         self._is_substrategy = False
         # TODO: add venue
-        self._venues: dict[TradingVenue, VenueProtocol] = {}
+        self._venues: dict[TradingVenue, BaseVenue] = {}
         self._order_manager = OrderManager()
         self._portfolio_manager = PortfolioManager()
         self._risk_manager = RiskManager()
@@ -50,7 +49,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         pass
 
     @property
-    def accounts(self) -> dict[AccountName, AccountProtocol]:
+    def accounts(self) -> dict[AccountName, BaseAccount]:
         return self._accounts
 
     @property
@@ -91,7 +90,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         return [*self.strategies.values(), *super().get_components()]
 
     @ray_method
-    def get_accounts(self) -> list[AccountProtocol]:
+    def get_accounts(self) -> list[BaseAccount]:
         return list(self._accounts.values())
 
     def is_substrategy(self) -> bool:
@@ -110,7 +109,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def _set_engine(self, engine: TradeEngine):
         self._engine = engine
 
-    def add_account(self, account: AccountProtocol) -> AccountProtocol:
+    def add_account(self, account: BaseAccount) -> BaseAccount:
         if self.is_substrategy():
             raise ValueError(f"Sub-strategy '{self.name}' cannot add accounts")
         account._set_env(self.env)
@@ -236,7 +235,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
 
     def place_orders(
         self,
-        account: AccountProtocol,
+        account: BaseAccount,
         product: BaseProduct,
         orders: list[BaseOrder] | BaseOrder,
     ):
@@ -278,21 +277,21 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def add_accounts(self):
         pass
 
-    def on_position(self, account: AccountProtocol, position: BasePosition):
+    def on_position(self, account: BaseAccount, position: BasePosition):
         pass
 
-    def on_balance(self, account: AccountProtocol, balance: BaseBalance):
+    def on_balance(self, account: BaseAccount, balance: BaseBalance):
         pass
 
     def on_order(
         self,
-        account: AccountProtocol,
+        account: BaseAccount,
         order: BaseOrder,
         type_: Literal["submitted", "opened", "closed", "amended"],
     ):
         pass
 
     def on_trade(
-        self, account: AccountProtocol, trade: dict, type_: Literal["partial", "filled"]
+        self, account: BaseAccount, trade: dict, type_: Literal["partial", "filled"]
     ):
         pass

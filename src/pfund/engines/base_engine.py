@@ -12,7 +12,7 @@ from typing import (
 
 if TYPE_CHECKING:
     from mtflow.tracking.run import MTFlowRun
-    from pfund_blocks.entities import BaseProduct
+    from pfund_blocks.entities import BaseProduct, BaseVenue
     from pfund_blocks.entities.venues.venue_base import VenueConfig
     from pfund_blocks.typing import TradingVenue
     from pfund_kit.logging.loggers import ColoredLogger
@@ -21,8 +21,7 @@ if TYPE_CHECKING:
     from pfund.components.actor_proxy import ActorProxy
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.engines.settings.base_engine_settings import BaseEngineSettings
-    from pfund.simulated.account_protocol import AccountProtocol
-    from pfund.simulated.venue_protocol import VenueProtocol
+    from pfund_blocks.entities import BaseAccount
     from pfund.typing import ComponentName, StrategyT
 
     class DataRangeDict(TypedDict, total=False):
@@ -68,7 +67,7 @@ class BaseEngine[
             ComponentName, BaseStrategy | ActorProxy[BaseStrategy]
         ] = {}
         self._feed = cast("PFundEngineFeed", pe.PFund().engine_feed)
-        self._venues: dict[TradingVenue, VenueProtocol] = {}
+        self._venues: dict[TradingVenue, BaseVenue] = {}
         self._order_manager = OrderManager()
         self._portfolio_manager = PortfolioManager()
         self._risk_manager = RiskManager()
@@ -127,10 +126,10 @@ class BaseEngine[
                     f'product name "{product.name}" is already used by {existing!r}; '
                     + "product names must be unique across the engine"
                 )
-        venue: VenueProtocol = self.add_venue(product.source)
+        venue: BaseVenue = self.add_venue(product.source)
         venue.add_product(product)
 
-    def _add_account(self, account: AccountProtocol):
+    def _add_account(self, account: BaseAccount):
         if self.env.is_simulated():
             from pfund.simulated.simulated_account import SimulatedAccount
 
@@ -150,13 +149,13 @@ class BaseEngine[
             raise ValueError(
                 f"account env {account.env} does not match engine env {self.env}"
             )
-        venue: VenueProtocol = self.add_venue(account.venue)
+        venue: BaseVenue = self.add_venue(account.venue)
         venue.add_account(account)
 
     # TODO
     def _create_venue(
         self, venue: TradingVenue, config: VenueConfig | None = None
-    ) -> VenueProtocol:
+    ) -> BaseVenue:
         """Creates the venue the engine plugs in, the ONLY place that decides real vs simulated venue by env.
 
         env=BACKTEST/SANDBOX plugs in the simulated venue (the fake exchange), env=PAPER/LIVE plugs in the real venue.
@@ -176,7 +175,7 @@ class BaseEngine[
 
     def add_venue(
         self, venue: TradingVenue, config: VenueConfig | None = None
-    ) -> VenueProtocol:
+    ) -> BaseVenue:
         venue = venue.upper()
         if venue not in self._venues:
             self._venues[venue] = self._create_venue(venue, config=config)
@@ -185,7 +184,7 @@ class BaseEngine[
             raise ValueError(f"{venue} already exists and cannot be configured")
         return self._venues[venue]
 
-    def get_venue(self, venue: TradingVenue) -> VenueProtocol:
+    def get_venue(self, venue: TradingVenue) -> BaseVenue:
         return self._venues[venue.upper()]
 
     def add_strategy(

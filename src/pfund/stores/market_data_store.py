@@ -1,51 +1,35 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeAlias, TypedDict, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
     from pfeed.dataflow.result import RunResult
+    from pfund_blocks.datas import Bar, Quote, Tick
+    from pfund_blocks.entities.products.product_base import BaseProduct
+    from pfund_blocks.resolution import Resolution
+    from pfund_blocks.typing import ProductName, ResolutionRepr
 
     from pfund.databoy import DataBoy
-    from pfund_blocks.resolution import Resolution
-    from pfund_blocks.entities.products.product_base import BaseProduct
-    from pfund_blocks.typing import ProductName
-
-    ResolutionRepr: TypeAlias = str
-
-    class BarUpdate(TypedDict, total=True):
-        product: ProductName
-        resolution: Resolution
-        ts: float
-        open: float
-        high: float
-        low: float
-        close: float
-        volume: float
-        is_incremental: bool
-        msg_ts: float | None
-        extra: dict[str, Any]
-
 
 import time
 from collections import defaultdict
 from functools import partial
 
 import narwhals as nw
-
 from pfeed.enums import DataAccessType
-from pfeed.feeds.market_feed import MarketFeed
-from pfund.datas import BarData, QuoteData, TickData
+from pfeed.market.feed import MarketFeed
+from pfund_blocks.datas import BarData, MarketData, QuoteData, TickData
+from pfund_blocks.enums.env import Environment
+from pfund_blocks.resolution import Resolution
+
 from pfund.components.bar_dataframe import (
     KEY_COLS,
     reorder_key_cols,
     validate_spine_df,
 )
 from pfund.data_config import DataConfig
-from pfund.datas.data_market import MarketData
-from pfund_blocks.resolution import Resolution
 from pfund.stores.base_data_store import BaseDataStore
-from pfund_blocks.enums.env import Environment
 
 
 class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
@@ -94,27 +78,25 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         self._datas[product.name][repr(resolution)] = data
         return data
 
-    def _resolve_data_config(
-        self,
-        product: BaseProduct,
-        resolutions: list[Resolution | str],
-        data_config: DataConfig,
-    ) -> DataConfig:
-        primary_resolution = self._databoy._component.resolution
-        extra_resolutions = [Resolution(r) for r in resolutions]
-        data_config.data_resolutions = [primary_resolution] + extra_resolutions
-        resolved_data_config = (
-            data_config.auto_shift()
-            .auto_resample(self._databoy._component._get_supported_resolutions(product))
-            .auto_skip_first_bar()
-            .auto_set_stale_bar_timeout()
-        )
-        if resolved_data_config.resample != data_config.resample:
-            self._logger.warning(
-                f"{product.name} {primary_resolution=!r} {extra_resolutions=!r} "
-                + f"is auto-resampled from {data_config.resample} to {resolved_data_config.resample}"
-            )
-        return resolved_data_config
+    @staticmethod
+    def _validate_resolutions(resolutions: list[Resolution]) -> None:
+        """Raises if the resolutions together are not supported, e.g. more than one tick resolution."""
+        quote_resolution_exists = False
+        tick_resolution_exists = False
+        for resolution in resolutions:
+            if resolution.is_quote():
+                if quote_resolution_exists:
+                    raise ValueError("only one quote resolution is supported")
+                quote_resolution_exists = True
+            elif resolution.is_tick():
+                if tick_resolution_exists:
+                    raise ValueError("only one tick resolution is supported")
+                tick_resolution_exists = True
+            # REVIEW: support week, month, year?
+            elif resolution.is_week() or resolution.is_month() or resolution.is_year():
+                raise ValueError(
+                    f"{resolution=} is not supported, resolution is at least daily"
+                )
 
     def add_data(
         self,
@@ -123,17 +105,40 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         config: DataConfig | None = None,
         as_features: bool = False,
     ) -> list[MarketData]:
-        self.set_data_as_features(as_features)
-        config = self._resolve_data_config(
-            product=product,
-            resolutions=resolutions or [],
-            data_config=config or DataConfig(),
+        self._set_data_as_features(as_features)
+        config = config or DataConfig()
+        data_resolutions: list[Resolution] = list(
+            dict.fromkeys([
+                self._component.resolution,
+                *(Resolution(r) for r in resolutions or []),
+                *config.get_resolutions(),
+            ])
         )
+        self._validate_resolutions(data_resolutions)
+
+        resolved_config = config.resolve_resample(
+            product,
+            data_resolutions,
+            self._component._get_streaming_resolutions(product),
+        )
+        if resolved_config.resample != config.resample:
+            self._logger.warning(
+                f"{product.name} {data_resolutions=!r} is auto-resampled from {config.resample} to {resolved_config.resample}"
+            )
+        config = resolved_config
 
         # mutually bind data_resampler and data_resamplee
-        for resamplee_resolution, resampler_resolution in config.resample.items():
-            data_resamplee = self._add_data(product, resamplee_resolution, config)
-            data_resampler = self._add_data(product, resampler_resolution, config)
+        resample = cast("dict[Resolution, Resolution]", config.resample)
+        for resamplee_resolution, resampler_resolution in resample.items():
+            # NOTE: the resolution types are validated in DataConfig.validate_resample()
+            data_resamplee = cast(
+                "BarData", self._add_data(product, resamplee_resolution, config)
+            )
+            data_resampler = cast(
+                "TickData | BarData",
+                self._add_data(product, resampler_resolution, config),
+            )
+            # raises if the resampler can't be resampled into the resamplee
             data_resamplee.bind_resampler(data_resampler)
             self._logger.debug(
                 f"{product.name} resolution={resampler_resolution} is used to resample {resamplee_resolution} data"
@@ -141,7 +146,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
 
         datas: list[MarketData] = [
             self._add_data(product, resolution, config)
-            for resolution in config.data_resolutions
+            for resolution in data_resolutions
         ]
         return datas
 
@@ -161,16 +166,16 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             raise ValueError(f"Unsupported resolution: {resolution}")
         return DataClass(product=product, resolution=resolution, config=config)
 
-    # TODO
-    def update_quote(self, update: QuoteUpdate):
+    # FIXME
+    def update_quote(self, update: Quote):
         data = self.get_data(update["product"], update["resolution"])
         if data is None:
             return
         data.on_update(update["bids"], update["asks"], update["ts"], **update["extra"])
         self._databoy._deliver(data)
 
-    # TODO
-    def update_tick(self, update: TickUpdate):
+    # FIXME
+    def update_tick(self, update: Tick):
         data = self.get_data(update["product"], update["resolution"])
         if data is None:
             return
@@ -196,7 +201,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                 bar_update["resolution"] = data_resamplee.resolution
                 self.update_bar(bar_update)
 
-    def update_bar(self, update: BarUpdate):
+    def update_bar(self, update: Bar):
         """update bar data from streaming message
         if ready, deliver the bar data to databoy
         """
@@ -257,7 +262,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
 
     def _should_cache_resampled(self, feed: MarketFeed) -> bool:
         """Determine if the retrieved data should be cached to the CURATED layer."""
-        engine_settings = self._databoy._component.context.settings
+        engine_settings = self._component.context.settings
         setting = engine_settings.cache_materialized_data
         if setting is True:
             return True
@@ -288,11 +293,11 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         from pfeed.errors import DataNotFoundError
 
         dfs: list[nw.DataFrame[Any]] = []
-        engine_context = self._databoy._component.context
+        engine_context = self._component.context
         settings = engine_context.settings
         start_date, end_date = engine_context.data_start, engine_context.data_end
 
-        component = self._databoy._component
+        component = self._component
         primary_resolution = component.resolution
         for product in component.products.values():
             # only materialize data with primary resolution

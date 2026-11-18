@@ -389,6 +389,13 @@ class BacktestMixin:
         return holdout_split.split(data)
 
     @override
+    def _get_streaming_resolutions(self, product: BaseProduct) -> list[Resolution]:
+        """Gets supported resolutions for the product based on the trading venue.
+        Overrides it in backtesting, supports only the primary resolution.
+        """
+        return [self.resolution]
+
+    @override
     def _add_component(
         self,
         component: ComponentT,
@@ -511,13 +518,6 @@ class BacktestMixin:
             self._is_gathered = True
         else:
             return super()._gather()
-
-    @override
-    def _get_streaming_resolutions(self, product: BaseProduct) -> list[Resolution]:
-        """Gets supported resolutions for the product based on the trading venue.
-        Overrides it in backtesting, supports only the primary resolution.
-        """
-        return [self.resolution]
 
     def _merge_signals_dfs(self) -> nw.DataFrame[Any]:
         """Build this component's historical feature frame.

@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     # need these imports to support IDE hints:
 
+    from pfund_blocks.entities.venues.venue_base import VenueConfig
     from pfund_bybit import Bybit
 
     # from pfund_hyperliquid import Hyperliquid
@@ -30,6 +31,7 @@ if TYPE_CHECKING:
         SKLearnModel as SklearnModel,
     )
     from pfund.components.strategies.strategy_base import BaseStrategy as Strategy
+    from pfund.data_config import DataConfig
     from pfund.engines.backtest_engine import BacktestEngine
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
@@ -48,6 +50,10 @@ def __getattr__(name: str):
         import pfund.hub as hub
 
         return hub
+    elif name == "VenueConfig":
+        from pfund_blocks.entities.venues.venue_base import VenueConfig
+
+        return VenueConfig
     elif name == "BacktestEngine":
         from pfund.engines.backtest_engine import BacktestEngine
 
@@ -60,6 +66,10 @@ def __getattr__(name: str):
         from pfund.backtest.cv.cross_validation import CrossValidation
 
         return CrossValidation
+    elif name == "DataConfig":
+        from pfund.data_config import DataConfig
+
+        return DataConfig
     elif name == "PolarsBacktestDataFrame":
         from pfund.backtest.typing import PolarsBacktestDataFrame
 
@@ -139,6 +149,8 @@ __all__ = (  # noqa: RUF022
     "configure",
     "get_config",
     "configure_logging",
+    "DataConfig",
+    "VenueConfig",
     "SimulatedAccount",
     "Holdout",
     "CrossValidation",

@@ -1,73 +1,90 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 if TYPE_CHECKING:
-    from pfund_blocks.entities.venues.venue_base import VenueConfig
+    from pfund_blocks.entities import BaseProduct
+    from pfund_blocks.resolution import Resolution
     from pfund_blocks.typing import TradingVenue
 
     from pfund._pfeed_source.engine.feed import PFundEngineFeed
 
-# from pfund_blocks.entities import BaseVenue
+import warnings
+from functools import cache
+
+from pfund_blocks.entities import BaseMarket, BaseVenue
+from pfund_blocks.entities.venues.venue_base import VenueConfig
 from pfund_blocks.enums.env import Environment
 
+from pfund.simulated import SimulatedAccount
 
-# TODO: inherit from BaseVenue?
-class SimulatedVenue:
-    # NOTE: how results get back to the engine, same pattern as BaseVenue.get_balances():
-    # the bookkeeping core is synchronous and always RETURNS its results,
-    # e.g. place_orders(orders) returns the order updates, on_bar(bar) returns the fills of the resting orders crossed by the bar,
-    # and ALSO puts them on the queue only if the queue is set:
-    #     if self._queue:
-    #         self._queue.put(update)
-    #     return update
-    # - BacktestEngine: never sets the queue, the for loop uses the return values directly.
-    #   backtest only borrows the fake server (bookkeeping), NOT the flow, so no queue
-    #   (draining a queue in the loop would be re-implementing the updates loop).
-    # - TradeEngine (env=SANDBOX): sets the queue (TradeEngine._create_venue), the queue is the ONLY way results reach the
-    #   updates loop, since the strategy's venue._run_coroutine_threadsafe(venue.place_orders, ...) is fire-and-forget.
-    # i.e. one bookkeeping code path, no env checks, whether results are also pushed is decided by the engine.
+
+# TODO: backtest engine didn't set queue, need to find another way to return results
+class SimulatedVenue(BaseVenue[SimulatedAccount, BaseMarket, VenueConfig]):
+    _RealVenue: ClassVar[type[BaseVenue]]
+
+    @classmethod
+    def for_venue(cls, venue: TradingVenue) -> type[SimulatedVenue]:
+        """Returns the simulated venue class of the real venue, e.g. SimulatedBybit for "BYBIT".
+
+        The venue's identity (venue, metadata, adapter, Config) is class-level in BaseVenue,
+        so each real venue gets its own subclass instead of setting them per instance.
+        The same class is returned for the same venue, so the adapter's mappings stay shared.
+        """
+        return cls._for_venue(venue.upper())
+
+    @classmethod
+    @cache
+    def _for_venue(cls, venue: TradingVenue) -> type[SimulatedVenue]:
+        from pfund.registry import get_venue
+
+        RealVenue = get_venue(venue)
+        attrs: dict[str, Any] = {
+            "metadata": RealVenue.metadata,
+            "adapter": RealVenue.adapter,
+            "_RealVenue": RealVenue
+        }
+        # NOTE: Config is declared in BaseVenue but not every venue sets it
+        if hasattr(RealVenue, "Config"):
+            attrs["Config"] = RealVenue.Config
+        return type(f"Simulated{RealVenue.__name__}", (cls,), attrs)
+
     def __init__(
         self,
-        env: Literal[Environment.BACKTEST, Environment.SANDBOX],
-        venue: TradingVenue,
+        env: Literal[Environment.BACKTEST, Environment.SANDBOX, "BACKTEST", "SANDBOX"],
         engine_feed: PFundEngineFeed,
-        config: VenueConfig
+        config: VenueConfig,
     ):
-        self._env = Environment(env.upper())
-        if self._env not in (Environment.BACKTEST, Environment.SANDBOX):
-            raise ValueError(
-                f"{self.__class__.__name__} only supports env=BACKTEST or env=SANDBOX, got env={self._env}"
+        cls = self.__class__
+        if cls is SimulatedVenue:
+            raise TypeError(
+                'use SimulatedVenue.for_venue(venue) to get the venue\'s class, e.g. SimulatedVenue.for_venue("BYBIT")(...)'
             )
-        self._venue = venue.upper()
-        # TODO:
-        # write to pfund.db (engine states (e.g. used to match back client order ids),
-        # also used to host a fake server in SANDBOX trading)
-        self._engine_feed = engine_feed
+        if Environment(env.upper()) not in (Environment.BACKTEST, Environment.SANDBOX):
+            raise ValueError(
+                f"{cls.__name__} only supports env=BACKTEST/SANDBOX, got {env=}"
+            )
 
-        # TODO: re-enable when the VenueBase in pfudn-blocks is ready
-        # # Adopt the real venue's class-level config/metadata/adapter so BaseVenue's
-        # # __init__ and add_product operate on the REAL venue's markets and symbol
-        # # mapping. The venue-specific entity classes (Balance/Order/...) are reached
-        # # at runtime via self._VenueClass; the generic slots are just base classes.
-        # self.Config = VenueClass.Config
-        # self.METADATA = VenueClass.METADATA
-        # self.adapter = VenueClass.adapter
-        # # NOTE: __real_venue is ONLY used for receiving real live data (e.g. IBKR,
-        # # whose market data needs an authenticated connection). It is read-only so it
-        # # can never send orders, and in replay mode it is not constructed at all — no
-        # # credentials loaded. Built BEFORE super().__init__() so any init-time access
-        # # (and later connect/disconnect) is safe.
-        # self.__real_venue: AnyVenue | None = (
-        #     None
-        #     if replay_mode
-        #     else VenueClass(
-        #         env=Environment.LIVE,
-        #         config=config,
-        #         read_only=True,  # read-only MUST be true to avoid accidentally sending out orders etc.
-        #     )
-        # )
-        # super().__init__(env=Environment.SANDBOX, config=config, read_only=False)
+        self._engine_feed = engine_feed  # used to write records to a fake server
+
+        # NOTE ***read-only MUST BE TRUE*** to avoid accidentally sending out orders etc.
+        self.__real_venue: BaseVenue = cls._RealVenue(env=Environment.LIVE, read_only=True)
+
+        # NOTE: env=BACKTEST is expected here, absorb BaseVenue's warning for it
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message=r".*env=BACKTEST")
+            super().__init__(env=env, config=config, read_only=False)
+
+    @classmethod
+    def get_streaming_resolutions(cls, product: BaseProduct) -> list[Resolution]:
+        return cls._RealVenue.get_streaming_resolutions(product=product)
+
+    def add_account(self, account: SimulatedAccount) -> None:
+        if not isinstance(account, SimulatedAccount):
+            raise TypeError(
+                f"{self.__class__.__name__} only accepts SimulatedAccount, got {type(account).__name__}"
+            )
+        return super().add_account(account)
 
     # TODO: stream real-time live data, VenueBase should also have this function!
     def stream(self, replay: bool = True):
@@ -82,52 +99,3 @@ class SimulatedVenue:
             raise RuntimeError(
                 f"{self.__class__.__name__}.stream() is only allowed in env=SANDBOX"
             )
-
-#     @property
-#     def name(self) -> TradingVenue:
-#         return self._venue
-#
-#     @property
-#     def _VenueClass(self) -> type[AnyVenue]:
-#         return self._venue.venue_class
-#
-#     @override
-#     def refetch_markets(self) -> None:
-#         pass
-#
-#     @override
-#     def add_channel(
-#         self,
-#         channel: FullChannel,
-#         *,
-#         channel_type: Literal["public", "private"] = "public",
-#     ) -> None:
-#         pass
-#
-#     @override
-#     def _add_market_data_channel(self, data: MarketData) -> None:
-#         pass
-#
-#     @override
-#     def _add_private_channels(self) -> None:
-#         pass
-#
-#     @override
-#     def _build_balance_update(self, ts, data, account_name, source):
-#         return self._VenueClass._build_balance_update(ts, data, account_name, source)
-#
-#     def connect(self):
-#         if self.__real_venue:
-#             self.__real_venue.connect()
-#
-#     def disconnect(self, reason: str = ""):
-#         if self.__real_venue:
-#             self.__real_venue.disconnect(reason=reason)
-
-#     # TODO
-#     async def _get_balances(self, account: BaseAccount) -> Result:
-#         pass
-#
-#     # TODO
-#     async def place_orders(self):
-#         pass

@@ -12,8 +12,8 @@ if TYPE_CHECKING:
     from pfund_blocks.typing import Message, TradingVenue
 
     from pfund.engines.base_engine import DataRangeDict
-    from pfund.simulated.account_protocol import AccountProtocol
-    from pfund.simulated.venue_protocol import VenueProtocol
+    from pfund_blocks.entities import BaseAccount
+    from pfund_blocks.entities import BaseVenue
     from pfund.typing import Component
 
 import logging
@@ -357,7 +357,7 @@ class TradeEngine(BaseEngine[TradeEngineSettings, TradeEngineContext]):
     def _get_trading_states(self):
         THROTTLE = 0.5  # seconds between endpoint types, to not hammer the venue
 
-        def _fetch(venue: VenueProtocol, func_name: str, account: AccountProtocol):
+        def _fetch(venue: BaseVenue, func_name: str, account: BaseAccount):
             func = getattr(venue, func_name)
             venue._run_coroutine_threadsafe(func, args=(account,))
 
@@ -370,7 +370,7 @@ class TradeEngine(BaseEngine[TradeEngineSettings, TradeEngineContext]):
     @override
     def _create_venue(
         self, venue: TradingVenue, config: VenueConfig | None = None
-    ) -> VenueProtocol:
+    ) -> BaseVenue:
         trading_venue = super()._create_venue(venue, config=config)
         # NOTE: the queue is how the venue pushes updates (e.g. fills, balances) back to the updates loop,
         # needed by both the real venue (PAPER/LIVE) and the simulated venue (SANDBOX)

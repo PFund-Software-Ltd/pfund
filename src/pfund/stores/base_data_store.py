@@ -6,6 +6,7 @@ if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
 
     from pfund.databoy import DataBoy
+    from pfund.typing import Component
 
 from abc import ABC, abstractmethod
 
@@ -49,10 +50,14 @@ class BaseDataStore[DataT: BaseData, FeedT: BaseFeed](ABC):
         pass
 
     @property
+    def _component(self) -> Component:
+        return self._databoy._component
+
+    @property
     def data_as_features(self) -> bool:
         return self._data_as_features is True
 
-    def set_data_as_features(self, as_features: bool) -> None:
+    def _set_data_as_features(self, as_features: bool) -> None:
         if self._data_as_features is None:
             self._data_as_features = as_features
         elif as_features != self._data_as_features:

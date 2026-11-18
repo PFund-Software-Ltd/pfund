@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from pfund.engines.contexts.base_engine_context import BaseEngineContext
     from pfund.engines.contexts.trade_engine_context import TradeEngineContext
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
+    from pfund_blocks.entities import BaseVenue
     from pfund.stores.base_data_store import BaseDataStore
     from pfund.stores.market_data_store import MarketDataStore
     from pfund.typing import (
@@ -688,10 +689,17 @@ class ComponentMixin:
             datas.extend(data_store.get_datas())
         return datas
 
-    def _get_streaming_resolutions(self, product: BaseProduct) -> list[Resolution]:
-        from pfund.registry import get_venue
+    def _get_venue_class(self, venue: TradingVenue) -> type[BaseVenue]:
+        if self.env.is_simulated():
+            from pfund.simulated import SimulatedVenue
+            return SimulatedVenue
+        else:
+            from pfund.registry import get_venue
+            return get_venue(venue)
 
-        return get_venue(product.source).get_streaming_resolutions(product)
+    def _get_streaming_resolutions(self, product: BaseProduct):
+        Venue = self._get_venue_class(product.source)
+        return Venue.get_streaming_resolutions(product)
 
     @staticmethod
     def dt(ts: float, tz: datetime.tzinfo = datetime.UTC) -> datetime.datetime:
@@ -800,8 +808,8 @@ class ComponentMixin:
         name: str = "",
         **specs: Any,
     ) -> BaseProduct:
-        VenueClass = venue.venue_class
-        product = VenueClass.create_product(
+        Venue = self._get_venue_class(venue)
+        product = Venue.create_product(
             basis=basis, exchange=exchange, name=name, symbol=symbol, **specs
         )
         if product.name not in self.products:
