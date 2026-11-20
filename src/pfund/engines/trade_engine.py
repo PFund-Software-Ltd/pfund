@@ -7,13 +7,12 @@ if TYPE_CHECKING:
     from pfeed.engine import DataEngine
     from pfeed.streaming.zeromq import ZeroMQ
     from pfund_blocks.datas import BaseData, MarketData
+    from pfund_blocks.entities import BaseAccount, BaseVenue
     from pfund_blocks.entities.venues.venue_base import VenueConfig
     from pfund_blocks.resolution import Resolution
     from pfund_blocks.typing import Message, TradingVenue
 
     from pfund.engines.base_engine import DataRangeDict
-    from pfund_blocks.entities import BaseAccount
-    from pfund_blocks.entities import BaseVenue
     from pfund.typing import Component
 
 import logging

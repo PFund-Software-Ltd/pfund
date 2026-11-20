@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 if TYPE_CHECKING:
     from mtflow.tracking.run import MTFlowRun
@@ -76,6 +76,8 @@ def _split_df_into_time_chunks(
 
 class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
     Context = BacktestEngineContext
+    # column telling apart the standalone backtests (chunks) in a strategy's backtest df, 0 for an unchunked run
+    CHUNK_COL: ClassVar[str] = "chunk_num"
 
     def __init__(
         self,
@@ -306,6 +308,8 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         if num_chunks > 1 and _DummyStrategy.__name__ in self._strategies:
             raise ValueError("Chunking is only supported for strategy backtesting")
 
+        # before super().run(), which sets up the components, so their metadata records it, see BacktestMixin.to_dict()
+        self.context.num_chunks = num_chunks
         super().run(overwrite=overwrite, run=run)
 
         backtest_results: list[IntoDataFrame] = []
@@ -378,6 +382,17 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             backtest_df = backtestee.backtest(df_chunk.to_native())
             backtest_df.chunk_num = chunk_num
             backtest_df.batch_num = batch_num
+            # NOTE: written by Claude (Claude Code)
+            # FIXME: chunk_num above is a df attribute, not a column: it is lost on any new df
+            # (e.g. _postprocess_backtest_df() below, a Ray round-trip), and PFundComponentDataHandler
+            # needs it as a column to tell the chunks apart in the stored data artifact.
+            # an unchunked run is chunk 0, so every BACKTEST strategy df has the same schema.
+            # remove the two attribute lines above once nothing reads them (nothing does today).
+            backtest_df = (
+                nw.from_native(backtest_df)
+                .with_columns(nw.lit(chunk_num or 0).alias(BacktestEngine.CHUNK_COL))
+                .to_native()
+            )
             return backtest_df
 
         ### Backtest ###
@@ -479,4 +494,20 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 backtestee._postprocess_backtest_df(backtest_df)
                 for backtest_df in backtest_dfs
             ]
+            # NOTE: written by Claude (Claude Code)
+            # FIXME: the top strategy's backtest results are never persisted.
+            # PFundComponentDataHandler writes component._data_artifact, i.e. store._df on THIS (driver's) component,
+            # but with chunking, each chunk ran on a Ray worker against a copy of the component (ray.put(backtestee)),
+            # so the results only exist in backtest_dfs, store._df never sees them;
+            # and BacktestMixin.backtest() only persists for components without a user backtest(), not the top strategy.
+            # so: combine the chunks into one df (ordered by (chunk_num, date): chunks are contiguous date ranges,
+            # ray.get() keeps the submission order) and persist it as the strategy's data artifact.
+            # failed chunks are already dropped from backtest_dfs, so chunk_num can have gaps, e.g. 0, 1, 3.
+            # only vectorized: in event-driven mode, BaseStrategy._data_artifact raises NotImplementedError.
+            if self.backtest_mode == BacktestMode.VECTORIZED and backtest_dfs:
+                backtestee.store._df = nw.concat(
+                    [nw.from_native(backtest_df) for backtest_df in backtest_dfs],
+                    how="vertical",
+                )
+                backtestee.store.persist_to_lakehouse()
         return backtest_dfs

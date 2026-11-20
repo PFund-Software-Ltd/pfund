@@ -39,6 +39,8 @@ class BacktestEngineContext(BaseEngineContext[BacktestEngineSettings]):
             settings=settings,
         )
         self.mode = BacktestMode[mode.upper()]
+        # set by BacktestEngine.run(num_chunks=...)
+        self.num_chunks: int = 1
         if self.mode == BacktestMode.EVENT_DRIVEN and self.settings.reuse_signals:
             import pfund_kit
 

@@ -1,69 +1,35 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from pfund._pfeed_source.component.data_handler import PFundComponentDataMetadata
     from pfund._pfeed_source.component.data_model import PFundComponentDataModel
 
-from pfund.components._mixins.component_mixin import ComponentMixin
-from pfund.enums import ArtifactType
-from pfund_blocks.enums.env import Environment
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field
 
-from pfund._pfeed_source.base_request import PFundBaseRequest
+from pfund._pfeed_source.base.requests.base_request import PFundBaseRequest
+from pfund.enums import ArtifactType
+from pfund.typing import Component
 
 
 class PFundComponentFeedBaseRequest(PFundBaseRequest):
-    # the live component, the artifact is extracted from it (download), or it identifies the stored artifact (retrieve)
-    component: ComponentMixin
+    # name of the component the artifact belongs to, the stored artifact is identified by its component_id
+    component: Component
     artifact_type: ArtifactType
     checkpoint_step: int | None = Field(
         default=None, description="model checkpoint step", ge=0
     )
 
-    @field_validator("artifact_type", mode="before")
-    @classmethod
-    def _validate_artifact_type(cls, value: ArtifactType | str) -> ArtifactType:
-        if isinstance(value, str):
-            return ArtifactType[value.lower()]
-        return value
-
-    @model_validator(mode="after")
-    def _check_artifact_type(self) -> Self:
-        if (
-            self.artifact_type in (ArtifactType.model, ArtifactType.checkpoint)
-            and not self.component.is_model()
-        ):
-            raise ValueError(
-                f"{self.component.name} must be a model for model/checkpoint artifacts"
-            )
-        if self.artifact_type == ArtifactType.checkpoint:
-            if self.env != Environment.BACKTEST:
-                raise ValueError("checkpoint artifacts are only available in backtesting")
-            if self.checkpoint_step is None:
-                raise ValueError("checkpoint_step is required for a checkpoint")
-        elif self.checkpoint_step is not None:
-            raise ValueError("checkpoint_step is only valid for checkpoints")
-        return self
-
-    def _create_metadata(self) -> PFundComponentDataMetadata | None:
-        """The component snapshot stored with the artifact, None if the request doesn't write it."""
-        return None
-
     def to_data_model(self) -> PFundComponentDataModel:
         from pfund._pfeed_source.component.data_model import PFundComponentDataModel
 
-        return PFundComponentDataModel.for_artifact(
-            self.component,
-            self.artifact_type,
+        return PFundComponentDataModel.from_component(
+            component=self.component,
+            artifact_type=self.artifact_type,
             data_source=self.data_source.name,
-            data_origin=self.data_origin,
-            env=self.env,
-            project_name=self.project_name,
-            run_name=self.run_name,
+            project=self.project,
+            run=self.run,
             checkpoint_step=self.checkpoint_step,
-            metadata=self._create_metadata(),
         )
 
     def __str__(self) -> str:
@@ -72,10 +38,8 @@ class PFundComponentFeedBaseRequest(PFundBaseRequest):
         data: dict[str, str] = {
             "data_source": self.data_source.name,
             "env": str(self.env),
-            "project_name": self.project_name,
-            "run_name": self.run_name,
-            "component": self.component.name,
             "artifact_type": str(self.artifact_type),
+            "component_name": self.component.name,
         }
         if self.checkpoint_step is not None:
             data["checkpoint_step"] = str(self.checkpoint_step)

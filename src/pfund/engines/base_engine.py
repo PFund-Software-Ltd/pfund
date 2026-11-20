@@ -12,16 +12,14 @@ from typing import (
 
 if TYPE_CHECKING:
     from mtflow.tracking.run import MTFlowRun
-    from pfund_blocks.entities import BaseProduct, BaseVenue
+    from pfund_blocks.entities import BaseAccount, BaseProduct, BaseVenue
     from pfund_blocks.entities.venues.venue_base import VenueConfig
     from pfund_blocks.typing import TradingVenue
     from pfund_kit.logging.loggers import ColoredLogger
 
-    from pfund._pfeed_source.engine.feed import PFundEngineFeed
     from pfund.components.actor_proxy import ActorProxy
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.engines.settings.base_engine_settings import BaseEngineSettings
-    from pfund_blocks.entities import BaseAccount
     from pfund.typing import ComponentName, StrategyT
 
     class DataRangeDict(TypedDict, total=False):
@@ -66,7 +64,7 @@ class BaseEngine[
         self._strategies: dict[
             ComponentName, BaseStrategy | ActorProxy[BaseStrategy]
         ] = {}
-        self._feed = cast("PFundEngineFeed", pe.PFund().engine_feed)
+        self._feed = pe.PFund().engine_feed
         self._venues: dict[TradingVenue, BaseVenue] = {}
         self._order_manager = OrderManager()
         self._portfolio_manager = PortfolioManager()

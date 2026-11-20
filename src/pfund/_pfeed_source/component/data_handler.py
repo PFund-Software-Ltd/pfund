@@ -1,87 +1,57 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
+from typing import TYPE_CHECKING, Any, ClassVar, assert_never, cast
 
 if TYPE_CHECKING:
-    from pfeed.io.base_io import BaseIO, Partition
-    from pfeed.streaming.sink import Sink
+    from pfeed.io.base_io import Partition
 
-    from pfund._pfeed_source.component.data_model import PFundComponentDataModel
+    from pfund._pfeed_source.component.data_model import (
+        CheckpointArtifact,
+        ModelArtifact,
+        PFundComponentDataModel,
+        SourceArtifact,
+    )
 
 import datetime
+import json
+from functools import cached_property
 
 import polars as pl
 from pfeed.base.data_handler import BaseDataMetadata
-from pfeed.enums import DataCategory, DataLayer
-from pfeed.io.base_io import DatasetKey
-from pfund.enums import ArtifactType, ComponentType
-from pfund_blocks.enums.env import Environment
-from pydantic import BaseModel, Field
+from pfeed.enums import DataLayer
+from pfeed.io.base_io import BaseIO, DatasetKey
+from pfeed.io.blob_io import BlobIO
+from pfund_kit.utils.temporal import get_utc_now
+from pydantic import Field
 
-from pfund._pfeed_source.base_data_handler import PFundBaseDataHandler
-
-
-# FIXME: restructure it in pfeed-pfund
-def _utc_now() -> datetime.datetime:
-    return datetime.datetime.now(datetime.UTC)
-
-
-class ComponentMetadata(BaseModel):
-    """A persisted snapshot of a pfund component's definition."""
-
-    class_name: str
-    source_sha256: str
-    component_name: str
-    resolution: str
-    df_form: Literal["wide", "long"]
-    signal_cols: list[str] = Field(default_factory=list)
-    model: str | None = None
-    signature: tuple[tuple[Any, ...], dict[str, Any]]
-    config: dict[str, Any]
-    params: dict[str, Any]
-    datas: list[dict[str, Any]]
-    strategies: list[str] = Field(default_factory=list)
-    models: list[str] = Field(default_factory=list)
-    features: list[str] = Field(default_factory=list)
-
-
-class RunMetadata(BaseModel):
-    """The run context in which the component snapshot was produced."""
-
-    env: str
-    project_name: str
-    run_name: str
-    run_mode: str
-    data_start: datetime.date
-    data_end: datetime.date
-    settings: dict[str, Any]
+from pfund._pfeed_source.base.data_handler import PFundBaseDataHandler
+from pfund._pfeed_source.data_category import PFundDataCategory
+from pfund.enums import ArtifactType
 
 
 class PFundComponentDataMetadata(BaseDataMetadata):
-    """Per-partition metadata of a component artifact: the component snapshot that produced it.
+    """pfeed's per-partition metadata of a component artifact, i.e. the IO's commit marker.
 
-    The run identity (env, project, run) and the component identity (type, id) are in the DatasetKey,
-    they are repeated in the snapshot since it is the component's full definition, read back as one unit.
+    The component's own metadata is written once in pfund's metadata.json, not per artifact, see _write_component_metadata().
     """
 
-    schema_version: Literal[1] = 1
-    created_at: datetime.datetime = Field(default_factory=_utc_now, frozen=True)
-    component_id: str
-    component_type: str
-    component: ComponentMetadata
-    run: RunMetadata
+    created_at: datetime.datetime = Field(default_factory=get_utc_now, frozen=True)
+    # pfund's metadata.json of the component, attached by PFundComponentDataHandler.read(),
+    # excluded from model_dump(), so it is never written into the per-partition metadata
+    component: dict[str, Any] | None = Field(default=None, exclude=True)
 
 
 class PFundComponentDataHandler(
     PFundBaseDataHandler["PFundComponentDataModel", PFundComponentDataMetadata]
 ):
+    # FIXME: update the docstring
     """Persists pfund component artifacts on file-based storage.
 
     The artifact arrives already in its owner's currency — opaque bytes for
-    model/source (serialized by pfund), a frame for `data` — so this handler does
-    no (de)serialization itself: it just routes the payload to the IO at a path
-    derived from the component's identity. With the blob path (IOFormat.BLOB -> FileIO)
-    the payload is bytes; the IO writes/reads them verbatim.
+    source/model/checkpoint (serialized by pfund), a frame for `data` — so this handler does
+    no (de)serialization itself: it routes the payload to the IO under the component's DatasetKey.
+    A frame goes to a BaseIO, bytes to a BlobIO, which writes/reads them verbatim;
+    a checkpoint is the partition of its step.
 
     Storage Layout:
     data_path/  (e.g. pfund's config.data_path)
@@ -96,129 +66,282 @@ class PFundComponentDataHandler(
                         {component_type}/
                             {component_class_name-component_id}/
                                 artifacts, e.g.
-                                - trading_df.delta  (delta table of trading df (df in pfud's trading store))
+                                - trading_df/  (DuckLakeIO of trading df (df in pfund's trading store),
+                                                         its own catalog pfeed.db + data/ inside, see the TODO below)
                                 - metadata.json
                                 - model.safetensors, model.joblib (trained model)
                                 - {component}.py  (component source code)
                                 checkpoints/
                                     step=0/
                                         checkpoint.pth or checkpoint.pkl
+
+    TODO: the data artifact's IO must be created per component, not passed in as a shared instance:
+        file-based IOs (ParquetIO, BlobIO) can share one base_path (data_path/runs), since the component
+        is in the DatasetKey, but a catalog-based IO (DuckLakeIO) puts its catalog at its base_path,
+        so a shared one keeps one catalog for every run outside the run folders, and deleting a run folder
+        (see _clear_run_path) leaves the catalog pointing to deleted files.
+        With base_path=<component dir>/trading_df.ducklake, the catalog lives inside the component's dir,
+        so a run folder is self-contained again (delete/copy as one unit).
+        i.e. take the IO's type (+ options) instead of an instance and create it here with that base_path,
+        decide it together with the handler split by payload type (frames vs bytes).
     """
 
     Metadata = PFundComponentDataMetadata
-    # pfund-owned column splitting a standalone strategy backtest's data into chunks
-    CHUNK_COL: ClassVar[str] = "chunk_num"
+    # NOTE: don't confuse them: Metadata above is pfeed's per-partition metadata (the IO's commit marker, _pfeed_metadata.json),
+    # the ones below are for pfund's metadata.json of the component, written once per run per component
+    METADATA_FILE_NAME: ClassVar[str] = "metadata.json"
+    METADATA_SCHEMA_VERSION: ClassVar[int] = 1
 
     def __init__(
         self,
         data_model: PFundComponentDataModel,
-        io: BaseIO,
-        # component data has no data layers, data_layer is not part of its DatasetKey
+        io: BaseIO | BlobIO,
+        # NOTE: component data has no data layers, data_layer is not part of its DatasetKey
         data_layer: DataLayer | str = DataLayer.CLEANED,
-        data_domain: str = DataCategory.COMPONENT_DATA,
-        sink: Sink | None = None,
+        data_domain: str = PFundDataCategory.COMPONENT_DATA,
+        # NOTE: always passed by pfeed's dataflow; streaming isn't supported, setup_streaming() raises
+        is_streaming: bool = False,
     ):
         super().__init__(
-            data_model, io, data_domain=data_domain, data_layer=data_layer, sink=sink
+            data_model,
+            io,
+            data_domain=data_domain,
+            data_layer=data_layer,
+            is_streaming=is_streaming,
         )
-        # FIXME: BaseIO only stores frames, source/model/checkpoint artifacts are opaque bytes and need a bytes IO
-        if data_model.artifact_type != ArtifactType.data:
-            raise NotImplementedError(
-                f"storing {data_model.artifact_type} artifacts is not supported yet, no IO stores bytes"
+        self._validate_io()
+
+    @cached_property
+    def _component_metadata_io(self) -> BlobIO:
+        """pfund's metadata.json is a blob, always stored by its own BlobIO, independent of the artifact's io."""
+        return BlobIO()
+
+    def _validate_io(self) -> None:
+        """Raises TypeError if the IO can't store the artifact: bytes need a BlobIO, frames a BaseIO."""
+        artifact_type = self._data_model.artifact_type
+        if self._should_use_blob_io() and not isinstance(self._io, BlobIO):
+            raise TypeError(
+                f"{artifact_type} artifacts are bytes, they need a BlobIO, got {self._io}"
             )
-        if sink is not None:
-            raise NotImplementedError(
-                "storing streamed component data is not supported yet"
+        if not self._should_use_blob_io() and not isinstance(self._io, BaseIO):
+            raise TypeError(
+                f"{artifact_type} artifacts are frames, they need a BaseIO, got {self._io}"
             )
 
-    def _requires_partitioning(self) -> bool:
-        """Partition standalone strategy backtests within one data artifact.
+    def _should_use_blob_io(self) -> bool:
+        """Whether the artifact is bytes (source/model/checkpoint), stored in a BlobIO."""
+        return self._data_model.artifact_type != ArtifactType.data
 
-        ``chunk_num`` is a pfund-owned dataframe column. Pfeed only gives that
-        logical result boundary a physical representation when persisting a
-        strategy's BACKTEST data to a table format that supports partitioning.
-        Model/feature data and strategy data from other environments retain
-        their existing unpartitioned layout.
+    @property
+    def _blob_io(self) -> BlobIO:
+        if not isinstance(self._io, BlobIO):
+            raise TypeError(f"{self._io} doesn't store bytes, use a BlobIO")
+        return self._io
+
+    def _blob_partition(self) -> Partition:
+        """The bytes artifact's partition: the data model's values of the key's partition levels, e.g. (step,) for a checkpoint.
+
+        A blob's partition level is named after a field of its data model, e.g. "step" -> CheckpointArtifact.step,
+        so the levels are only decided in _create_dataset_key().
         """
-        data_model = self._data_model
-        return (
-            data_model.env == Environment.BACKTEST
-            and data_model.component_type == ComponentType.strategy
+        if not self._should_use_blob_io():
+            raise TypeError(
+                "data artifacts are frames, their partitions come from the frame's columns"
+            )
+        return tuple(
+            getattr(self._data_model, level)
+            for level in self._dataset_key.partition_columns
         )
+
+    def _blob_file_name(self) -> str:
+        """The bytes artifact's file name in storage, e.g. 'model.joblib', so it can be opened as is."""
+        data_model = self._data_model
+        match data_model.artifact_type:
+            case ArtifactType.source:
+                return cast("SourceArtifact", data_model).filename
+            case ArtifactType.model:
+                return f"model{cast('ModelArtifact', data_model).extension}"
+            case ArtifactType.checkpoint:
+                return f"checkpoint{cast('CheckpointArtifact', data_model).extension}"
+            case ArtifactType.data:
+                raise TypeError("data artifacts are frames, they have no file name")
+            case _:
+                assert_never(data_model.artifact_type)
 
     def _create_dataset_key(self) -> DatasetKey:
         data_model = self._data_model
+        component = data_model.component
+        # NOTE: chunk_num is not a partition: a backtest replaces the whole dataset anyway (see write_batch()),
+        # and the chunks are written together, once, see BacktestEngine._backtest()
+        partition_by = (
+            ("step",) if data_model.artifact_type == ArtifactType.checkpoint else ()
+        )
         return DatasetKey(
             namespace={
                 "env": str(data_model.env),
-                "project_name": data_model.project_name,
-                "run_name": data_model.run_name,
+                "project": data_model.project,
+                "run": data_model.run,
             },
             name={
-                "component_type": str(data_model.component_type),
-                "component_id": data_model.component_id,
+                "component_type": str(component.component_type),
+                "component_id": component.component_id,
                 "artifact_type": str(data_model.artifact_type),
             },
-            partition_by=(self.CHUNK_COL,) if self._requires_partitioning() else (),
+            partition_by=partition_by,
         )
 
+    def _create_component_dataset_key(self) -> DatasetKey:
+        """The key of pfund's metadata.json: the component's dir, one level above its artifact_type=... dirs."""
+        key = self._dataset_key
+        name = {k: v for k, v in key.name.items() if k != "artifact_type"}
+        return DatasetKey(namespace=key.namespace, name=name, partition_by=())
+
     def _validate_schema(self, df: pl.DataFrame) -> pl.DataFrame:
-        if not self._requires_partitioning():
-            return df
-        if self.CHUNK_COL not in df.columns:
+        """Checks only what storage relies on: the date column read() sorts by.
+
+        The frame's other columns are owned by the component that produced it (e.g. the backtest kernels).
+        chunk_num and product are sort keys too, but optional: chunk_num only exists in a strategy's BACKTEST data,
+        product only in long form, see _sort().
+        """
+        from pfund.components.bar_dataframe import INDEX_COL
+
+        if INDEX_COL not in df.columns:
             raise ValueError(
-                f"BACKTEST strategy data is missing the required partition column '{self.CHUNK_COL}'"
-            )
-        chunk_num = df.get_column(self.CHUNK_COL)
-        if not chunk_num.dtype.is_integer():
-            raise TypeError(
-                f"BACKTEST strategy data column '{self.CHUNK_COL}' must have an integer dtype, got {chunk_num.dtype}"
-            )
-        if chunk_num.null_count() > 0:
-            raise ValueError(
-                f"BACKTEST strategy data column '{self.CHUNK_COL}' cannot contain nulls"
-            )
-        if not chunk_num.is_empty() and cast("int", chunk_num.min()) < 0:
-            raise ValueError(
-                f"BACKTEST strategy data column '{self.CHUNK_COL}' cannot contain negative values"
+                f"{self._data_model.artifact_type} artifact is missing the required column '{INDEX_COL}'"
             )
         return df
 
-    def _create_metadata(self) -> PFundComponentDataMetadata:
-        metadata = self._data_model.metadata
-        if metadata is None:
-            raise ValueError("component metadata is required when writing an artifact")
-        return metadata
+    @staticmethod
+    def _sort_data_artifact(lf: pl.LazyFrame) -> pl.LazyFrame:
+        """Sorts the data by the sort keys it has, in order: chunk_num, date, product.
 
-    def write_batch(self, df: pl.DataFrame) -> None:
-        """Writes the component's data.
-
-        A backtest reruns from scratch, so its data replaces the whole dataset,
-        including the chunks of a previous run that this run no longer has.
-        Data of other envs (e.g. LIVE) accumulates across sessions, so it is appended.
+        No IO guarantees the order of the rows it reads, e.g. LIVE data accumulated from many appends.
+        chunk_num first, so each chunk (a standalone backtest) reads as its own timeline;
+        product last, so the rows of a date in long form come in a deterministic order.
+        Only the schema is read, so lf stays lazy.
         """
-        df = self._validate_schema(df)
-        metadata = self._create_metadata()
-        if self._requires_partitioning():
-            partitions: set[Partition] = {
-                (chunk_num,) for chunk_num in df.get_column(self.CHUNK_COL).unique()
-            }
-        else:
-            partitions = {()}
-        if self._data_model.env == Environment.BACKTEST:
-            # existing partitions not in df are written as empty partitions, i.e. their rows are deleted
-            _, existing = self._read()
-            self._write(
-                df,
-                {partition: metadata for partition in partitions | existing.keys()},
-                mode="replace",
+        from pfund.components.bar_dataframe import INDEX_COL, PIVOT_COLS
+        from pfund.engines.backtest_engine import BacktestEngine
+
+        schema = lf.collect_schema()
+        sort_cols = [
+            col
+            for col in (BacktestEngine.CHUNK_COL, INDEX_COL, PIVOT_COLS[0])
+            if col in schema
+        ]
+        return lf.sort(sort_cols, maintain_order=True) if sort_cols else lf
+
+    def _create_metadata(self) -> PFundComponentDataMetadata:
+        return PFundComponentDataMetadata()
+
+    def _write_component_metadata(self) -> None:
+        """Writes pfund's metadata.json of the component (what it was in its run), replacing the stored one.
+
+        Written once per run per component, as component.to_dict() + a few fields about the record and the run.
+        A blob in the component's dir, BlobIO adds its own _pfeed_metadata.json (commit marker) next to it.
+        """
+        component_metadata = {
+            # bump when a reader would misread an older metadata.json, e.g. a field renamed or removed
+            "schema_version": self.METADATA_SCHEMA_VERSION,
+            # isoformat(): default=str below would write it with a space instead of the ISO "T"
+            "created_at": get_utc_now().isoformat(),
+            # in backtesting, it also has backtest_mode and num_chunks, see BacktestMixin.to_dict()
+            **self._data_model.component.to_dict(),
+        }
+        # default=str: the signature/config/params can hold objects JSON can't express, e.g. a torch module,
+        # stored as their str, same as component_id hashes them
+        blob = json.dumps(component_metadata, default=str).encode()
+        self._component_metadata_io.write(
+            self._create_component_dataset_key(),
+            {(): (blob, self._create_metadata().model_dump(mode="json"))},
+            file_name=self.METADATA_FILE_NAME,
+        )
+
+    def _read_component_metadata(self) -> dict[str, Any] | None:
+        """Reads pfund's metadata.json of the component as written, None if it isn't stored.
+
+        Values come back as JSON types, e.g. dates as ISO strings.
+        """
+        key = self._create_component_dataset_key()
+        blobs, _ = self._component_metadata_io.read(key, partitions=[()])
+        if () not in blobs:
+            return None
+        return json.loads(blobs[()])
+
+    # NOTE: named df to match BaseDataHandler.write_batch(), but a bytes artifact is bytes
+    def write_batch(self, data: pl.DataFrame | bytes) -> None:
+        """Writes the component's artifact, and pfund's metadata.json with the source artifact.
+
+        Always replaces the stored artifact (of its step, for a checkpoint), same as pfeed's write_batch():
+        a data artifact replaces the whole dataset, e.g. a rerun with fewer chunks leaves none of the previous run's chunks behind.
+        Appending new rows, e.g. live trading data, is write_stream()'s job.
+        """
+        if self._should_use_blob_io():
+            if not isinstance(data, bytes):
+                raise TypeError(
+                    f"{self._data_model.artifact_type} artifact must be bytes, got {type(data)}"
+                )
+            metadata = self._create_metadata().model_dump(mode="json")
+            self._blob_io.write(
+                self._dataset_key,
+                {self._blob_partition(): (data, metadata)},
+                file_name=self._blob_file_name(),
             )
-        else:
-            self._write(
-                df, {partition: metadata for partition in partitions}, mode="append"
+            # the source is written once per run per component, at the end of the component's setup (see _gather()),
+            # when its snapshot is final, so pfund's metadata.json is written with it
+            if self._data_model.artifact_type == ArtifactType.source:
+                self._write_component_metadata()
+            return
+        if not isinstance(data, pl.DataFrame):
+            raise TypeError(
+                f"data artifact must be a polars DataFrame, got {type(data)}"
             )
+        df = self._validate_schema(data)
+        self._write(df, {(): self._create_metadata()}, mode="replace")
+
+    # TODO
+    def write_stream(self, msg: Any) -> None:
+        """Buffers new rows of the data artifact, appended to it by pfeed's flush(), see BaseDataHandler.setup_streaming().
+
+        Not implemented yet, raises NotImplementedError.
+        """
+        # TODO: use this to write live trading data to the trading df (data artifact), once the live trading flow is decided,
+        # e.g. streaming data -> TradingStore updates its df in memory -> the new rows -> write_stream() -> buffered, appended by flush().
+        # needs _build_streaming_schema() (the trading df's columns depend on the component, e.g. from store._df after _gather())
+        # and _stream_partitions() (just {(): metadata}, the data artifact is unpartitioned),
+        # and an IO that supports append (e.g. DuckLakeIO, not ParquetIO)
+        raise NotImplementedError(
+            "writing live trading data to the data artifact is not supported yet"
+        )
 
     def read(
         self,
-    ) -> tuple[pl.LazyFrame | None, dict[Partition, PFundComponentDataMetadata]]:
-        return self._read()
+    ) -> tuple[
+        pl.LazyFrame | bytes | None, dict[Partition, PFundComponentDataMetadata]
+    ]:
+        """Reads the component's artifact: a frame for data, bytes for the others (of its step, for a checkpoint).
+
+        Each partition's metadata comes with pfund's metadata.json of the component attached (see its `component`),
+        None if metadata.json isn't stored, e.g. a child's data artifact written before its source (see _gather()).
+
+        Returns (None, {}) if it isn't stored.
+        """
+        data: pl.LazyFrame | bytes | None
+        if not self._should_use_blob_io():
+            data, metadata = self._read()
+            if data is not None:
+                data = self._sort_data_artifact(data)
+        else:
+            partition = self._blob_partition()
+            blobs, blob_metadata = self._blob_io.read(
+                self._dataset_key, partitions=[partition]
+            )
+            if partition not in blobs:
+                return None, {}
+            data = blobs[partition]
+            metadata = {partition: self._parse_metadata(blob_metadata[partition])}
+        if metadata:
+            component_metadata = self._read_component_metadata()
+            for md in metadata.values():
+                md.component = component_metadata
+        return data, metadata

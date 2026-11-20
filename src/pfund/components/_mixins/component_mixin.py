@@ -249,8 +249,8 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "component_id": self.component_id,
             **self._identity_fields(),
-            "component_name": self.name,
             "signal_cols": self._signal_cols,
             "data_start": self.context.data_start,
             "data_end": self.context.data_end,
@@ -261,6 +261,8 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
     def _identity_fields(self) -> dict[str, Any]:
         return {
             "class_name": self.__class__.__name__,
+            "engine_name": self.context.name,
+            "component_name": self.name,
             "source_sha256": hashlib.sha256(
                 self._source_artifact.read_bytes()
             ).hexdigest(),

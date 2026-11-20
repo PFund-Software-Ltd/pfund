@@ -96,6 +96,7 @@ def BacktestModel(
                 )
             return self._decode_checkpoint(data)
 
+        # TODO
         def save_checkpoint(self, checkpoint: dict[str, Any], step: int) -> RunResult:
             """Persist a training checkpoint the user built (weights, optimizer, epoch,
             ... — their dict, their content). Written under the same model storage as
@@ -106,6 +107,12 @@ def BacktestModel(
                 raise NotImplementedError(
                     "save_checkpoint is not implemented for this model"
                 )
+            # TODO: push the checkpoint instead of staging it on the component.
+            # The checkpoint is user input, not component state; it's staged only because download() pulls artifacts from the component.
+            # e.g. download(artifact_type=checkpoint, checkpoint_step=step, data=self._encode_checkpoint(checkpoint)),
+            # and PFundComponentFeed._download_impl returns request.data for ArtifactType.checkpoint.
+            # removes _checkpoint_artifact, _stage_checkpoint_artifact() and the "No checkpoint is staged" branch,
+            # _encode_checkpoint/_decode_checkpoint stay on the model.
             with self._stage_checkpoint_artifact(checkpoint):
                 return cast(
                     "PFundComponentFeed",

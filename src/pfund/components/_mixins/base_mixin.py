@@ -95,7 +95,7 @@ class ComponentBaseMixin:
         return self._df_form
 
     @property
-    def component_type(self) -> str:
+    def component_type(self) -> ComponentType:
         from pfund.components.features.feature_base import BaseFeature
         from pfund.components.models.model_base import BaseModel
         from pfund.components.strategies.strategy_base import BaseStrategy
@@ -203,9 +203,11 @@ class ComponentBaseMixin:
     def _get_venue_class(self, venue: TradingVenue) -> type[BaseVenue]:
         if self.env.is_simulated():
             from pfund.simulated import SimulatedVenue
+
             return SimulatedVenue
         else:
             from pfund.registry import get_venue
+
             return get_venue(venue)
 
     def _get_streaming_resolutions(self, product: BaseProduct):
@@ -340,13 +342,13 @@ class ComponentBaseMixin:
     def get_tradebook(self, product: ProductName) -> MarketData | None:
         return self.get_data(product, Resolution("1t"))
 
-
     """
     ************************************************
     Override Methods
     Override these methods in your subclass to implement your custom behavior.
     ************************************************
     """
+
     def on_quote(self, data: QuoteData):
         pass
 

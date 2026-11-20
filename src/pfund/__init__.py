@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     # need these imports to support IDE hints:
 
     from pfund_blocks.entities.venues.venue_base import VenueConfig
-    from pfund_bybit import Bybit
+    from pfund_bybit import Bybit as Bybit
 
     # from pfund_hyperliquid import Hyperliquid
     # from pfund_binance import Binance
@@ -120,14 +120,15 @@ def __getattr__(name: str):
         from pfund.components.features.feature_talib import TALibIndicator
 
         return TALibIndicator
-    elif name == "Hyperliquid":
-        return _import_official_venue("pfund_hyperliquid", "Hyperliquid")
-    elif name == "Binance":
-        return _import_official_venue("pfund_binance", "Binance")
+    # ***TRADING VENUES***
     elif name == "Bybit":
         return _import_official_venue("pfund_bybit", "Bybit")
-    elif name == "OKX":
-        return _import_official_venue("pfund_okx", "OKX")
+    # elif name == "Hyperliquid":
+    #     return _import_official_venue("pfund_hyperliquid", "Hyperliquid")
+    # elif name == "Binance":
+    #     return _import_official_venue("pfund_binance", "Binance")
+    # elif name == "OKX":
+    #     return _import_official_venue("pfund_okx", "OKX")
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
@@ -173,8 +174,6 @@ __all__ = (  # noqa: RUF022
     "Indicator",
     "TalibIndicator",
     "TALibIndicator",
-    # trading venues
-    "Bybit",
 )
 
 

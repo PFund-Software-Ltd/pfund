@@ -1,69 +1,78 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, assert_never
+from typing import Any, ClassVar, Literal, assert_never
 
-if TYPE_CHECKING:
-    from pfund.typing import Component
+from pathlib import Path
 
-from pfund.enums import ArtifactType, ComponentType
-from pfund_blocks.enums.env import Environment
-from pydantic import Field, field_validator
+from pydantic import Field, PrivateAttr
 
-from pfund._pfeed_source.base_data_model import PFundBaseDataModel
-from pfund._pfeed_source.component.data_handler import (
-    PFundComponentDataHandler,
-    PFundComponentDataMetadata,
-)
+from pfund._pfeed_source.base.data_model import PFundBaseDataModel
+from pfund._pfeed_source.component.data_handler import PFundComponentDataHandler
+from pfund.enums import ArtifactType
+from pfund.typing import Component
 
 
 class PFundComponentDataModel(PFundBaseDataModel):
-    DataHandler: ClassVar[type[PFundComponentDataHandler]] = PFundComponentDataHandler
+    DataHandler: ClassVar[type[PFundComponentDataHandler]] = PFundComponentDataHandler  # ty: ignore[incompatible-mutable-override]
 
-    artifact_type: ArtifactType
-    component_type: ComponentType
-    # TODO: component names are only checked for uniqueness within one engine
-    # (BaseEngine._assert_unique_component_names), not across engines or runs;
-    # enforce here whatever uniqueness storage needs. Also, component_id leaves
-    # out the name, so two components identical except for their names collide.
-    component_id: str
-    # the component snapshot stored with the artifact, set when downloading, None when retrieving
-    metadata: PFundComponentDataMetadata | None = None
+    component: Component
+    # set from the instance's type in model_post_init(), subclasses don't set it themselves
+    _artifact_type: ArtifactType = PrivateAttr()
+
+    def model_post_init(self, context: Any, /) -> None:
+        super().model_post_init(context)
+        if isinstance(self, DataArtifact):
+            self._artifact_type = ArtifactType.data
+        elif isinstance(self, ModelArtifact):
+            self._artifact_type = ArtifactType.model
+        elif isinstance(self, SourceArtifact):
+            self._artifact_type = ArtifactType.source
+        elif isinstance(self, CheckpointArtifact):
+            self._artifact_type = ArtifactType.checkpoint
+        else:
+            raise TypeError(f"unknown artifact data model {type(self).__name__}")
+
+    @property
+    def artifact_type(self) -> ArtifactType:
+        return self._artifact_type
+
+    @property
+    def component_path(self) -> Path:
+        return (
+            self.run_path
+            / self.component.component_type.to_plural()
+            / self.component.component_id
+        )
 
     @classmethod
-    def for_artifact(
+    def from_component(
         cls,
-        component: Component,
-        artifact_type: ArtifactType | str,
         *,
+        component: Component,
+        artifact_type: ArtifactType,
         data_source: str,
-        env: Environment | str,
-        project_name: str,
-        run_name: str,
-        data_origin: str = "",
+        project: str | None = None,
+        run: str | None = None,
         checkpoint_step: int | None = None,
-        metadata: PFundComponentDataMetadata | None = None,
     ) -> PFundComponentDataModel:
         """Creates the data model subclass of the artifact, e.g. ModelArtifact for artifact_type='model'."""
-        artifact_type = ArtifactType[artifact_type.lower()]
         artifact_kwargs: dict[str, Any] = {
             "data_source": data_source,
-            "data_origin": data_origin,
-            "env": env,
-            "project_name": project_name,
-            "run_name": run_name,
-            "component_type": component.component_type,
-            "component_id": component.component_id,
-            "metadata": metadata,
+            "env": component.env,
+            "component": component,
         }
+        if project is not None:
+            artifact_kwargs["project"] = project
+        if run is not None:
+            artifact_kwargs["run"] = run
         match artifact_type:
             case ArtifactType.model:
-                from pfund.components.models._jax_model import JAXModel
                 from pfund.components.models.pytorch_model import PyTorchModel
                 from pfund.components.models.sklearn_model import SKLearnModel
 
                 if isinstance(component, SKLearnModel):
                     extension = ".joblib"
-                elif isinstance(component, (PyTorchModel, JAXModel)):
+                elif isinstance(component, PyTorchModel):
                     extension = ".safetensors"
                 else:
                     raise ValueError(f"Unsupported model type: {type(component)}")
@@ -75,15 +84,12 @@ class PFundComponentDataModel(PFundBaseDataModel):
                     filename=component._source_artifact.name, **artifact_kwargs
                 )
             case ArtifactType.checkpoint:
-                from pfund.components.models._jax_model import JAXModel
                 from pfund.components.models.pytorch_model import PyTorchModel
 
                 if checkpoint_step is None:
                     raise ValueError("checkpoint_step is required for a checkpoint")
                 if isinstance(component, PyTorchModel):
                     extension = ".pth"
-                elif isinstance(component, JAXModel):
-                    extension = ".pkl"
                 else:
                     raise ValueError(
                         f"Unsupported checkpoint model type: {type(component)}"
@@ -97,41 +103,21 @@ class PFundComponentDataModel(PFundBaseDataModel):
     def __str__(self) -> str:
         return ":".join(
             [
-                self.env,
                 super().__str__(),
-                self.project_name,
-                self.run_name,
-                self.component_type,
-                self.component_id,
+                self.component.name,
                 self.artifact_type,
             ]
         )
-
-    @field_validator("artifact_type", mode="before")
-    @classmethod
-    def _validate_artifact_type(cls, v: str | ArtifactType) -> ArtifactType:
-        if isinstance(v, str):
-            return ArtifactType[v.lower()]
-        return v
-
-    @field_validator("component_type", mode="before")
-    @classmethod
-    def _validate_component_type(cls, v: str | ComponentType) -> ComponentType:
-        if isinstance(v, str):
-            return ComponentType[v.lower()]
-        return v
 
 
 # NOTE: the extension is the format pfund serialized the bytes in, data artifacts are frames,
 # their storage format is decided by the IO, so they have no extension
 class SourceArtifact(PFundComponentDataModel):
-    artifact_type: Literal[ArtifactType.source] = ArtifactType.source
     extension: Literal[".py"] = ".py"  # python source code
     filename: str  # e.g. "my_alpha.py"
 
 
 class ModelArtifact(PFundComponentDataModel):
-    artifact_type: Literal[ArtifactType.model] = ArtifactType.model
     extension: Literal[
         ".joblib",  # sklearn model
         ".safetensors",  # torch/jax model
@@ -139,7 +125,6 @@ class ModelArtifact(PFundComponentDataModel):
 
 
 class CheckpointArtifact(PFundComponentDataModel):
-    artifact_type: Literal[ArtifactType.checkpoint] = ArtifactType.checkpoint
     extension: Literal[
         ".pth",  # pytorch checkpoint
         ".pkl",  # jax checkpoint
@@ -149,5 +134,3 @@ class CheckpointArtifact(PFundComponentDataModel):
 
 class DataArtifact(PFundComponentDataModel):
     """The output frame of a component (strategy / model / feature)."""
-
-    artifact_type: Literal[ArtifactType.data] = ArtifactType.data

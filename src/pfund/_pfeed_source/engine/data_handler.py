@@ -6,7 +6,8 @@ if TYPE_CHECKING:
     from pfund._pfeed_source.engine.data_model import PFundEngineDataModel  # noqa: F401, used as a string forward reference in the class bases
 
 from pfeed.base.data_handler import BaseDataMetadata
-from pfund._pfeed_source.base_data_handler import PFundBaseDataHandler
+
+from pfund._pfeed_source.base.data_handler import PFundBaseDataHandler
 
 
 class PFundEngineDataMetadata(BaseDataMetadata):

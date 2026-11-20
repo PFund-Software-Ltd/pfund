@@ -10,7 +10,6 @@ if TYPE_CHECKING:
     from pfeed.io.table_io import TableIO
     from pfund_blocks.datas import BarData
 
-    from pfund._pfeed_source.component.data_handler import PFundComponentDataMetadata
     from pfund._pfeed_source.component.feed import PFundComponentFeed
     from pfund.typing import ColumnName, Component, Signals
 
@@ -30,9 +29,9 @@ class TradingStore:
         # child signals; event-driven/live execution fills it incrementally;
         # materialize() rehydrates the component's own persisted trading_df.
         self._df: nw.DataFrame[Any] | None = None
-        self._feed: PFundComponentFeed = pe.PFund(
-            pipeline_mode=True
-        ).component_feed.with_component(self._component)
+        self._feed: PFundComponentFeed = pe.PFund().component_feed.with_component(
+            self._component
+        )
         self._features: dict[
             ColumnName, Any
         ] = {}  # child components signals = component's feature columns
@@ -262,12 +261,9 @@ class TradingStore:
         df = nw.from_native(cast("IntoDataFrame", result.data))
         self._df = df.collect() if isinstance(df, nw.LazyFrame) else df
 
-        metadata = cast(
-            "PFundComponentDataMetadata",
-            result.dataflows[0].data_model.metadata,
-        )
-        if metadata.component.signal_cols:
-            self._component.set_signal_cols(metadata.component.signal_cols)
+        metadata = self._feed.retrieve_metadata(self._component)
+        if metadata and metadata["signal_cols"]:
+            self._component.set_signal_cols(metadata["signal_cols"])
 
     def persist_to_lakehouse(self) -> RunResult | None:
         """Persist the component's current data artifact through pfeed.

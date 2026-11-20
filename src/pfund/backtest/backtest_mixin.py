@@ -62,6 +62,19 @@ class BacktestMixin:
     def backtest_mode(self) -> BacktestMode:
         return self._context.mode
 
+    def to_dict(self) -> dict[str, Any]:
+        """Adds how the component was backtested, e.g. so a chunked or vectorized df can't seed live trading."""
+        return {
+            **super().to_dict(),
+            # VECTORIZED or EVENT_DRIVEN
+            "backtest_mode": self.backtest_mode,
+            # the number of standalone backtests (chunks) the data was split into by BacktestEngine.run(num_chunks=...),
+            # each on its own contiguous date range and starting from a fresh state, told apart by the 'chunk_num' column.
+            # 1 means unchunked: one continuous backtest. A chunked (> 1) df is not one timeline,
+            # so it must not seed live trading.
+            "num_chunks": self.context.num_chunks,
+        }
+
     @property
     def folds(self) -> tuple[CVFold, ...]:
         return self._folds
