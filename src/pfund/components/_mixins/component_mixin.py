@@ -68,7 +68,7 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
         self._set_name(name)
         self._set_resolution(resolution)
         self.set_logger(self.logger)
-        self.store.setup_lakehouse()
+        self.store.setup_datalake()
 
     def _update_data_df(self, data: BaseData) -> None:
         data_store = self.get_data_store(data.category)

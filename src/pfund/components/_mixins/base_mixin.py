@@ -46,11 +46,11 @@ class ComponentBaseMixin:
         self._source_artifact_path: Path | None = None
 
         self.logger: logging.Logger = logging.getLogger("pfund")
-        self.products: dict[ProductName, BaseProduct] = {}
+        self._products: dict[ProductName, BaseProduct] = {}
         # the mixin only ever runs as part of a strategy, model or feature
         component = cast("Component", self)
         self._databoy = DataBoy(component)
-        self.store = TradingStore(component)
+        self._store = TradingStore(component)
 
         self._signal_cols: list[str] = []
         # Last successfully computed signals; may not belong to the current bar.
@@ -95,6 +95,14 @@ class ComponentBaseMixin:
     def df_form(self) -> Literal["wide", "long"]:
         assert self._df_form is not None, "df_form is not set"
         return self._df_form
+
+    @property
+    def products(self) -> dict[ProductName, BaseProduct]:
+        return self._products
+
+    @property
+    def store(self) -> TradingStore:
+        return self._store
 
     @property
     def component_type(self) -> ComponentType:

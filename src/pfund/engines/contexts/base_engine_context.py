@@ -5,8 +5,6 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 if TYPE_CHECKING:
     import datetime
 
-    from pfeed.io.table_io import TableIO
-
     from pfund.config import PFundConfig
     from pfund.engines.base_engine import DataRangeDict
     from pfund.engines.settings.base_engine_settings import BaseEngineSettings
@@ -42,7 +40,6 @@ class BaseEngineContext[SettingsT: BaseEngineSettings]:
         self.config: PFundConfig = get_config().scoped(self.name)
         self.logging_config: dict[str, Any] = get_logging_config()
         self.settings = self._resolve_settings(settings)
-        self.datalake: TableIO = self._create_datalake()
 
     def _resolve_settings(self, settings: SettingsT | None) -> SettingsT:
         # load settings if it's None
@@ -56,16 +53,6 @@ class BaseEngineContext[SettingsT: BaseEngineSettings]:
             if settings.persist:
                 settings.save(self.name, self.env)
         return settings
-
-    def _create_datalake(self) -> TableIO:
-        if self.settings.datalake is not None:
-            return self.settings.datalake
-        import pfeed as pe
-
-        # DuckLakeIO's own default is under pfeed's data_path, so pass pfund's (engine-scoped) one
-        return pe.DuckLakeIO(
-            base_path=str(self.config.data_path / pe.DuckLakeIO.DEFAULT_DIR_NAME)
-        )
 
     def _parse_data_range(
         self,

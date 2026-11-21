@@ -88,8 +88,9 @@ class PFundComponentFeed[PipelineT: bool = Literal[False]](
     ) -> BaseIO | BlobIO:
         match artifact_type:
             case ArtifactType.data:
-                # NOTE: context.datalake, not settings.datalake, which is None unless the user set one
-                return component.context.datalake
+                # NOTE: store.datalake, not settings.datalake, which is only the user's template
+                # (or None), the store rebuilds it under the engine's scope in setup_datalake()
+                return component.store.datalake
             case _:
                 from pfeed.io.blob_io import BlobIO
 

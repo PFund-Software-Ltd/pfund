@@ -3,15 +3,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 if TYPE_CHECKING:
-    from datetime import timedelta
-
     from narwhals.typing import IntoDataFrame
     from pfeed.dataflow.result import RunResult
-    from pfeed.io.table_io import TableIO
+    from pfeed.io.table_io import TableIO, VacuumResult
     from pfund_blocks.datas import BarData
 
     from pfund._pfeed_source.component.feed import PFundComponentFeed
     from pfund.typing import ColumnName, Component, Signals
+
+import datetime
 
 import narwhals as nw
 
@@ -29,13 +29,11 @@ class TradingStore:
         # child signals; event-driven/live execution fills it incrementally;
         # materialize() rehydrates the component's own persisted trading_df.
         self._df: nw.DataFrame[Any] | None = None
-        self._feed: PFundComponentFeed = pe.PFund().component_feed.with_component(
-            self._component
-        )
+        self._feed: PFundComponentFeed = pe.PFund().component_feed
         self._features: dict[
             ColumnName, Any
         ] = {}  # child components signals = component's feature columns
-        self._lakehouse_storage: BaseStorage | None = None
+        self._datalake: TableIO | None = None
 
     @property
     def logger(self):
@@ -43,22 +41,34 @@ class TradingStore:
 
     @property
     def datalake(self) -> TableIO:
-        return self._component.context.datalake
+        assert self._datalake is not None, "datalake has not been initialized"
+        return self._datalake
 
-    def setup_lakehouse(self) -> None:
-        storage_config = self.storage_config
-        Storage = storage_config.storage.storage_class
-        io_config = self._feed._create_artifact_io_config(ArtifactType.data)
-        self._lakehouse_storage = Storage.from_storage_config(storage_config).with_io(
-            io_config
-        )
+    def setup_datalake(self) -> None:
+        context = self._component.context
+        datalake = self._component.settings.datalake
+        if datalake is None:
+            import pfeed as pe
 
-    @property
-    def lakehouse_storage(self) -> BaseStorage:
-        assert self._lakehouse_storage is not None
-        return self._lakehouse_storage.with_data_model(
-            self._feed.create_data_model(artifact_type=ArtifactType.data)
-        )
+            # DuckLakeIO's own default is under pfeed's data_path, so pass pfund's (engine-scoped) one
+            self._datalake = pe.DuckLakeIO(
+                base_path=str(context.config.data_path / pe.DuckLakeIO.DEFAULT_DIR_NAME)
+            )
+        else:
+            import inspect
+            from pathlib import Path
+
+            # the user's IO is only a template: it's built before any engine exists, so its
+            # base_path is the lake root, rebuild it nested under the engine name (like config.data_path)
+            Lake = type(datalake)
+            options = {
+                name: getattr(datalake, f"_{name}")
+                for name in inspect.signature(Lake.__init__).parameters
+                if name not in ("self", "base_path")
+            }
+            self._datalake = Lake(
+                base_path=str(Path(datalake._base_path) / context.name), **options
+            )
 
     def has_updated(self, data: BarData) -> bool:
         """Return whether the trading dataframe already contains ``data``'s bar.
@@ -290,87 +300,19 @@ class TradingStore:
             storage_config=self.storage_config,
         ).run()
 
-    def optimize_lakehouse(
-        self,
-        partition_filters: FilterConjunctionType | None = None,
-        target_size: int | None = None,
-        max_concurrent_tasks: int | None = None,
-        max_spill_size: int | None = None,
-        max_temp_directory_size: int | None = None,
-        min_commit_interval: int | timedelta | None = None,
-        writer_properties: WriterProperties | None = None,
-        post_commithook_properties: PostCommitHookProperties | None = None,
-        commit_properties: CommitProperties | None = None,
-    ) -> dict[str, Any] | None:
-        """Compact this component's Delta table using pfeed's implementation.
-
-        Returns ``None`` until the component has successfully persisted its first
-        trading dataframe.
-        """
-        storage = self.lakehouse_storage
-        from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
-
-        if not isinstance(storage, DeltaLakeStorageMixin):
-            raise TypeError(f"{storage.name} does not support optimize_lakehouse")
-        from deltalake.exceptions import TableNotFoundError
-
-        try:
-            delta_table = storage.get_delta_table()
-        except TableNotFoundError:
-            self.logger.debug(
-                f"{self._component.name} has no Delta table to optimize yet"
-            )
-            return None
-        return storage.optimize_delta_table(
-            delta_table,
-            partition_filters=partition_filters,
-            target_size=target_size,
-            max_concurrent_tasks=max_concurrent_tasks,
-            max_spill_size=max_spill_size,
-            max_temp_directory_size=max_temp_directory_size,
-            min_commit_interval=min_commit_interval,
-            writer_properties=writer_properties,
-            post_commithook_properties=post_commithook_properties,
-            commit_properties=commit_properties,
-        )
+    def optimize_lakehouse(self) -> None:
+        """Compacts the datalake's tables, see ``TableIO.optimize()``."""
+        self.datalake.optimize()
 
     def vacuum_lakehouse(
-        self,
-        retention_hours: int | None = None,
-        dry_run: bool = True,
-        enforce_retention_duration: bool = True,
-        post_commithook_properties: PostCommitHookProperties | None = None,
-        commit_properties: CommitProperties | None = None,
-        full: bool = False,
-        keep_versions: list[int] | None = None,
-    ) -> list[str] | None:
-        """Vacuum this component's Delta table using pfeed's implementation.
+        self, retention_hours: int | None = None, dry_run: bool = True
+    ) -> VacuumResult:
+        """Deletes the datalake's history older than ``retention_hours``, see ``TableIO.vacuum()``.
 
-        Pfeed's safe defaults apply, including ``dry_run=True``. Returns ``None``
-        until the component has successfully persisted its first trading
-        dataframe.
+        Pfeed's safe defaults apply: ``dry_run=True`` and ``TableIO.DEFAULT_VACUUM_RETENTION``.
         """
-        storage = self.lakehouse_storage
-        from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
-
-        if not isinstance(storage, DeltaLakeStorageMixin):
-            raise TypeError(f"{storage.name} does not support vacuum_lakehouse")
-        from deltalake.exceptions import TableNotFoundError
-
-        try:
-            delta_table = storage.get_delta_table()
-        except TableNotFoundError:
-            self.logger.debug(
-                f"{self._component.name} has no Delta table to vacuum yet"
-            )
-            return None
-        return storage.vacuum_delta_table(
-            delta_table,
-            retention_hours=retention_hours,
-            dry_run=dry_run,
-            enforce_retention_duration=enforce_retention_duration,
-            post_commithook_properties=post_commithook_properties,
-            commit_properties=commit_properties,
-            full=full,
-            keep_versions=keep_versions,
+        if retention_hours is None:
+            return self.datalake.vacuum(dry_run=dry_run)
+        return self.datalake.vacuum(
+            retention=datetime.timedelta(hours=retention_hours), dry_run=dry_run
         )
