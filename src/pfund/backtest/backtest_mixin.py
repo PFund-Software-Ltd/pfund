@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, cast, override
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast, override
 
 from collections.abc import Callable
 
@@ -24,6 +24,7 @@ from pfeed.enums import DataCategory
 from pfund_kit.style import RichColor, TextStyle, cprint
 
 from pfund.backtest.cv.indexing import SplittableData
+from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.components.bar_dataframe import (
     INDEX_COL as BAR_INDEX_COL,
     KEY_COLS as BAR_KEY_COLS,
@@ -33,23 +34,36 @@ from pfund.components.bar_dataframe import (
     reorder_key_cols,
     validate_spine_df,
 )
-from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.enums import BacktestMode
 
 
 class BacktestMixin(ComponentMixin):
     """Backtest behavior layered over a component.
 
-    Mixed in as the first base, e.g. ``_BacktestModel(BacktestMixin, Model)``,
-    so its overrides precede the component's and its ``super()`` calls resolve
-    to the component class next in the MRO.
+    Subclassed per component type (BacktestModelMixin, BacktestStrategyMixin,
+    BacktestFeatureMixin), which `_adopt()` mixes in as the first base of the
+    component's class, e.g. ``(BacktestModelMixin, MyModel)``, so its overrides
+    precede the component's and its ``super()`` calls resolve to the component
+    class next in the MRO.
     """
+
+    # backtest classes built by _adopt(), one per (backtest mixin, component class)
+    _backtest_classes: ClassVar[dict[tuple[type, type], type]] = {}
+
+    def __init_subclass__(cls, **kwargs: Any):
+        super().__init_subclass__(**kwargs)
+        # A backtest class never runs __init__: _adopt() swaps __class__ on an
+        # already-constructed component, so an __init__ here would silently never run.
+        # Backtest state belongs in _init_backtest_state() instead.
+        assert "__init__" not in vars(cls), (
+            f"{cls.__name__} must not define __init__(), put backtest state in _init_backtest_state()"
+        )
 
     def __mixin_post_init__(self, *args: Any, **kwargs: Any):
         # A backtest component is never constructed directly: the user's component is
         # created (and post-initialized) under its own class, then adopted in place via
         # _adopt(), which swaps __class__ and calls _init_backtest_state() instead.
-        # Reaching here means something constructed a _BacktestX(...) directly,
+        # Reaching here means something constructed a backtest class directly,
         # bypassing _adopt().
         raise RuntimeError(
             f"{type(self).__name__} must be created via BacktestMixin._adopt(), not constructed directly"
@@ -63,20 +77,42 @@ class BacktestMixin(ComponentMixin):
 
     @classmethod
     def _adopt[C: Component](cls, component: C) -> C:
-        """Turns an already-constructed component into an instance of this backtest class, in place.
+        """Turns an already-constructed component into its backtesting version, in place.
 
         The component keeps its identity and state (name, source artifact path, etc.),
-        only its class is swapped to ``cls``, i.e. ``_BacktestX(BacktestMixin, type(component))``.
+        only its class is swapped to a backtest class built from ``(cls, type(component))``,
+        e.g. ``(BacktestModelMixin, MyModel)``. The backtest class is built once per
+        component class and reused.
 
         Args:
-            component: the component to adopt, ``cls`` must be built from ``type(component)``.
+            component: the component to adopt. Returned as is if already adopted,
+                e.g. the same instance shared by two parents.
 
         Returns:
-            The same component object, now an instance of ``cls``.
+            The same component object, now an instance of the backtest class.
         """
-        # a class swap can't be typed: ty types __class__ as type[C], while cls is a
+        if isinstance(component, BacktestMixin):
+            return component
+        Component = type(component)
+        key = (cls, Component)
+        Backtest = BacktestMixin._backtest_classes.get(key)
+        if Backtest is None:
+            # built with the component's metaclass (MetaModel etc.), like a class statement would.
+            # __name__/__qualname__ make it look like the component's own class in logs/errors,
+            # __module__ marks it as a pfund class, so the metaclass doesn't treat it as user-defined
+            Backtest = type(Component)(
+                Component.__name__,
+                (cls, Component),
+                {
+                    "__module__": cls.__module__,
+                    "__qualname__": Component.__qualname__,
+                    "__wrapped__": Component,
+                },
+            )
+            BacktestMixin._backtest_classes[key] = Backtest
+        # a class swap can't be typed: ty types __class__ as type[C], while Backtest is a
         # subclass of type(component) built at runtime
-        cast("Any", component).__class__ = cls
+        cast("Any", component).__class__ = Backtest
         cast("BacktestMixin", component)._init_backtest_state()
         return component
 
@@ -450,17 +486,17 @@ class BacktestMixin(ComponentMixin):
         **kwargs: Any,
     ) -> ComponentT:
         if component.is_strategy():
-            from pfund.components.strategies.strategy_backtest import BacktestStrategy
+            from pfund.backtest.strategy_mixin import BacktestStrategyMixin
 
-            component = BacktestStrategy(component)
+            component = BacktestStrategyMixin._adopt(component)
         elif component.is_model():
-            from pfund.components.models.model_backtest import BacktestModel
+            from pfund.backtest.model_mixin import BacktestModelMixin
 
-            component = BacktestModel(component)
+            component = BacktestModelMixin._adopt(component)
         elif component.is_feature():
-            from pfund.components.features.feature_backtest import BacktestFeature
+            from pfund.backtest.feature_mixin import BacktestFeatureMixin
 
-            component = BacktestFeature(component)
+            component = BacktestFeatureMixin._adopt(component)
         else:
             raise ValueError(f"Unsupported component type: {component}")
         return super()._add_component(

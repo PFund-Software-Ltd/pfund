@@ -68,11 +68,6 @@ class MetaFeature(ABCMeta):
                 # assert users to include 'indicator' as the first argument in __init__() (TALibIndicator subclasses only)
                 MetaFeature._assert_required_arg(cls, init_args)
 
-        if name == "_BacktestFeature":
-            assert "__init__" not in namespace, (
-                "In order to keep the MRO clean, _BacktestFeature is not allowed to have __init__()"
-            )
-
     @staticmethod
     def _get_required_arg(component_class: type) -> Literal["indicator", ""]:
         # plain features require no first arg; TALibIndicator subclasses must lead with

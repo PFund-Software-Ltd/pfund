@@ -147,8 +147,8 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         Returns:
             The strategy configured for backtesting.
         """
+        from pfund.backtest.strategy_mixin import BacktestStrategyMixin
         from pfund.components.strategies._dummy_strategy import _DummyStrategy
-        from pfund.components.strategies.strategy_backtest import BacktestStrategy
 
         dummy_strategy_name = _DummyStrategy.__name__
         if dummy_strategy_name in self._strategies:
@@ -165,7 +165,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 raise ValueError(
                     f'strategy name "{dummy_strategy_name}" is reserved, please use another name'
                 )
-        strategy = BacktestStrategy(strategy)
+        strategy = BacktestStrategyMixin._adopt(strategy)
         strategy.set_top_component()
         return cast(
             "StrategyT",

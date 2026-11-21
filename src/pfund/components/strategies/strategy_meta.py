@@ -45,17 +45,3 @@ class MetaStrategy(ABCMeta):
                 # hasattr saw the parent's inherited attr and skipped the child's)
                 cls.__original_init__ = original_init
         return cls
-
-    def __init__(
-        cls,
-        name: str,
-        bases: tuple[type, ...],
-        namespace: dict[str, Any],
-        **kwargs: Any,
-    ) -> None:
-        super().__init__(name, bases, namespace, **kwargs)
-
-        if name == "_BacktestStrategy":
-            assert "__init__" not in namespace, (
-                "In order to keep the MRO clean, _BacktestStrategy is not allowed to have __init__()"
-            )
