@@ -11,7 +11,6 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
     from torch import Tensor
     from jax import Array
-    from pfeed.dataflow.result import RunResult
 
     from pfund.typing import Signals
 
@@ -203,15 +202,10 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         self.load()
 
     def load(self) -> None:
-        result = self.store._feed.retrieve(
-            artifact_type=ArtifactType.model,
-            storage_config=self.store.storage_config,
-        ).run()
-        data = result.data
+        data = self.store._feed.load_artifact(self, ArtifactType.model)
         if data is None:
             raise FileNotFoundError(
-                f"no saved model found for '{self.name}' in "
-                + f"{self.store.storage_config.storage} storage; call save() after training first"
+                f"no saved model found for '{self.name}'; call save() after training first"
             )
         if not isinstance(data, bytes):
             raise TypeError(
@@ -219,8 +213,5 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             )
         self._decode(data)
 
-    def save(self) -> RunResult:
-        return self.store._feed.download(
-            artifact_type=ArtifactType.model,
-            storage_config=self.store.storage_config,
-        ).run()
+    def save(self) -> None:
+        self.store._feed.save_artifact(self, ArtifactType.model)

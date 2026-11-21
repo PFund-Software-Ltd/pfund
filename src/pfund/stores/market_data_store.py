@@ -434,7 +434,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         pass
 
     # TODO:
-    def rehydrate_from_lakehouse(self):
+    def rehydrate_from_datalake(self):
         """Load data from pfeed's data lakehouse when:
         - theres missing data, load streaming data from pfeed (data has been recorded in pfeed)
         - EOD data is available, replace SourceType.STREAM (live data) with SourceType.BATCH (official EOD data)

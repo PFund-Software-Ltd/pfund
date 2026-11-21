@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
-    from pfeed.dataflow.result import RunResult
+    from pfeed.io.blob_io import BlobIO
     from pfeed.io.table_io import TableIO, VacuumResult
     from pfund_blocks.datas import BarData
 
@@ -34,6 +34,7 @@ class TradingStore:
             ColumnName, Any
         ] = {}  # child components signals = component's feature columns
         self._datalake: TableIO | None = None
+        self._blob_io: BlobIO | None = None
 
     @property
     def logger(self):
@@ -44,31 +45,50 @@ class TradingStore:
         assert self._datalake is not None, "datalake has not been initialized"
         return self._datalake
 
-    def setup_datalake(self) -> None:
+    @property
+    def blob_io(self) -> BlobIO:
+        assert self._blob_io is not None, "blob_io has not been initialized"
+        return self._blob_io
+
+    def setup_lakehouse(self) -> None:
+        """Sets up the lakehouse's IOs: the datalake (table IO) and the blob IO.
+
+        Both live side by side under the engine's lakehouse path:
+        <lakehouse_path>/<Lake.DEFAULT_DIR_NAME> and <lakehouse_path>/<BlobIO.DEFAULT_DIR_NAME>,
+        so blobs always follow the datalake's storage.
+        """
+        import posixpath
+
+        from pfeed.io.blob_io import BlobIO
+
         context = self._component.context
         datalake = self._component.settings.datalake
         if datalake is None:
             import pfeed as pe
 
-            # DuckLakeIO's own default is under pfeed's data_path, so pass pfund's (engine-scoped) one
-            self._datalake = pe.DuckLakeIO(
-                base_path=str(context.config.data_path / pe.DuckLakeIO.DEFAULT_DIR_NAME)
-            )
+            DataLakeIO = pe.DuckLakeIO
+            options = {}
+            # pfund's data_path is already engine-scoped
+            lakehouse_path = str(context.config.data_path)
         else:
             import inspect
-            from pathlib import Path
 
             # the user's IO is only a template: it's built before any engine exists, so its
-            # base_path is the lake root, rebuild it nested under the engine name (like config.data_path)
-            Lake = type(datalake)
+            # base_path is the lakehouse root, nest it under the engine name (like config.data_path)
+            DataLakeIO = type(datalake)
             options = {
                 name: getattr(datalake, f"_{name}")
-                for name in inspect.signature(Lake.__init__).parameters
+                for name in inspect.signature(DataLakeIO.__init__).parameters
                 if name not in ("self", "base_path")
             }
-            self._datalake = Lake(
-                base_path=str(Path(datalake._base_path) / context.name), **options
-            )
+            # NOTE: posixpath, not Path, which collapses the "//" of a URI (e.g. s3://)
+            lakehouse_path = posixpath.join(datalake._base_path, context.name)
+        self._datalake = DataLakeIO(
+            base_path=posixpath.join(lakehouse_path, DataLakeIO.DEFAULT_DIR_NAME), **options
+        )
+        self._blob_io = BlobIO(
+            base_path=posixpath.join(lakehouse_path, BlobIO.DEFAULT_DIR_NAME)
+        )
 
     def has_updated(self, data: BarData) -> bool:
         """Return whether the trading dataframe already contains ``data``'s bar.
@@ -247,40 +267,34 @@ class TradingStore:
             df = df.tail(max_rows)
         self._df = df
 
-    def _save_source_artifact(self) -> RunResult:
-        return self._feed.download(
-            artifact_type=ArtifactType.source,
-            storage_config=self.storage_config,
-        ).run()
+    def _save_source_artifact(self) -> None:
+        self._feed.save_artifact(self._component, ArtifactType.source)
 
     # TODO: remove strategy columns, e.g. "signal", "order_xxx" and "trade_xxx"
     # they are unnecessary and could be misleading (if created by vectorized backtesting, results are inaccurate)
     def materialize(self):
         """Load this component's own trading_df.delta (data artifact)."""
-        result = self._feed.retrieve(
-            artifact_type=ArtifactType.data,
-            storage_config=self.storage_config,
-        ).run()
-        if result.data is None:
+        data = self._feed.load_artifact(self._component, ArtifactType.data)
+        if data is None:
             self._df = None
             self.logger.debug(
                 f"No persisted trading dataframe found for '{self._component.name}'"
             )
             return
 
-        df = nw.from_native(cast("IntoDataFrame", result.data))
+        df = nw.from_native(cast("IntoDataFrame", data))
         self._df = df.collect() if isinstance(df, nw.LazyFrame) else df
 
-        metadata = self._feed.retrieve_metadata(self._component)
+        metadata = self._feed.load_metadata(self._component)
         if metadata and metadata["signal_cols"]:
             self._component.set_signal_cols(metadata["signal_cols"])
 
-    def persist_to_lakehouse(self) -> RunResult | None:
+    def persist_to_datalake(self) -> None:
         """Persist the component's current data artifact through pfeed.
 
         The dataframe is not passed directly to pfeed. The component feed treats
         the bound component as a data source and extracts ``component._data_artifact``
-        when the dataflow runs.
+        when it saves.
 
         Which rows are exposed by ``data_artifact`` depends on the execution mode:
         vectorized backtesting exposes the complete trading dataframe, while
@@ -294,17 +308,14 @@ class TradingStore:
         )
         if not has_signals:
             self.logger.debug(f"{component.name} has no signals to persist yet")
-            return None
-        return self._feed.download(
-            artifact_type=ArtifactType.data,
-            storage_config=self.storage_config,
-        ).run()
+            return
+        self._feed.save_artifact(component, ArtifactType.data)
 
-    def optimize_lakehouse(self) -> None:
+    def optimize_datalake(self) -> None:
         """Compacts the datalake's tables, see ``TableIO.optimize()``."""
         self.datalake.optimize()
 
-    def vacuum_lakehouse(
+    def vacuum_datalake(
         self, retention_hours: int | None = None, dry_run: bool = True
     ) -> VacuumResult:
         """Deletes the datalake's history older than ``retention_hours``, see ``TableIO.vacuum()``.

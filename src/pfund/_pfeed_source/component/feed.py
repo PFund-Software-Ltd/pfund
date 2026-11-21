@@ -89,17 +89,11 @@ class PFundComponentFeed[PipelineT: bool = Literal[False]](
         match artifact_type:
             case ArtifactType.data:
                 # NOTE: store.datalake, not settings.datalake, which is only the user's template
-                # (or None), the store rebuilds it under the engine's scope in setup_datalake()
+                # (or None), the store rebuilds it under the engine's scope in setup_lakehouse()
                 return component.store.datalake
             case _:
-                from pfeed.io.blob_io import BlobIO
-
-                # BlobIO's own default is under pfeed's data_path, so pass pfund's (engine-scoped) one
-                return BlobIO(
-                    base_path=str(
-                        component.context.config.data_path / BlobIO.DEFAULT_DIR_NAME
-                    )
-                )
+                # the store builds the blob IO next to the datalake, so they share the lakehouse's storage
+                return component.store.blob_io
 
     def load_metadata(
         self,

@@ -507,5 +507,5 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                     [nw.from_native(backtest_df) for backtest_df in backtest_dfs],
                     how="vertical",
                 )
-                backtestee.store.persist_to_lakehouse()
+                backtestee.store.persist_to_datalake()
         return backtest_dfs

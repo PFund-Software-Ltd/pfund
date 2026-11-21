@@ -30,7 +30,7 @@ from pfund.enums import PFundChannel
 
 
 class DataBoy:
-    LAKEHOUSE_MAINTENANCE_JITTER_SECONDS: ClassVar[int] = 300
+    DATALAKE_MAINTENANCE_JITTER_SECONDS: ClassVar[int] = 300
 
     def __init__(self, component: Component):
         self._component: Component = component
@@ -212,12 +212,12 @@ class DataBoy:
         if self._data_zmq or self._signals_zmq:
             self._zmq_thread = Thread(target=self._collect, daemon=True)
             self._zmq_thread.start()
-        # TODO: flush stale bars, rehydrate_from_lakehouse in market data store
+        # TODO: flush stale bars, rehydrate_from_datalake in market data store
         if self._scheduler:
             store = self._component.store
             settings = self._component.settings
             self._scheduler.add_job(
-                store.persist_to_lakehouse,
+                store.persist_to_datalake,
                 "interval",
                 seconds=settings.persist_interval,
                 coalesce=True,
@@ -225,19 +225,19 @@ class DataBoy:
             )
             if settings.optimize_interval is not None:
                 self._scheduler.add_job(
-                    store.optimize_lakehouse,
+                    store.optimize_datalake,
                     "interval",
                     seconds=settings.optimize_interval,
-                    jitter=self.LAKEHOUSE_MAINTENANCE_JITTER_SECONDS,
+                    jitter=self.DATALAKE_MAINTENANCE_JITTER_SECONDS,
                     coalesce=True,
                     max_instances=1,
                 )
             if settings.vacuum_interval is not None:
                 self._scheduler.add_job(
-                    store.vacuum_lakehouse,
+                    store.vacuum_datalake,
                     "interval",
                     seconds=settings.vacuum_interval,
-                    jitter=self.LAKEHOUSE_MAINTENANCE_JITTER_SECONDS,
+                    jitter=self.DATALAKE_MAINTENANCE_JITTER_SECONDS,
                     kwargs={
                         "dry_run": False,
                         "retention_hours": settings.vacuum_retention_hours,
@@ -261,7 +261,7 @@ class DataBoy:
             self._scheduler = None
             # persist one last time (after the zmq thread has stopped delivering,
             # so the trading df is final) so rows since the last tick aren't lost
-            self._component.store.persist_to_lakehouse()
+            self._component.store.persist_to_datalake()
 
     def _update_data_store(self, msg: StreamingMessage):
         from msgspec import structs

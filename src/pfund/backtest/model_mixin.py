@@ -5,9 +5,6 @@ from typing import TYPE_CHECKING, Any, cast, override
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-    from pfeed.dataflow.result import RunResult
-
-    from pfund._pfeed_source.component.feed import PFundComponentFeed
     from pfund.components.models.model_base import BaseModel
 
 from contextlib import contextmanager
@@ -79,19 +76,12 @@ class BacktestModelMixin(BacktestMixin):
             raise NotImplementedError(
                 "load_checkpoint is not implemented for this model"
             )
-        result = cast(
-            "PFundComponentFeed",
-            self.store._feed.retrieve(
-                artifact_type=ArtifactType.checkpoint,
-                storage_config=self.store.storage_config,
-                checkpoint_step=step,
-            ),
-        ).run()
-        data = result.data
+        data = self.store._feed.load_artifact(
+            cast("BaseModel", self), ArtifactType.checkpoint, checkpoint_step=step
+        )
         if data is None:
             raise FileNotFoundError(
-                f"no checkpoint found for '{self.name}' at step {step} in "
-                + f"{self.store.storage_config.storage} storage"
+                f"no checkpoint found for '{self.name}' at step {step}"
             )
         if not isinstance(data, bytes):
             raise TypeError(
@@ -101,7 +91,7 @@ class BacktestModelMixin(BacktestMixin):
         return self._decode_checkpoint(data)
 
     # TODO
-    def save_checkpoint(self, checkpoint: dict[str, Any], step: int) -> RunResult:
+    def save_checkpoint(self, checkpoint: dict[str, Any], step: int) -> None:
         """Persist a training checkpoint the user built (weights, optimizer, epoch,
         ... — their dict, their content). Written under the same model storage as
         save(), but keyed by `step` so checkpoints coexist without clobbering the
@@ -118,11 +108,6 @@ class BacktestModelMixin(BacktestMixin):
         # removes _checkpoint_artifact, _stage_checkpoint_artifact() and the "No checkpoint is staged" branch,
         # _encode_checkpoint/_decode_checkpoint stay on the model.
         with self._stage_checkpoint_artifact(checkpoint):
-            return cast(
-                "PFundComponentFeed",
-                self.store._feed.download(
-                    artifact_type=ArtifactType.checkpoint,
-                    storage_config=self.store.storage_config,
-                    checkpoint_step=step,
-                ),
-            ).run()
+            self.store._feed.save_artifact(
+                cast("BaseModel", self), ArtifactType.checkpoint, checkpoint_step=step
+            )
