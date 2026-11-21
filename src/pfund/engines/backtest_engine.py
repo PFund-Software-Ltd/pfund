@@ -7,12 +7,12 @@ if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
     from pfund_blocks.resolution import Resolution
 
+    from pfund.backtest.backtest_mixin import BacktestMixin
     from pfund.backtest.cv.dataset_splits import DatasetSplits
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel, UnderlyingModel
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.engines.base_engine import DataRangeDict
-    from pfund.typing import FeatureT, ModelT, StrategyT
 
     type BacktesteeName = str
 
@@ -23,6 +23,7 @@ import numpy as np
 from pfund_blocks.enums.env import Environment
 from pfund_kit.utils.progress_bar import ProgressBar
 
+from pfund.components.strategies._dummy_strategy import _DummyStrategy
 from pfund.engines.base_engine import BaseEngine
 from pfund.engines.contexts.backtest_engine_context import BacktestEngineContext
 from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
@@ -129,11 +130,18 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
     def backtest_mode(self) -> BacktestMode:
         return self.context.mode
 
-    def add_strategy(
+    @property
+    def _dummy_strategy_name(self) -> str:
+        return _DummyStrategy.__name__
+
+    def add_strategy[StrategyT: BaseStrategy](
         self,
         strategy: StrategyT,
         resolution: str,
         name: str = "",
+        # NOTE: ray args are ignored in backtesting, same as BacktestMixin._add_component
+        ray_actor_options: dict[str, Any] | None = None,
+        **ray_kwargs: Any,
     ) -> StrategyT:
         """Add a strategy as the top-level backtesting component.
 
@@ -148,71 +156,64 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             The strategy configured for backtesting.
         """
         from pfund.backtest.strategy_mixin import BacktestStrategyMixin
-        from pfund.components.strategies._dummy_strategy import _DummyStrategy
 
-        dummy_strategy_name = _DummyStrategy.__name__
-        if dummy_strategy_name in self._strategies:
+        if dummy_strategy := self._get_dummy_strategy():
             raise Exception(
-                "adding another strategy is not allowed during model/feature backtesting"
+                f"{next(iter({**dummy_strategy.models, **dummy_strategy.features}))} is already being backtested, "
+                + "cannot add a strategy to the engine. "
             )
-        elif self._strategies:
+
+        if self._strategies:
             raise Exception(
-                f"strategy {list(self._strategies)[0]} already exists, only one strategy is allowed in backtesting"
+                f"strategy {next(iter(self._strategies))} already exists, only one strategy is allowed in backtesting"
             )
-        Strategy = type(strategy)
-        if Strategy is not _DummyStrategy:
-            if name == dummy_strategy_name:
-                raise ValueError(
-                    f'strategy name "{dummy_strategy_name}" is reserved, please use another name'
-                )
+
+        if ray_actor_options or ray_kwargs:
+            self._logger.warning(
+                f"ray_actor_options and ray_kwargs are ignored in backtesting, strategy {name or strategy.name} will run locally"
+            )
+
         strategy = BacktestStrategyMixin._adopt(strategy)
-        strategy.set_top_component()
-        return cast(
+        strategy = cast(
             "StrategyT",
-            super().add_strategy(
-                strategy=strategy,
-                resolution=resolution,
-                name=name or Strategy.__name__,
-            ),
+            super().add_strategy(strategy=strategy, resolution=resolution, name=name),
         )
+        cast("BacktestMixin", strategy).set_top_component()
+        return strategy
 
-    def _add_component(
-        self,
-        component: ModelT | FeatureT,
-        resolution: str,
-        name: str,
-        df_form: Literal["wide", "long"],
-    ) -> ModelT | FeatureT:
-        """Add model without creating a strategy (using dummy strategy)"""
-        from pfund.components.strategies._dummy_strategy import _DummyStrategy
-
-        dummy_strategy_name = _DummyStrategy.__name__
-        only_dummy_strategy_exists = dummy_strategy_name in self._strategies
-        assert not only_dummy_strategy_exists, (
-            "Please use strategy.add_model/add_feature(...) instead of engine.add_model/add_feature(...) when a strategy is already created"
-        )
-        if dummy_strategy_name not in self._strategies:
-            strategy = self.add_strategy(
-                _DummyStrategy(),
-                resolution,
-                name=dummy_strategy_name,
-            )
-        strategy = self.get_strategy(dummy_strategy_name)
-        if strategy.models or strategy.features:
+    def _create_dummy_strategy(self, resolution: str) -> _DummyStrategy:
+        if self._strategies:
             raise ValueError(
-                "Adding more than 1 model/feature in backtesting is not supported, "
-                + "you should (train) and save your models/features one by one"
+                f"strategy {next(iter(self._strategies))} is already being backtested, cannot add a top-level model/feature to the engine. "
+                + "Did you mean strategy.add_model/add_feature(...) instead of engine.add_model/add_feature(...)?"
             )
-        component = strategy._add_component(
-            component=component,
-            resolution=resolution,
-            name=name,
-            df_form=df_form,
+        return self.add_strategy(
+            _DummyStrategy(),
+            resolution,
+            name=self._dummy_strategy_name,
         )
-        component.set_top_component()
-        return component
 
-    def add_model(
+    def _get_dummy_strategy(self) -> _DummyStrategy | None:
+        if self._dummy_strategy_name in self._strategies:
+            dummy_strategy = cast(
+                "_DummyStrategy", self.get_strategy(self._dummy_strategy_name)
+            )
+            return dummy_strategy
+        else:
+            return None
+
+    def _assert_no_component_in_dummy_strategy(self):
+        if (dummy_strategy := self._get_dummy_strategy()) and (
+            dummy_strategy.models or dummy_strategy.features
+        ):
+            raise ValueError(
+                f"{next(iter({**dummy_strategy.models, **dummy_strategy.features}))} is already being backtested, "
+                + "only one top-level model/feature is allowed in backtesting. "
+                + "Backtest (train) and save your models/features one by one, "
+                + "or add them to a strategy via strategy.add_model/add_feature(...)"
+            )
+
+    def add_model[ModelT: BaseModel](
         self,
         model: ModelT | UnderlyingModel,
         resolution: str,
@@ -233,19 +234,26 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         Returns:
             The model configured for backtesting.
         """
-        from pfund.components.models.wrap import wrap_model
-
-        return self._add_component(
-            component=cast("ModelT", wrap_model(model)),
-            resolution=resolution,
-            name=name,
-            df_form=df_form,
+        dummy_strategy = self._get_dummy_strategy() or self._create_dummy_strategy(
+            resolution
         )
+        self._assert_no_component_in_dummy_strategy()
+        model = cast(
+            "ModelT",
+            dummy_strategy.add_model(
+                model=model,
+                resolution=resolution,
+                name=name,
+                df_form=df_form,
+            ),
+        )
+        cast("BacktestMixin", model).set_top_component()
+        return model
 
-    def add_feature(
+    def add_feature[FeatureT: BaseFeature](
         self,
         feature: FeatureT,
-        resolution: str = "",
+        resolution: str,
         name: str = "",
         df_form: Literal["wide", "long"] = "wide",
     ) -> FeatureT:
@@ -256,20 +264,28 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
 
         Args:
             feature: Feature instance to backtest.
-            resolution: Resolution at which the feature runs. Uses the feature's
-                resolution when omitted.
+            resolution: Resolution at which the feature runs.
             name: Optional name for the feature.
             df_form: Dataframe layout used by the feature.
 
         Returns:
             The feature configured for backtesting.
         """
-        return self._add_component(
-            component=feature,
-            resolution=resolution,
-            name=name,
-            df_form=df_form,
+        dummy_strategy = self._get_dummy_strategy() or self._create_dummy_strategy(
+            resolution
         )
+        self._assert_no_component_in_dummy_strategy()
+        feature = cast(
+            "FeatureT",
+            dummy_strategy.add_feature(
+                feature=feature,
+                resolution=resolution,
+                name=name,
+                df_form=df_form,
+            ),
+        )
+        cast("BacktestMixin", feature).set_top_component()
+        return feature
 
     def run(
         self,
@@ -293,8 +309,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 if None, defaults to os.cpu_count().
                 This will be ignored if Ray is not used (i.e. num_chunks = 1).
         """
-        from pfund.components.strategies._dummy_strategy import _DummyStrategy
-
         if num_chunks < 1:
             raise ValueError("num_chunks must be greater than 0")
         if num_cpus is not None:
@@ -314,13 +328,13 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
 
         try:
             # NOTE: only one strategy exists in backtesting
-            strategy = cast("BaseStrategy", list(self._strategies.values())[0])
+            strategy = cast("BaseStrategy", next(iter(self._strategies.values())))
             is_dummy_strategy = strategy.name == _DummyStrategy.__name__
             if is_dummy_strategy:
                 # dummy strategy has exactly one model or one feature
                 if strategy.models:
                     model: BaseModel = cast(
-                        "BaseModel", list(strategy.models.values())[0]
+                        "BaseModel", next(iter(strategy.models.values()))
                     )
                     if (
                         self.backtest_mode == BacktestMode.VECTORIZED
@@ -331,7 +345,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                     backtestee = model
                 elif strategy.features:
                     feature: BaseFeature = cast(
-                        "BaseFeature", list(strategy.features.values())[0]
+                        "BaseFeature", next(iter(strategy.features.values()))
                     )
                     backtestee = feature
                 else:

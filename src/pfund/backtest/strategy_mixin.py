@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, override
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
@@ -15,6 +15,17 @@ class BacktestStrategyMixin(BacktestMixin):
 
     Adopted onto a strategy via ``BacktestStrategyMixin._adopt(strategy)``.
     """
+
+    @override
+    def _set_name(self, name: str):
+        from pfund.components.strategies._dummy_strategy import _DummyStrategy
+
+        # NOTE: isinstance, not type(self) is _DummyStrategy, since _adopt swaps in a Backtest subclass
+        if name == _DummyStrategy.__name__ and not isinstance(self, _DummyStrategy):
+            raise ValueError(
+                f'strategy name "{_DummyStrategy.__name__}" is reserved, please use another name'
+            )
+        super()._set_name(name)
 
     @staticmethod
     def _postprocess_backtest_df(

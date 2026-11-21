@@ -1,3 +1,4 @@
+# ty: ignore[incompatible-property-override]
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast, override
@@ -127,7 +128,7 @@ class BacktestMixin(ComponentMixin):
 
     @property
     def backtest_mode(self) -> BacktestMode:
-        return self._context.mode
+        return self.context.mode
 
     def to_dict(self) -> dict[str, Any]:
         """Adds how the component was backtested, e.g. so a chunked or vectorized df can't seed live trading."""

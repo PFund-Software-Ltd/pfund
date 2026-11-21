@@ -11,7 +11,6 @@ if TYPE_CHECKING:
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel
     from pfund.engines.contexts.base_engine_context import BaseEngineContext
-    from pfund.engines.contexts.trade_engine_context import TradeEngineContext
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.stores.base_data_store import BaseDataStore
     from pfund.stores.market_data_store import MarketDataStore
@@ -63,10 +62,10 @@ class ComponentBaseMixin:
         self._is_gathered = False
 
     @property
-    def context(self) -> TradeEngineContext:
+    def context(self) -> BaseEngineContext[TradeEngineSettings]:
         assert self._context is not None, "context is not set"
-        # backtesting overrides this to return BacktestEngineContext (see backtest_mixin.py)
-        return cast("TradeEngineContext", self._context)
+        # NOTE: backtesting narrows via BacktestMixin._backtest_context instead (see backtest_mixin.py)
+        return cast("BaseEngineContext[TradeEngineSettings]", self._context)
 
     @property
     def settings(self) -> TradeEngineSettings:

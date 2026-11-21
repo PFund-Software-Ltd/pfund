@@ -28,13 +28,13 @@ from pfeed.streaming.zeromq import (
 from pfund_blocks.enums.env import Environment
 
 from pfund.engines.base_engine import BaseEngine
-from pfund.engines.contexts.trade_engine_context import TradeEngineContext
+from pfund.engines.contexts.base_engine_context import BaseEngineContext
 from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
 
 
-class TradeEngine(BaseEngine[TradeEngineSettings, TradeEngineContext]):
-    Context = TradeEngineContext
-
+class TradeEngine(
+    BaseEngine[TradeEngineSettings, BaseEngineContext[TradeEngineSettings]]
+):
     def __init__(
         self,
         *,
