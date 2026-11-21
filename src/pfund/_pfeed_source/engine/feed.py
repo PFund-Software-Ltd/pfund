@@ -1,40 +1,27 @@
+# ty: ignore[incompatible-attribute-override,incompatible-mutable-override]
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from pfund._pfeed_source.engine.requests.base_request import (
-        PFundEngineFeedBaseRequest,
-    )
-
     from pfund._pfeed_source.source import PFund  # noqa: F401, used as a string forward reference in the class bases
 
-from pfeed.base.feed import BaseFeed
+from pfeed.base.requests.base_request import BaseRequest
 
+from pfund._pfeed_source.base.feed import PFundBaseFeed
 from pfund._pfeed_source.data_category import PFundDataCategory
 from pfund._pfeed_source.engine.data_model import PFundEngineDataModel
 
 
-# TODO: get around the data source issue, since technically its data source is the engine.
-# this feed should be able to get backtesting data from pfund's BacktestEngine for monitoring and analysis puporse
-# some functions require api calls (e.g. get dynamic backtest results) and some do not (e.g. load backtest hisory)
-# TODO: need to specify which engine if there are multiple engines running
+# TODO: add StreamingMixin
 class PFundEngineFeed[PipelineT: bool = Literal[False]](
-    BaseFeed["PFund[PipelineT]", "PFundEngineFeedBaseRequest", PFundEngineDataModel]
+    PFundBaseFeed[
+        BaseRequest,
+        PFundEngineDataModel,
+        PipelineT,
+    ]
 ):
-    class Requests:  # ty: ignore[incompatible-attribute-override]
-        """Request class per verb, None = not supported."""
-
-        # TODO: download = pull the live engine's states (passed in the request), see component feed
-        download: ClassVar[None] = None
-        # TODO: retrieve = read-back twin of download+load
-        retrieve: ClassVar[None] = None
-        # TODO: stream engine's states, connect to mtflow's ws server
-        stream: ClassVar[None] = None
-
-    DataModel: ClassVar[type[PFundEngineDataModel]] = PFundEngineDataModel  # ty: ignore[incompatible-mutable-override]
+    DataModel: ClassVar[type[PFundEngineDataModel]] = PFundEngineDataModel
     data_domain: ClassVar[PFundDataCategory] = PFundDataCategory.ENGINE_DATA
 
     @classmethod
@@ -42,11 +29,3 @@ class PFundEngineFeed[PipelineT: bool = Literal[False]](
         raise NotImplementedError(
             f"{cls.__name__}.create_data_model() is not implemented yet"
         )
-
-    def _get_default_transformations(
-        self, request: BaseRequest, /
-    ) -> list[Callable[..., Any]]:
-        raise NotImplementedError(f"{type(self).__name__} has no verbs yet")
-
-    def run(self, use_prefect: bool = False, **prefect_kwargs: Any) -> Any:
-        raise NotImplementedError(f"{type(self).__name__} has no verbs yet")

@@ -16,7 +16,7 @@ from pfund._pfeed_source.engine.feed import PFundEngineFeed
 
 
 class PFund[PipelineT: bool = Literal[False]](BaseSource[PipelineT]):
-    Feeds: ClassVar[dict[StrEnum, type[BaseFeed]]] = {
+    Feeds: ClassVar[dict[StrEnum, type[BaseFeed]]] = {  # ty: ignore[incompatible-attribute-override]
         PFundDataCategory.COMPONENT_DATA: PFundComponentFeed,
         PFundDataCategory.ENGINE_DATA: PFundEngineFeed,
     }

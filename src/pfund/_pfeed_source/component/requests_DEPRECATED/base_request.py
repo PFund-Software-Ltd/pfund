@@ -7,12 +7,12 @@ if TYPE_CHECKING:
 
 from pydantic import Field
 
-from pfund._pfeed_source.base.requests.base_request import PFundBaseRequest
+from pfund._pfeed_source.base.requests_DEPRECATED.base_request import PFundFeedBaseRequest
 from pfund.enums import ArtifactType
 from pfund.typing import Component
 
 
-class PFundComponentFeedBaseRequest(PFundBaseRequest):
+class PFundComponentFeedBaseRequest(PFundFeedBaseRequest):
     # name of the component the artifact belongs to, the stored artifact is identified by its component_id
     component: Component
     artifact_type: ArtifactType

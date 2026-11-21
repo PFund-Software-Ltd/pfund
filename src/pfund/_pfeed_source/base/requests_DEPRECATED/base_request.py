@@ -2,7 +2,7 @@ from pfeed.base.requests.base_request import BaseRequest
 from pfund_blocks.enums.env import Environment
 
 
-class PFundBaseRequest(BaseRequest):
+class PFundFeedBaseRequest(BaseRequest):
     """Base request of pfund's feeds, identifies the engine run the data belongs to.
 
     Attributes:

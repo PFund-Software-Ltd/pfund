@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from pfeed.io.base_io import BaseIO
     from pfeed.io.blob_io import BlobIO
 
-    from pfund._pfeed_source.component.requests.base_request import (
+    from pfund._pfeed_source.component.requests_DEPRECATED.base_request import (
         PFundComponentFeedBaseRequest,
     )
     from pfund.components.models.model_base import BaseModel
@@ -30,7 +30,7 @@ from pfund_blocks.enums import Environment
 
 from pfund._pfeed_source.base.feed import PFundBaseFeed
 from pfund._pfeed_source.component.data_model import PFundComponentDataModel
-from pfund._pfeed_source.component.requests import (
+from pfund._pfeed_source.component.requests_DEPRECATED import (
     PFundComponentFeedDownloadRequest,
     PFundComponentFeedRetrieveRequest,
 )

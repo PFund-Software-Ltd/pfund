@@ -8,22 +8,16 @@ if TYPE_CHECKING:
     from pfeed.io.blob_io import BlobIO
 
     from pfund._pfeed_source.component.data_handler import PFundComponentDataHandler
-    from pfund._pfeed_source.component.requests.base_request import (  # noqa: F401, used as a string forward reference in the class bases
-        PFundComponentFeedBaseRequest,
-    )
     from pfund.components.models.model_base import BaseModel
     from pfund.typing import Component
 
 import polars as pl
+from pfeed.base.requests.base_request import BaseRequest
 from pfeed.config import setup_logging
 from pfund_blocks.enums import Environment
 
 from pfund._pfeed_source.base.feed import PFundBaseFeed
 from pfund._pfeed_source.component.data_model import PFundComponentDataModel
-from pfund._pfeed_source.component.requests import (
-    PFundComponentFeedDownloadRequest,
-    PFundComponentFeedRetrieveRequest,
-)
 from pfund._pfeed_source.data_category import PFundDataCategory
 from pfund.enums import ArtifactType
 
@@ -31,44 +25,13 @@ from pfund.enums import ArtifactType
 # TODO: add StreamingMixin
 class PFundComponentFeed[PipelineT: bool = Literal[False]](
     PFundBaseFeed[
-        "PFundComponentFeedBaseRequest",
+        BaseRequest,
         PFundComponentDataModel,
         PipelineT,
     ]
 ):
-    """Feed over a pfund component's artifacts (data, model, source).
-
-    Architecture (see the design discussion):
-      - `download(artifact_type)` is the EXTRACT: it pulls the artifact out of the
-        component.
-      - `load(...)` is the LOAD: it reuses BaseFeed's storage machinery to write the
-        downloaded artifact. The IO format is chosen from the artifact's extension —
-        `.delta` -> DeltaLakeIO (frames, pfeed's native currency), everything else ->
-        FileIO via IOFormat.BLOB (opaque bytes; pfund owns the serialization).
-      - `retrieve(...)` is the read-back twin of `download()`+`load()`: same identity,
-        but the extract source is pfeed's STORAGE instead of the live component. No
-        serialization happens — FileIO/DeltaLakeIO hand the persisted bytes/frame back.
-    """
-
-    class Requests:
-        """Request class per verb, None = not supported."""
-
-        download: ClassVar[type[PFundComponentFeedDownloadRequest] | None] = (
-            PFundComponentFeedDownloadRequest
-        )
-        retrieve: ClassVar[type[PFundComponentFeedRetrieveRequest] | None] = (
-            PFundComponentFeedRetrieveRequest
-        )
-        # TODO: connect to mtflow's ws server
-        # streaming a component's live signals — separate (StreamingFeedMixin) path
-        stream: ClassVar[None] = None
-
     DataModel: ClassVar[type[PFundComponentDataModel]] = PFundComponentDataModel
     data_domain: ClassVar[PFundDataCategory] = PFundDataCategory.COMPONENT_DATA
-    _required_methods: ClassVar[dict[str, tuple[str, ...]]] = {
-        PFundComponentFeedDownloadRequest.extract_type: ("_download_impl",),
-        PFundComponentFeedRetrieveRequest.extract_type: ("_retrieve_impl",),
-    }
 
     @classmethod
     def create_data_model(

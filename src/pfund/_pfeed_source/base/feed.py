@@ -5,16 +5,18 @@ from typing import TYPE_CHECKING, Any, Literal, override
 from collections.abc import Callable
 
 if TYPE_CHECKING:
+    from pfeed.dataflow.result import RunResult
+
     from pfund._pfeed_source.source import PFund
 
 from pfeed.base.feed import BaseFeed
+from pfeed.base.requests.base_request import BaseRequest
 
 from pfund._pfeed_source.base.data_model import PFundBaseDataModel
-from pfund._pfeed_source.base.requests.base_request import PFundBaseRequest
 
 
 class PFundBaseFeed[
-    RequestT: PFundBaseRequest,
+    RequestT: BaseRequest,
     DataModelT: PFundBaseDataModel,
     PipelineT: bool = Literal[False],
 ](
@@ -53,3 +55,7 @@ class PFundBaseFeed[
         self, request: RequestT
     ) -> list[Callable[..., Any]]:
         return []
+
+    @override
+    def run(self, use_prefect: bool = False, **prefect_kwargs: Any) -> RunResult[Any]:
+        raise NotImplementedError("PFund Feed doesn't support pfeed's run() pattern")

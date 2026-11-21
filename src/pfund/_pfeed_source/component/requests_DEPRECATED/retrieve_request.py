@@ -10,7 +10,7 @@ from pfeed.io.base_io import BaseIO
 from pfeed.io.blob_io import BlobIO
 from pydantic import Field
 
-from pfund._pfeed_source.component.requests.base_request import (
+from pfund._pfeed_source.component.requests_DEPRECATED.base_request import (
     PFundComponentFeedBaseRequest,
 )
 from pfund._pfeed_source.data_category import PFundDataCategory

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import ClassVar
 
-from pfund._pfeed_source.component.requests.base_request import (
+from pfund._pfeed_source.component.requests_DEPRECATED.base_request import (
     PFundComponentFeedBaseRequest,
 )
 

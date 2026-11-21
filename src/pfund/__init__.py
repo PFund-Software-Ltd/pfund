@@ -146,6 +146,7 @@ def _import_official_venue(module: str, venue: str):
 
 
 __all__ = (  # noqa: RUF022
+    "__version__",
     "hub",
     "configure",
     "get_config",
