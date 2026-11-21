@@ -1,31 +1,29 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast, override
 
-from typing_extensions import override
+from collections.abc import Callable
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
-
+    from pfund_blocks.datas import BarData, BaseData
+    from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund_blocks.resolution import Resolution
-    from pfund.datas.data_base import BaseData
-    from pfund.datas.data_bar import BarData
-    from pfund.stores.market_data_store import BarUpdate
+
+    from pfund.backtest.cv.cv_fold import CVFold
+    from pfund.backtest.cv.holdout_split import HoldoutSplit
     from pfund.engines.contexts.backtest_engine_context import BacktestEngineContext
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
-    from pfund_blocks.entities.products.product_base import BaseProduct
-    from pfund.typing import ComponentT, Signals, Component, ComponentName
-    from pfund.backtest.cv.holdout_split import HoldoutSplit
-    from pfund.backtest.cv.cv_fold import CVFold
+    from pfund.typing import Component, ComponentName, Signals
 
 from pathlib import Path
 
 import narwhals as nw
 from narwhals.dependencies import is_into_dataframe
-from pfund_kit.style import cprint, RichColor, TextStyle
 from pfeed.enums import DataCategory
+from pfund_kit.style import RichColor, TextStyle, cprint
 
+from pfund.backtest.cv.indexing import SplittableData
 from pfund.components.bar_dataframe import (
     INDEX_COL as BAR_INDEX_COL,
     KEY_COLS as BAR_KEY_COLS,
@@ -35,19 +33,52 @@ from pfund.components.bar_dataframe import (
     reorder_key_cols,
     validate_spine_df,
 )
+from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.enums import BacktestMode
-from pfund.backtest.cv.indexing import SplittableData
 
 
-class BacktestMixin:
-    df: IntoDataFrame
+class BacktestMixin(ComponentMixin):
+    """Backtest behavior layered over a component.
+
+    Mixed in as the first base, e.g. ``_BacktestModel(BacktestMixin, Model)``,
+    so its overrides precede the component's and its ``super()`` calls resolve
+    to the component class next in the MRO.
+    """
 
     def __mixin_post_init__(self, *args: Any, **kwargs: Any):
-        super().__mixin_post_init__(*args, **kwargs)
+        # A backtest component is never constructed directly: the user's component is
+        # created (and post-initialized) under its own class, then adopted in place via
+        # _adopt(), which swaps __class__ and calls _init_backtest_state() instead.
+        # Reaching here means something constructed a _BacktestX(...) directly,
+        # bypassing _adopt().
+        raise RuntimeError(
+            f"{type(self).__name__} must be created via BacktestMixin._adopt(), not constructed directly"
+        )
+
+    def _init_backtest_state(self) -> None:
         # top components are the ones added by engine.add_strategy/model/feature()
         self._is_top_component = False
         self._holdout_split: HoldoutSplit | None = None
         self._folds: tuple[CVFold, ...] = ()
+
+    @classmethod
+    def _adopt[C: Component](cls, component: C) -> C:
+        """Turns an already-constructed component into an instance of this backtest class, in place.
+
+        The component keeps its identity and state (name, source artifact path, etc.),
+        only its class is swapped to ``cls``, i.e. ``_BacktestX(BacktestMixin, type(component))``.
+
+        Args:
+            component: the component to adopt, ``cls`` must be built from ``type(component)``.
+
+        Returns:
+            The same component object, now an instance of ``cls``.
+        """
+        # a class swap can't be typed: ty types __class__ as type[C], while cls is a
+        # subclass of type(component) built at runtime
+        cast("Any", component).__class__ = cls
+        cast("BacktestMixin", component)._init_backtest_state()
+        return component
 
     @property
     def context(self) -> BacktestEngineContext:
@@ -110,8 +141,8 @@ class BacktestMixin:
 
     def _resolve_dataset_splits(self) -> None:
         from pfund.backtest.cv.cross_validation import resolve_folds
-        from pfund.backtest.cv.holdout_split import HoldoutSplit
         from pfund.backtest.cv.holdout import Holdout, resolve_holdout
+        from pfund.backtest.cv.holdout_split import HoldoutSplit
 
         splits = self.context.dataset_splits
         if splits is None:
@@ -409,7 +440,7 @@ class BacktestMixin:
         return [self.resolution]
 
     @override
-    def _add_component(
+    def _add_component[ComponentT: Component](
         self,
         component: ComponentT,
         resolution: str,
@@ -418,41 +449,24 @@ class BacktestMixin:
         # NOTE: non-backtesting kwargs are ignored, e.g. ray_actor_options, ray_kwargs, etc.
         **kwargs: Any,
     ) -> ComponentT:
-        source_artifact_path = component._source_artifact_path
-        Component = type(component)
         if component.is_strategy():
             from pfund.components.strategies.strategy_backtest import BacktestStrategy
 
-            component = BacktestStrategy(
-                Component,
-                *component.__pfund_args__,
-                **component.__pfund_kwargs__,
-            )
+            component = BacktestStrategy(component)
         elif component.is_model():
             from pfund.components.models.model_backtest import BacktestModel
 
-            component = BacktestModel(
-                Component,
-                *component.__pfund_args__,
-                **component.__pfund_kwargs__,
-            )
+            component = BacktestModel(component)
         elif component.is_feature():
             from pfund.components.features.feature_backtest import BacktestFeature
 
-            Component = type(component)
-            component = BacktestFeature(
-                Component,
-                *component.__pfund_args__,
-                **component.__pfund_kwargs__,
-            )
+            component = BacktestFeature(component)
         else:
             raise ValueError(f"Unsupported component type: {component}")
-        if source_artifact_path is not None:
-            component._set_source_artifact_path(str(source_artifact_path))
         return super()._add_component(
             component=component,
             resolution=resolution,
-            name=name or Component.__name__,
+            name=name,
             df_form=df_form,
         )
 

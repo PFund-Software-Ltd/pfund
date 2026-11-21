@@ -4,12 +4,17 @@ from typing import TYPE_CHECKING, Any, Literal, override
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
-    from pfund_blocks.entities import BaseBalance, BasePosition, BaseProduct, BaseVenue
+    from pfund_blocks.entities import (
+        BaseAccount,
+        BaseBalance,
+        BasePosition,
+        BaseProduct,
+        BaseVenue,
+    )
     from pfund_blocks.typing import AccountName, Currency, ProductName, TradingVenue
 
     from pfund.components.actor_proxy import ActorProxy
     from pfund.engines.trade_engine import TradeEngine
-    from pfund_blocks.entities import BaseAccount
     from pfund.typing import (
         Component,
         ComponentName,
@@ -30,7 +35,9 @@ from pfund.utils.decorators import ray_method
 class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def __init__(self, *args: Any, **kwargs: Any):
         self._accounts: dict[AccountName, BaseAccount] = {}
-        self.strategies: dict[str, BaseStrategy] = {}  # NOTE: sub-strategies
+        self.strategies: dict[str, BaseStrategy | ActorProxy[BaseStrategy]] = (
+            {}
+        )  # NOTE: sub-strategies
         self._is_substrategy = False
         # TODO: add venue
         self._venues: dict[TradingVenue, BaseVenue] = {}

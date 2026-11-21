@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
-from typing_extensions import override
+from typing import TYPE_CHECKING, Any, cast, override
 
 if TYPE_CHECKING:
     from collections.abc import Generator
-    from pfeed.dataflow.result import RunResult
-    from pfeed.sources.pfund.component_feed import PFundComponentFeed
 
-    from pfund.components.models.model_base import UnderlyingModel
+    from pfeed.dataflow.result import RunResult
+
+    from pfund._pfeed_source.component.feed import PFundComponentFeed
     from pfund.typing import ModelT
 
 from contextlib import contextmanager
@@ -17,9 +16,13 @@ from pfund.backtest.backtest_mixin import BacktestMixin
 from pfund.enums import ArtifactType
 
 
-def BacktestModel(
-    Model: type[ModelT], model: UnderlyingModel, *args: Any, **kwargs: Any
-) -> ModelT:
+def BacktestModel(model: ModelT) -> ModelT:
+    """Turns `model` into its backtesting version in place, keeping its state."""
+    # already adopted, e.g. the same model instance shared by two parents
+    if isinstance(model, BacktestMixin):
+        return model
+    Model = type(model)
+
     class _BacktestModel(BacktestMixin, Model):
         _is_training: bool = False
         _checkpoint_artifact: bytes | None = None
@@ -33,7 +36,7 @@ def BacktestModel(
             try:
                 self.load()
             except FileNotFoundError:
-                from pfund_kit.style import cprint, TextStyle, RichColor
+                from pfund_kit.style import RichColor, TextStyle, cprint
 
                 cprint(
                     f"No trained model found for '{self.name}' — treating this run as a training session. "
@@ -46,7 +49,7 @@ def BacktestModel(
         def _stage_checkpoint_artifact(
             self,
             checkpoint: dict[str, Any],
-        ) -> Generator[None, None, None]:
+        ) -> Generator[None]:
             """Temporarily expose a user-built checkpoint as component state.
 
             pfeed's ComponentFeed treats a pfund component as a data source:
@@ -125,14 +128,6 @@ def BacktestModel(
 
     _BacktestModel.__name__ = Model.__name__
     _BacktestModel.__qualname__ = Model.__qualname__
-    setattr(_BacktestModel, "__wrapped__", Model)
+    _BacktestModel.__wrapped__ = Model
 
-    try:
-        return _BacktestModel(model, *args, **kwargs)
-    except TypeError as e:
-        if "__init__()" in str(e):
-            raise TypeError(
-                f"if super().__init__() is called in {Model.__name__}.__init__() (which is unnecssary), "
-                + "make sure it is called with args and kwargs, i.e. super().__init__(*args, **kwargs)"
-            ) from e
-        raise
+    return _BacktestModel._adopt(model)

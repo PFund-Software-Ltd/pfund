@@ -47,8 +47,10 @@ class ComponentBaseMixin:
 
         self.logger: logging.Logger = logging.getLogger("pfund")
         self.products: dict[ProductName, BaseProduct] = {}
-        self._databoy = DataBoy(self)
-        self.store = TradingStore(self)
+        # the mixin only ever runs as part of a strategy, model or feature
+        component = cast("Component", self)
+        self._databoy = DataBoy(component)
+        self.store = TradingStore(component)
 
         self._signal_cols: list[str] = []
         # Last successfully computed signals; may not belong to the current bar.

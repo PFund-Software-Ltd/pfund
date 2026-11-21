@@ -11,8 +11,8 @@ if TYPE_CHECKING:
     from pfund.components.models.model_base import UnderlyingModel
     from pfund.engines.contexts.base_engine_context import BaseEngineContext
     from pfund.typing import (
+        Component,
         ComponentName,
-        ComponentT,
         FeatureT,
         ModelT,
         Signals,
@@ -393,7 +393,7 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
 
     add_market_data = add_data
 
-    def _add_component(
+    def _add_component[ComponentT: Component](
         self,
         component: ComponentT | ActorProxy[ComponentT],
         resolution: str,
@@ -416,6 +416,7 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
         if component.is_strategy():
             from pfund.components.strategies.strategy_base import BaseStrategy
 
+            assert isinstance(self, BaseStrategy), f"only a strategy can add a sub-strategy, '{self.name}' is a {self.component_type}"
             components = self.strategies
             BaseClass = BaseStrategy
         elif component.is_model():
@@ -478,7 +479,7 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
                 df_form=df_form,
             )
 
-        components[component.name] = component
+        cast("dict[str, Any]", components)[component.name] = component
         self.logger.debug(f"{self.name} added {component.name}")
 
         # NOTE: returns None when adding a local component (not ActorProxy) to a remote component to avoid returning a serialized (copied) object

@@ -3,16 +3,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from torch import Tensor
     from narwhals.typing import IntoDataFrame
+    from torch import Tensor
 
 import io
 import json
 
-import torch
-import numpy as np
 import narwhals as nw
-from safetensors.torch import save, load
+import numpy as np
+import torch
+from safetensors.torch import load, save
 
 from pfund.components.bar_dataframe import KEY_COLS as BAR_KEY_COLS
 from pfund.components.models.model_base import BaseModel

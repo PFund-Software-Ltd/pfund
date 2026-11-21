@@ -14,7 +14,13 @@ import narwhals as nw
 from pfund.backtest.backtest_mixin import BacktestMixin
 
 
-def BacktestStrategy(Strategy: type[StrategyT], *args: Any, **kwargs: Any) -> StrategyT:
+def BacktestStrategy(strategy: StrategyT) -> StrategyT:
+    """Turns `strategy` into its backtesting version in place, keeping its state."""
+    # already adopted, e.g. the same strategy instance shared by two parents
+    if isinstance(strategy, BacktestMixin):
+        return strategy
+    Strategy = type(strategy)
+
     class _BacktestStrategy(BacktestMixin, Strategy):
         @staticmethod
         def _postprocess_backtest_df(
@@ -92,12 +98,4 @@ def BacktestStrategy(Strategy: type[StrategyT], *args: Any, **kwargs: Any) -> St
     _BacktestStrategy.__qualname__ = Strategy.__qualname__
     setattr(_BacktestStrategy, "__wrapped__", Strategy)
 
-    try:
-        return _BacktestStrategy(*args, **kwargs)
-    except TypeError as e:
-        if "__init__()" in str(e):
-            raise TypeError(
-                f"if super().__init__() is called in {Strategy.__name__}.__init__() (which is unnecssary), "
-                + "make sure it is called with args and kwargs, i.e. super().__init__(*args, **kwargs)"
-            ) from e
-        raise
+    return _BacktestStrategy._adopt(strategy)

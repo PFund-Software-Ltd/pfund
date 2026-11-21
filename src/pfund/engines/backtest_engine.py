@@ -165,9 +165,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 raise ValueError(
                     f'strategy name "{dummy_strategy_name}" is reserved, please use another name'
                 )
-        strategy: StrategyT = BacktestStrategy(
-            Strategy, *strategy.__pfund_args__, **strategy.__pfund_kwargs__
-        )
+        strategy = BacktestStrategy(strategy)
         strategy.set_top_component()
         return cast(
             "StrategyT",

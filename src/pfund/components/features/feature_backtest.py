@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pfund.typing import FeatureT
@@ -8,7 +8,13 @@ if TYPE_CHECKING:
 from pfund.backtest.backtest_mixin import BacktestMixin
 
 
-def BacktestFeature(Feature: type[FeatureT], *args: Any, **kwargs: Any) -> FeatureT:
+def BacktestFeature(feature: FeatureT) -> FeatureT:
+    """Turns `feature` into its backtesting version in place, keeping its state."""
+    # already adopted, e.g. the same feature instance shared by two parents
+    if isinstance(feature, BacktestMixin):
+        return feature
+    Feature = type(feature)
+
     class _BacktestFeature(BacktestMixin, Feature):
         pass
 
@@ -16,12 +22,4 @@ def BacktestFeature(Feature: type[FeatureT], *args: Any, **kwargs: Any) -> Featu
     _BacktestFeature.__qualname__ = Feature.__qualname__
     setattr(_BacktestFeature, "__wrapped__", Feature)
 
-    try:
-        return _BacktestFeature(*args, **kwargs)
-    except TypeError as e:
-        if "__init__()" in str(e):
-            raise TypeError(
-                f"if super().__init__() is called in {Feature.__name__}.__init__() (which is unnecssary), "
-                + "make sure it is called with args and kwargs, i.e. super().__init__(*args, **kwargs)"
-            ) from e
-        raise
+    return _BacktestFeature._adopt(feature)
