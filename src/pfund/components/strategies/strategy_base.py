@@ -35,9 +35,9 @@ from pfund.utils.decorators import ray_method
 class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def __init__(self, *args: Any, **kwargs: Any):
         self._accounts: dict[AccountName, BaseAccount] = {}
-        self.strategies: dict[str, BaseStrategy | ActorProxy[BaseStrategy]] = (
-            {}
-        )  # NOTE: sub-strategies
+        self.strategies: dict[
+            str, BaseStrategy | ActorProxy[BaseStrategy]
+        ] = {}  # NOTE: sub-strategies
         self._is_substrategy = False
         # TODO: add venue
         self._venues: dict[TradingVenue, BaseVenue] = {}

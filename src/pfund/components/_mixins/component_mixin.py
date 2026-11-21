@@ -416,7 +416,9 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
         if component.is_strategy():
             from pfund.components.strategies.strategy_base import BaseStrategy
 
-            assert isinstance(self, BaseStrategy), f"only a strategy can add a sub-strategy, '{self.name}' is a {self.component_type}"
+            assert isinstance(self, BaseStrategy), (
+                f"only a strategy can add a sub-strategy, '{self.name}' is a {self.component_type}"
+            )
             components = self.strategies
             BaseClass = BaseStrategy
         elif component.is_model():
