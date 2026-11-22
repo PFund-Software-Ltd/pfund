@@ -117,6 +117,10 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             )
         self._set_data_as_features(as_features)
         config = config or DataConfig()
+        if config.data_source is None:
+            # the product's trading venue is the data source unless one is specified,
+            # copied so a config shared across products (e.g. different venues) is not mutated
+            config = config.model_copy(update={"data_source": product.source})
         data_resolutions: list[Resolution] = list(
             dict.fromkeys(
                 [
@@ -172,8 +176,9 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         Args:
             config: the product's resolved data config, the data takes its settings from it (e.g. shift).
         """
-        # where the data comes from, the product's trading venue unless a data source is specified
-        source = config.data_source or product.source
+        # where the data comes from, filled in with the product's trading venue in add_data() if not specified
+        assert config.data_source is not None, "data_source must be resolved in add_data()"
+        source = config.data_source
         origin = config.data_origin
         if resolution.is_bar():
             return BarData(
