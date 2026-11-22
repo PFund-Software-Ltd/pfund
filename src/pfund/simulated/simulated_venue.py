@@ -73,7 +73,7 @@ class SimulatedVenue(BaseVenue[SimulatedAccount, BaseMarket, VenueConfig]):
         self,
         env: Literal[Environment.BACKTEST, Environment.SANDBOX, "BACKTEST", "SANDBOX"],
         engine_feed: PFundEngineFeed,
-        config: VenueConfig,
+        config: VenueConfig | None=None,
     ):
         cls = self.__class__
         if cls is SimulatedVenue:

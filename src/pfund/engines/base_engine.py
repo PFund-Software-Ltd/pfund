@@ -4,6 +4,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     ClassVar,
+    Literal,
     NotRequired,
     Required,
     TypedDict,
@@ -163,13 +164,17 @@ class BaseEngine[
 
             # TODO: pass self._simulated_venue_configs.get(venue) and config (for the internal read-only real venue)
             # when SimulatedVenue accepts them
-            return SimulatedVenue(env=self.env, venue=venue, engine_feed=self._feed)
+            return SimulatedVenue.for_venue(venue)(
+                env=cast("Literal[Environment.BACKTEST, Environment.SANDBOX]", self.env),
+                engine_feed=self._feed,
+                config=config,
+            )
         else:
             from pfund.registry import get_venue
 
             Venue = get_venue(venue)
             # TODO: pass env and config when BaseVenue's __init__ accepts them
-            return Venue(read_only=False)
+            return Venue(env=self.env, config=config, read_only=False)
 
     def add_venue(
         self, venue: TradingVenue, config: VenueConfig | None = None
