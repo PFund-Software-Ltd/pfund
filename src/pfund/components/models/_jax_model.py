@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from jax import Array
-    from narwhals.typing import IntoDataFrame
 
 import io
 import json
@@ -13,7 +12,7 @@ import pickle
 import struct
 
 import numpy as np
-import narwhals as nw
+import polars as pl
 import jax
 import jax.numpy as jnp
 
@@ -46,7 +45,7 @@ class JAXModel(BaseModel):
 
     variables: Any = None
 
-    def predict(self, X: IntoDataFrame, *args: Any, **kwargs: Any) -> Array:
+    def predict(self, X: pl.DataFrame, *args: Any, **kwargs: Any) -> Array:
         X_array = self._to_array(X)
         if self._is_equinox():
             pred_y = self.model(X_array, *args, **kwargs)
@@ -59,38 +58,24 @@ class JAXModel(BaseModel):
         return pred_y
 
     @staticmethod
-    def _to_array(X: Any) -> Array:
+    def _to_array(X: Array | np.ndarray | pl.DataFrame) -> Array:
         """Coerce X to a jax array.
 
-        Accepts a jax array (passed through), a numpy array, or any dataframe —
-        native (pandas/polars/pyarrow/...) or an already-wrapped narwhals frame,
-        eager or lazy.
+        Accepts a jax array (passed through), a numpy array, or a polars dataframe.
         """
         if isinstance(X, jax.Array):
             return X
         if isinstance(X, np.ndarray):
             return jnp.asarray(X)
-        # accept native frames (pandas/polars/pyarrow/...) or already-wrapped
-        # narwhals frames; pass_through returns non-frames unchanged so we can
-        # reject them with a clear error instead of a cryptic narwhals one
-        frame = (
-            X
-            if isinstance(X, (nw.DataFrame, nw.LazyFrame))
-            else nw.from_native(X, pass_through=True)
-        )
-        if not isinstance(frame, (nw.DataFrame, nw.LazyFrame)):
+        if not isinstance(X, pl.DataFrame):
             raise TypeError(
                 f"unsupported data type for '{X.__class__.__name__}'; "
-                + "predict() accepts a jax array, numpy array, or dataframe"
+                + "predict() accepts a jax array, numpy array, or polars dataframe"
             )
-        if isinstance(frame, nw.LazyFrame):
-            frame = frame.collect()
         # PFund keeps bar keys in feature dataframes for row alignment, but
         # date/product/resolution are not numerical model inputs.
-        key_cols = [col for col in BAR_KEY_COLS if col in frame.columns]
-        if key_cols:
-            frame = frame.drop(key_cols)
-        return jnp.asarray(frame.to_numpy())
+        key_cols = [col for col in BAR_KEY_COLS if col in X.columns]
+        return jnp.asarray(X.drop(key_cols).to_numpy())
 
     def _is_equinox(self) -> bool:
         try:

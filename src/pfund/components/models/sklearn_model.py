@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    import polars as pl
     from numpy.typing import NDArray
-    from narwhals.typing import IntoDataFrame
 
 import io
 import joblib
@@ -13,7 +13,7 @@ from pfund.components.models.model_base import BaseModel
 
 
 class SKLearnModel(BaseModel):
-    def predict(self, X: IntoDataFrame, *args: Any, **kwargs: Any) -> NDArray[Any]:
+    def predict(self, X: pl.DataFrame, *args: Any, **kwargs: Any) -> NDArray[Any]:
         pred_y = self.model.predict(X, *args, **kwargs)
         return pred_y
 

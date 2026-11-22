@@ -3,14 +3,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from narwhals.typing import IntoDataFrame
     from torch import Tensor
 
 import io
 import json
 
-import narwhals as nw
 import numpy as np
+import polars as pl
 import torch
 from safetensors.torch import load, save
 
@@ -19,7 +18,7 @@ from pfund.components.models.model_base import BaseModel
 
 
 class PyTorchModel(BaseModel):
-    def predict(self, X: IntoDataFrame, *args: Any, **kwargs: Any) -> Tensor:
+    def predict(self, X: pl.DataFrame, *args: Any, **kwargs: Any) -> Tensor:
         # inference: eval() gives dropout/batchnorm their inference behavior and
         # no_grad() skips the autograd graph. restore the prior mode so calling
         # predict() doesn't silently leave a still-training model stuck in eval.
@@ -32,12 +31,10 @@ class PyTorchModel(BaseModel):
             self.model.train(was_training)
         return pred_y
 
-    def _to_tensor(self, X: Any) -> Tensor:
+    def _to_tensor(self, X: Tensor | np.ndarray | pl.DataFrame) -> Tensor:
         """Coerce X to a tensor matching the model's dtype and device.
 
-        Accepts a torch.Tensor (passed through), a numpy array, or any
-        dataframe — native (pandas/polars/pyarrow/...) or an already-wrapped
-        narwhals frame, eager or lazy.
+        Accepts a torch.Tensor (passed through), a numpy array, or a polars dataframe.
         """
         # align the input with the model's device AND dtype (e.g. after
         # model.to("cuda") or a float64/bf16 model), else self.model(X) raises on
@@ -53,28 +50,16 @@ class PyTorchModel(BaseModel):
             return X.to(device=device, dtype=dtype)
         if isinstance(X, np.ndarray):
             array = X
-        else:
-            # accept native frames (pandas/polars/pyarrow/...) or already-wrapped
-            # narwhals frames; pass_through returns non-frames unchanged so we can
-            # reject them with a clear error instead of a cryptic narwhals one
-            frame = (
-                X
-                if isinstance(X, (nw.DataFrame, nw.LazyFrame))
-                else nw.from_native(X, pass_through=True)
-            )
-            if not isinstance(frame, (nw.DataFrame, nw.LazyFrame)):
-                raise TypeError(
-                    f"unsupported data type for '{X.__class__.__name__}'; "
-                    + "predict() accepts a torch.Tensor, numpy array, or dataframe"
-                )
-            if isinstance(frame, nw.LazyFrame):
-                frame = frame.collect()
+        elif isinstance(X, pl.DataFrame):
             # PFund keeps bar keys in feature dataframes for row alignment, but
             # date/product/resolution are not numerical model inputs.
-            key_cols = [col for col in BAR_KEY_COLS if col in frame.columns]
-            if key_cols:
-                frame = frame.drop(key_cols)
-            array = frame.to_numpy()
+            key_cols = [col for col in BAR_KEY_COLS if col in X.columns]
+            array = X.drop(key_cols).to_numpy()
+        else:
+            raise TypeError(
+                f"unsupported data type for '{X.__class__.__name__}'; "
+                + "predict() accepts a torch.Tensor, numpy array, or polars dataframe"
+            )
         return torch.tensor(array, dtype=dtype, device=device)
 
     def _encode(self, payload: dict[str, Any]) -> bytes:

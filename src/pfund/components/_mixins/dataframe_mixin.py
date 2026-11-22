@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 if TYPE_CHECKING:
-    import pandas as pd
     import polars as pl
-    from narwhals.typing import IntoDataFrame
 
 import narwhals as nw
 from pfund_blocks.enums import DataCategory
@@ -24,56 +22,28 @@ from pfund.components.bar_dataframe import (
 
 class DataFrameMixin(ComponentBaseMixin):
     @property
-    def data_df(self) -> IntoDataFrame:
-        return self.get_df(
-            kind="data", data_category=None, window_size=None, to_native=True
-        )
+    def data_df(self) -> pl.DataFrame:
+        return self.get_df(kind="data", data_category=None, window_size=None)
 
     @property
-    def features_df(self) -> IntoDataFrame:
-        return self.get_df(kind="features", window_size=None, to_native=True)
+    def features_df(self) -> pl.DataFrame:
+        return self.get_df(kind="features", window_size=None)
 
     X = features_df
 
     @property
-    def X_pandas(self) -> pd.DataFrame:
-        from pfeed.utils.dataframe import convert_dataframe
-
-        return convert_dataframe(self.X, data_tool="pandas")
+    def signals_df(self) -> pl.DataFrame:
+        return self.get_df(kind="signals", window_size=None)
 
     @property
-    def X_polars(self) -> pl.DataFrame:
-        from pfeed.utils.dataframe import convert_dataframe
-
-        return convert_dataframe(self.X, data_tool="polars").collect()
-
-    @property
-    def signals_df(self) -> IntoDataFrame:
-        return self.get_df(kind="signals", window_size=None, to_native=True)
-
-    @property
-    def trading_df(self) -> IntoDataFrame:
-        return self.get_df(kind="trading", window_size=None, to_native=True)
+    def trading_df(self) -> pl.DataFrame:
+        return self.get_df(kind="trading", window_size=None)
 
     df = trading_df
 
     @property
-    def df_pandas(self) -> pd.DataFrame:
-        from pfeed.utils.dataframe import convert_dataframe
-
-        return convert_dataframe(self.df, data_tool="pandas")
-
-    # mainly used to avoid type casting, since self.df will return IntoDataFrame,
-    # which messes up with pl.DataFrame type hints.
-    @property
-    def df_polars(self) -> pl.DataFrame:
-        from pfeed.utils.dataframe import convert_dataframe
-
-        return convert_dataframe(self.df, data_tool="polars").collect()
-
-    @property
-    def full_df(self) -> IntoDataFrame:
-        return self.get_df(kind="full", window_size=None, to_native=True)
+    def full_df(self) -> pl.DataFrame:
+        return self.get_df(kind="full", window_size=None)
 
     complete_df = full_df
 
@@ -83,8 +53,7 @@ class DataFrameMixin(ComponentBaseMixin):
         kind: Literal["data", "features", "signals", "trading", "full"] = "full",
         data_category: DataCategory | str | None = DataCategory.MARKET_DATA,
         window_size: int | None = None,
-        to_native: bool = False,
-    ) -> nw.DataFrame[Any] | IntoDataFrame:
+    ) -> pl.DataFrame:
         """Returns one of the stored dataframes in either trading store or data stores.
 
         Args:
@@ -100,43 +69,43 @@ class DataFrameMixin(ComponentBaseMixin):
                 Defaults to market data.
             window_size: Number of most recent rows to return.
                 Defaults to None, i.e. return the whole dataframe.
-            to_native: If True, return the underlying backend frame (polars/pandas) instead
-                of a Narwhals DataFrame. Defaults to True.
         """
+        import polars as pl
+
         if kind == "data":
             if data_category is not None:
                 store = self._databoy.get_data_store(data_category)
-                df = store.get_df(window_size=window_size, to_native=to_native)
+                df = cast(
+                    "pl.DataFrame",
+                    store.get_df(window_size=window_size, to_native=True),
+                )
             else:
+                # _merge_data_dfs stays narwhals, it's built on bar_dataframe's helpers
                 data_dfs: dict[DataCategory, nw.DataFrame[Any]] = {
-                    category: store.get_df(window_size=window_size, to_native=False)
+                    category: nw.from_native(
+                        store.get_df(window_size=window_size, to_native=True)
+                    )
                     for category, store in self.data_stores.items()
                 }
-                df = self._merge_data_dfs(data_dfs)
-                if to_native:
-                    df = df.to_native()
-        elif kind == "features":
-            df = self.store.get_df(
-                kind="features", window_size=window_size, to_native=to_native
-            )
-        elif kind == "signals":
-            df = self.store.get_df(
-                kind="signals", window_size=window_size, to_native=to_native
-            )
-        elif kind == "trading":
-            df = self.store.get_df(
-                kind="trading", window_size=window_size, to_native=to_native
+                df = cast("pl.DataFrame", self._merge_data_dfs(data_dfs).to_native())
+        elif kind in ("features", "signals", "trading"):
+            df = cast(
+                "pl.DataFrame",
+                self.store.get_df(kind=kind, window_size=window_size, to_native=True),
             )
         elif kind == "full":
             data_dfs = {
-                category: data_store.get_df(
-                    window_size=None,
-                    to_native=False,
+                category: nw.from_native(
+                    data_store.get_df(window_size=None, to_native=True)
                 )
                 for category, data_store in self.data_stores.items()
                 if data_store.get_datas() and data_store._df is not None
             }
-            data_df = self._merge_data_dfs(data_dfs) if data_dfs else None
+            data_df: pl.DataFrame | None = (
+                cast("pl.DataFrame", self._merge_data_dfs(data_dfs).to_native())
+                if data_dfs
+                else None
+            )
 
             # Data stores are canonically long-form. full_df follows the
             # component's configured form, just like its trading dataframe.
@@ -145,15 +114,22 @@ class DataFrameMixin(ComponentBaseMixin):
                     col for col in data_df.columns if col not in BAR_KEY_COLS
                 ]
                 if data_value_cols:
-                    data_df = pivot_long_to_wide(
-                        data_df,
-                        index_col=BAR_INDEX_COL,
-                        pivot_cols=BAR_PIVOT_COLS,
+                    data_df = cast(
+                        "pl.DataFrame",
+                        pivot_long_to_wide(
+                            nw.from_native(data_df),
+                            index_col=BAR_INDEX_COL,
+                            pivot_cols=BAR_PIVOT_COLS,
+                        ).to_native(),
                     )
                 else:
                     data_df = data_df.select(BAR_INDEX_COL).unique().sort(BAR_INDEX_COL)
 
-            trading_df = self.store._df
+            trading_df: pl.DataFrame | None = (
+                cast("pl.DataFrame", self.store._df.to_native())
+                if self.store._df is not None
+                else None
+            )
 
             if data_df is None and trading_df is None:
                 raise RuntimeError(f"{self.name} full df is not ready")
@@ -193,17 +169,22 @@ class DataFrameMixin(ComponentBaseMixin):
                     right_key = f"{key}_right"
                     if right_key in df.columns:
                         df = df.with_columns(
-                            nw.coalesce(key, right_key).alias(key)
+                            pl.coalesce(key, right_key).alias(key)
                         ).drop(right_key)
 
-            df = reorder_key_cols(
-                df.sort(BAR_KEY_COLS if self.df_form == "long" else [BAR_INDEX_COL]),
-                df_form=self.df_form,
+            df = cast(
+                "pl.DataFrame",
+                reorder_key_cols(
+                    nw.from_native(
+                        df.sort(
+                            BAR_KEY_COLS if self.df_form == "long" else [BAR_INDEX_COL]
+                        )
+                    ),
+                    df_form=self.df_form,
+                ).to_native(),
             )
             if window_size is not None:
                 df = df.tail(window_size)
-            if to_native:
-                df = df.to_native()
         else:
             raise ValueError(f"Invalid {kind=} for component {self.name}")
         return df

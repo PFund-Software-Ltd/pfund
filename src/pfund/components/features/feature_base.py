@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeAlias, cast
+from typing import TYPE_CHECKING, Any, cast
+
 from collections.abc import Sequence
 
 if TYPE_CHECKING:
+    import polars as pl
     from numpy.typing import NDArray
     from torch import Tensor
-    from narwhals.typing import IntoDataFrame, IntoSeries
 
     from pfund.typing import ColumnName, Signals
 
-    FeatureValue: TypeAlias = "NDArray[Any] | Tensor | Sequence[Any] | IntoSeries"
+    type FeatureValue = "NDArray[Any] | Tensor | Sequence[Any] | pl.Series"
 
 from abc import ABC, abstractmethod
 
@@ -31,14 +32,14 @@ class BaseFeature(ComponentMixin, ABC, metaclass=MetaFeature):
     @abstractmethod
     def transform(
         self,
-        X: IntoDataFrame,
+        X: pl.DataFrame,
         *args: Any,
         **kwargs: Any,
     ) -> FeatureValue | dict[ColumnName, FeatureValue]:
         """Extract features from the input data"""
         pass
 
-    def signalize(self, X: IntoDataFrame) -> Signals:
+    def signalize(self, X: pl.DataFrame) -> Signals:
         """Creates signals of this component
 
         Args:

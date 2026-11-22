@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Literal, override
 
 if TYPE_CHECKING:
-    from narwhals.typing import IntoDataFrame
+    import polars as pl
     from pfund_blocks.entities import (
         BaseAccount,
         BaseBalance,
@@ -54,7 +54,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         )  # calls ComponentMixin.__mixin_post_init__()
 
     @abstractmethod
-    def trade(self, X: IntoDataFrame) -> list[BaseOrder]:
+    def trade(self, X: pl.DataFrame) -> list[BaseOrder]:
         pass
 
     @property
@@ -164,7 +164,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
             strategy._mark_as_substrategy()
         return strategy
 
-    def signalize(self, X: IntoDataFrame) -> Signals:
+    def signalize(self, X: pl.DataFrame) -> Signals:
         """Creates signals of this component
 
         Args:

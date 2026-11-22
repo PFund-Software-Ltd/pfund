@@ -3,10 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
+    import polars as pl
     import torch.nn as nn
     import equinox as eqx
     from flax import linen
-    from narwhals.typing import IntoDataFrame
     from sklearn.base import BaseEstimator
     from numpy.typing import NDArray
     from torch import Tensor
@@ -90,7 +90,7 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
 
     @abstractmethod
     def predict(
-        self, X: IntoDataFrame, *args: Any, **kwargs: Any
+        self, X: pl.DataFrame, *args: Any, **kwargs: Any
     ) -> NDArray[Any] | Tensor | Array:
         pass
 
@@ -118,7 +118,7 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
                 f"'{self.name}' and its underlying model '{self.model.__class__.__name__}' both have no attribute '{name}'"
             )
 
-    def signalize(self, X: IntoDataFrame) -> Signals:
+    def signalize(self, X: pl.DataFrame) -> Signals:
         """Creates signals of this component
 
         Args:

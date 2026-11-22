@@ -4,12 +4,10 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from narwhals.typing import IntoDataFrame
-
     from pfund.components.features.feature_base import FeatureValue
     from pfund.typing import ColumnName
 
-import narwhals as nw
+import polars as pl
 import talib
 from talib import abstract as talib_abstract
 from talib._ta_lib import Function as TALibFunction
@@ -75,16 +73,16 @@ class TALibIndicator(BaseFeature):
         return self.get_indicator_info()["parameters"]
 
     def transform(
-        self, X: IntoDataFrame
+        self, X: pl.DataFrame
     ) -> FeatureValue | dict[ColumnName, FeatureValue]:
         # NOTE: self.__pfund_args__[0] is the indicator function, so we skip it
         inds = self.indicator(X, *self.__pfund_args__[1:], **self.__pfund_kwargs__)
-        inds = nw.from_native(inds, allow_series=True)
-        if isinstance(inds, nw.Series):
-            return inds.to_native()
+        # polars in, polars out: talib returns a pl.Series or a pl.DataFrame
+        if isinstance(inds, pl.Series):
+            return inds
         if self._signal_cols and set(self._signal_cols) != set(inds.columns):
             raise ValueError(
                 "TA-Lib output columns should NOT be customized: "
                 + f"expected {inds.columns}, got {self._signal_cols}"
             )
-        return {col: inds[col].to_native() for col in inds.columns}
+        return {col: inds[col] for col in inds.columns}

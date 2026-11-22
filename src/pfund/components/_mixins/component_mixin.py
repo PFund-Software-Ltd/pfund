@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 if TYPE_CHECKING:
-    from narwhals.typing import IntoDataFrame
+    import polars as pl
     from pfund_blocks.datas import BarData, BaseData, MarketData
     from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund_blocks.typing import TradingVenue
@@ -102,7 +102,6 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
             X = self.get_df(
                 kind="features",
                 window_size=self.config["lookback_period"],
-                to_native=True,
             )
             signals = self.signalize(X)
             self._latest_signals = signals
@@ -310,7 +309,7 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
         self._source_artifact_path = Path(source_artifact_path)
 
     @property
-    def _data_artifact(self) -> IntoDataFrame:
+    def _data_artifact(self) -> pl.DataFrame:
         # TODO: extract the latest rows (that have not been written to pfeed) from the trading store's df
         raise NotImplementedError
 
@@ -554,7 +553,7 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
     # TODO: add a progress bar to it when its not ready
     def is_ready(self, data: BaseData) -> bool:
         if data.category == DataCategory.MARKET_DATA:
-            df = self.get_df(kind="data", data_category=data.category, to_native=False)
+            df = self.get_df(kind="data", data_category=data.category)
             if len(df) < self.config["warmup_period"]:
                 return False
             if self.df_form == "long":
