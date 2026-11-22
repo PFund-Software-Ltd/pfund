@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
-    from narwhals.typing import IntoDataFrame
     from pfeed.io.blob_io import BlobIO
     from pfeed.io.table_io import TableIO, VacuumResult
     from pfund_blocks.datas import BarData
@@ -13,7 +12,7 @@ if TYPE_CHECKING:
 
 import datetime
 
-import narwhals as nw
+import polars as pl
 
 from pfund.components.bar_dataframe import KEY_COLS
 from pfund.enums import ArtifactType
@@ -28,7 +27,7 @@ class TradingStore:
         # vectorized backtesting constructs it from the component's data and
         # child signals; event-driven/live execution fills it incrementally;
         # materialize() rehydrates the component's own persisted trading_df.
-        self._df: nw.DataFrame[Any] | None = None
+        self._df: pl.DataFrame | None = None
         self._feed: PFundComponentFeed = pe.PFund().component_feed
         self._features: dict[
             ColumnName, Any
@@ -99,29 +98,28 @@ class TradingStore:
         ``date``.
         """
         df = self._df
-        if df is None or len(df) == 0:
+        if df is None or df.is_empty():
             return False
 
         component = self._component
         if component.df_form == "long":
             predicate = (
-                (nw.col(self.INDEX_COL) == data.start_dt)
-                & (nw.col("product") == data.product.name)
-                & (nw.col("resolution") == str(data.resolution))
+                (pl.col(self.INDEX_COL) == data.start_dt)
+                & (pl.col("product") == data.product.name)
+                & (pl.col("resolution") == str(data.resolution))
             )
         elif component.df_form == "wide":
-            predicate = nw.col(self.INDEX_COL) == data.start_dt
+            predicate = pl.col(self.INDEX_COL) == data.start_dt
         else:
             raise ValueError(f"unsupported dataframe form {component.df_form!r}")
 
-        return len(df.filter(predicate).head(1)) > 0
+        return not df.filter(predicate).is_empty()
 
     def get_df(
         self,
         kind: Literal["features", "signals", "trading"] = "trading",
         window_size: int | None = None,
-        to_native: bool = False,
-    ) -> nw.DataFrame[Any] | IntoDataFrame:
+    ) -> pl.DataFrame:
         """
         Args:
             kind: Which part of the trading_df to return.
@@ -129,8 +127,6 @@ class TradingStore:
                 - "signals": the computed signals
                 - "trading": the full trading DataFrame
             window_size: Number of most recent rows to return.
-            to_native: If True, return the underlying backend frame (polars/pandas) instead
-                of a Narwhals DataFrame. Defaults to True.
         """
         df = self._df
         component = self._component
@@ -153,7 +149,7 @@ class TradingStore:
                 df = df.select([col for col in columns if col not in signal_cols])
         if window_size is not None:
             df = df.tail(window_size)
-        return df.to_native() if to_native else df
+        return df
 
     def get_signals(self, data: BarData) -> Signals | None:
         df = self._df
@@ -162,15 +158,15 @@ class TradingStore:
 
         if self._component.df_form == "long":
             predicate = (
-                (nw.col("date") == data.start_dt)
-                & (nw.col("product") == data.product.name)
-                & (nw.col("resolution") == str(data.resolution))
+                (pl.col("date") == data.start_dt)
+                & (pl.col("product") == data.product.name)
+                & (pl.col("resolution") == str(data.resolution))
             )
         else:
-            predicate = nw.col("date") == data.start_dt
+            predicate = pl.col("date") == data.start_dt
 
         row = df.filter(predicate).head(1)
-        if len(row) == 0:
+        if row.is_empty():
             return None
 
         signal_cols = [
@@ -179,7 +175,7 @@ class TradingStore:
         if not signal_cols:
             return None
 
-        return {col: row.get_column(col).to_list()[0] for col in signal_cols}
+        return {col: row.item(0, col) for col in signal_cols}
 
     # TODO: need to handle if data_as_features is True, i.e. if data is also a feature
     # TODO: check if the data.is_closed() is False (incomplete bar)
@@ -236,31 +232,27 @@ class TradingStore:
         if df is None:
             # no seeded features (component without data-as-features): the first
             # contributor's signals create the trading df
-            from pfeed.config import get_config
-
-            df = nw.DataFrame.from_dict(
-                {self.INDEX_COL: [date], **{col: [v] for col, v in row_values.items()}},
-                backend=str(get_config().data_tool),
+            df = pl.DataFrame(
+                {self.INDEX_COL: [date], **{col: [v] for col, v in row_values.items()}}
             )
         else:
             index_col = self.INDEX_COL
-            row_exists = len(df.filter(nw.col(index_col) == date)) > 0
+            row_exists = not df.filter(pl.col(index_col) == date).is_empty()
             if row_exists:
                 df = df.with_columns(
-                    nw.when(nw.col(index_col) == date)
-                    .then(nw.lit(v))
-                    .otherwise(nw.col(col) if col in df.columns else nw.lit(None))
+                    pl.when(pl.col(index_col) == date)
+                    .then(pl.lit(v))
+                    .otherwise(pl.col(col) if col in df.columns else pl.lit(None))
                     .alias(col)
                     for col, v in row_values.items()
                 )
             else:
-                new_row = nw.DataFrame.from_dict(
-                    {index_col: [date], **{col: [v] for col, v in row_values.items()}},
-                    backend=nw.get_native_namespace(df),
+                new_row = pl.DataFrame(
+                    {index_col: [date], **{col: [v] for col, v in row_values.items()}}
                 )
                 # diagonal: the new row only has [date] + this contributor's columns;
                 # every other column is filled with null
-                df = nw.concat([df, new_row], how="diagonal")
+                df = pl.concat([df, new_row], how="diagonal")
 
         max_rows = component.config["max_rows"]
         if max_rows is not None and len(df) > max_rows:
@@ -282,8 +274,10 @@ class TradingStore:
             )
             return
 
-        df = nw.from_native(cast("IntoDataFrame", data))
-        self._df = df.collect() if isinstance(df, nw.LazyFrame) else df
+        assert isinstance(data, pl.LazyFrame), (
+            f"data artifact must be a polars LazyFrame, got {type(data)}"
+        )
+        self._df = data.collect()
 
         metadata = self._feed.load_metadata(self._component)
         if metadata and metadata["signal_cols"]:

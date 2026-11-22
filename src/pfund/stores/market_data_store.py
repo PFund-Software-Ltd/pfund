@@ -463,11 +463,12 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         # concat just stacks per-(product, resolution) frames; sort by KEY_COLS
         # (date-leading) so _df holds a deterministic, date-ascending invariant
         # for every downstream consumer (get_df, merge_data_dfs, features_df)
-        # bar_dataframe's helpers and self._df stay narwhals
-        df = nw.from_native(pl.concat(dfs).sort(KEY_COLS).collect())
+        df = pl.concat(dfs).sort(KEY_COLS).collect()
 
-        validate_spine_df(df)
-        self._df = reorder_key_cols(df)
+        # bar_dataframe's helpers are still narwhals, wrap only to call them
+        nw_df = nw.from_native(df)
+        validate_spine_df(nw_df)
+        self._df = reorder_key_cols(nw_df).to_native()
 
     # TODO:
     def flush_stale_bars(self):

@@ -75,29 +75,19 @@ class DataFrameMixin(ComponentBaseMixin):
         if kind == "data":
             if data_category is not None:
                 store = self._databoy.get_data_store(data_category)
-                df = cast(
-                    "pl.DataFrame",
-                    store.get_df(window_size=window_size, to_native=True),
-                )
+                df = store.get_df(window_size=window_size)
             else:
                 # _merge_data_dfs stays narwhals, it's built on bar_dataframe's helpers
                 data_dfs: dict[DataCategory, nw.DataFrame[Any]] = {
-                    category: nw.from_native(
-                        store.get_df(window_size=window_size, to_native=True)
-                    )
+                    category: nw.from_native(store.get_df(window_size=window_size))
                     for category, store in self.data_stores.items()
                 }
                 df = cast("pl.DataFrame", self._merge_data_dfs(data_dfs).to_native())
         elif kind in ("features", "signals", "trading"):
-            df = cast(
-                "pl.DataFrame",
-                self.store.get_df(kind=kind, window_size=window_size, to_native=True),
-            )
+            df = self.store.get_df(kind=kind, window_size=window_size)
         elif kind == "full":
             data_dfs = {
-                category: nw.from_native(
-                    data_store.get_df(window_size=None, to_native=True)
-                )
+                category: nw.from_native(data_store.get_df(window_size=None))
                 for category, data_store in self.data_stores.items()
                 if data_store.get_datas() and data_store._df is not None
             }
@@ -125,11 +115,7 @@ class DataFrameMixin(ComponentBaseMixin):
                 else:
                     data_df = data_df.select(BAR_INDEX_COL).unique().sort(BAR_INDEX_COL)
 
-            trading_df: pl.DataFrame | None = (
-                cast("pl.DataFrame", self.store._df.to_native())
-                if self.store._df is not None
-                else None
-            )
+            trading_df: pl.DataFrame | None = self.store._df
 
             if data_df is None and trading_df is None:
                 raise RuntimeError(f"{self.name} full df is not ready")

@@ -520,6 +520,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 backtestee.store._df = nw.concat(
                     [nw.from_native(backtest_df) for backtest_df in backtest_dfs],
                     how="vertical",
-                )
+                ).to_native()
                 backtestee.store.persist_to_datalake()
         return backtest_dfs

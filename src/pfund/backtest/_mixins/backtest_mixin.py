@@ -317,7 +317,9 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
                     )
                 return cast("IntoDataFrame", backtest_df)
             else:
-                self.store._df = self._vectorized_backtest(nw.from_native(df))
+                self.store._df = self._vectorized_backtest(
+                    nw.from_native(df)
+                ).to_native()
                 self.store.persist_to_datalake()
                 return self.df
         elif self.backtest_mode == BacktestMode.EVENT_DRIVEN:
@@ -472,10 +474,10 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
                         + "Running its vectorized backtest on the fly...",
                         style=TextStyle.BOLD + RichColor.YELLOW,
                     )
-                    self.store._df = self._vectorized_backtest(X)
+                    self.store._df = self._vectorized_backtest(X).to_native()
                     self.store.persist_to_datalake()
                 else:
-                    self.store._df = X
+                    self.store._df = X.to_native()
             self._resolve_dataset_splits()
         elif self.backtest_mode == BacktestMode.EVENT_DRIVEN:
             if self._reuse_child_component_signals:

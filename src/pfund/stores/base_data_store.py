@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     import polars as pl
-    from narwhals.typing import IntoDataFrame
     from pfeed.io.parquet_io import ParquetIO
 
     from pfund.data_config import DataConfig
@@ -13,7 +12,6 @@ if TYPE_CHECKING:
 
 from abc import ABC, abstractmethod
 
-import narwhals as nw
 from pfeed.base.feed import BaseFeed
 from pfund_blocks.datas.data_base import BaseData
 
@@ -24,7 +22,7 @@ class BaseDataStore[DataT: BaseData, FeedT: BaseFeed](ABC):
     def __init__(self, databoy: DataBoy):
         self._databoy: DataBoy = databoy
         self._logger = databoy._logger
-        self._df: nw.DataFrame[Any] | None = None  # in long form
+        self._df: pl.DataFrame | None = None  # in long form
         self._data_as_features: bool | None = None
         # keyed by the data itself, see BaseData.key in pfund_blocks
         self._configs: dict[DataT, DataConfig] = {}
@@ -99,12 +97,7 @@ class BaseDataStore[DataT: BaseData, FeedT: BaseFeed](ABC):
             **metadata,
         )
 
-    def get_df(
-        self,
-        window_size: int | None = None,
-        to_native: bool = False,
-    ) -> nw.DataFrame[Any] | IntoDataFrame:
+    def get_df(self, window_size: int | None = None) -> pl.DataFrame:
         if self._df is None:
             raise RuntimeError(f"{self.__class__.__name__} data df is not ready")
-        df = self._df if window_size is None else self._df.tail(window_size)
-        return df.to_native() if to_native else df
+        return self._df if window_size is None else self._df.tail(window_size)

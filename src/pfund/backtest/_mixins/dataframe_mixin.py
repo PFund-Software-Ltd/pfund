@@ -236,12 +236,12 @@ class BacktestDataFrameMixin(DataFrameMixin):
         children_signals = [
             (
                 child,
-                child.get_df(kind="signals", window_size=None, to_native=False),
+                nw.from_native(child.get_df(kind="signals", window_size=None)),
             )
             for child in self.components
         ]
         data_dfs = {
-            category: data_store.get_df(to_native=False)
+            category: nw.from_native(data_store.get_df())
             for category, data_store in self.data_stores.items()
             # NOTE: market data df is ALWAYS included to create the "spine" of the df
             if (category == DataCategory.MARKET_DATA or data_store.data_as_features)
@@ -251,7 +251,7 @@ class BacktestDataFrameMixin(DataFrameMixin):
             df = self._merge_data_dfs(data_dfs)
             market_data_store = self.market_data_store
             if not market_data_store.data_as_features:
-                market_data_df = market_data_store.get_df(to_native=False)
+                market_data_df = market_data_store.get_df()
                 market_data_cols = [
                     col
                     for col in market_data_df.columns
