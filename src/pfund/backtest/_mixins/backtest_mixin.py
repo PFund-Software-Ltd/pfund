@@ -460,6 +460,7 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
 
     @override
     def _materialize(self):
+        self.store.setup_lakehouse()
         for data_store in self.data_stores.values():
             data_store.materialize()
         if self.backtest_mode == BacktestMode.VECTORIZED:
