@@ -44,46 +44,36 @@ class PFundComponentDataMetadata(BaseDataMetadata):
 class PFundComponentDataHandler(
     PFundBaseDataHandler["PFundComponentDataModel", PFundComponentDataMetadata]
 ):
-    # FIXME: update the docstring
     """Persists pfund component artifacts on file-based storage.
 
     The artifact arrives already in its owner's currency — opaque bytes for
     source/model/checkpoint (serialized by pfund), a frame for `data` — so this handler does
     no (de)serialization itself: it routes the payload to the IO under the component's DatasetKey.
-    A frame goes to a BaseIO, bytes to a BlobIO, which writes/reads them verbatim;
+    A frame goes to a BaseIO (the component's own datalake), bytes to a BlobIO, which writes/reads them verbatim;
     a checkpoint is the partition of its step.
 
     Storage Layout:
-    data_path/  (e.g. pfund's config.data_path)
-        runs/
-            env=BACKTEST or SANDBOX or PAPER or LIVE/
-                {project_name}/
+    <lakehouse_path>/  (pfund's engine-scoped config.data_path by default, see TradingStore.setup_lakehouse())
+        runs/  (the store's BlobIO, plain dataset dirs, i.e. hive_dataset_dirs=False)
+            BACKTEST or SANDBOX or PAPER or LIVE/
+                {project}/
                     trackio.db  (when mtflow is used)
                     optuna.db  (optional, when mtflow is used)
                     default_run/  (or run_00x when mtflow is used)
                         pfund.db (engine states (e.g. used to match back client order ids),
                                   also used to host a fake server in SANDBOX trading)
-                        {component_type}/
-                            {component_class_name-component_id}/
-                                artifacts, e.g.
-                                - trading_df/  (DuckLakeIO of trading df (df in pfund's trading store),
-                                                         its own catalog pfeed.db + data/ inside, see the TODO below)
-                                - metadata.json
-                                - model.safetensors, model.joblib (trained model)
-                                - {component}.py  (component source code)
+                        {component_type plural}/  (e.g. strategies/)
+                            {component_id}/  ({component_class_name}-{hash}, see PFundComponentDataModel.component_path)
+                                _pfeed_metadata.json  (BlobIO's manifest of the files below)
+                                metadata.json  (pfund's own metadata of the run)
+                                {component}.py  (component source code)
+                                model.safetensors or model.joblib  (trained model)
+                                trading_df/  (the component's own DuckLakeIO, catalog pfeed.db + data/ inside,
+                                              see TradingStore.setup_lakehouse())
                                 checkpoints/
                                     step=0/
-                                        checkpoint.pth or checkpoint.pkl
-
-    TODO: the data artifact's IO must be created per component, not passed in as a shared instance:
-        file-based IOs (ParquetIO, BlobIO) can share one base_path (data_path/runs), since the component
-        is in the DatasetKey, but a catalog-based IO (DuckLakeIO) puts its catalog at its base_path,
-        so a shared one keeps one catalog for every run outside the run folders, and deleting a run folder
-        (see _clear_run_path) leaves the catalog pointing to deleted files.
-        With base_path=<component dir>/trading_df.ducklake, the catalog lives inside the component's dir,
-        so a run folder is self-contained again (delete/copy as one unit).
-        i.e. take the IO's type (+ options) instead of an instance and create it here with that base_path,
-        decide it together with the handler split by payload type (frames vs bytes).
+                                        _pfeed_metadata.json
+                                        checkpoint.pth
     """
 
     Metadata = PFundComponentDataMetadata
@@ -91,6 +81,7 @@ class PFundComponentDataHandler(
     # the ones below are for pfund's metadata.json of the component, written once per run per component
     METADATA_FILE_NAME: ClassVar[str] = "metadata.json"
     METADATA_SCHEMA_VERSION: ClassVar[int] = 1
+    CHECKPOINTS_DIR_NAME: ClassVar[str] = "checkpoints"
 
     def __init__(
         self,
@@ -113,8 +104,12 @@ class PFundComponentDataHandler(
 
     @cached_property
     def _component_metadata_io(self) -> BlobIO:
-        """pfund's metadata.json is a blob, always stored by its own BlobIO, independent of the artifact's io."""
-        return BlobIO()
+        """pfund's metadata.json is a blob, always stored in the store's BlobIO, independent of the artifact's io.
+
+        It is the BlobIO of the component's other bytes artifacts, metadata.json sits next to them
+        in the component's dir, listed in the same manifest (see TradingStore.setup_lakehouse()).
+        """
+        return self._data_model.component.store.blob_io
 
     def _validate_io(self) -> None:
         """Raises TypeError if the IO can't store the artifact: bytes need a BlobIO, frames a BaseIO."""
@@ -173,27 +168,30 @@ class PFundComponentDataHandler(
         component = data_model.component
         # NOTE: chunk_num is not a partition: a backtest replaces the whole dataset anyway (see write_batch()),
         # and the chunks are written together, once, see BacktestEngine._backtest()
-        partition_by = (
-            ("step",) if data_model.artifact_type == ArtifactType.checkpoint else ()
-        )
+        name = {
+            "component_type": component.component_type.to_plural(),
+            "component_id": component.component_id,
+        }
+        # the other bytes artifacts are files of the component's dir (the same dataset, see _blob_file_name()),
+        # checkpoints are their own dataset in the component's checkpoints/ dir, partitioned by step
+        partition_by: tuple[str, ...] = ()
+        if data_model.artifact_type == ArtifactType.checkpoint:
+            name["artifact"] = self.CHECKPOINTS_DIR_NAME
+            partition_by = ("step",)
         return DatasetKey(
             namespace={
                 "env": str(data_model.env),
                 "project": data_model.project,
                 "run": data_model.run,
             },
-            name={
-                "component_type": str(component.component_type),
-                "component_id": component.component_id,
-                "artifact_type": str(data_model.artifact_type),
-            },
+            name=name,
             partition_by=partition_by,
         )
 
     def _create_component_dataset_key(self) -> DatasetKey:
-        """The key of pfund's metadata.json: the component's dir, one level above its artifact_type=... dirs."""
+        """The key of pfund's metadata.json: the component's dir, where the source and model files are too."""
         key = self._dataset_key
-        name = {k: v for k, v in key.name.items() if k != "artifact_type"}
+        name = {k: v for k, v in key.name.items() if k != "artifact"}
         return DatasetKey(namespace=key.namespace, name=name, partition_by=())
 
     def _validate_schema(self, df: pl.DataFrame) -> pl.DataFrame:
@@ -238,7 +236,7 @@ class PFundComponentDataHandler(
         """Writes pfund's metadata.json of the component (what it was in its run), replacing the stored one.
 
         Written once per run per component, as component.to_dict() + a few fields about the record and the run.
-        A blob in the component's dir, BlobIO adds its own _pfeed_metadata.json (commit marker) next to it.
+        A blob in the component's dir, listed in the dir's _pfeed_metadata.json (BlobIO's manifest) with the other files.
         """
         component_metadata = {
             # bump when a reader would misread an older metadata.json, e.g. a field renamed or removed
@@ -263,7 +261,9 @@ class PFundComponentDataHandler(
         Values come back as JSON types, e.g. dates as ISO strings.
         """
         key = self._create_component_dataset_key()
-        blobs, _ = self._component_metadata_io.read(key, partitions=[()])
+        blobs, _ = self._component_metadata_io.read(
+            key, partitions=[()], file_name=self.METADATA_FILE_NAME
+        )
         if () not in blobs:
             return None
         return json.loads(blobs[()])
@@ -334,7 +334,9 @@ class PFundComponentDataHandler(
         else:
             partition = self._blob_partition()
             blobs, blob_metadata = self._blob_io.read(
-                self._dataset_key, partitions=[partition]
+                self._dataset_key,
+                partitions=[partition],
+                file_name=self._blob_file_name(),
             )
             if partition not in blobs:
                 return None, {}

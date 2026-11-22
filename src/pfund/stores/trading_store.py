@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 if TYPE_CHECKING:
     from pfeed.io.blob_io import BlobIO
@@ -19,6 +19,9 @@ from pfund.enums import ArtifactType
 
 
 class TradingStore:
+    # the dir of the component's datalake in its component dir, named after what it holds, not the IO type
+    TRADING_DF_DIR_NAME: ClassVar[str] = "trading_df"
+
     def __init__(self, component: Component):
         import pfeed as pe
 
@@ -29,9 +32,8 @@ class TradingStore:
         # materialize() rehydrates the component's own persisted trading_df.
         self._df: pl.DataFrame | None = None
         self._feed: PFundComponentFeed = pe.PFund().component_feed
-        self._features: dict[
-            ColumnName, Any
-        ] = {}  # child components signals = component's feature columns
+        # child components signals = component's feature columns
+        self._features: dict[ColumnName, Any] = {}
         self._datalake: TableIO | None = None
         self._blob_io: BlobIO | None = None
 
@@ -49,16 +51,23 @@ class TradingStore:
         assert self._blob_io is not None, "blob_io has not been initialized"
         return self._blob_io
 
-    def setup_lakehouse(self) -> None:
-        """Sets up the lakehouse's IOs: the datalake (table IO) and the blob IO.
+    def _is_lakehouse_setup(self) -> bool:
+        return bool(self._datalake and self._blob_io)
 
-        Both live side by side under the engine's lakehouse path:
-        <lakehouse_path>/<Lake.DEFAULT_DIR_NAME> and <lakehouse_path>/<BlobIO.DEFAULT_DIR_NAME>,
-        so blobs always follow the datalake's storage.
+    def setup_lakehouse(self) -> None:
+        """Sets up the lakehouse's IOs: the component's datalake (table IO) and the blob IO.
+
+        Called after component_id is final, it is in the datalake's path:
+        - <lakehouse_path>/<PFundBaseDataModel.RUNS_DIR_NAME>: the blob IO, with plain dataset dirs, i.e. runs/BACKTEST/...
+        - <lakehouse_path>/<component_path>/<TRADING_DF_DIR_NAME>: the component's datalake, inside its component dir
+        lakehouse_path is pfund's engine-scoped data_path by default,
+        or <datalake template's base_path>/<engine name> when the user passes a datalake.
         """
         import posixpath
 
         from pfeed.io.blob_io import BlobIO
+
+        from pfund._pfeed_source.base.data_model import PFundBaseDataModel
 
         context = self._component.context
         datalake = self._component.settings.datalake
@@ -82,11 +91,18 @@ class TradingStore:
             }
             # NOTE: posixpath, not Path, which collapses the "//" of a URI (e.g. s3://)
             lakehouse_path = posixpath.join(datalake._base_path, context.name)
+        component_path = self._feed.create_data_model(
+            self._component, ArtifactType.data
+        ).component_path
         self._datalake = DataLakeIO(
-            base_path=posixpath.join(lakehouse_path, DataLakeIO.DEFAULT_DIR_NAME), **options
+            base_path=posixpath.join(
+                lakehouse_path, component_path.as_posix(), self.TRADING_DF_DIR_NAME
+            ),
+            **options,
         )
         self._blob_io = BlobIO(
-            base_path=posixpath.join(lakehouse_path, BlobIO.DEFAULT_DIR_NAME)
+            base_path=posixpath.join(lakehouse_path, PFundBaseDataModel.RUNS_DIR_NAME),
+            hive_dataset_dirs=False,
         )
 
     def has_updated(self, data: BarData) -> bool:
@@ -266,6 +282,9 @@ class TradingStore:
     # they are unnecessary and could be misleading (if created by vectorized backtesting, results are inaccurate)
     def materialize(self):
         """Load this component's own trading_df.delta (data artifact)."""
+        if not self._is_lakehouse_setup():
+            self.setup_lakehouse()
+
         data = self._feed.load_artifact(self._component, ArtifactType.data)
         if data is None:
             self._df = None

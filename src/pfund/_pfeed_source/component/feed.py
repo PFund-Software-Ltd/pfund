@@ -83,16 +83,14 @@ class PFundComponentFeed[PipelineT: bool = Literal[False]](
             raise ValueError("checkpoint_step is only valid for checkpoints")
 
     @staticmethod
-    def _resolve_artifact_io(
-        component: Component, artifact_type: ArtifactType
-    ) -> BaseIO | BlobIO:
-        match artifact_type:
+    def _resolve_artifact_io(data_model: PFundComponentDataModel) -> BaseIO | BlobIO:
+        component = data_model.component
+        match data_model.artifact_type:
             case ArtifactType.data:
-                # NOTE: store.datalake, not settings.datalake, which is only the user's template
-                # (or None), the store rebuilds it under the engine's scope in setup_lakehouse()
+                # NOTE: the store's datalake, not settings.datalake, which is only the user's template (or None)
                 return component.store.datalake
             case _:
-                # the store builds the blob IO next to the datalake, so they share the lakehouse's storage
+                # the store builds the blob IO in the same lakehouse as the datalakes, so they share its storage
                 return component.store.blob_io
 
     def load_metadata(
@@ -116,7 +114,7 @@ class PFundComponentFeed[PipelineT: bool = Literal[False]](
         )
         handler = data_model.DataHandler(
             data_model=data_model,
-            io=self._resolve_artifact_io(component, artifact_type),
+            io=self._resolve_artifact_io(data_model),
         )
         return handler._read_component_metadata()
 
@@ -202,7 +200,7 @@ class PFundComponentFeed[PipelineT: bool = Literal[False]](
         )
         return data_model.DataHandler(
             data_model=data_model,
-            io=self._resolve_artifact_io(component, artifact_type),
+            io=self._resolve_artifact_io(data_model),
         )
 
     @staticmethod

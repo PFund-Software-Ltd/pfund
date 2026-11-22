@@ -14,6 +14,8 @@ class PFundBaseDataModel(BaseDataModel):
 
     DEFAULT_PROJECT_NAME: ClassVar[str] = "default_project"
     DEFAULT_RUN_NAME: ClassVar[str] = "default_run"
+    # the blob IO's dir under the lakehouse path, see TradingStore.setup_lakehouse()
+    RUNS_DIR_NAME: ClassVar[str] = "runs"
 
     env: Environment | str
     project: str = DEFAULT_PROJECT_NAME
@@ -30,9 +32,11 @@ class PFundBaseDataModel(BaseDataModel):
     def _lower_names(cls, value: str) -> str:
         return value.lower()
 
+    # NOTE: plain dirs, the same as the namespace of every pfund DatasetKey written by the blob IO (hive_dataset_dirs=False),
+    # see PFundComponentDataHandler._create_dataset_key(), so a run's files share one run dir
     @property
     def project_path(self) -> Path:
-        return Path("runs") / f"env={self.env}" / self.project
+        return Path(self.RUNS_DIR_NAME) / str(self.env) / self.project
 
     @property
     def run_path(self) -> Path:
