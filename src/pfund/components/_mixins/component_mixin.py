@@ -573,17 +573,19 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
                 f"is_ready() is not implemented for {data.category=}"
             )
 
+    # FIXME
     def _reload_markets(self):
-        """venues (at engine level) might have refetched the latest markets, reload markets from markets.yml"""
-        # NOTE: must use pfund_config from context, config from get_config() could be different from what user has set in Ray Actor
-        # .parent drops the engine name: markets.yml is venue data, shared by
-        # every engine, and that is where the venues wrote it.
-        data_path = self.context.config.data_path.parent
-        for product in self.products.values():
-            if product.source not in TradingVenue.__members__:
-                continue
-            VenueClass = TradingVenue(product.source).venue_class
-            VenueClass.load_market(product, data_path)
+        pass
+        # """venues (at engine level) might have refetched the latest markets, reload markets from markets.yml"""
+        # # NOTE: must use pfund_config from context, config from get_config() could be different from what user has set in Ray Actor
+        # # .parent drops the engine name: markets.yml is venue data, shared by
+        # # every engine, and that is where the venues wrote it.
+        # data_path = self.context.config.data_path.parent
+        # for product in self.products.values():
+        #     if product.source not in TradingVenue.__members__:
+        #         continue
+        #     VenueClass = TradingVenue(product.source).venue_class
+        #     VenueClass.load_market(product, data_path)
 
     def _materialize(self):
         """Materialize historical frames only when a data range was requested."""
