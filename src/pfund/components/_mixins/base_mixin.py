@@ -32,6 +32,9 @@ from pfund.utils.decorators import ray_method
 
 
 class ComponentBaseMixin:
+    # NOTE: set in each component base class's __init__, e.g. BaseStrategy.__init__
+    component_type: ComponentType
+
     # custom post init for-common attributes of strategy and model
     def __mixin_post_init__(self, *args: Any, **kwargs: Any):
         self.__pfund_args__ = args
@@ -102,21 +105,6 @@ class ComponentBaseMixin:
     @property
     def store(self) -> TradingStore:
         return self._store
-
-    @property
-    def component_type(self) -> ComponentType:
-        from pfund.components.features.feature_base import BaseFeature
-        from pfund.components.models.model_base import BaseModel
-        from pfund.components.strategies.strategy_base import BaseStrategy
-
-        if isinstance(self, BaseStrategy):
-            return ComponentType.strategy
-        elif isinstance(self, BaseModel):
-            return ComponentType.model
-        elif isinstance(self, BaseFeature):
-            return ComponentType.feature
-        else:
-            raise ValueError(f"Unknown component type: {type(self)}")
 
     def _setup_scheduler(self):
         self._databoy._setup_scheduler()

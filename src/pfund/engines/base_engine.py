@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from pfund.components.actor_proxy import ActorProxy
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.engines.settings.base_engine_settings import BaseEngineSettings
-    from pfund.typing import ComponentName, StrategyT
+    from pfund.typing import ComponentName
 
     class DataRangeDict(TypedDict, total=False):
         start_date: Required[str]
@@ -185,7 +185,7 @@ class BaseEngine[
     def get_venue(self, venue: TradingVenue) -> BaseVenue:
         return self._venues[venue.upper()]
 
-    def add_strategy(
+    def add_strategy[StrategyT: BaseStrategy](
         self,
         strategy: StrategyT,
         resolution: str,

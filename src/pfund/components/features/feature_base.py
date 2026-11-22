@@ -18,10 +18,12 @@ import numpy as np
 
 from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.components.features.feature_meta import MetaFeature
+from pfund.enums import ComponentType
 
 
 class BaseFeature(ComponentMixin, ABC, metaclass=MetaFeature):
     def __init__(self, *args: Any, **kwargs: Any):
+        self.component_type: ComponentType = ComponentType.feature
         self.__mixin_post_init__(
             *args, **kwargs
         )  # calls ComponentMixin.__mixin_post_init__()

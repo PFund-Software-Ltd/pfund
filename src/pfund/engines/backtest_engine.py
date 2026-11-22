@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
     from pfund_blocks.resolution import Resolution
 
-    from pfund.backtest.backtest_mixin import BacktestMixin
+    from pfund.backtest._mixins.backtest_mixin import BacktestMixin
     from pfund.backtest.cv.dataset_splits import DatasetSplits
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel, UnderlyingModel
@@ -155,7 +155,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         Returns:
             The strategy configured for backtesting.
         """
-        from pfund.backtest.strategy_mixin import BacktestStrategyMixin
+        from pfund.backtest._mixins.strategy_mixin import BacktestStrategyMixin
 
         if dummy_strategy := self._get_dummy_strategy():
             raise Exception(

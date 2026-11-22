@@ -24,7 +24,7 @@ import pytest
 
 
 def _load_mixin_module() -> ModuleType:
-    name = "pfund.backtest.product_backtest_mixin"
+    name = "pfund.backtest._mixins.product_backtest_mixin"
     try:
         return importlib.import_module(name)
     except ImportError:

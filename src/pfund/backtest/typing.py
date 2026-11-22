@@ -1,8 +1,8 @@
 import pandas as pd
 import polars as pl
 
-from pfund.backtest.portfolio_backtest_mixin import PortfolioBacktestMixin
-from pfund.backtest.product_backtest_mixin import ProductBacktestMixin
+from pfund.backtest._mixins.portfolio_backtest_mixin import PortfolioBacktestMixin
+from pfund.backtest._mixins.product_backtest_mixin import ProductBacktestMixin
 
 
 class PolarsBacktestDataFrame(

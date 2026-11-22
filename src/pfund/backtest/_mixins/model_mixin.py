@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 from contextlib import contextmanager
 
-from pfund.backtest.backtest_mixin import BacktestMixin
+from pfund.backtest._mixins.backtest_mixin import BacktestMixin
 from pfund.enums import ArtifactType
 
 

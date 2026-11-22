@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pfund.backtest.backtest_mixin import BacktestMixin
+from pfund.backtest._mixins.backtest_mixin import BacktestMixin
 
 
 class BacktestFeatureMixin(BacktestMixin):

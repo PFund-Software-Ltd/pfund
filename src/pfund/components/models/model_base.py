@@ -20,7 +20,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from pfund.enums import ArtifactType
+from pfund.enums import ArtifactType, ComponentType
 from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.components.models.model_meta import MetaModel
 
@@ -51,6 +51,7 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
     _allowed_model_method_collisions: ClassVar[frozenset[str]] = frozenset({"predict"})
 
     def __init__(self, model: UnderlyingModel, *args: Any, **kwargs: Any):
+        self.component_type: ComponentType = ComponentType.model
         self.model: UnderlyingModel = model
         self.__mixin_post_init__(
             model, *args, **kwargs

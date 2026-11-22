@@ -28,12 +28,14 @@ from pfund_blocks.entities.orders.order_base import BaseOrder
 
 from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.components.strategies.strategy_meta import MetaStrategy
+from pfund.enums import ComponentType
 from pfund.managers import OrderManager, PortfolioManager, RiskManager
 from pfund.utils.decorators import ray_method
 
 
 class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def __init__(self, *args: Any, **kwargs: Any):
+        self.component_type: ComponentType = ComponentType.strategy
         self._accounts: dict[AccountName, BaseAccount] = {}
         self.strategies: dict[
             str, BaseStrategy | ActorProxy[BaseStrategy]

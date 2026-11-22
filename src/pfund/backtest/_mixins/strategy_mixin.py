@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 
 import narwhals as nw
 
-from pfund.backtest.backtest_mixin import BacktestMixin
+from pfund.backtest._mixins.backtest_mixin import BacktestMixin
 
 
 class BacktestStrategyMixin(BacktestMixin):

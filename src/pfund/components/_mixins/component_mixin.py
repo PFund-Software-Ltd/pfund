@@ -8,13 +8,12 @@ if TYPE_CHECKING:
     from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund_blocks.typing import TradingVenue
 
-    from pfund.components.models.model_base import UnderlyingModel
+    from pfund.components.features.feature_base import BaseFeature
+    from pfund.components.models.model_base import BaseModel, UnderlyingModel
     from pfund.engines.contexts.base_engine_context import BaseEngineContext
     from pfund.typing import (
         Component,
         ComponentName,
-        FeatureT,
-        ModelT,
         Signals,
     )
 
@@ -420,17 +419,10 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
                 f"only a strategy can add a sub-strategy, '{self.name}' is a {self.component_type}"
             )
             components = self.strategies
-            BaseClass = BaseStrategy
         elif component.is_model():
-            from pfund.components.models.model_base import BaseModel
-
             components = self.models
-            BaseClass = BaseModel
         elif component.is_feature():
-            from pfund.components.features.feature_base import BaseFeature
-
             components = self.features
-            BaseClass = BaseFeature
         else:
             raise ValueError(
                 f"{component.component_type} '{ComponentName}' is not a strategy, model or feature"
@@ -452,9 +444,6 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
 
         if not isinstance(component, ActorProxy):
             component_type = component.component_type
-            assert isinstance(component, BaseClass), (
-                f"{component_type} '{ComponentName}' is not an instance of {BaseClass.__name__}. Please create your {component_type} using 'class {ComponentName}(pf.{component_type.capitalize()})'"
-            )
             component_name = name or component.name
             if any(
                 component_name.casefold() == existing.casefold()
@@ -489,7 +478,7 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
             return None
         return component
 
-    def add_model(
+    def add_model[ModelT: BaseModel](
         self,
         model: ModelT | ActorProxy[ModelT] | UnderlyingModel,
         resolution: str = "",
@@ -526,7 +515,7 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
             **ray_kwargs,
         )
 
-    def add_feature(
+    def add_feature[FeatureT: BaseFeature](
         self,
         feature: FeatureT | ActorProxy[FeatureT],
         resolution: str = "",
