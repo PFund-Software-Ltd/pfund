@@ -70,13 +70,11 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         data = self.get_data(product.name, resolution)
         if data is not None:
             return data
-        data = self.create_data(product=product, resolution=resolution)
+        data = self.create_data(product=product, resolution=resolution, config=config)
         self._datas[product.name][repr(resolution)] = data
-        self._configs[self._generate_data_key(data)] = config
+        # all the product's data share the same resolved config, since a product is added once
+        self._configs[data] = config
         return data
-
-    def _generate_data_key(self, data: MarketData) -> tuple[ProductName, ResolutionRepr]:
-        return (data.product.name, repr(data.resolution))
 
     @staticmethod
     def _validate_resolutions(resolutions: list[Resolution]) -> None:
@@ -103,16 +101,30 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         product: BaseProduct,
         resolutions: list[Resolution | str] | None = None,
         config: DataConfig | None = None,
-        as_features: bool = False,
+        as_features: bool = True,
     ) -> list[MarketData]:
+        """Adds the product's market data for the requested resolutions.
+
+        A product is added once, with all its resolutions and its config in one call.
+
+        Raises:
+            ValueError: if the product has already been added,
+                or if as_features differs from a previous call.
+        """
+        if product.name in self._datas:
+            raise ValueError(
+                f"{product.name} has already been added, add all its resolutions in one add_data() call"
+            )
         self._set_data_as_features(as_features)
         config = config or DataConfig()
         data_resolutions: list[Resolution] = list(
-            dict.fromkeys([
-                self._component.resolution,
-                *(Resolution(r) for r in resolutions or []),
-                *config.get_resolutions(),
-            ])
+            dict.fromkeys(
+                [
+                    self._component.resolution,
+                    *(Resolution(r) for r in resolutions or []),
+                    *config.get_resolutions(),
+                ]
+            )
         )
         self._validate_resolutions(data_resolutions)
 
@@ -154,16 +166,24 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         self,
         product: BaseProduct,
         resolution: Resolution,
+        config: DataConfig,
     ) -> MarketData:
-        if resolution.is_quote():
-            DataClass = QuoteData
+        """
+        Args:
+            config: the product's resolved data config, the data takes its settings from it (e.g. shift).
+        """
+        if resolution.is_bar():
+            return BarData(
+                product=product,
+                resolution=resolution,
+                shift=config.get_shift(resolution),
+            )
+        elif resolution.is_quote():
+            return QuoteData(product=product, resolution=resolution)
         elif resolution.is_tick():
-            DataClass = TickData
-        elif resolution.is_bar():
-            DataClass = BarData
+            return TickData(product=product, resolution=resolution)
         else:
             raise ValueError(f"Unsupported resolution: {resolution}")
-        return DataClass(product=product, resolution=resolution)
 
     # FIXME
     def update_quote(self, update: Quote):
@@ -314,7 +334,9 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                 raise Exception(
                     f"{product.name} {primary_resolution} data has not been added"
                 )
-            assert isinstance(data, BarData), f"primary resolution data must be BarData, got {type(data)}"
+            assert isinstance(data, BarData), (
+                f"primary resolution data must be BarData, got {type(data)}"
+            )
             data_config = self.get_config(data)
             data_source = sources[product.source]
             if hasattr(data_source, "market_feed"):
@@ -384,10 +406,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             else:
                 if settings.auto_download_data:
                     # PAID data cannot be downloaded automatically, user must download it manually
-                    if (
-                        data_source.metadata.access_type
-                        == DataAccessType.PAID_BY_USAGE
-                    ):
+                    if data_source.metadata.access_type == DataAccessType.PAID_BY_USAGE:
                         raise DataNotFoundError(
                             f"No data found for {data.product.name} {data.resolution}, and auto-downloading PAID data from {feed.data_source.name} is NOT allowed"
                         )

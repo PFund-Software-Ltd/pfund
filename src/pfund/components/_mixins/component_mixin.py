@@ -356,8 +356,8 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
             exchange: useful for TradFi brokers (e.g. IB), to specify the exchange (e.g. 'NASDAQ')
             symbol: useful for TradFi brokers (e.g. IB), to specify the symbol (e.g. 'AAPL')
             product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
-            resolutions: data resolutions in use, e.g. "1t" for tick data, "1q" for quote data
-                if None, resolution of the component will be used
+            resolutions: extra data resolutions in use, e.g. "1t" for tick data, "1q" for quote data.
+                The component's resolution is always included.
             product_name: A user-defined identifier for the product.
                 If not provided, the default product symbol (e.g. 'BTC_USDT_PERP', 'TSLA241213C00075000') will be used.
                 This is useful when you need to distinguish between similar instruments, such as options
@@ -366,9 +366,10 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
                 simpler names like 'BTC_OPT1' and 'BTC_OPT2'.
                 Note:
                     It is the user's responsibility to manage and maintain these custom product names.
-            config: Data Configuration
+            config: Data Configuration, shared by all the product's resolutions.
+                A product can only be added once, so pass all its resolutions in one call.
             as_features: Whether data columns (e.g. OHLCV in market data) are treated as "features"
-                in the component's trading_df.
+                in the component's trading_df. Must be the same across add_data() calls.
             product_specs: product specifications, e.g. expiration, strike_price etc.
 
         Returns:

@@ -214,8 +214,13 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
         """
         import narwhals as nw
 
-        from pfund.backtest._mixins import portfolio_backtest_mixin, product_backtest_mixin
-        from pfund.backtest._mixins.portfolio_backtest_mixin import PortfolioBacktestMixin
+        from pfund.backtest._mixins import (
+            portfolio_backtest_mixin,
+            product_backtest_mixin,
+        )
+        from pfund.backtest._mixins.portfolio_backtest_mixin import (
+            PortfolioBacktestMixin,
+        )
         from pfund.backtest._mixins.product_backtest_mixin import ProductBacktestMixin
 
         product_backtest_mixin._clear_registry()

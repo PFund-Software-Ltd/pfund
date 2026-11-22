@@ -199,7 +199,8 @@ class ComponentBaseMixin:
         if self.env.is_simulated():
             from pfund.simulated import SimulatedVenue
 
-            return SimulatedVenue
+            # the per-venue subclass, which carries the real venue's metadata and adapter
+            return SimulatedVenue.for_venue(venue)
         else:
             from pfund.registry import get_venue
 

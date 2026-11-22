@@ -3,8 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
-    from collections.abc import Hashable
-
     from narwhals.typing import IntoDataFrame, IntoLazyFrame
     from pfeed.io.parquet_io import ParquetIO
 
@@ -27,11 +25,8 @@ class BaseDataStore[DataT: BaseData, FeedT: BaseFeed](ABC):
         self._logger = databoy._logger
         self._df: nw.DataFrame[Any] | None = None  # in long form
         self._data_as_features: bool | None = None
-        self._configs: dict[Hashable, DataConfig] = {}
-
-    @abstractmethod
-    def _generate_data_key(self, data: DataT) -> Hashable:
-        """Generates the store's own key of the data, used to look up its config."""
+        # keyed by the data itself, see BaseData.key in pfund_blocks
+        self._configs: dict[DataT, DataConfig] = {}
 
     @abstractmethod
     def materialize(self, *args: Any, **kwargs: Any) -> None:
@@ -66,15 +61,17 @@ class BaseDataStore[DataT: BaseData, FeedT: BaseFeed](ABC):
         return self._data_as_features is True
 
     def get_config(self, data: DataT) -> DataConfig:
-        return self._configs[self._generate_data_key(data)]
+        return self._configs[data]
 
     def _set_data_as_features(self, as_features: bool) -> None:
         if self._data_as_features is None:
             self._data_as_features = as_features
         elif as_features != self._data_as_features:
-            self._logger.debug(
+            # as_features applies to the whole store, i.e. all data of this category (e.g. all market data),
+            # it can't differ per call. other categories (e.g. news data) have their own stores and flags.
+            raise ValueError(
                 f"{self.__class__.__name__} has already set data_as_features={self._data_as_features}, "
-                + f"ignoring inconsistent input {as_features=}"
+                + f"got inconsistent {as_features=}"
             )
 
     def _create_io_for_caching(self) -> ParquetIO:
