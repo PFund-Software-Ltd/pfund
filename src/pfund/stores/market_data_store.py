@@ -320,11 +320,12 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
             self._df = None
             return
 
+        import polars as pl
         from pfeed.enums import DataLayer
-        from pfeed.errors import DataNotFoundError
+        from pfeed.errors import DataNotFoundError, MissingDatesError
         from pfeed.registry import get_source
 
-        dfs: list[nw.LazyFrame[Any]] = []
+        dfs: list[pl.LazyFrame] = []
         engine_context = self._component.context
         settings = engine_context.settings
         start_date, end_date = engine_context.data_start, engine_context.data_end
@@ -381,19 +382,29 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
 
             # check cache first for previously resampled data
             if settings.cache_materialized_data is not False:
-                result: RunResult = retrieve(
-                    io=io_for_caching,
-                    data_layer=DataLayer.CURATED,
-                ).run()
-                # cache is best-effort: a miss/failure just falls through to original storage
-                if result.failed:
-                    self._logger.debug(
-                        f"failed to load cached data for {data.product.name} {data.resolution}: {result.errors}"
+                # cache is best-effort: a miss/partial hit/failure just falls through to original storage.
+                # a partial cache must not shadow the original storage, which may have the full date range
+                try:
+                    cache_feed = retrieve(
+                        io=io_for_caching,
+                        data_layer=DataLayer.CURATED,
+                        raise_on_missing_data=True,
                     )
-                _df: pl.LazyFrame | None = result.data
-                if _df is not None:
-                    dfs.append(self._standardize_df(_df))
-                    continue
+                except MissingDatesError as err:
+                    self._logger.debug(
+                        f"cached data for {data.product.name} {data.resolution} is missing {len(err.missing_dates)} dates, ignoring the cache"
+                    )
+                else:
+                    result: RunResult = cache_feed.run()
+                    if result.failed:
+                        self._logger.debug(
+                            f"failed to load cached data for {data.product.name} {data.resolution}: {result.errors}"
+                        )
+                    _df: pl.LazyFrame | None = result.data
+                    # a failed per-date dataflow leaves the cached data partial too
+                    if _df is not None and not result.failed:
+                        dfs.append(self._standardize_df(_df))
+                        continue
 
             # cache miss or caching disabled, retrieve from original storage
             result: RunResult = (
@@ -451,7 +462,8 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         # concat just stacks per-(product, resolution) frames; sort by KEY_COLS
         # (date-leading) so _df holds a deterministic, date-ascending invariant
         # for every downstream consumer (get_df, merge_data_dfs, features_df)
-        df = nw.concat(dfs).sort(KEY_COLS).collect()
+        # bar_dataframe's helpers and self._df stay narwhals
+        df = nw.from_native(pl.concat(dfs).sort(KEY_COLS).collect())
 
         validate_spine_df(df)
         self._df = reorder_key_cols(df)

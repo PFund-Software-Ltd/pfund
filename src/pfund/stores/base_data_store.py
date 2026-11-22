@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
-    from narwhals.typing import IntoDataFrame, IntoLazyFrame
+    import polars as pl
+    from narwhals.typing import IntoDataFrame
     from pfeed.io.parquet_io import ParquetIO
 
     from pfund.data_config import DataConfig
@@ -81,18 +82,20 @@ class BaseDataStore[DataT: BaseData, FeedT: BaseFeed](ABC):
         engine_context = self._component.context
         return pe.ParquetIO(base_path=engine_context.config.cache_path)
 
-    def _standardize_df(self, df: IntoLazyFrame) -> nw.LazyFrame[Any]:
+    def _standardize_df(self, df: pl.LazyFrame) -> pl.LazyFrame:
         """Adds metadata columns to the dataframe"""
+        import polars as pl
+
         from pfund.enums import SourceType
 
         metadata = {
-            "source_type": nw.lit(SourceType.BATCH).cast(nw.String),
+            "source_type": pl.lit(SourceType.BATCH.value, dtype=pl.String),
         }
         assert set(metadata) == set(self.METADATA_COLS), (
             f"metadata keys {set(metadata)} do not match METADATA_COLS {set(self.METADATA_COLS)}"
         )
-        return nw.from_native(df).with_columns(
-            # product=nw.lit(data.product.name).cast(nw.String),
+        return df.with_columns(
+            # product=pl.lit(data.product.name, dtype=pl.String),
             **metadata,
         )
 
