@@ -22,12 +22,13 @@ FAKE_MODULE = "fake_pfund_plugin"
 
 
 class FakeVenue:
-    name = "FAKE"
+    # get_venue() checks the class-level metadata.name (BaseVenue.name is an instance property)
+    metadata = types.SimpleNamespace(name="FAKE")
 
 
 class MismatchedVenue:
     # entry point is named "fake" but the venue's name says otherwise
-    name = "OTHER"
+    metadata = types.SimpleNamespace(name="OTHER")
 
 
 def _ep(name: str, attr: str = "FakeVenue") -> EntryPoint:
