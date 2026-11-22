@@ -321,10 +321,28 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
         name: str = "",
         **specs: Any,
     ) -> BaseProduct:
+        from pydantic import ValidationError
+
         Venue = self._get_venue_class(venue)
-        product = Venue.create_product(
-            basis=basis, exchange=exchange, name=name, symbol=symbol, **specs
-        )
+        try:
+            product = Venue.create_product(
+                basis=basis, exchange=exchange, name=name, symbol=symbol, **specs
+            )
+        except ValidationError as err:
+            # unknown kwargs of add_data() fall into **product_specs,
+            # so a typo (e.g. data_config= instead of config=) surfaces as pydantic's "Extra inputs are not permitted"
+            unknown = [
+                str(e["loc"][0])
+                for e in err.errors()
+                if e["type"] == "extra_forbidden" and e["loc"]
+            ]
+            if not unknown:
+                raise
+            raise TypeError(
+                f"unexpected keyword argument(s) {unknown} for product '{basis}': "
+                f"extra kwargs are treated as product specs, but {err.title} does not have them. "
+                f"Is it a typo of a parameter?"
+            ) from err
         if product.name not in self.products:
             self.products[product.name] = product
             self.logger.debug(f"added {product}")
