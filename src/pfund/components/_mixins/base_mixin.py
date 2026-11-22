@@ -175,8 +175,6 @@ class ComponentBaseMixin:
 
     def _set_name(self, name: str):
         self._name = name
-        if not self._name.lower().endswith(self.component_type):
-            self._name += f"_{self.component_type}"
 
     @ray_method
     def get_df_form(self) -> Literal["wide", "long"]:
@@ -250,6 +248,9 @@ class ComponentBaseMixin:
         ]
 
     def _get_default_signal_cols(self, num_cols: int) -> list[str]:
+        # FIXME: the default signal column is the bare component name, so it can clash with a data column,
+        # e.g. a feature named "close" vs the bar's "close" column, probably add the component type suffix
+        # (e.g. "close_feature") only when it's a duplicate. same for sub-strategies in BaseStrategy._get_default_signal_cols
         if num_cols == 1:
             columns = [self.name]
         else:
