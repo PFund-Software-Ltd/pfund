@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel
+    from pfund.data_config import DataConfig
     from pfund.engines.contexts.base_engine_context import BaseEngineContext
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.stores.base_data_store import BaseDataStore
@@ -20,7 +21,7 @@ import datetime
 import logging
 from pathlib import Path
 
-from pfeed.enums import DataCategory
+from pfund_blocks.enums import DataCategory
 from pfund_blocks.enums.env import Environment
 from pfund_blocks.resolution import Resolution
 
@@ -194,6 +195,16 @@ class ComponentBaseMixin:
         for data_store in self.data_stores.values():
             datas.extend(data_store.get_datas())
         return datas
+
+    @ray_method
+    def get_data_configs(self) -> dict[BaseData, DataConfig]:
+        """Returns every data of the component with its config.
+        A method (not the stores' get_config()) so that the engine can also call it on a remote component."""
+        return {
+            data: data_store.get_config(data)
+            for data_store in self.data_stores.values()
+            for data in data_store.get_datas()
+        }
 
     def _get_venue_class(self, venue: TradingVenue) -> type[BaseVenue]:
         if self.env.is_simulated():

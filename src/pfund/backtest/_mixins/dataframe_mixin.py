@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from pfund.typing import Component
 
 import narwhals as nw
-from pfeed.enums import DataCategory
+from pfund_blocks.enums import DataCategory
 
 from pfund.backtest.cv.indexing import SplittableData
 from pfund.components._mixins.dataframe_mixin import DataFrameMixin

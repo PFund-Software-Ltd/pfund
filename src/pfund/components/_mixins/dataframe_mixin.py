@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from narwhals.typing import IntoDataFrame
 
 import narwhals as nw
-from pfeed.enums import DataCategory
+from pfund_blocks.enums import DataCategory
 
 from pfund.components._mixins.base_mixin import ComponentBaseMixin
 from pfund.components.bar_dataframe import (

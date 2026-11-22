@@ -145,3 +145,24 @@ class TestAsFeatures:
 
         with pytest.raises(ValueError, match="data_as_features"):
             strategy.add_data(VENUE, ETH, as_features=False)
+
+
+class TestSourceAndOrigin:
+    def test_source_defaults_to_the_product_venue(self, strategy: Any):
+        datas = strategy.add_data(VENUE, BTC, resolutions=["6m"])
+
+        assert all(data.source == VENUE for data in datas)
+        assert all(data.origin == "" for data in datas)
+
+    def test_data_source_overrides_the_venue(self, strategy: Any):
+        datas = strategy.add_data(
+            VENUE,
+            BTC,
+            resolutions=["6m"],
+            config=DataConfig(data_source="databento", data_origin="glbx"),
+        )
+
+        # resamplers and resamplees come from the same source, so they can be bound
+        assert all(data.source == "DATABENTO" for data in datas)
+        assert all(data.origin == "glbx" for data in datas)
+        assert datas[1].get_resampler() is datas[0]

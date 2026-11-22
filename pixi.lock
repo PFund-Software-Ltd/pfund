@@ -9281,7 +9281,7 @@ packages:
 - pypi: ../pfeed
   name: pfeed
   requires_dist:
-  - pfund-blocks>=0.0.6
+  - pfund-blocks>=0.0.7
   - pfund-kit>=0.1.25
   - pyarrow>=26.0.1 ; sys_platform != 'emscripten'
   - polars>=2.1.0 ; sys_platform != 'emscripten'

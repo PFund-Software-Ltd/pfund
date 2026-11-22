@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from pfund_blocks.resolution import Resolution
     from pfund_blocks.typing import Message, TradingVenue
 
+    from pfund.data_config import DataConfig
     from pfund.engines.base_engine import DataRangeDict
     from pfund.typing import Component
 
@@ -21,10 +22,10 @@ import time
 from threading import Thread
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from pfeed.enums import DataCategory
 from pfeed.streaming.zeromq import (
     ZeroMQDataChannel,
 )
+from pfund_blocks.enums import DataCategory
 from pfund_blocks.enums.env import Environment
 
 from pfund.engines.base_engine import BaseEngine
@@ -129,15 +130,16 @@ class TradeEngine(
             self.settings.zmq_ports.update({sender_name: data_engine_port})
 
         # data engine creates feeds and subscribes to market data to prepare for streaming
-        for data in self._get_all_datas():
+        for data, config in self._get_all_data_configs().items():
             if data.category != DataCategory.MARKET_DATA:
                 raise NotImplementedError(f"Unhandled data type: {type(data)}")
+            data = cast("MarketData", data)
             if data.is_resamplee():
                 continue
             feed = self._data_engine.add_feed(
                 data_source=data.source,
                 data_category=data.category,
-                num_workers=data.config.num_stream_workers,
+                num_workers=config.num_stream_workers,
             )
             feed.stream(
                 product=str(data.product.basis),
@@ -148,8 +150,7 @@ class TradeEngine(
                 name=data.product.name,
                 resolution=repr(data.resolution),
                 data_origin=data.origin,
-                storage_config=data.config.storage_config,
-                io_config=data.config.io_config,
+                io=config.io,
                 **self._get_pfeed_stream_kwargs(),
                 **data.product.specs,
             )
@@ -398,12 +399,36 @@ class TradeEngine(
             self.end()
 
     def _get_all_datas(self) -> set[BaseData]:
-        datas: set[BaseData] = set()
+        return set(self._get_all_data_configs())
+
+    def _get_all_data_configs(self) -> dict[BaseData, DataConfig]:
+        """Collects every component's data with its config.
+
+        Components share one feed per data (e.g. two strategies both adding BYBIT BTC 1m),
+        so the settings the feed uses must agree across them.
+
+        Raises:
+            ValueError: if the same data is added by components with different stream settings.
+        """
+        data_configs: dict[BaseData, DataConfig] = {}
+        owners: dict[BaseData, str] = {}
         for strategy in self._strategies.values():
-            datas.update(strategy.get_datas())
-            for component in strategy.get_components():
-                datas.update(component.get_datas())
-        return datas
+            for component in (strategy, *strategy.get_components()):
+                for data, config in component.get_data_configs().items():
+                    if data not in data_configs:
+                        data_configs[data] = config
+                        owners[data] = component.name
+                        continue
+                    existing = data_configs[data]
+                    if (existing.num_stream_workers, existing.io) != (
+                        config.num_stream_workers,
+                        config.io,
+                    ):
+                        raise ValueError(
+                            f"{data} is added by '{owners[data]}' and '{component.name}' with different "
+                            + "stream settings (num_stream_workers, io), they share one feed so these must match"
+                        )
+        return data_configs
 
     def _setup(self):
         super()._setup()

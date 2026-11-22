@@ -172,16 +172,25 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         Args:
             config: the product's resolved data config, the data takes its settings from it (e.g. shift).
         """
+        # where the data comes from, the product's trading venue unless a data source is specified
+        source = config.data_source or product.source
+        origin = config.data_origin
         if resolution.is_bar():
             return BarData(
                 product=product,
                 resolution=resolution,
                 shift=config.get_shift(resolution),
+                source=source,
+                origin=origin,
             )
         elif resolution.is_quote():
-            return QuoteData(product=product, resolution=resolution)
+            return QuoteData(
+                product=product, resolution=resolution, source=source, origin=origin
+            )
         elif resolution.is_tick():
-            return TickData(product=product, resolution=resolution)
+            return TickData(
+                product=product, resolution=resolution, source=source, origin=origin
+            )
         else:
             raise ValueError(f"Unsupported resolution: {resolution}")
 
@@ -323,10 +332,8 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
         component = self._component
         primary_resolution = component.resolution
         products = list(component.products.values())
-        sources = {
-            source: get_source(source)(pipeline_mode=True)
-            for source in {product.source for product in products}
-        }
+        # one pfeed data source per data.source, shared by the products using it
+        sources: dict[str, Any] = {}
         for product in products:
             # only materialize data with primary resolution
             data = self.get_data(product.name, primary_resolution)
@@ -338,7 +345,9 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                 f"primary resolution data must be BarData, got {type(data)}"
             )
             data_config = self.get_config(data)
-            data_source = sources[product.source]
+            if data.source not in sources:
+                sources[data.source] = get_source(data.source)(pipeline_mode=True)
+            data_source = sources[data.source]
             if hasattr(data_source, "market_feed"):
                 feed = cast(
                     "MarketFeed[Any, Any, Any, Literal[True]]", data_source.market_feed
@@ -363,7 +372,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                 symbol=symbol,
                 start_date=start_date,
                 end_date=end_date,
-                data_origin=data_config.data_origin,
+                data_origin=data.origin,
                 dataflow_per_date=bool(
                     requires_resampling and data_config.num_batch_workers
                 ),
@@ -420,7 +429,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                         symbol=symbol,
                         start_date=start_date,
                         end_date=end_date,
-                        data_origin=data_config.data_origin,
+                        data_origin=data.origin,
                         io=data_config.io,
                         **product_specs,
                     ).run()

@@ -8,9 +8,8 @@ if TYPE_CHECKING:
     from apscheduler.schedulers.background import BackgroundScheduler
     from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.streaming.zeromq import ZeroMQ
+    from pfund_blocks.datas import BarData, MarketData
 
-    from pfund.datas.data_bar import BarData
-    from pfund.datas.data_market import MarketData
     from pfund.stores.base_data_store import BaseDataStore
     from pfund.typing import (
         Component,
@@ -21,11 +20,12 @@ if TYPE_CHECKING:
     ComponentID: TypeAlias = int
 
 from threading import Thread
-from apscheduler.schedulers.background import BackgroundScheduler
 
-from pfeed.enums import DataCategory
+from apscheduler.schedulers.background import BackgroundScheduler
 from pfeed.streaming.zeromq import ZeroMQDataChannel
+from pfund_blocks.enums import DataCategory
 from pfund_blocks.enums.channel import PrivateChannel
+
 from pfund.enums import PFundChannel
 
 

@@ -22,7 +22,7 @@ import json
 from functools import cached_property
 from pathlib import Path
 
-from pfeed.enums import DataCategory
+from pfund_blocks.enums import DataCategory
 from pfund_blocks.resolution import Resolution
 from pfund_kit.style import RichColor, TextStyle, cprint
 from pfund_kit.utils import toml

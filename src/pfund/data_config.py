@@ -30,7 +30,7 @@ class DataConfig(BaseModel):
     # where the data comes from, passed to pfeed
     data_source: str | None = Field(
         default=None,
-        description="pfeed's data source, if None, the product's trading venue is used.",
+        description="pfeed's data source, if None, the product's source is used.",
     )
     data_origin: str = Field(
         default="",
