@@ -1,7 +1,7 @@
 # ty: ignore[incompatible-property-override]
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast, override
+from typing import TYPE_CHECKING, Any, Literal, cast, override
 
 from collections.abc import Callable
 
@@ -39,9 +39,6 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
     class next in the MRO.
     """
 
-    # backtest classes built by _adopt(), one per (backtest mixin, component class)
-    _backtest_classes: ClassVar[dict[tuple[type, type], type]] = {}
-
     def __init_subclass__(cls, **kwargs: Any):
         super().__init_subclass__(**kwargs)
         # A backtest class never runs __init__: _adopt() swaps __class__ on an
@@ -73,8 +70,8 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
 
         The component keeps its identity and state (name, source artifact path, etc.),
         only its class is swapped to a backtest class built from ``(cls, type(component))``,
-        e.g. ``(BacktestModelMixin, MyModel)``. The backtest class is built once per
-        component class and reused.
+        e.g. ``(BacktestModelMixin, MyModel)``. A new backtest class is built per adopted
+        instance (no caching), so two adopted ``MyModel`` instances have different types.
 
         Args:
             component: the component to adopt. Returned as is if already adopted,
@@ -86,22 +83,18 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
         if isinstance(component, BacktestMixin):
             return component
         Component = type(component)
-        key = (cls, Component)
-        Backtest = BacktestMixin._backtest_classes.get(key)
-        if Backtest is None:
-            # built with the component's metaclass (MetaModel etc.), like a class statement would.
-            # __name__/__qualname__ make it look like the component's own class in logs/errors,
-            # __module__ marks it as a pfund class, so the metaclass doesn't treat it as user-defined
-            Backtest = type(Component)(
-                Component.__name__,
-                (cls, Component),
-                {
-                    "__module__": cls.__module__,
-                    "__qualname__": Component.__qualname__,
-                    "__wrapped__": Component,
-                },
-            )
-            BacktestMixin._backtest_classes[key] = Backtest
+        # built with the component's metaclass (MetaModel etc.), like a class statement would.
+        # __name__/__qualname__ make it look like the component's own class in logs/errors,
+        # __module__ marks it as a pfund class, so the metaclass doesn't treat it as user-defined
+        Backtest = type(Component)(
+            Component.__name__,
+            (cls, Component),
+            {
+                "__module__": cls.__module__,
+                "__qualname__": Component.__qualname__,
+                "__wrapped__": Component,
+            },
+        )
         # a class swap can't be typed: ty types __class__ as type[C], while Backtest is a
         # subclass of type(component) built at runtime
         cast("Any", component).__class__ = Backtest
