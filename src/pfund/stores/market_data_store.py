@@ -432,7 +432,8 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                         )
 
                     self._logger.warning(
-                        f"No data found for {data.product.name} {data.resolution}, auto-downloading data..."
+                        f"No data found for {data.product.name} {data.resolution} ({start_date} to {end_date}), "
+                        + f"auto-downloading from {feed.data_source.name} to {data_config.io} at {data_config.io.base_path} ..."
                     )
                     result: RunResult = feed.download(
                         product=product,
