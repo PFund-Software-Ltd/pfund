@@ -51,9 +51,6 @@ class TradingStore:
         assert self._blob_io is not None, "blob_io has not been initialized"
         return self._blob_io
 
-    def _is_lakehouse_setup(self) -> bool:
-        return bool(self._datalake and self._blob_io)
-
     def setup_lakehouse(self) -> None:
         """Sets up the lakehouse's IOs: the component's datalake (table IO) and the blob IO.
 
@@ -282,9 +279,6 @@ class TradingStore:
     # they are unnecessary and could be misleading (if created by vectorized backtesting, results are inaccurate)
     def materialize(self):
         """Load this component's own trading_df.delta (data artifact)."""
-        if not self._is_lakehouse_setup():
-            self.setup_lakehouse()
-
         data = self._feed.load_artifact(self._component, ArtifactType.data)
         if data is None:
             self._df = None

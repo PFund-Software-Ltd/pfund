@@ -588,6 +588,7 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
 
     def _materialize(self):
         """Materialize historical frames only when a data range was requested."""
+        self.store.setup_lakehouse()
         if self.context.data_start is None and self.context.data_end is None:
             return
         for data_store in self.data_stores.values():
