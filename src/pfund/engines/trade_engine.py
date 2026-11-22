@@ -22,12 +22,14 @@ import time
 from threading import Thread
 
 from apscheduler.schedulers.background import BackgroundScheduler
+from pfeed.io.table_io import TableIO
 from pfeed.streaming.zeromq import (
     ZeroMQDataChannel,
 )
 from pfund_blocks.enums import DataCategory
 from pfund_blocks.enums.env import Environment
 
+from pfund.data_config import get_default_io
 from pfund.engines.base_engine import BaseEngine
 from pfund.engines.contexts.base_engine_context import BaseEngineContext
 from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
@@ -141,6 +143,10 @@ class TradeEngine(
                 data_category=data.category,
                 num_workers=config.num_stream_workers,
             )
+            # streamed data is always stored, appending needs a datalake io (e.g. not ParquetIO)
+            stream_io = (
+                config.io if isinstance(config.io, TableIO) else get_default_io()
+            )
             feed.stream(
                 product=str(data.product.basis),
                 # NOTE: VERY IMPORTANT, pfeed must build the same product name as pfund, since the name is part of the zmq channel
@@ -150,7 +156,7 @@ class TradeEngine(
                 name=data.product.name,
                 resolution=repr(data.resolution),
                 data_origin=data.origin,
-                io=config.io,
+                io=stream_io,
                 **self._get_pfeed_stream_kwargs(),
                 **data.product.specs,
             )
@@ -420,9 +426,16 @@ class TradeEngine(
                         owners[data] = component.name
                         continue
                     existing = data_configs[data]
-                    if (existing.num_stream_workers, existing.io) != (
+                    # NOTE: io is compared by where it points, not by identity, a remote component's
+                    # config is a copy, so even the same io (e.g. the default) is a different object
+                    if (
+                        existing.num_stream_workers,
+                        type(existing.io),
+                        getattr(existing.io, "_base_path", None),
+                    ) != (
                         config.num_stream_workers,
-                        config.io,
+                        type(config.io),
+                        getattr(config.io, "_base_path", None),
                     ):
                         raise ValueError(
                             f"{data} is added by '{owners[data]}' and '{component.name}' with different "

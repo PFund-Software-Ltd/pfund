@@ -3,7 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, cast
 
 if TYPE_CHECKING:
+    from pfeed.io.table_io import TableIO
     from pfund_blocks.entities.products.product_base import BaseProduct
+
+import functools
 
 from pfeed.io.base_io import BaseIO
 from pfund_blocks.datas.bar_data import BarData, parse_shift
@@ -13,6 +16,20 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 # fraction of a bar's duration to wait past its close (bar.end_ts) for delayed
 # updates before flushing the bar; used when stale_bar_timeout has no entry for a resolution.
 DEFAULT_STALE_BAR_TIMEOUT_RATIO = 0.1
+
+
+@functools.cache
+def get_default_io() -> TableIO:
+    """The default io of market data, a DuckLakeIO under pfeed's data_path.
+
+    Under pfeed's data_path, not pfund's: market data belongs to pfeed, so it is shared by every engine,
+    and data downloaded with pfeed directly is found too.
+    One instance per process, shared by every DataConfig, so configs using the default compare equal
+    (e.g. TradeEngine checks that components sharing a data use the same io).
+    """
+    from pfeed.io.ducklake_io import DuckLakeIO
+
+    return DuckLakeIO()
 
 
 class DataConfig(BaseModel):
@@ -36,9 +53,14 @@ class DataConfig(BaseModel):
         default="",
         description="pfeed's sub-label for data from the same source but different origins.",
     )
-    io: BaseIO | None = Field(
-        default=None,
-        description="where and how pfeed retrieves the data, e.g. ParquetIO(base_path='./data'). If None, pfeed's default is used.",
+    io: BaseIO = Field(
+        default_factory=get_default_io,
+        description="""
+        where and how pfeed retrieves, downloads and streams the data, e.g. ParquetIO(base_path='./data').
+        Defaults to a DuckLakeIO under pfeed's data_path, see get_default_io().
+        Streamed data is always stored, and needs a datalake io (TableIO, e.g. DuckLakeIO) to append to,
+        if io is not one (e.g. ParquetIO), streamed data is stored in the default io instead.
+        """,
     )
     num_batch_workers: int | None = Field(
         default=None,

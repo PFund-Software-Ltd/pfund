@@ -35,7 +35,8 @@ class BaseEngineSettings(Settings):
     auto_download_data: bool = Field(
         default=True,
         description="""
-            if True, the engine will automatically download data using pfeed if no data is found in the storage specified in add_data()'s storage_config.
+            if True, the engine will automatically download data using pfeed if no data is found in the io of add_data()'s config (DataConfig.io),
+            and store it there.
             if False, the engine will not download data automatically.
         """,
     )
