@@ -3,15 +3,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal, cast, override
 
-from collections.abc import Callable
-
 if TYPE_CHECKING:
-    import polars as pl
-    from narwhals.typing import IntoDataFrame
+    from collections.abc import Callable
+
     from pfund_blocks.datas import BarData, BaseData
     from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund_blocks.resolution import Resolution
 
+    from pfund.backtest._mixins.strategy_mixin import BacktestStrategyMixin
     from pfund.backtest.cv.cv_fold import CVFold
     from pfund.backtest.cv.holdout_split import HoldoutSplit
     from pfund.components.actor_proxy import ActorProxy
@@ -22,7 +21,7 @@ if TYPE_CHECKING:
 from pathlib import Path
 
 import narwhals as nw
-from narwhals.dependencies import is_into_dataframe
+import polars as pl
 from pfund_kit.style import RichColor, TextStyle, cprint
 
 from pfund.backtest._mixins.dataframe_mixin import BacktestDataFrameMixin
@@ -115,6 +114,28 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
     def backtest_mode(self) -> BacktestMode:
         return self.context.mode
 
+    @property
+    def _source_artifact(self) -> Path:
+        if self._source_artifact_path is not None:
+            return self._source_artifact_path
+
+        import inspect
+
+        from pfund.backtest._mixins.backtest_mixin import BacktestMixin
+
+        mro = type(self).__mro__
+        source_class = mro[mro.index(BacktestMixin) + 1]
+        source_file = inspect.getsourcefile(source_class)
+        if source_file is None:
+            raise ValueError(f"cannot locate source file for {source_class.__name__}")
+        return Path(source_file)
+
+    @property
+    def _data_artifact(self) -> pl.DataFrame | None:
+        if self.backtest_mode == BacktestMode.VECTORIZED:
+            return self.store._df
+        return super()._data_artifact
+
     def to_dict(self) -> dict[str, Any]:
         """Adds how the component was backtested, e.g. so a chunked or vectorized df can't seed live trading."""
         return {
@@ -130,7 +151,7 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
 
     @staticmethod
     def _validate_backtest_signature(
-        func: Callable[[IntoDataFrame], IntoDataFrame],
+        func: Callable[[pl.DataFrame], Any],
     ):
         """Validates the signature of the backtest() function.
         The backtest() function must accept exactly 1 argument (df) and return the backtested dataframe.
@@ -162,8 +183,8 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
             pass  # source not available (e.g. built-in), skip check
 
     @staticmethod
-    def _setup_backtest_df_for_vectorized_mode(df: IntoDataFrame) -> IntoDataFrame:
-        """Prepare a native dataframe (pandas/polars) for FAST backtesting.
+    def _setup_backtest_df_for_vectorized_mode(df: pl.DataFrame) -> pl.DataFrame:
+        """Prepare a polars dataframe for FAST backtesting.
 
         Attaches the two ENTRY methods to the df's class so they survive native
         operations (filter/join/... construct plain dataframes of the same class):
@@ -213,8 +234,6 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
 
         Returns the df unchanged.
         """
-        import narwhals as nw
-
         from pfund.backtest._mixins import (
             portfolio_backtest_mixin,
             product_backtest_mixin,
@@ -228,11 +247,10 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
         portfolio_backtest_mixin._clear_registry()
 
         df_class = type(df)
-        df_class.create_signal = ProductBacktestMixin.create_signal
-        df_class.create_weight = PortfolioBacktestMixin.create_weight
+        df_class.create_signal = ProductBacktestMixin.create_signal  # ty: ignore[missing-attribute]
+        df_class.create_weight = PortfolioBacktestMixin.create_weight  # ty: ignore[missing-attribute]
 
-        nw_df = nw.from_native(df)
-        if "close" not in nw_df.columns:
+        if "close" not in df.columns:
             raise ValueError(
                 "'close' column not found — the dataframe must be in LONG form: "
                 + "one row per bar with shared OHLCV columns "
@@ -242,111 +260,79 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
         from pfund.components.bar_dataframe import KEY_COLS
 
         key_cols = KEY_COLS
-        missing = [c for c in key_cols if c not in nw_df.columns]
+        missing = [c for c in key_cols if c not in df.columns]
         if missing:
             raise ValueError(
                 f"backtesting requires columns ({', '.join(key_cols)}) "
                 + f"to identify each bar — missing column(s) {missing}"
             )
-        if len(nw_df.select(*key_cols).unique()) != len(nw_df):
+        if df.select(key_cols).is_duplicated().any():
             raise ValueError(
                 f"({', '.join(key_cols)}) keys must be unique for backtesting"
             )
         # bars are processed positionally per (product, resolution) combo: an
         # unsorted df would silently produce garbage results
-        if not nw_df.get_column("date").is_sorted():
+        if not df.get_column("date").is_sorted():
             raise ValueError("the dataframe must be sorted by 'date' (ascending)")
         return df
-
-    @property
-    def _source_artifact(self) -> Path:
-        if self._source_artifact_path is not None:
-            return self._source_artifact_path
-
-        import inspect
-
-        from pfund.backtest._mixins.backtest_mixin import BacktestMixin
-
-        mro = type(self).__mro__
-        source_class = mro[mro.index(BacktestMixin) + 1]
-        source_file = inspect.getsourcefile(source_class)
-        if source_file is None:
-            raise ValueError(f"cannot locate source file for {source_class.__name__}")
-        return Path(source_file)
-
-    @property
-    def _data_artifact(self) -> pl.DataFrame:
-        if self.backtest_mode == BacktestMode.VECTORIZED:
-            return self.store._df
-        return super()._data_artifact
 
     def set_top_component(self):
         self._is_top_component = True
 
-    def backtest(self, df: pl.DataFrame) -> pl.DataFrame:
-        if self.backtest_mode == BacktestMode.VECTORIZED:
-            if hasattr(super(), "backtest"):
-                if not self.is_strategy():
-                    raise TypeError(f"{self.name} should not have a backtest() method")
-
-                super_backtest = cast(
-                    "Callable[[pl.DataFrame], Any]", super().backtest
-                )
-                self._validate_backtest_signature(super_backtest)
-
-                # only after we know a valid backtest() exists: prepares the df for the
-                # user's chain (attaches create_signal/create_weight, validates LONG form,
-                # clears registries); returns df unchanged
-                df = cast("pl.DataFrame", self._setup_backtest_df_for_vectorized_mode(df))
-
-                backtest_df: Any = super_backtest(df)
-
-                # check if returns a df
-                if not is_into_dataframe(backtest_df):
-                    raise TypeError(
-                        f"{self.name}.backtest() must return the backtested dataframe, got {type(backtest_df).__name__}. Did you forget to return df?"
-                    )
-                # check if returns a new df
-                if backtest_df is df:
-                    cprint(
-                        f"WARNING: {self.name} backtest() returned the same df unchanged.\n"
-                        + "This is fine if you only used native e.g. Polars/Pandas operations on the original df.\n"
-                        + "However, [italic]this is an ERROR[/italic] if you called backtest methods such as "
-                        + "create_signal(), open_position(), or close_position() —\n"
-                        + "these return a new df, so you must reassign: df = df.create_signal(...) and return the new df",
-                        style=TextStyle.BOLD + RichColor.RED,
-                    )
-                return cast("pl.DataFrame", backtest_df)
-            else:
-                self.store._df = self._vectorized_backtest(
-                    nw.from_native(df)
-                ).to_native()
-                self.store.persist_to_datalake()
-                return self.df
-        elif self.backtest_mode == BacktestMode.EVENT_DRIVEN:
-            return self._event_driven_backtest(df)
-        else:
-            raise ValueError(f"Unknown backtest mode: {self.backtest_mode}")
-
-    def _vectorized_backtest(self, X: nw.DataFrame[Any]) -> nw.DataFrame[Any]:
+    def _vectorized_backtest(self, X: pl.DataFrame) -> pl.DataFrame:
         """Runs a vectorized backtest and completes the feature-only trading dataframe with the resulting signals."""
+        has_backtest_func = callable(getattr(self, "backtest", None))
         if self.is_strategy():
-            raise NotImplementedError(
-                f"{self.name} has no backtest() method, please implement it or switch to EVENT_DRIVEN mode"
-            )
-        signals = cast("Signals", self.signalize(X.to_native()))
-        signals_df = nw.DataFrame.from_dict(
-            data=signals,
-            backend=nw.get_native_namespace(X),
-        )
-        return nw.concat([X, signals_df], how="horizontal")
+            # only after we know a valid backtest() exists: prepares the df for the
+            # user's chain (attaches create_signal/create_weight, validates LONG form,
+            # clears registries); returns df unchanged
+            df = self._setup_backtest_df_for_vectorized_mode(X)
+
+            if not has_backtest_func:
+                raise NotImplementedError(
+                    f"{self} has no backtest() method, which VECTORIZED backtesting requires. "
+                    + "Implement `def backtest(self, df: pl.DataFrame) -> pl.DataFrame` "
+                    + "that returns the backtested df, or backtest it in EVENT_DRIVEN mode instead."
+                )
+            else:
+                backtest = cast("BacktestStrategyMixin", self).backtest
+                self._validate_backtest_signature(backtest)
+                backtest_df: Any = backtest(df)
+
+            # a lazy chain is fine, the backtest only needs its result
+            if isinstance(backtest_df, pl.LazyFrame):
+                backtest_df = backtest_df.collect()
+            # check if returns a df
+            if not isinstance(backtest_df, pl.DataFrame):
+                raise TypeError(
+                    f"{self.name}.backtest() must return the backtested polars DataFrame (or LazyFrame), got {type(backtest_df).__name__}. Did you forget to return df?"
+                )
+            # check if returns a new df
+            if backtest_df is df:
+                cprint(
+                    f"WARNING: {self.name} backtest() returned the same df unchanged.\n"
+                    + "This is fine if you only used native e.g. Polars/Pandas operations on the original df.\n"
+                    + "However, [italic]this is an ERROR[/italic] if you called backtest methods such as "
+                    + "create_signal(), open_position(), or close_position() —\n"
+                    + "these return a new df, so you must reassign: df = df.create_signal(...) and return the new df",
+                    style=TextStyle.BOLD + RichColor.RED,
+                )
+            return backtest_df
+        else:
+            if has_backtest_func:
+                raise TypeError(
+                    f"{self} defines a backtest() method, but only strategies can have one."
+                )
+            signals = cast("Component", self).signalize(X)
+            signals_df = pl.DataFrame(signals)
+            return pl.concat([X, signals_df], how="horizontal")
 
     # EXTEND: support non-bar data types:
     # brainstorm: heapq.merge(market_data_df, news_data_df), with a dispatcher to create data updates for each data type
     # TODO: write trading_df (trading_df.delta) and compare it with the one generated by vectorized backtesting
     # TODO: need to build a clock? coz looping bars has time gaps
     # TODO: support dataset_splits
-    def _event_driven_backtest(self, df: nw.DataFrame[Any]) -> nw.DataFrame[Any]:
+    def _event_driven_backtest(self, df: pl.DataFrame) -> pl.DataFrame:
         from pfund_kit.style import RichColor
         from pfund_kit.utils.progress_bar import track
 
@@ -354,7 +340,7 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
         for row in track(
             df.iter_rows(named=False),
             total=df.shape[0],
-            description=description,
+            description=...,
             bar_style=RichColor.BRIGHT_YELLOW,
             disable=not self.context.config.show_progress_bar,
         ):
@@ -470,17 +456,17 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
             if not self._is_top_component:
                 self.store.materialize()
             if self.store._df is None:
-                X = self._merge_signals_dfs()
+                X = self._merge_signals_dfs().to_native()
                 if not self._is_top_component:
                     cprint(
                         f"No persisted trading dataframe found for '{self.name}'. "
                         + "Running its vectorized backtest on the fly...",
                         style=TextStyle.BOLD + RichColor.YELLOW,
                     )
-                    self.store._df = self._vectorized_backtest(X).to_native()
+                    self.store._df = self._vectorized_backtest(X)
                     self.store.persist_to_datalake()
                 else:
-                    self.store._df = X.to_native()
+                    self.store._df = X
             self._resolve_dataset_splits()
         elif self.backtest_mode == BacktestMode.EVENT_DRIVEN:
             if self._reuse_child_component_signals:

@@ -402,27 +402,43 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         ### Pre-Backtest ###
         num_chunks = self.context.num_chunks
         is_using_ray = num_chunks > 1
-        backtest_dfs: list[pl.DataFrame] = []
         is_strategy = backtestee.is_strategy()
-
-        if self.backtest_mode == BacktestMode.EVENT_DRIVEN:
-            df = backtestee.data_df
-        else:
-            df = backtestee.trading_df if not is_strategy else backtestee.full_df
+        # each chunk starts from a fresh state, so a feature/model would warm up again at every chunk boundary,
+        # and without the chunk_num column (strategy-only) its artifact would look like one continuous run
+        if is_using_ray and not is_strategy:
+            raise ValueError(
+                f"{backtestee} cannot be backtested in chunks (num_chunks={num_chunks}), only strategies can. "
+                + "Run it with num_chunks=1."
+            )
 
         def _run_backtest(
             backtestee: Component,
             df_chunk: pl.DataFrame,
             chunk_num: ChunkNum = 0,
         ) -> pl.DataFrame:
-            backtest_df = cast("BacktestMixin", backtestee).backtest(df_chunk)
+            _backtestee = cast("BacktestMixin", backtestee)
+            if _backtestee.backtest_mode == BacktestMode.VECTORIZED:
+                backtest_df = _backtestee._vectorized_backtest(df_chunk)
+            elif _backtestee.backtest_mode == BacktestMode.EVENT_DRIVEN:
+                backtest_df = _backtestee._event_driven_backtest(df_chunk)
+            else:
+                raise ValueError(f"Unknown backtest mode: {_backtestee.backtest_mode}")
+            # only strategy BACKTEST data may carry the column (see data_handler._validate_schema),
             # chunks are standalone backtests, the column tells them apart in the stored data artifact;
             # an unchunked run is chunk 0, so every BACKTEST strategy df has the same schema
+            if not backtestee.is_strategy():
+                return backtest_df
             return backtest_df.with_columns(
                 pl.lit(chunk_num).alias(BacktestEngine.CHUNK_COL)
             )
 
         ### Backtest ###
+        backtest_dfs: list[pl.DataFrame] = []
+        if self.backtest_mode == BacktestMode.EVENT_DRIVEN:
+            df = backtestee.data_df
+        else:
+            df = backtestee.trading_df if not is_strategy else backtestee.full_df
+
         if not is_using_ray:
             backtest_dfs.append(_run_backtest(backtestee=backtestee, df_chunk=df))
         else:
@@ -512,7 +528,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 except BaseException:
                     # e.g. KeyboardInterrupt or a crashed worker: cancel the in-flight chunks,
                     # otherwise they keep running after the backtest returns,
-                    # and re-raise, so a partial set of chunks is never persisted as the strategy's results.
+                    # and re-raise, so a partial set of chunks is never persisted as the backtestee's results.
                     # force=True kills the worker, a non-forced cancel doesn't stop a task that's already running
                     for ref in unfinished:
                         ray.cancel(ref, force=True)
@@ -521,25 +537,15 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
 
         ### Post-Backtest ###
         if is_strategy:
-            backtest_dfs = cast(
-                "list[pl.DataFrame]",
-                [
-                    cast("BacktestStrategyMixin", backtestee)._postprocess_backtest_df(backtest_df)
-                    for backtest_df in backtest_dfs
-                ]
-            )
-            # NOTE: written by Claude (Claude Code)
-            # FIXME: the top strategy's backtest results are never persisted.
-            # PFundComponentDataHandler writes component._data_artifact, i.e. store._df on THIS (driver's) component,
-            # but with chunking, each chunk ran on a Ray worker against a copy of the component (ray.put(backtestee)),
-            # so the results only exist in backtest_dfs, store._df never sees them;
-            # and BacktestMixin.backtest() only persists for components without a user backtest(), not the top strategy.
-            # so: persist the combined df below as the strategy's data artifact.
+            backtest_dfs = [
+                cast("BacktestStrategyMixin", backtestee)._postprocess_backtest_df(backtest_df)
+                for backtest_df in backtest_dfs
+            ]
         # combine the chunks into one df, ordered by (chunk_num, date): chunks are contiguous date ranges,
         # and the results are kept in chunk order.
         backtest_df = pl.concat(backtest_dfs, how="vertical")
-        if is_strategy and self.backtest_mode == BacktestMode.VECTORIZED:
-            backtestee.store._df = backtest_df
-            # write data artifact to trading_df/
-            backtestee.store.persist_to_datalake()
+        if self.backtest_mode == BacktestMode.VECTORIZED:
+            trading_store = backtestee.store
+            trading_store._df = backtest_df
+            trading_store.persist_to_datalake()
         return backtest_df

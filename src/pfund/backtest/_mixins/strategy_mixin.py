@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, override
 
 if TYPE_CHECKING:
-    from narwhals.typing import IntoDataFrame
+    from collections.abc import Callable
 
-import narwhals as nw
+import polars as pl
 
 from pfund.backtest._mixins.backtest_mixin import BacktestMixin
 
@@ -15,6 +15,8 @@ class BacktestStrategyMixin(BacktestMixin):
 
     Adopted onto a strategy via ``BacktestStrategyMixin._adopt(strategy)``.
     """
+    # defined by the user's strategy
+    backtest: Callable[[pl.DataFrame], pl.DataFrame]
 
     @override
     def _set_name(self, name: str):
@@ -28,9 +30,7 @@ class BacktestStrategyMixin(BacktestMixin):
         super()._set_name(name)
 
     @staticmethod
-    def _postprocess_backtest_df(
-        backtest_df: IntoDataFrame,
-    ) -> IntoDataFrame:
+    def _postprocess_backtest_df(backtest_df: pl.DataFrame) -> pl.DataFrame:
         """Postprocesses backtest DataFrame by merging internal debug columns into a
         single 'remark' column and dropping them.
 
@@ -55,45 +55,22 @@ class BacktestStrategyMixin(BacktestMixin):
             "_time_window": "tw",
         }
 
-        df: nw.DataFrame[Any] = nw.from_native(backtest_df)
-
-        # Build remark from existing boolean columns
-        remark_parts: list[nw.Expr] = []
-        for col, abbr in REMARK_COLS.items():
-            if col in df.columns:
-                remark_parts.append(
-                    nw.when(nw.col(col)).then(nw.lit(abbr)).otherwise(nw.lit(""))
-                )
-
-        if remark_parts:
-            # Concatenate all parts with comma separator, then strip leading/trailing commas
-            concat_expr = remark_parts[0]
-            for part in remark_parts[1:]:
-                concat_expr = concat_expr + nw.lit(",") + part
-            df = df.with_columns(concat_expr.alias("_remark_raw"))
-            # Clean up: remove empty segments by replacing multiple commas and stripping edges
-            df = df.with_columns(
-                nw.col("_remark_raw")
-                .str.replace_all(
-                    r",{2,}", ","
-                )  # collapse consecutive commas from empty parts, e.g. "sc,,,,tp" -> "sc,tp"
-                .str.strip_chars(
-                    ","
-                )  # remove leading/trailing commas, e.g. ",sl," -> "sl"
-                .alias("remark")
-            )
-            df = df.drop("_remark_raw")
-        else:
-            df = df.with_columns(nw.lit("").alias("remark"))
+        # each flag that is set contributes its abbreviation, unset ones are null and skipped,
+        # e.g. "sc,tp"; a row with no flags gets ""
+        remark_parts = [
+            pl.when(pl.col(col)).then(pl.lit(abbr))
+            for col, abbr in REMARK_COLS.items()
+            if col in backtest_df.columns
+        ]
+        remark = (
+            pl.concat_str(remark_parts, separator=",", ignore_nulls=True)
+            if remark_parts
+            else pl.lit("")
+        )
+        df = backtest_df.with_columns(remark.alias("remark"))
 
         # Drop all internal columns (prefixed with '_')
-        internal_cols = [col for col in df.columns if col.startswith("_")]
-        if internal_cols:
-            df = df.drop(*internal_cols)
-
-        # to_native() already returns the same native class (pandas/polars)
-        # that backtest methods are attached to — no wrapping needed
-        return df.to_native()
+        return df.drop(col for col in df.columns if col.startswith("_"))
 
     # TODO: update order manager directly
     async def place_orders(self):

@@ -84,6 +84,13 @@ class ComponentBaseMixin:
     def name(self) -> ComponentName:
         return self._name
 
+    def __str__(self) -> str:
+        """Display name, appends the component type unless the name already contains it, e.g. 'RSI (feature)'.
+        For messages only; use `name` for identity (keys, signal columns, paths)."""
+        if self.component_type.lower() in self.name.lower():
+            return self.name
+        return f"{self.name} ({self.component_type})"
+
     @property
     def run_mode(self) -> RunMode:
         assert self._run_mode is not None, "run_mode is not set"
