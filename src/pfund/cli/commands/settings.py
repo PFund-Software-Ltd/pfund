@@ -27,6 +27,35 @@ def where(ctx, engine_name):
     click.echo(config.get_settings_file_path(engine_name))
 
 
+@settings.command()
+@click.pass_context
+@_engine_name_option
+def reset(ctx, engine_name):
+    """Reset the engine settings toml file to defaults.
+
+    Backs up the existing file to settings.toml.bak and removes it;
+    the engine recreates it with defaults on its next run.
+    """
+    import shutil
+
+    config = ctx.obj["config"]
+    project_name = config._paths.project_name
+
+    file_path = config.get_settings_file_path(engine_name)
+    if not file_path.exists():
+        click.echo(
+            f"No settings file for engine '{engine_name}' at {file_path}; nothing to reset."
+        )
+        return
+
+    click.echo(f"Resetting {project_name}'s {file_path.name} for engine '{engine_name}'...")
+    backup_file = file_path.with_name(f"{file_path.name}.bak")
+    shutil.copy(file_path, backup_file)
+    click.echo(f"  Backed up the existing file {file_path.name} to {backup_file.name}")
+    file_path.unlink()
+    click.echo("  Removed it; defaults will be recreated on the engine's next run")
+
+
 @settings.command("open")
 @click.pass_context
 @_engine_name_option
