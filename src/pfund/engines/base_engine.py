@@ -293,8 +293,6 @@ class BaseEngine[
             strategy.start()
 
     def end(self, reason: str = ""):
-        if not self.is_running():
-            raise RuntimeError("Engine is not running")
         self._logger.warning(f"{self.env} {self.name} is ending...({reason=})")
         for strategy in self._strategies.values():
             strategy.stop()

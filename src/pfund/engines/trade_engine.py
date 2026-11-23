@@ -476,7 +476,8 @@ class TradeEngine(
         self._scheduler.start()
 
     def _teardown(self):
-        self._scheduler.shutdown(wait=False)
+        if self._scheduler.running:
+            self._scheduler.shutdown(wait=False)
         for venue in self._venues.values():
             venue.stop()
         if self._data_engine:

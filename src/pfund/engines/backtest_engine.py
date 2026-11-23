@@ -348,6 +348,11 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             Use df.partition_by(CHUNK_COL, as_dict=True) to get the per-chunk dfs.
             None if there is nothing to return, e.g. model training.
         """
+        if not self._strategies:
+            raise ValueError(
+                "Nothing to backtest, add a strategy, model or feature first, "
+                + "e.g. engine.add_strategy/add_model/add_feature(...)"
+            )
         num_cpus = (os.cpu_count() or 1) if num_cpus is None else max(1, num_cpus)
         if self._get_dummy_strategy() and num_chunks > 1:
             self._logger.warning(
@@ -357,9 +362,10 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         # NOTE: before super().run(), which sets up the components, so their metadata records it, see BacktestMixin.to_dict()
         self.context.set_num_chunks(num_chunks)
 
-        super().run(run=run)
         backtest_result: pl.DataFrame | None = None
         try:
+            # NOTE: inside the try, so the engine still ends if the component setup fails
+            super().run(run=run)
             # NOTE: only one strategy exists in backtesting
             strategy = cast("BaseStrategy", next(iter(self._strategies.values())))
             is_dummy_strategy = (strategy.name == self._dummy_strategy_name)
