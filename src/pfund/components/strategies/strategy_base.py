@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, override
+from typing import TYPE_CHECKING, Any, Literal, overload, override
 
 if TYPE_CHECKING:
     import polars as pl
@@ -150,6 +150,43 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
             raise ValueError(f"account name {account.name} is already registered")
         return account
 
+    # remote strategy in -> remote strategy out, ray args are ignored (the proxy is already remote)
+    @overload
+    def add_strategy[StrategyT: BaseStrategy](
+        self,
+        strategy: ActorProxy[StrategyT],
+        resolution: str = "",
+        name: str = "",
+        ray_actor_options: dict[str, Any] | None = None,
+        **ray_kwargs: Any,
+    ) -> ActorProxy[StrategyT]: ...
+
+    # local strategy in + num_cpus -> wrapped into a remote strategy
+    @overload
+    def add_strategy[StrategyT: BaseStrategy](
+        self,
+        strategy: StrategyT,
+        resolution: str = "",
+        name: str = "",
+        ray_actor_options: dict[str, Any] | None = None,
+        *,
+        num_cpus: float,
+        **ray_kwargs: Any,
+    ) -> ActorProxy[StrategyT]: ...
+
+    # local strategy in, no num_cpus -> local strategy out
+    @overload
+    def add_strategy[StrategyT: BaseStrategy](
+        self,
+        strategy: StrategyT,
+        resolution: str = "",
+        name: str = "",
+        ray_actor_options: dict[str, Any] | None = None,
+        *,
+        num_cpus: None = None,
+        **ray_kwargs: Any,
+    ) -> StrategyT: ...
+
     def add_strategy[StrategyT: BaseStrategy](
         self,
         strategy: StrategyT | ActorProxy[StrategyT],
@@ -157,7 +194,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         name: str = "",
         ray_actor_options: dict[str, Any] | None = None,
         **ray_kwargs: Any,
-    ) -> StrategyT | ActorProxy[StrategyT] | None:
+    ) -> StrategyT | ActorProxy[StrategyT]:
         """Add a child strategy to this strategy.
 
         Args:
@@ -170,8 +207,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
                 child strategy remotely.
 
         Returns:
-            The added child strategy or its remote proxy. Returns ``None`` when
-            adding a local child strategy to a remote parent strategy.
+            The added child strategy or its remote proxy.
         """
         return self._add_component(
             component=strategy,

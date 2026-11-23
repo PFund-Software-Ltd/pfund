@@ -162,7 +162,7 @@ class ComponentBaseMixin:
         self.settings.zmq_ports.update({self.name + "_logger": zmq_port})
 
     # useful when user wants to set logger specific to the component. currently 'pfund' is the default logger.
-    def set_logger(self, logger: logging.Logger):
+    def _set_logger(self, logger: logging.Logger):
         self.logger = logger
         if self.is_remote(direct_only=False):
             self._setup_logging()

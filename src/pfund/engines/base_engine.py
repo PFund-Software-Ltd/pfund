@@ -9,6 +9,7 @@ from typing import (
     Required,
     TypedDict,
     cast,
+    overload,
 )
 
 if TYPE_CHECKING:
@@ -189,6 +190,32 @@ class BaseEngine[
 
     def get_venue(self, venue: TradingVenue) -> BaseVenue:
         return self._venues[venue.upper()]
+
+    # local strategy in + num_cpus -> wrapped into a remote strategy
+    @overload
+    def add_strategy[StrategyT: BaseStrategy](
+        self,
+        strategy: StrategyT,
+        resolution: str,
+        name: str = "",
+        ray_actor_options: dict[str, Any] | None = None,
+        *,
+        num_cpus: float,
+        **ray_kwargs: Any,
+    ) -> ActorProxy[StrategyT]: ...
+
+    # local strategy in, no num_cpus -> local strategy out
+    @overload
+    def add_strategy[StrategyT: BaseStrategy](
+        self,
+        strategy: StrategyT,
+        resolution: str,
+        name: str = "",
+        ray_actor_options: dict[str, Any] | None = None,
+        *,
+        num_cpus: None = None,
+        **ray_kwargs: Any,
+    ) -> StrategyT: ...
 
     def add_strategy[StrategyT: BaseStrategy](
         self,

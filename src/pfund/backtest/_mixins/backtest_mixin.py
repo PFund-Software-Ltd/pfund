@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     from pfund.backtest.cv.cv_fold import CVFold
     from pfund.backtest.cv.holdout_split import HoldoutSplit
     from pfund.components.actor_proxy import ActorProxy
+    from pfund.components.features.feature_base import BaseFeature
+    from pfund.components.models.model_base import BaseModel
     from pfund.engines.contexts.backtest_engine_context import BacktestEngineContext
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
     from pfund.typing import Component, ComponentName, Signals
@@ -129,15 +131,15 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
         return Path(source_file)
 
     @property
-    def _max_rows(self) -> None:
-        # a backtest is a finite run, so the trading store keeps every row and store._df is the
-        # run's full data artifact; users still see max_rows applied, see get_df()
-        return None
-
-    @property
     def _data_artifact(self) -> pl.DataFrame | None:
         # store._df is never trimmed in backtesting, so it holds every row produced during the run
         return self.store._df
+
+    @property
+    def _max_rows(self) -> None:
+        # set max_rows to none so that trading_store._df can keep every row as data artifact.
+        # trimming trading_df is done in get_df() to preserve the same output as live trading
+        return None
 
     def to_dict(self) -> dict[str, Any]:
         """Adds how the component was backtested, e.g. so a chunked or vectorized df can't seed live trading."""
@@ -146,6 +148,58 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
             "backtest_mode": self.backtest_mode,
             "num_chunks": self.context.num_chunks,
         }
+
+    @override
+    def _get_streaming_resolutions(self, product: BaseProduct) -> list[Resolution]:
+        """Gets supported resolutions for the product based on the trading venue.
+        Overrides it in backtesting, supports only the primary resolution.
+        """
+        return [self.resolution]
+
+    @override
+    def _add_component[ComponentT: Component](
+        self,
+        component: ComponentT | ActorProxy[ComponentT],
+        resolution: str,
+        name: str,
+        df_form: Literal["wide", "long"],
+        # NOTE: ray args are ignored in backtesting, components always run locally
+        ray_actor_options: dict[str, Any] | None = None,
+        **ray_kwargs: Any,
+    ) -> ComponentT:
+        component = cast("ComponentT", component)
+        if ray_actor_options or ray_kwargs:
+            self.logger.warning(
+                f"ray_actor_options and ray_kwargs are ignored in backtesting, {component.component_type} {name or component.name} will run locally"
+            )
+        if component.is_strategy():
+            from pfund.backtest._mixins.strategy_mixin import BacktestStrategyMixin
+
+            component = BacktestStrategyMixin._adopt(component)
+        elif component.is_model():
+            from pfund.backtest._mixins.model_mixin import BacktestModelMixin
+
+            component = BacktestModelMixin._adopt(component)
+        elif component.is_feature():
+            from pfund.backtest._mixins.feature_mixin import BacktestFeatureMixin
+
+            component = BacktestFeatureMixin._adopt(component)
+        else:
+            raise ValueError(f"Unsupported component type: {component}")
+        return cast(
+            "ComponentT",
+            super()._add_component(
+                component=component,
+                resolution=resolution,
+                name=name,
+                df_form=df_form,
+            ),
+        )
+
+    def _is_dummy_strategy(self) -> bool:
+        from pfund.components.strategies._dummy_strategy import _DummyStrategy
+
+        return isinstance(self, _DummyStrategy)
 
     @staticmethod
     def _validate_backtest_signature(
@@ -360,58 +414,6 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
         # TODO: return the backtested dataframe, how?
         return df
 
-    @override
-    def _get_streaming_resolutions(self, product: BaseProduct) -> list[Resolution]:
-        """Gets supported resolutions for the product based on the trading venue.
-        Overrides it in backtesting, supports only the primary resolution.
-        """
-        return [self.resolution]
-
-    @override
-    def _add_component[ComponentT: Component](
-        self,
-        component: ComponentT | ActorProxy[ComponentT],
-        resolution: str,
-        name: str,
-        df_form: Literal["wide", "long"],
-        # NOTE: ray args are ignored in backtesting, components always run locally
-        ray_actor_options: dict[str, Any] | None = None,
-        **ray_kwargs: Any,
-    ) -> ComponentT:
-        component = cast("ComponentT", component)
-        if ray_actor_options or ray_kwargs:
-            self.logger.warning(
-                f"ray_actor_options and ray_kwargs are ignored in backtesting, {component.component_type} {name or component.name} will run locally"
-            )
-        if component.is_strategy():
-            from pfund.backtest._mixins.strategy_mixin import BacktestStrategyMixin
-
-            component = BacktestStrategyMixin._adopt(component)
-        elif component.is_model():
-            from pfund.backtest._mixins.model_mixin import BacktestModelMixin
-
-            component = BacktestModelMixin._adopt(component)
-        elif component.is_feature():
-            from pfund.backtest._mixins.feature_mixin import BacktestFeatureMixin
-
-            component = BacktestFeatureMixin._adopt(component)
-        else:
-            raise ValueError(f"Unsupported component type: {component}")
-        return cast(
-            "ComponentT",
-            super()._add_component(
-                component=component,
-                resolution=resolution,
-                name=name,
-                df_form=df_form,
-            ),
-        )
-
-    def _is_dummy_strategy(self) -> bool:
-        from pfund.components.strategies._dummy_strategy import _DummyStrategy
-
-        return isinstance(self, _DummyStrategy)
-
     @property
     def _reuse_child_component_signals(self):
         return not self._is_top_component and self.settings.reuse_signals
@@ -478,7 +480,7 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
             assert len(self.components) == 1, (
                 "dummy strategy must have exactly one component"
             )
-            component = self.components[0]
+            component = cast("BaseModel | BaseFeature", self.components[0])
             component._gather()
             self._is_gathered = True
         else:

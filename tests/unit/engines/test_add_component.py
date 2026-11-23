@@ -1,12 +1,18 @@
-"""Tests the add-component flow under the trade engine: engine.add_strategy and
-component.add_strategy/add_model/add_feature, local and remote (ActorProxy)."""
+"""Tests the add-component flow outside backtesting: engine.add_strategy and
+component.add_strategy/add_model/add_feature, local and remote (ActorProxy), and adding
+children through a remote parent (ActorProxy.add_* -> _add_component_via_proxy).
+
+Backtesting's own flow (BacktestMixin._add_component) is tested in test_backtest_engine.py.
+"""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, assert_type
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
+
+    from pfund.components.models.model_base import BaseModel
 
 import pytest
 from pfund_blocks.resolution import Resolution
@@ -51,6 +57,13 @@ def engine() -> TradeEngine:
 def create_actor(mocker: MockerFixture) -> Any:
     """Patches out Ray actor creation, so tests can check whether the add flow created an actor."""
     return mocker.patch.object(ActorProxy, "_create_actor")
+
+
+@pytest.fixture
+def ray_get(mocker: MockerFixture) -> Any:
+    """Lets a proxy call its (fake) actor: no Ray startup, ray.get returns the value as is."""
+    mocker.patch("pfund_kit.utils.ray.setup_ray")
+    return mocker.patch("ray.get", side_effect=lambda ref: ref)
 
 
 class TestEngineAddStrategy:
@@ -206,7 +219,7 @@ class TestComponentAddLocal:
 
     def test_unsupported_model_is_rejected(self, strategy: MyStrategy):
         with pytest.raises(TypeError, match="Unsupported model type"):
-            strategy.add_model(object())  # ty: ignore[invalid-argument-type]
+            strategy.add_model(object())  # ty: ignore[no-matching-overload]
 
     @pytest.mark.parametrize("second_name", ["ema", "EMA"])
     def test_duplicate_name_is_rejected(self, strategy: MyStrategy, second_name: str):
@@ -233,16 +246,17 @@ class TestComponentAddLocal:
 
         assert parent.features == {"child": child}
 
-    def test_child_of_remote_parent_returns_none(
+    def test_child_of_a_component_in_its_actor_is_returned(
         self, strategy: MyStrategy, mocker: MockerFixture
     ):
-        # simulates the strategy running inside its Ray actor
+        # simulates the strategy running inside its Ray actor, the child lives in the same process,
+        # only adding through the proxy (ActorProxy.add_*) returns None
         mocker.patch.object(strategy, "_run_mode", RunMode.REMOTE)
         feature = MyFeature()
 
         added = strategy.add_feature(feature, name="ema")
 
-        assert added is None
+        assert added is feature
         assert strategy.features == {"ema": feature}
 
 
@@ -299,12 +313,6 @@ class TestComponentAddRemote:
         strategy = MyStrategy()
         engine.add_strategy(strategy, "1m")
         return strategy
-
-    @pytest.fixture
-    def ray_get(self, mocker: MockerFixture) -> Any:
-        """Lets a proxy call its (fake) actor: no Ray startup, ray.get returns the value as is."""
-        mocker.patch("pfund_kit.utils.ray.setup_ray")
-        return mocker.patch("ray.get", side_effect=lambda ref: ref)
 
     @pytest.fixture
     def feature_actor(self, create_actor: Any, ray_get: Any) -> Any:
@@ -387,3 +395,208 @@ class TestComponentAddRemote:
         create_actor.assert_not_called()
         assert proxy._hydrate_fields is not None
         assert proxy._hydrate_fields["is_substrategy"] is True
+
+
+class TestAddComponentViaProxy:
+    """The actor side of ActorProxy.add_*: the add method runs in the parent's process,
+    a local child is not returned (it would be a copy), a remote child is."""
+
+    @pytest.fixture
+    def strategy(self, engine: TradeEngine) -> MyStrategy:
+        strategy = MyStrategy()
+        engine.add_strategy(strategy, "1m")
+        return strategy
+
+    def test_local_feature_is_added_and_none_is_returned(self, strategy: MyStrategy):
+        feature = MyFeature()
+
+        result = strategy._add_component_via_proxy(
+            "add_feature", feature=feature, name="ema"
+        )
+
+        assert result is None
+        assert strategy.features == {"ema": feature}
+        assert feature.run_mode == RunMode.LOCAL
+
+    def test_underlying_model_is_wrapped_added_and_none_is_returned(
+        self, strategy: MyStrategy
+    ):
+        result = strategy._add_component_via_proxy(
+            "add_model", model=LinearRegression()
+        )
+
+        assert result is None
+        assert isinstance(strategy.models["LinearRegression"], SKLearnModel)
+
+    def test_local_substrategy_is_added_and_none_is_returned(
+        self, strategy: MyStrategy
+    ):
+        sub = MyStrategy()
+
+        result = strategy._add_component_via_proxy(
+            "add_strategy", strategy=sub, name="sub"
+        )
+
+        assert result is None
+        assert strategy.strategies == {"sub": sub}
+        assert sub.is_substrategy()
+
+    def test_remote_child_is_returned(self, strategy: MyStrategy, create_actor: Any):
+        result = strategy._add_component_via_proxy(
+            "add_feature", feature=MyFeature(), name="ema", num_cpus=1
+        )
+
+        assert isinstance(result, ActorProxy)
+        assert strategy.features == {"ema": result}
+        create_actor.assert_not_called()
+
+
+class TestAddThroughProxyParent:
+    """ActorProxy.add_*: forwards to the parent's actor via _add_component_via_proxy."""
+
+    @pytest.fixture
+    def proxy(self, engine: TradeEngine) -> ActorProxy[MyStrategy]:
+        return engine.add_strategy(MyStrategy(), "1m", name="alpha", num_cpus=1)
+
+    @pytest.fixture
+    def actor(self, create_actor: Any, ray_get: Any) -> Any:
+        actor = create_actor.return_value
+        actor._add_component_via_proxy.remote.return_value = None
+        return actor
+
+    def test_add_feature_is_forwarded_and_returns_none(
+        self, proxy: ActorProxy[MyStrategy], actor: Any
+    ):
+        feature = MyFeature()
+
+        added = proxy.add_feature(feature, "1m", name="ema", df_form="long")
+
+        assert added is None
+        actor._add_component_via_proxy.remote.assert_called_once_with(
+            "add_feature",
+            feature=feature,
+            resolution="1m",
+            name="ema",
+            df_form="long",
+            ray_actor_options=None,
+        )
+
+    def test_add_model_is_forwarded_unwrapped(
+        self, proxy: ActorProxy[MyStrategy], actor: Any
+    ):
+        model = LinearRegression()
+
+        added = proxy.add_model(model, name="lr")
+
+        assert added is None
+        # wrapping happens in the actor, in the parent's own add_model
+        actor._add_component_via_proxy.remote.assert_called_once_with(
+            "add_model",
+            model=model,
+            resolution="",
+            name="lr",
+            df_form="wide",
+            ray_actor_options=None,
+        )
+
+    def test_add_strategy_is_forwarded(self, proxy: ActorProxy[MyStrategy], actor: Any):
+        sub = MyStrategy()
+
+        added = proxy.add_strategy(sub, name="sub")
+
+        assert added is None
+        actor._add_component_via_proxy.remote.assert_called_once_with(
+            "add_strategy",
+            strategy=sub,
+            resolution="",
+            name="sub",
+            ray_actor_options=None,
+        )
+
+    def test_ray_kwargs_are_forwarded_and_the_child_proxy_is_returned(
+        self, proxy: ActorProxy[MyStrategy], actor: Any, mocker: MockerFixture
+    ):
+        child_proxy = mocker.sentinel.child_proxy
+        actor._add_component_via_proxy.remote.return_value = child_proxy
+        feature = MyFeature()
+
+        added = proxy.add_feature(feature, name="ema", num_cpus=1)
+
+        assert added is child_proxy
+        assert actor._add_component_via_proxy.remote.call_args.kwargs["num_cpus"] == 1
+
+    def test_first_add_creates_and_hydrates_the_actor_once(
+        self,
+        engine: TradeEngine,
+        proxy: ActorProxy[MyStrategy],
+        create_actor: Any,
+        actor: Any,
+    ):
+        create_actor.assert_not_called()
+
+        proxy.add_feature(MyFeature(), name="a")
+        proxy.add_feature(MyFeature(), name="b")
+
+        create_actor.assert_called_once()
+        actor._hydrate.remote.assert_called_once_with(
+            name="alpha",
+            run_mode=RunMode.REMOTE,
+            resolution="1m",
+            engine_context=engine.context,
+            df_form="long",
+        )
+        assert actor._add_component_via_proxy.remote.call_count == 2
+
+
+if TYPE_CHECKING:
+    # NOTE: never run, ty checks that each add_* overload returns the documented type
+
+    def _check_add_overloads(
+        engine: TradeEngine,
+        strategy: MyStrategy,
+        strategy_proxy: ActorProxy[MyStrategy],
+        feature: MyFeature,
+        feature_proxy: ActorProxy[MyFeature],
+        model: MyModel,
+        model_proxy: ActorProxy[MyModel],
+    ) -> None:
+        # engine
+        assert_type(engine.add_strategy(strategy, "1m"), MyStrategy)
+        assert_type(
+            engine.add_strategy(strategy, "1m", num_cpus=1), ActorProxy[MyStrategy]
+        )
+
+        # local parent
+        assert_type(strategy.add_strategy(strategy), MyStrategy)
+        assert_type(strategy.add_strategy(strategy, num_cpus=1), ActorProxy[MyStrategy])
+        assert_type(strategy.add_strategy(strategy_proxy), ActorProxy[MyStrategy])
+        assert_type(strategy.add_feature(feature), MyFeature)
+        assert_type(strategy.add_feature(feature, num_cpus=1), ActorProxy[MyFeature])
+        assert_type(strategy.add_feature(feature_proxy), ActorProxy[MyFeature])
+        assert_type(strategy.add_model(model), MyModel)
+        assert_type(strategy.add_model(model, num_cpus=1), ActorProxy[MyModel])
+        assert_type(strategy.add_model(model_proxy), ActorProxy[MyModel])
+        assert_type(strategy.add_model(LinearRegression()), BaseModel)
+        assert_type(
+            strategy.add_model(LinearRegression(), num_cpus=1), ActorProxy[BaseModel]
+        )
+
+        # remote parent (through its proxy)
+        assert_type(strategy_proxy.add_strategy(strategy), None)
+        assert_type(
+            strategy_proxy.add_strategy(strategy, num_cpus=1), ActorProxy[MyStrategy]
+        )
+        assert_type(strategy_proxy.add_strategy(strategy_proxy), ActorProxy[MyStrategy])
+        assert_type(strategy_proxy.add_feature(feature), None)
+        assert_type(
+            strategy_proxy.add_feature(feature, num_cpus=1), ActorProxy[MyFeature]
+        )
+        assert_type(strategy_proxy.add_feature(feature_proxy), ActorProxy[MyFeature])
+        assert_type(strategy_proxy.add_model(model), None)
+        assert_type(strategy_proxy.add_model(model, num_cpus=1), ActorProxy[MyModel])
+        assert_type(strategy_proxy.add_model(model_proxy), ActorProxy[MyModel])
+        assert_type(strategy_proxy.add_model(LinearRegression()), None)
+        assert_type(
+            strategy_proxy.add_model(LinearRegression(), num_cpus=1),
+            ActorProxy[BaseModel],
+        )

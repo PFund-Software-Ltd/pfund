@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
 if TYPE_CHECKING:
     from ray.actor import ActorClass, ActorHandle
 
+    from pfund.components.features.feature_base import BaseFeature
+    from pfund.components.models.model_base import BaseModel, UnderlyingModel
+    from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.engines.contexts.base_engine_context import BaseEngineContext
     from pfund.typing import Component
 
@@ -112,6 +115,243 @@ class ActorProxy[ComponentT: Component]:
     def __setstate__(self, state: dict[str, Any]) -> None:
         self.__dict__.update(state)
 
+    def _add_component(
+        self,
+        add_method: Literal["add_strategy", "add_model", "add_feature"],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        import ray
+
+        actor = self._ensure_actor()
+        # NOTE: getattr() for the same reason as in _ensure_actor()
+        return ray.get(
+            getattr(actor, "_add_component_via_proxy").remote(  # noqa: B009
+                add_method, *args, **kwargs
+            )
+        )
+
+    # remote strategy in -> remote strategy out, ray args are ignored (the proxy is already remote)
+    @overload
+    def add_strategy[StrategyT: BaseStrategy](
+        self,
+        strategy: ActorProxy[StrategyT],
+        resolution: str = "",
+        name: str = "",
+        ray_actor_options: dict[str, Any] | None = None,
+        **ray_kwargs: Any,
+    ) -> ActorProxy[StrategyT]: ...
+
+    # local strategy in + num_cpus -> wrapped into a remote strategy
+    @overload
+    def add_strategy[StrategyT: BaseStrategy](
+        self,
+        strategy: StrategyT,
+        resolution: str = "",
+        name: str = "",
+        ray_actor_options: dict[str, Any] | None = None,
+        *,
+        num_cpus: float,
+        **ray_kwargs: Any,
+    ) -> ActorProxy[StrategyT]: ...
+
+    # local strategy in, no num_cpus -> None, the strategy lives in this proxy's actor
+    @overload
+    def add_strategy[StrategyT: BaseStrategy](
+        self,
+        strategy: StrategyT,
+        resolution: str = "",
+        name: str = "",
+        ray_actor_options: dict[str, Any] | None = None,
+        *,
+        num_cpus: None = None,
+        **ray_kwargs: Any,
+    ) -> None: ...
+
+    def add_strategy[StrategyT: BaseStrategy](
+        self,
+        strategy: StrategyT | ActorProxy[StrategyT],
+        resolution: str = "",
+        name: str = "",
+        ray_actor_options: dict[str, Any] | None = None,
+        **ray_kwargs: Any,
+    ) -> ActorProxy[StrategyT] | None:
+        """Add a child strategy to the remote strategy, see BaseStrategy.add_strategy.
+
+        Returns:
+            The child's remote proxy if the child runs remotely, otherwise ``None``,
+            since a local child lives in this proxy's actor and can't be returned
+            without being copied.
+        """
+        return self._add_component(
+            "add_strategy",
+            strategy=strategy,
+            resolution=resolution,
+            name=name,
+            ray_actor_options=ray_actor_options,
+            **ray_kwargs,
+        )
+
+    # remote model in -> remote model out, ray args are ignored (the proxy is already remote)
+    @overload
+    def add_model[ModelT: BaseModel](
+        self,
+        model: ActorProxy[ModelT],
+        resolution: str = "",
+        name: str = "",
+        df_form: Literal["wide", "long"] = "wide",
+        ray_actor_options: dict[str, Any] | None = None,
+        **ray_kwargs: Any,
+    ) -> ActorProxy[ModelT]: ...
+
+    # local model in + num_cpus -> wrapped into a remote model
+    @overload
+    def add_model[ModelT: BaseModel](
+        self,
+        model: ModelT,
+        resolution: str = "",
+        name: str = "",
+        df_form: Literal["wide", "long"] = "wide",
+        ray_actor_options: dict[str, Any] | None = None,
+        *,
+        num_cpus: float,
+        **ray_kwargs: Any,
+    ) -> ActorProxy[ModelT]: ...
+
+    # local model in, no num_cpus -> None, the model lives in this proxy's actor
+    @overload
+    def add_model[ModelT: BaseModel](
+        self,
+        model: ModelT,
+        resolution: str = "",
+        name: str = "",
+        df_form: Literal["wide", "long"] = "wide",
+        ray_actor_options: dict[str, Any] | None = None,
+        *,
+        num_cpus: None = None,
+        **ray_kwargs: Any,
+    ) -> None: ...
+
+    # underlying model (e.g. sklearn/pytorch) in + num_cpus -> wrapped pfund model as a remote model
+    @overload
+    def add_model(
+        self,
+        model: UnderlyingModel,
+        resolution: str = "",
+        name: str = "",
+        df_form: Literal["wide", "long"] = "wide",
+        ray_actor_options: dict[str, Any] | None = None,
+        *,
+        num_cpus: float,
+        **ray_kwargs: Any,
+    ) -> ActorProxy[BaseModel]: ...
+
+    # underlying model in, no num_cpus -> None, the wrapped model lives in this proxy's actor
+    @overload
+    def add_model(
+        self,
+        model: UnderlyingModel,
+        resolution: str = "",
+        name: str = "",
+        df_form: Literal["wide", "long"] = "wide",
+        ray_actor_options: dict[str, Any] | None = None,
+        *,
+        num_cpus: None = None,
+        **ray_kwargs: Any,
+    ) -> None: ...
+
+    def add_model[ModelT: BaseModel](
+        self,
+        model: ModelT | ActorProxy[ModelT] | UnderlyingModel,
+        resolution: str = "",
+        name: str = "",
+        df_form: Literal["wide", "long"] = "wide",
+        ray_actor_options: dict[str, Any] | None = None,
+        **ray_kwargs: Any,
+    ) -> ActorProxy[ModelT] | ActorProxy[BaseModel] | None:
+        """Add a model as a child of the remote component, see ComponentMixin.add_model.
+
+        Returns:
+            The child's remote proxy if the child runs remotely, otherwise ``None``,
+            since a local child lives in this proxy's actor and can't be returned
+            without being copied.
+        """
+        return self._add_component(
+            "add_model",
+            model=model,
+            resolution=resolution,
+            name=name,
+            df_form=df_form,
+            ray_actor_options=ray_actor_options,
+            **ray_kwargs,
+        )
+
+    # remote feature in -> remote feature out, ray args are ignored (the proxy is already remote)
+    @overload
+    def add_feature[FeatureT: BaseFeature](
+        self,
+        feature: ActorProxy[FeatureT],
+        resolution: str = "",
+        name: str = "",
+        df_form: Literal["wide", "long"] = "wide",
+        ray_actor_options: dict[str, Any] | None = None,
+        **ray_kwargs: Any,
+    ) -> ActorProxy[FeatureT]: ...
+
+    # local feature in + num_cpus -> wrapped into a remote feature
+    @overload
+    def add_feature[FeatureT: BaseFeature](
+        self,
+        feature: FeatureT,
+        resolution: str = "",
+        name: str = "",
+        df_form: Literal["wide", "long"] = "wide",
+        ray_actor_options: dict[str, Any] | None = None,
+        *,
+        num_cpus: float,
+        **ray_kwargs: Any,
+    ) -> ActorProxy[FeatureT]: ...
+
+    # local feature in, no num_cpus -> None, the feature lives in this proxy's actor
+    @overload
+    def add_feature[FeatureT: BaseFeature](
+        self,
+        feature: FeatureT,
+        resolution: str = "",
+        name: str = "",
+        df_form: Literal["wide", "long"] = "wide",
+        ray_actor_options: dict[str, Any] | None = None,
+        *,
+        num_cpus: None = None,
+        **ray_kwargs: Any,
+    ) -> None: ...
+
+    def add_feature[FeatureT: BaseFeature](
+        self,
+        feature: FeatureT | ActorProxy[FeatureT],
+        resolution: str = "",
+        name: str = "",
+        df_form: Literal["wide", "long"] = "wide",
+        ray_actor_options: dict[str, Any] | None = None,
+        **ray_kwargs: Any,
+    ) -> ActorProxy[FeatureT] | None:
+        """Add a feature as a child of the remote component, see ComponentMixin.add_feature.
+
+        Returns:
+            The child's remote proxy if the child runs remotely, otherwise ``None``,
+            since a local child lives in this proxy's actor and can't be returned
+            without being copied.
+        """
+        return self._add_component(
+            "add_feature",
+            feature=feature,
+            resolution=resolution,
+            name=name,
+            df_form=df_form,
+            ray_actor_options=ray_actor_options,
+            **ray_kwargs,
+        )
+
     def __getattr__(self, name: str) -> Any:
         if name in self.__dict__:
             return self.__dict__[name]
@@ -122,15 +362,6 @@ class ActorProxy[ComponentT: Component]:
         attr = getattr(actor, name)
 
         def remote_method(*args: Any, **kwargs: Any) -> Any:
-            try:
-                return ray.get(attr.remote(*args, **kwargs))
-            except TypeError as err:
-                # NOTE: catch TypeError when trying to pickle and return a component
-                # e.g. model = strategy.add_model(...), where strategy is a ray actor but model is not, so model can't be serialized and returned correctly
-                # if 'cannot pickle' in str(err):
-                #     print_error(f'Ray Actor "{self.name}" error when calling "{name}": {err}')
-                #     return None
-                # else:
-                raise err
+            return ray.get(attr.remote(*args, **kwargs))
 
         return remote_method
