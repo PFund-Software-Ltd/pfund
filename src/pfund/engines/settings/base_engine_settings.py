@@ -51,17 +51,6 @@ class BaseEngineSettings(Settings):
             - False: never cache, always process on the fly.
         """,
     )
-    warn_overwrite: bool = Field(
-        default=True,
-        description="""
-        Ask for confirmation before engine.run(overwrite=True) clears the reused run folder
-        (e.g. default_run/) and all artifacts inside it, including component outputs,
-        models, and checkpoints.
-
-        This setting is ignored when an mtflow run is active because every mtflow run
-        receives its own unique run folder instead of reusing and clearing an existing one.
-        """,
-    )
 
     @classmethod
     def _validate_file(cls, data: dict[str, Any]) -> None:

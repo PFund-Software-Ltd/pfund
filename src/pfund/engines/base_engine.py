@@ -255,7 +255,7 @@ class BaseEngine[
     def get_strategy(self, name: str) -> BaseStrategy | ActorProxy[BaseStrategy]:
         return self._strategies[name]
 
-    def run(self, *, overwrite: bool = True, run: MTFlowRun | None = None):
+    def run(self, *, run: MTFlowRun | None = None):
         if self.is_running():
             raise RuntimeError("Engine is already running")
         # try:
@@ -264,16 +264,6 @@ class BaseEngine[
         #     mtflow = None
         # TODO: re-enable mtflow
         mtflow = None
-        if overwrite:
-            if mtflow:
-                self._logger.warning(
-                    f"{overwrite=} is ignored when an mtflow run is active "
-                    + "(every mtflow run gets its own folder, so there is nothing to overwrite)"
-                )
-            else:
-                # TODO: moved to base_data_handler.py
-                # self._clear_run_path(confirm=self.settings.warn_overwrite)
-                pass
         run = run or (mtflow.get_run() if mtflow else None)
         if run is not None:
             assert mtflow is not None

@@ -3,23 +3,27 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from mtflow.tracking.run import MTFlowRun
-    from narwhals.typing import IntoDataFrame
     from pfund_blocks.resolution import Resolution
 
     from pfund.backtest._mixins.backtest_mixin import BacktestMixin
+    from pfund.backtest._mixins.strategy_mixin import BacktestStrategyMixin
     from pfund.backtest.cv.dataset_splits import DatasetSplits
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel, UnderlyingModel
     from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.engines.base_engine import DataRangeDict
+    from pfund.typing import Component
 
     type BacktesteeName = str
+    type ChunkNum = int
 
 import os
+from contextlib import contextmanager
 
-import narwhals as nw
-import numpy as np
+import polars as pl
 from pfund_blocks.enums.env import Environment
 from pfund_kit.utils.progress_bar import ProgressBar
 
@@ -31,48 +35,75 @@ from pfund.enums import BacktestMode
 
 
 def _split_df_into_time_chunks(
-    df: nw.DataFrame[Any],
+    df: pl.DataFrame,
     num_chunks: int,
-) -> list[tuple[nw.DataFrame[Any], int]]:
-    """Split a sorted dataframe into contiguous, timestamp-safe chunks."""
+) -> list[tuple[pl.DataFrame, ChunkNum]]:
+    """Splits a date-sorted df into contiguous, timestamp-safe chunks.
+
+    The unique dates are split like np.array_split (the extra dates go to the first chunks),
+    so the rows of one date never end up in two chunks, e.g. in long form.
+    """
     if num_chunks < 1:
         raise ValueError("num_chunks must be greater than 0")
     if "date" not in df.columns:
         raise ValueError("chunked backtesting requires a 'date' column")
 
     date = df.get_column("date")
-    if len(date) == 0:
+    if date.is_empty():
         raise ValueError("chunked backtesting requires at least one row")
-    if date.is_null().any():
+    if date.has_nulls():
         raise ValueError("chunked backtesting does not support null dates")
     if not date.is_sorted():
         raise ValueError("the dataframe must be sorted by 'date' before chunking")
 
-    row_dates = date.to_numpy()
-    starts_new_time = np.empty(len(row_dates), dtype=bool)
-    starts_new_time[0] = True
-    starts_new_time[1:] = row_dates[1:] != row_dates[:-1]
-    time_starts = np.flatnonzero(starts_new_time)
-    num_times = len(time_starts)
+    # 0, 0, 1, 1, 2, ...: the index of each row's date among the unique dates
+    time_ids = date.rle_id()
+    num_times = cast("int", time_ids[-1]) + 1
     if num_chunks > num_times:
         raise ValueError(
             f"num_chunks ({num_chunks}) cannot exceed the number of unique "
             + f"timestamps ({num_times})"
         )
 
-    row_boundaries = np.append(time_starts, len(row_dates))
-    time_chunks = np.array_split(np.arange(num_times), num_chunks)
+    # chunk k covers the dates [time_bounds[k], time_bounds[k + 1])
+    q, r = divmod(num_times, num_chunks)
+    time_bounds = [k * q + min(k, r) for k in range(num_chunks + 1)]
+    # the first row of each bound's date, the last bound (num_times) maps to len(df)
+    row_bounds = time_ids.search_sorted(
+        pl.Series(time_bounds, dtype=time_ids.dtype), side="left"
+    ).to_list()
     return [
-        (
-            df[
-                int(row_boundaries[time_chunk[0]]) : int(
-                    row_boundaries[time_chunk[-1] + 1]
-                )
-            ],
-            chunk_num,
-        )
-        for chunk_num, time_chunk in enumerate(time_chunks)
+        (df.slice(row_bounds[k], row_bounds[k + 1] - row_bounds[k]), k)
+        for k in range(num_chunks)
     ]
+
+
+@contextmanager
+def _without_dfs(component: Component) -> Generator[None]:
+    """Temporarily detaches the dfs of the component tree, i.e. its data stores' dfs and store._df, children included.
+
+    Used around ray.put() in chunked backtesting: otherwise every Ray worker in flight holds a copy of the
+    full dataset (~67MB per product-year of 1m bars, ~4GB at 1s), though a chunk task only uses its df_chunk.
+    So inside a chunk task, the backtestee's own dfs are None,
+    i.e. a user's backtest() must use the df passed in, not self.data_df/self.df.
+    The dfs are restored on exit.
+    """
+    detached: list[tuple[Any, pl.DataFrame | None]] = []
+
+    def _detach(comp: Component) -> None:
+        for store in [comp.store, *comp.data_stores.values()]:
+            detached.append((store, store._df))
+            store._df = None
+        for child in comp.components:
+            # components always run locally in backtesting, never as ActorProxy
+            _detach(cast("Component", child))
+
+    try:
+        _detach(component)
+        yield
+    finally:
+        for store, df in detached:
+            store._df = df
 
 
 class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
@@ -124,7 +155,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             mode=mode,
             dataset_splits=dataset_splits,
         )
-        self.results: list[IntoDataFrame] | None = None
+        self.result: pl.DataFrame | None = None
 
     @property
     def backtest_mode(self) -> BacktestMode:
@@ -290,58 +321,62 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
     def run(
         self,
         *,
-        overwrite: bool = False,
         run: MTFlowRun | None = None,
         num_chunks: int = 1,
         num_cpus: int | None = None,
-    ) -> list[IntoDataFrame]:
+    ) -> pl.DataFrame | None:
         """
         Args:
-            overwrite: If True, clear the reused run path (the default_run/ folder) before running.
-                Ignored when an mtflow run is active, since each mtflow run gets its own folder.
+            run:
+                mtflow run to track this backtest, each run is written to its own folder (e.g. run001, run002).
+                if None, the reused default_run/ folder is overwritten.
             num_chunks:
                 Number of standalone strategy backtests to split the dataset into.
-                if = 1, process the whole dataset all at once.
+                if <= 1, process the whole dataset all at once (values below 1 are treated as 1).
                 if > 1, use Ray for parallel processing.
-                Chunking is not supported for model or feature backtesting.
+                Chunking is not supported for model or feature backtesting,
+                num_chunks is set to 1 with a warning.
+                When chunked, the strategy's dfs (e.g. self.data_df, self.df) are None inside its backtest(),
+                use the df passed in.
             num_cpus:
-                Maximum number of CPUs (Ray workers) to use per batch, i.e. how many chunks run in parallel at once.
+                Maximum number of chunks (Ray tasks) in flight at once, i.e. how many chunks run in parallel.
                 if None, defaults to os.cpu_count().
                 This will be ignored if Ray is not used (i.e. num_chunks = 1).
+
+        Returns:
+            The backtest df, all chunks concatenated in chunk order, with each row's chunk in the CHUNK_COL column.
+            Use df.partition_by(CHUNK_COL, as_dict=True) to get the per-chunk dfs.
+            None if there is nothing to return, e.g. model training.
         """
-        if num_chunks < 1:
-            raise ValueError("num_chunks must be greater than 0")
-        if num_cpus is not None:
-            if num_cpus < 1:
-                raise ValueError("num_cpus must be greater than 0")
-            available_cpus = os.cpu_count()
-            if available_cpus is not None:
-                num_cpus = min(num_cpus, available_cpus)
-        if num_chunks > 1 and _DummyStrategy.__name__ in self._strategies:
-            raise ValueError("Chunking is only supported for strategy backtesting")
+        num_cpus = (os.cpu_count() or 1) if num_cpus is None else max(1, num_cpus)
+        if self._get_dummy_strategy() and num_chunks > 1:
+            self._logger.warning(
+                f"Chunking is only supported for strategy backtesting, num_chunks={num_chunks} is set to 1"
+            )
+            num_chunks = 1
+        # NOTE: before super().run(), which sets up the components, so their metadata records it, see BacktestMixin.to_dict()
+        self.context.set_num_chunks(num_chunks)
 
-        # before super().run(), which sets up the components, so their metadata records it, see BacktestMixin.to_dict()
-        self.context.num_chunks = num_chunks
-        super().run(overwrite=overwrite, run=run)
-
-        backtest_results: list[IntoDataFrame] = []
-
+        super().run(run=run)
+        backtest_result: pl.DataFrame | None = None
         try:
             # NOTE: only one strategy exists in backtesting
             strategy = cast("BaseStrategy", next(iter(self._strategies.values())))
-            is_dummy_strategy = strategy.name == _DummyStrategy.__name__
+            is_dummy_strategy = (strategy.name == self._dummy_strategy_name)
             if is_dummy_strategy:
                 # dummy strategy has exactly one model or one feature
                 if strategy.models:
                     model: BaseModel = cast(
                         "BaseModel", next(iter(strategy.models.values()))
                     )
-                    if (
-                        self.backtest_mode == BacktestMode.VECTORIZED
-                        and model.is_training()
-                    ):
-                        self.result = backtest_results
-                        return backtest_results
+                    if model.is_training():
+                        if self.backtest_mode == BacktestMode.EVENT_DRIVEN:
+                            raise ValueError(
+                                f"No trained model found for '{model.name}', event-driven backtesting needs a trained model, "
+                                + "train it in a vectorized backtest first and call save()"
+                            )
+                        self.result = backtest_result
+                        return backtest_result
                     backtestee = model
                 elif strategy.features:
                     feature: BaseFeature = cast(
@@ -352,68 +387,47 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                     raise ValueError("No model or feature to backtest")
             else:
                 backtestee = strategy
-            backtest_dfs = self._backtest(
-                backtestee,
-                num_chunks=num_chunks,
-                num_cpus=num_cpus,
-            )
-            backtest_results = backtest_dfs
+            backtest_result = self._backtest(backtestee, num_cpus=num_cpus)
 
         except Exception:
             self._logger.exception("Error in backtesting:")
+            raise
         finally:
             self.end()
 
-        self.results = backtest_results
-        return backtest_results
+        self.result = backtest_result
+        return backtest_result
 
-    def _backtest(
-        self,
-        backtestee: BaseStrategy | BaseModel | BaseFeature,
-        num_chunks: int = 1,
-        num_cpus: int | None = None,
-    ) -> list[IntoDataFrame]:
+    def _backtest(self, backtestee: Component, num_cpus: int) -> pl.DataFrame:
         ### Pre-Backtest ###
+        num_chunks = self.context.num_chunks
         is_using_ray = num_chunks > 1
-        backtest_dfs: list[IntoDataFrame] = []
+        backtest_dfs: list[pl.DataFrame] = []
+        is_strategy = backtestee.is_strategy()
 
         if self.backtest_mode == BacktestMode.EVENT_DRIVEN:
-            df = nw.from_native(backtestee.data_df)
+            df = backtestee.data_df
         else:
-            if not backtestee.is_strategy():
-                df = nw.from_native(backtestee.trading_df)
-            else:
-                df = nw.from_native(backtestee.full_df)
+            df = backtestee.trading_df if not is_strategy else backtestee.full_df
 
         def _run_backtest(
-            backtestee: BaseStrategy | BaseModel | BaseFeature,
-            df_chunk: nw.DataFrame[Any],
-            chunk_num: int | None = None,
-            batch_num: int | None = None,
-        ) -> IntoDataFrame:
-            backtest_df = backtestee.backtest(df_chunk.to_native())
-            backtest_df.chunk_num = chunk_num
-            backtest_df.batch_num = batch_num
-            # NOTE: written by Claude (Claude Code)
-            # FIXME: chunk_num above is a df attribute, not a column: it is lost on any new df
-            # (e.g. _postprocess_backtest_df() below, a Ray round-trip), and PFundComponentDataHandler
-            # needs it as a column to tell the chunks apart in the stored data artifact.
-            # an unchunked run is chunk 0, so every BACKTEST strategy df has the same schema.
-            # remove the two attribute lines above once nothing reads them (nothing does today).
-            backtest_df = (
-                nw.from_native(backtest_df)
-                .with_columns(nw.lit(chunk_num or 0).alias(BacktestEngine.CHUNK_COL))
-                .to_native()
+            backtestee: Component,
+            df_chunk: pl.DataFrame,
+            chunk_num: ChunkNum = 0,
+        ) -> pl.DataFrame:
+            backtest_df = cast("BacktestMixin", backtestee).backtest(df_chunk)
+            # chunks are standalone backtests, the column tells them apart in the stored data artifact;
+            # an unchunked run is chunk 0, so every BACKTEST strategy df has the same schema
+            return backtest_df.with_columns(
+                pl.lit(chunk_num).alias(BacktestEngine.CHUNK_COL)
             )
-            return backtest_df
 
         ### Backtest ###
         if not is_using_ray:
-            backtest_df: IntoDataFrame = _run_backtest(
-                backtestee=backtestee, df_chunk=df
-            )
-            backtest_dfs.append(backtest_df)
+            backtest_dfs.append(_run_backtest(backtestee=backtestee, df_chunk=df))
         else:
+            from itertools import islice
+
             import ray
             from pfund_kit.utils.ray import (
                 ray_logging_context,
@@ -425,101 +439,107 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             @ray.remote
             def ray_task(
                 log_queue: Queue,
-                backtestee_ref: ray.ObjectRef[BaseStrategy | BaseModel],
-                df_chunk: nw.DataFrame[Any],
-                chunk_num: int,
-                batch_num: int,
-            ):
-                backtestee = ray.get(backtestee_ref)
+                # passed in as an ObjectRef, Ray resolves top-level ObjectRef args before the task runs
+                backtestee: Component,
+                df_chunk: pl.DataFrame,
+                chunk_num: ChunkNum,
+            ) -> pl.DataFrame:
                 logger = setup_logger_in_ray_task(backtestee.logger.name, log_queue)
                 try:
-                    backtest_df: IntoDataFrame = _run_backtest(
+                    return _run_backtest(
                         backtestee=backtestee,
                         df_chunk=df_chunk,
                         chunk_num=chunk_num,
-                        batch_num=batch_num,
                     )
-                    return backtest_df
                 except Exception:
-                    logger.exception(
-                        f"Error in Backtest-Chunk{chunk_num}-Batch{batch_num}:"
-                    )
-                    return None
+                    # log it to the log file, then re-raise: ray.get() raises it in the driver,
+                    # which cancels the other chunks, so a partial set of chunks is never persisted
+                    logger.exception(f"Error in Backtest-Chunk{chunk_num}:")
+                    raise
 
-            df_chunks = _split_df_into_time_chunks(df, num_chunks)
+            df_chunks: list[tuple[pl.DataFrame, ChunkNum]] = (
+                _split_df_into_time_chunks(df, num_chunks)
+            )
 
-            logger = backtestee.logger
             self._logger.debug("setting up ray...")
             setup_ray()
-            backtestee_ref: ray.ObjectRef[BaseStrategy | BaseModel] = ray.put(
-                backtestee
-            )
+            # serialize the backtestee into the object store once, instead of once per chunk,
+            # each task still deserializes its own copy, so chunks don't share state.
+            # its dfs are left out, see _without_dfs()
+            with _without_dfs(backtestee):
+                backtestee_ref: ray.ObjectRef[Component] = ray.put(backtestee)
+
+            logger = backtestee.logger
             with ray_logging_context(logger) as log_queue:
+                unfinished: list[ray.ObjectRef] = []
                 try:
-                    num_cpus = num_cpus or os.cpu_count()
-                    if num_cpus is None:
-                        raise ValueError("num_cpus must be set when using Ray")
-                    batch_size: int = min(num_cpus, num_chunks)
-                    batches = [
-                        df_chunks[i : i + batch_size]
-                        for i in range(0, len(df_chunks), batch_size)
+                    pending = iter(df_chunks)
+                    # chunks finish in any order, keep the results in chunk order,
+                    # chunks are contiguous date ranges, so the combined df stays sorted by (chunk_num, date)
+                    ref_to_chunk_num: dict[ray.ObjectRef, ChunkNum] = {}
+                    # placeholders, every slot is filled before the chunks are combined
+                    results: list[pl.DataFrame] = cast(
+                        "list[pl.DataFrame]", [None] * len(df_chunks)
+                    )
+
+                    def submit_next(
+                        df_chunk: pl.DataFrame, chunk_num: ChunkNum
+                    ) -> ray.ObjectRef:
+                        # Ray's .remote() only takes positional arguments (for type checkers)
+                        ref = ray_task.remote(
+                            log_queue, backtestee_ref, df_chunk, chunk_num
+                        )
+                        ref_to_chunk_num[ref] = chunk_num
+                        return ref
+
+                    # sliding window: keep num_cpus chunks in flight, start the next chunk
+                    # as soon as one finishes, so a slow chunk doesn't leave the other workers idle
+                    unfinished = [
+                        submit_next(*item) for item in islice(pending, num_cpus)
                     ]
                     with ProgressBar(
-                        total=len(batches),
-                        description=f"Backtesting {backtestee.name} ({batch_size} chunks per batch)",
+                        total=len(df_chunks),
+                        description=f"Backtesting {backtestee.name} ({len(df_chunks)} chunks, {min(num_cpus, len(df_chunks))} in parallel)",
                     ) as pbar:
-                        for batch_num, batch in enumerate(batches):
-                            futures = [
-                                ray_task.remote(
-                                    log_queue=log_queue,
-                                    backtestee_ref=backtestee_ref,
-                                    df_chunk=df_chunk,
-                                    chunk_num=chunk_num,
-                                    batch_num=batch_num,
-                                )
-                                for df_chunk, chunk_num in batch
-                            ]
-                            backtest_dfs_in_batch: list[IntoDataFrame | None] = ray.get(
-                                futures
+                        while unfinished:
+                            finished, unfinished = ray.wait(unfinished, num_returns=1)
+                            results[ref_to_chunk_num[finished[0]]] = ray.get(
+                                finished[0]
                             )
-                            backtest_dfs_in_batch_not_none: list[IntoDataFrame] = [
-                                backtest_df
-                                for backtest_df in backtest_dfs_in_batch
-                                if backtest_df is not None
-                            ]
-                            backtest_dfs.extend(backtest_dfs_in_batch_not_none)
-                            if len(backtest_dfs_in_batch_not_none) != len(batch):
-                                logger.warning(
-                                    f"Some backtesting tasks in batch-{batch_num} failed, check {logger.name}.log for details"
-                                )
                             pbar.advance(1)
-                except KeyboardInterrupt:
-                    self._logger.warning(
-                        f"KeyboardInterrupt received, stopping {backtestee.name} backtesting..."
-                    )
-                except Exception:
-                    logger.exception("Error in backtesting:")
+                            if (item := next(pending, None)) is not None:
+                                unfinished.append(submit_next(*item))
+                except BaseException:
+                    # e.g. KeyboardInterrupt or a crashed worker: cancel the in-flight chunks,
+                    # otherwise they keep running after the backtest returns,
+                    # and re-raise, so a partial set of chunks is never persisted as the strategy's results.
+                    # force=True kills the worker, a non-forced cancel doesn't stop a task that's already running
+                    for ref in unfinished:
+                        ray.cancel(ref, force=True)
+                    raise
+            backtest_dfs = results
 
-        # ### Post-Backtest ###
-        if backtestee.is_strategy():
-            backtest_dfs: list[IntoDataFrame] = [
-                backtestee._postprocess_backtest_df(backtest_df)
-                for backtest_df in backtest_dfs
-            ]
+        ### Post-Backtest ###
+        if is_strategy:
+            backtest_dfs = cast(
+                "list[pl.DataFrame]",
+                [
+                    cast("BacktestStrategyMixin", backtestee)._postprocess_backtest_df(backtest_df)
+                    for backtest_df in backtest_dfs
+                ]
+            )
             # NOTE: written by Claude (Claude Code)
             # FIXME: the top strategy's backtest results are never persisted.
             # PFundComponentDataHandler writes component._data_artifact, i.e. store._df on THIS (driver's) component,
             # but with chunking, each chunk ran on a Ray worker against a copy of the component (ray.put(backtestee)),
             # so the results only exist in backtest_dfs, store._df never sees them;
             # and BacktestMixin.backtest() only persists for components without a user backtest(), not the top strategy.
-            # so: combine the chunks into one df (ordered by (chunk_num, date): chunks are contiguous date ranges,
-            # ray.get() keeps the submission order) and persist it as the strategy's data artifact.
-            # failed chunks are already dropped from backtest_dfs, so chunk_num can have gaps, e.g. 0, 1, 3.
-            # only vectorized: in event-driven mode, BaseStrategy._data_artifact raises NotImplementedError.
-            if self.backtest_mode == BacktestMode.VECTORIZED and backtest_dfs:
-                backtestee.store._df = nw.concat(
-                    [nw.from_native(backtest_df) for backtest_df in backtest_dfs],
-                    how="vertical",
-                ).to_native()
-                backtestee.store.persist_to_datalake()
-        return backtest_dfs
+            # so: persist the combined df below as the strategy's data artifact.
+        # combine the chunks into one df, ordered by (chunk_num, date): chunks are contiguous date ranges,
+        # and the results are kept in chunk order.
+        backtest_df = pl.concat(backtest_dfs, how="vertical")
+        if is_strategy and self.backtest_mode == BacktestMode.VECTORIZED:
+            backtestee.store._df = backtest_df
+            # write data artifact to trading_df/
+            backtestee.store.persist_to_datalake()
+        return backtest_df

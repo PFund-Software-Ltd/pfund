@@ -383,15 +383,9 @@ class TradeEngine(
         trading_venue._set_queue(self._queue)
         return trading_venue
 
-    def run(self, *, overwrite: bool = True, run: MTFlowRun | None = None):
-        """Run the trade engine.
-
-        Args:
-            overwrite: If True, clear the reused run path (the default_run/ folder) before running.
-                Ignored when an mtflow run is active, since each mtflow run gets its own folder.
-        """
+    def run(self, *, run: MTFlowRun | None = None):
         try:
-            super().run(overwrite=overwrite, run=run)
+            super().run(run=run)
             if self._data_engine:
                 self._data_engine.run()  # blocking call
             else:
