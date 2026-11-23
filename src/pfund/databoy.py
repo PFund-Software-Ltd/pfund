@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias
+from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     from logging import Logger
 
     from apscheduler.schedulers.background import BackgroundScheduler
-    from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.streaming.zeromq import ZeroMQ
     from pfund_blocks.datas import BarData, MarketData
 
@@ -17,7 +16,7 @@ if TYPE_CHECKING:
         Signals,
     )
 
-    ComponentID: TypeAlias = int
+    type ComponentID = int
 
 from threading import Thread
 

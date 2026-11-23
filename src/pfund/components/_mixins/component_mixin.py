@@ -31,7 +31,7 @@ from pfund.components._mixins.base_mixin import ComponentBaseMixin
 from pfund.components._mixins.dataframe_mixin import DataFrameMixin
 from pfund.components.actor_proxy import ActorProxy
 from pfund.data_config import DataConfig
-from pfund.enums import RunMode
+from pfund.enums import ComponentType, RunMode
 from pfund.utils.decorators import ray_method
 
 
@@ -308,6 +308,11 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
         self._source_artifact_path = Path(source_artifact_path)
 
     @property
+    def _max_rows(self) -> int | None:
+        """Max rows the trading store keeps in its df, None means unbounded."""
+        return self.config["max_rows"]
+
+    @property
     def _data_artifact(self) -> pl.DataFrame:
         # TODO: extract the latest rows (that have not been written to pfeed) from the trading store's df
         raise NotImplementedError
@@ -321,28 +326,10 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
         name: str = "",
         **specs: Any,
     ) -> BaseProduct:
-        from pydantic import ValidationError
-
         Venue = self._get_venue_class(venue)
-        try:
-            product = Venue.create_product(
-                basis=basis, exchange=exchange, name=name, symbol=symbol, **specs
-            )
-        except ValidationError as err:
-            # unknown kwargs of add_data() fall into **product_specs,
-            # so a typo (e.g. data_config= instead of config=) surfaces as pydantic's "Extra inputs are not permitted"
-            unknown = [
-                str(e["loc"][0])
-                for e in err.errors()
-                if e["type"] == "extra_forbidden" and e["loc"]
-            ]
-            if not unknown:
-                raise
-            raise TypeError(
-                f"unexpected keyword argument(s) {unknown} for product '{basis}': "
-                f"extra kwargs are treated as product specs, but {err.title} does not have them. "
-                f"Is it a typo of a parameter?"
-            ) from err
+        product = Venue.create_product(
+            basis=basis, exchange=exchange, name=name, symbol=symbol, **specs
+        )
         if product.name not in self.products:
             self.products[product.name] = product
             self.logger.debug(f"added {product}")
@@ -369,11 +356,11 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
 
         Args:
             venue: trading venue, e.g. 'ibkr', 'bybit'.
-            exchange: useful for TradFi brokers (e.g. IB), to specify the exchange (e.g. 'NASDAQ')
-            symbol: useful for TradFi brokers (e.g. IB), to specify the symbol (e.g. 'AAPL')
             product: product basis, defined as {base_asset}_{quote_asset}_{product_type}, e.g. BTC_USDT_PERP
             resolutions: extra data resolutions in use, e.g. "1t" for tick data, "1q" for quote data.
                 The component's resolution is always included.
+            exchange: useful for TradFi brokers (e.g. IB), to specify the exchange (e.g. 'NASDAQ')
+            symbol: useful for TradFi brokers (e.g. IB), to specify the symbol (e.g. 'AAPL')
             product_name: A user-defined identifier for the product.
                 If not provided, the default product symbol (e.g. 'BTC_USDT_PERP', 'TSLA241213C00075000') will be used.
                 This is useful when you need to distinguish between similar instruments, such as options
@@ -427,23 +414,34 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
                 Options for Ray actor.
                 will be passed to ray actor like this: Actor.options(**ray_options).remote(**ray_kwargs)
         """
-        Component = component.__class__
-        ComponentName = Component.__name__
-        if component.is_strategy():
+        # NOTE: use the component_type attribute, not is_strategy() etc., because on an
+        # ActorProxy a method call goes through __getattr__ and creates the Ray actor
+        component_type = component.component_type
+        if component_type == ComponentType.strategy:
             from pfund.components.strategies.strategy_base import BaseStrategy
 
             assert isinstance(self, BaseStrategy), (
                 f"only a strategy can add a sub-strategy, '{self.name}' is a {self.component_type}"
             )
             components = self.strategies
-        elif component.is_model():
+        elif component_type == ComponentType.model:
             components = self.models
-        elif component.is_feature():
+        elif component_type == ComponentType.feature:
             components = self.features
         else:
             raise ValueError(
-                f"{component.component_type} '{ComponentName}' is not a strategy, model or feature"
+                f"{component_type} '{component.__class__.__name__}' is not a strategy, model or feature"
             )
+
+        component_name = (
+            component.name
+            if isinstance(component, ActorProxy)
+            else name or component.name
+        )
+        if any(
+            component_name.casefold() == existing.casefold() for existing in components
+        ):
+            raise ValueError(f"{component_name} already exists")
 
         component_resolution = (
             component.resolution
@@ -451,7 +449,6 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
             else Resolution(resolution or self.resolution)
         )
         if component_resolution > self.resolution:
-            component_name = name or component.name
             raise ValueError(
                 f"{component.component_type} '{component_name}' resolution "
                 + f"{component_resolution!r} is finer than parent '{self.name}' resolution "
@@ -460,14 +457,6 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
             )
 
         if not isinstance(component, ActorProxy):
-            component_type = component.component_type
-            component_name = name or component.name
-            if any(
-                component_name.casefold() == existing.casefold()
-                for existing in components
-            ):
-                raise ValueError(f"{component_name} already exists")
-
             if ray_kwargs:
                 component = ActorProxy(
                     component,
@@ -485,6 +474,12 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
                 resolution=component_resolution,
                 engine_context=self.context,
                 df_form=df_form,
+                # NOTE: only strategies accept is_substrategy, see BaseStrategy._hydrate
+                **(
+                    {"is_substrategy": True}
+                    if component_type == ComponentType.strategy
+                    else {}
+                ),
             )
 
         cast("dict[str, Any]", components)[component.name] = component

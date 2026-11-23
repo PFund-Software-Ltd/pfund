@@ -24,10 +24,7 @@ from pfund.enums import ComponentType
 
 class BaseFeature(ComponentMixin, ABC, metaclass=MetaFeature):
     def __init__(self, *args: Any, **kwargs: Any):
-        self.component_type: ComponentType = ComponentType.feature
-        self.__mixin_post_init__(
-            *args, **kwargs
-        )  # calls ComponentMixin.__mixin_post_init__()
+        self.__mixin_post_init__(ComponentType.feature, *args, **kwargs)
 
     @abstractmethod
     def transform(

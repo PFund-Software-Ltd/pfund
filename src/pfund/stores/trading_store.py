@@ -267,7 +267,7 @@ class TradingStore:
                 # every other column is filled with null
                 df = pl.concat([df, new_row], how="diagonal")
 
-        max_rows = component.config["max_rows"]
+        max_rows = component._max_rows
         if max_rows is not None and len(df) > max_rows:
             df = df.tail(max_rows)
         self._df = df
@@ -304,8 +304,8 @@ class TradingStore:
         when it saves.
 
         Which rows are exposed by ``data_artifact`` depends on the execution mode:
-        vectorized backtesting exposes the complete trading dataframe, while
-        event-driven and live execution will expose the rows selected by
+        backtesting (vectorized and event-driven) exposes the complete trading
+        dataframe, while live execution will expose the rows selected by
         TradingStore for the current persistence interval.
         """
         # nothing to persist yet (e.g. component still warming up)

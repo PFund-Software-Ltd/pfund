@@ -463,10 +463,9 @@ class TradeEngine(
             self._zmq_thread = Thread(target=self._run_zmq_loop, daemon=True)
             self._zmq_thread.start()
         else:
-            # pure-local path: no zmq loop, so strategies reach the engine-owned venues
-            # directly. Inject the engine handle for use in strategy.place_orders().
-            for strategy in self._strategies.values():
-                strategy._set_engine(self)
+            # TODO
+            # pure-local path: no zmq loop
+            pass
         # the updates loop drains venue updates -> managers -> publish, ALWAYS (zmq or not)
         self._updates_thread = Thread(target=self._run_updates_loop, daemon=True)
         self._updates_thread.start()

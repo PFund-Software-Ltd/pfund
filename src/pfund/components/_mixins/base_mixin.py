@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.stores.base_data_store import BaseDataStore
     from pfund.stores.market_data_store import MarketDataStore
-    from pfund.typing import Component, ComponentName, Signals
+    from pfund.typing import Component, ComponentName, ComponentProxy, Signals
 
 import datetime
 import logging
@@ -33,14 +33,11 @@ from pfund.utils.decorators import ray_method
 
 
 class ComponentBaseMixin:
-    # NOTE: set in each component base class's __init__, e.g. BaseStrategy.__init__
-    component_type: ComponentType
-
-    # custom post init for-common attributes of strategy and model
-    def __mixin_post_init__(self, *args: Any, **kwargs: Any):
+    def __mixin_post_init__(self, component_type: ComponentType, *args: Any, **kwargs: Any):
         self.__pfund_args__ = args
         self.__pfund_kwargs__ = kwargs
 
+        self._component_type = component_type
         self._name = self._get_default_name()
         self._run_mode: RunMode | None = None
         self._df_form: Literal["wide", "long"] | None = None
@@ -105,6 +102,10 @@ class ComponentBaseMixin:
     def df_form(self) -> Literal["wide", "long"]:
         assert self._df_form is not None, "df_form is not set"
         return self._df_form
+
+    @property
+    def component_type(self) -> ComponentType:
+        return self._component_type
 
     @property
     def products(self) -> dict[ProductName, BaseProduct]:
@@ -229,15 +230,13 @@ class ComponentBaseMixin:
         return Venue.get_streaming_resolutions(product)
 
     @property
-    def components(self) -> list[Component | ActorProxy[Component]]:
+    def components(self) -> list[Component | ComponentProxy]:
         return self.get_components()
 
-    def get_component(
-        self, name: ComponentName
-    ) -> Component | ActorProxy[Component] | None:
+    def get_component(self, name: ComponentName) -> Component | ComponentProxy | None:
         return self.models.get(name, None) or self.features.get(name, None)
 
-    def get_components(self) -> list[Component | ActorProxy[Component]]:
+    def get_components(self) -> list[Component | ComponentProxy]:
         return [
             *self.models.values(),
             *self.features.values(),
@@ -289,7 +288,9 @@ class ComponentBaseMixin:
 
     @property
     def market_data_store(self) -> MarketDataStore:
-        return self._databoy.get_data_store(DataCategory.MARKET_DATA)
+        return cast(
+            "MarketDataStore", self._databoy.get_data_store(DataCategory.MARKET_DATA)
+        )
 
     @property
     def data_stores(self) -> dict[DataCategory, BaseDataStore[Any, Any]]:

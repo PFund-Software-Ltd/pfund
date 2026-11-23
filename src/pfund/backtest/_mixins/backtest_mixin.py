@@ -20,7 +20,6 @@ if TYPE_CHECKING:
 
 from pathlib import Path
 
-import narwhals as nw
 import polars as pl
 from pfund_kit.style import RichColor, TextStyle, cprint
 
@@ -121,31 +120,30 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
 
         import inspect
 
-        from pfund.backtest._mixins.backtest_mixin import BacktestMixin
-
-        mro = type(self).__mro__
-        source_class = mro[mro.index(BacktestMixin) + 1]
+        # the user's component class, stored by _adopt(); the MRO position isn't reliable
+        # since BacktestMixin's own bases (e.g. BacktestDataFrameMixin) precede it
+        source_class: type = getattr(type(self), "__wrapped__")  # noqa: B009
         source_file = inspect.getsourcefile(source_class)
         if source_file is None:
             raise ValueError(f"cannot locate source file for {source_class.__name__}")
         return Path(source_file)
 
     @property
+    def _max_rows(self) -> None:
+        # a backtest is a finite run, so the trading store keeps every row and store._df is the
+        # run's full data artifact; users still see max_rows applied, see get_df()
+        return None
+
+    @property
     def _data_artifact(self) -> pl.DataFrame | None:
-        if self.backtest_mode == BacktestMode.VECTORIZED:
-            return self.store._df
-        return super()._data_artifact
+        # store._df is never trimmed in backtesting, so it holds every row produced during the run
+        return self.store._df
 
     def to_dict(self) -> dict[str, Any]:
         """Adds how the component was backtested, e.g. so a chunked or vectorized df can't seed live trading."""
         return {
             **super().to_dict(),
-            # VECTORIZED or EVENT_DRIVEN
             "backtest_mode": self.backtest_mode,
-            # the number of standalone backtests (chunks) the data was split into by BacktestEngine.run(num_chunks=...),
-            # each on its own contiguous date range and starting from a fresh state, told apart by the 'chunk_num' column.
-            # 1 means unchunked: one continuous backtest. A chunked (> 1) df is not one timeline,
-            # so it must not seed live trading.
             "num_chunks": self.context.num_chunks,
         }
 

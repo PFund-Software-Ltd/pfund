@@ -11,15 +11,17 @@ if TYPE_CHECKING:
         BaseProduct,
         BaseVenue,
     )
+    from pfund_blocks.resolution import Resolution
     from pfund_blocks.typing import AccountName, Currency, ProductName, TradingVenue
 
     from pfund.components.actor_proxy import ActorProxy
-    from pfund.engines.trade_engine import TradeEngine
+    from pfund.engines.contexts.base_engine_context import BaseEngineContext
+    from pfund.enums import RunMode
     from pfund.typing import (
         Component,
         ComponentName,
+        ComponentProxy,
         Signals,
-        StrategyT,
     )
 
 from abc import ABC, abstractmethod
@@ -30,28 +32,19 @@ from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.components.strategies.strategy_meta import MetaStrategy
 from pfund.enums import ComponentType
 from pfund.managers import OrderManager, PortfolioManager, RiskManager
-from pfund.utils.decorators import ray_method
 
 
 class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def __init__(self, *args: Any, **kwargs: Any):
-        self.component_type: ComponentType = ComponentType.strategy
-        self._accounts: dict[AccountName, BaseAccount] = {}
-        self.strategies: dict[
-            str, BaseStrategy | ActorProxy[BaseStrategy]
-        ] = {}  # NOTE: sub-strategies
+        self.__mixin_post_init__(ComponentType.strategy, *args, **kwargs)
         self._is_substrategy = False
-        # TODO: add venue
         self._venues: dict[TradingVenue, BaseVenue] = {}
+        self._accounts: dict[AccountName, BaseAccount] = {}
         self._order_manager = OrderManager()
         self._portfolio_manager = PortfolioManager()
         self._risk_manager = RiskManager()
-        # In-process handle to the engine, injected by TradeEngine._setup() ONLY on the
-        # pure-local path (not self._is_using_zmq()). Stays None when ZMQ/Ray is in use
-        self._engine: TradeEngine | None = None
-        self.__mixin_post_init__(
-            *args, **kwargs
-        )  # calls ComponentMixin.__mixin_post_init__()
+        # NOTE: sub-strategies
+        self.strategies: dict[str, BaseStrategy | ActorProxy[BaseStrategy]] = {}
 
     @abstractmethod
     def trade(self, X: pl.DataFrame) -> list[BaseOrder]:
@@ -88,32 +81,63 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
 
     rm = risk_manager
 
-    def get_component(
-        self, name: ComponentName
-    ) -> Component | ActorProxy[Component] | None:
+    def get_component(self, name: ComponentName) -> Component | ComponentProxy | None:
         return self.strategies.get(name, None) or super().get_component(name)
 
-    def get_components(self) -> list[Component | ActorProxy[Component]]:
+    def get_components(self) -> list[Component | ComponentProxy]:
         return [*self.strategies.values(), *super().get_components()]
 
     def get_accounts(self) -> list[BaseAccount]:
         return list(self._accounts.values())
 
+    def get_venue(self, name: TradingVenue) -> BaseVenue | None:
+        return self._venues.get(name, None)
+
     def is_substrategy(self) -> bool:
         return self._is_substrategy
 
-    @ray_method
-    def _mark_as_substrategy(self):
-        self._is_substrategy = True
+    @override
+    def _hydrate(
+        self,
+        name: ComponentName,
+        run_mode: RunMode,
+        resolution: Resolution | str,
+        engine_context: BaseEngineContext[Any],
+        df_form: Literal["wide", "long"],
+        is_substrategy: bool = False,
+    ):
+        """
+        Args:
+            is_substrategy: True when added by a parent strategy, False when added by the engine.
+                Passed through hydration so that an ActorProxy applies it only when its actor is created.
+        """
+        super()._hydrate(
+            name=name,
+            run_mode=run_mode,
+            resolution=resolution,
+            engine_context=engine_context,
+            df_form=df_form,
+        )
+        self._is_substrategy = is_substrategy
+
+    @override
+    def to_dict(self) -> dict[str, Any]:
+        """Adds strategy-only fields, kept out of _identity_fields() so they don't change component_id."""
+        return {
+            **super().to_dict(),
+            "is_substrategy": self.is_substrategy(),
+            # NOTE: name -> venue only, never the account object, it holds credentials
+            "accounts": {
+                name: account.venue for name, account in self._accounts.items()
+            },
+            "venues": sorted(self._venues),
+        }
 
     def _identity_fields(self) -> dict[str, Any]:
         return {
             **super()._identity_fields(),
             "strategies": sorted(self.strategies),
         }
-
-    def _set_engine(self, engine: TradeEngine):
-        self._engine = engine
 
     def add_account(self, account: BaseAccount) -> BaseAccount:
         if self.is_substrategy():
@@ -126,7 +150,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
             raise ValueError(f"account name {account.name} is already registered")
         return account
 
-    def add_strategy(
+    def add_strategy[StrategyT: BaseStrategy](
         self,
         strategy: StrategyT | ActorProxy[StrategyT],
         resolution: str = "",
@@ -149,8 +173,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
             The added child strategy or its remote proxy. Returns ``None`` when
             adding a local child strategy to a remote parent strategy.
         """
-        strategy._mark_as_substrategy()
-        strategy = self._add_component(
+        return self._add_component(
             component=strategy,
             resolution=resolution,
             name=name,
@@ -158,11 +181,6 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
             ray_actor_options=ray_actor_options,
             **ray_kwargs,
         )
-        # NOTE: must be called AFTER hydration, because strategy may be an ActorProxy,
-        # need to mark it as a substrategy after its creation
-        if strategy is not None:
-            strategy._mark_as_substrategy()
-        return strategy
 
     def signalize(self, X: pl.DataFrame) -> Signals:
         """Creates signals of this component
@@ -252,7 +270,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
         if self._databoy.is_using_zmq():
             self._databoy._data_zmq.send(...)  # TODO: draft only
         else:
-            venue = self._engine.get_venue(account.venue)
+            venue = self.get_venue(account.venue)
             venue._run_coroutine_threadsafe(venue.place_orders, args=(orders,))
         return orders
 

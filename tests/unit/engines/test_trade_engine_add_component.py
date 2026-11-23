@@ -363,9 +363,8 @@ class TestComponentAddRemote:
         assert other.features == {"ema": proxy}
         assert proxy.resolution == Resolution("1m")
         assert proxy._hydrate_fields is hydrate_fields
-        # the proxy's component type is checked on its actor, so the actor is created here
-        create_actor.assert_called_once()
-        feature_actor._hydrate.remote.assert_called_once_with(**hydrate_fields)
+        # the proxy's component type is read as a plain attribute, so the actor stays lazy
+        create_actor.assert_not_called()
 
     def test_existing_proxy_finer_than_parent_is_rejected(
         self, engine: TradeEngine, strategy: MyStrategy, feature_actor: Any
@@ -377,18 +376,14 @@ class TestComponentAddRemote:
         with pytest.raises(ValueError, match="is finer than parent"):
             coarse.add_feature(proxy)
 
-    def test_remote_substrategy_actor_is_hydrated_and_marked(
-        self, strategy: MyStrategy, create_actor: Any, ray_get: Any
+    def test_remote_substrategy_is_marked_without_creating_the_actor(
+        self, strategy: MyStrategy, create_actor: Any
     ):
-        actor = create_actor.return_value
-
         proxy = strategy.add_strategy(MyStrategy(), name="sub", num_cpus=1)
 
         assert isinstance(proxy, ActorProxy)
         assert strategy.strategies == {"sub": proxy}
-        # marking the sub-strategy is a remote call, it creates the actor and hydrates it first
-        create_actor.assert_called_once()
+        # the sub-strategy flag rides in the hydrate fields, applied when the actor is created
+        create_actor.assert_not_called()
         assert proxy._hydrate_fields is not None
-        actor._hydrate.remote.assert_called_once_with(**proxy._hydrate_fields)
-        actor._mark_as_substrategy.remote.assert_called_once_with()
-        assert ray_get.call_count == 2
+        assert proxy._hydrate_fields["is_substrategy"] is True

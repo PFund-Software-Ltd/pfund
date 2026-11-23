@@ -40,6 +40,7 @@ classifiers = [
 ]
 requires-python = ">=3.13"
 dependencies = [
+    "pfund-blocks>=0.0.7",
     "pfeed>=0.0.25",
     # "mtflow>=0.0.1.dev2",
     "apscheduler>=3.11.3",

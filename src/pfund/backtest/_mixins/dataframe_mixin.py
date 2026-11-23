@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, override
 
 if TYPE_CHECKING:
+    import polars as pl
     from narwhals.typing import IntoDataFrame
 
     from pfund.backtest.cv.cv_fold import CVFold
@@ -29,6 +30,30 @@ class BacktestDataFrameMixin(DataFrameMixin):
     @property
     def folds(self) -> tuple[CVFold, ...]:
         return self._folds
+
+    @override
+    def get_df(
+        self,
+        *,
+        kind: Literal["data", "features", "signals", "trading", "full"] = "full",
+        data_category: DataCategory | str | None = DataCategory.MARKET_DATA,
+        window_size: int | None = None,
+    ) -> pl.DataFrame:
+        # store._df is untrimmed in backtesting (_max_rows is None),
+        # apply the real max_rows on access so users see the df live trading would keep
+        # NOTE: kind="full" drifts slightly from live trading. full_df outer-joins data_df with the
+        # trading df and applies window_size AFTER the join. In live trading, store._df is trimmed
+        # BEFORE the join, so when data_df has more rows than max_rows, live full_df keeps the older
+        # data rows with null trading columns, while here they're trimmed away. The last max_rows
+        # rows are identical. store._df can't be trimmed in backtesting since it's the data artifact.
+        max_rows = self.config["max_rows"]
+        if kind != "data" and max_rows is not None:
+            window_size = (
+                max_rows if window_size is None else min(window_size, max_rows)
+            )
+        return super().get_df(
+            kind=kind, data_category=data_category, window_size=window_size
+        )
 
     def _resolve_dataset_splits(self) -> None:
         from pfund.backtest.cv.cross_validation import resolve_folds

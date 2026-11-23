@@ -3,14 +3,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
+    import equinox as eqx
     import polars as pl
     import torch.nn as nn
-    import equinox as eqx
     from flax import linen
-    from sklearn.base import BaseEstimator
-    from numpy.typing import NDArray
-    from torch import Tensor
     from jax import Array
+    from numpy.typing import NDArray
+    from sklearn.base import BaseEstimator
+    from torch import Tensor
 
     from pfund.typing import Signals
 
@@ -20,9 +20,9 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from pfund.enums import ArtifactType, ComponentType
 from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.components.models.model_meta import MetaModel
+from pfund.enums import ArtifactType, ComponentType
 
 
 def _get_caller_source_artifact_path() -> str | None:
@@ -51,11 +51,8 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
     _allowed_model_method_collisions: ClassVar[frozenset[str]] = frozenset({"predict"})
 
     def __init__(self, model: UnderlyingModel, *args: Any, **kwargs: Any):
-        self.component_type: ComponentType = ComponentType.model
+        self.__mixin_post_init__(ComponentType.model, model, *args, **kwargs)
         self.model: UnderlyingModel = model
-        self.__mixin_post_init__(
-            model, *args, **kwargs
-        )  # calls ComponentMixin.__mixin_post_init__()
         # Built-in adapters otherwise resolve their source artifact to this
         # pfund file. Capture the user's construction site here so both
         # PyTorchModel(model) and automatic wrapping retain user provenance.

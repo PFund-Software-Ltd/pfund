@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from pfund.components.actor_proxy import ActorProxy
 from pfund.components.features.feature_base import BaseFeature
 from pfund.components.models.model_base import BaseModel
 from pfund.components.strategies.strategy_base import BaseStrategy
 
 type Component = BaseStrategy | BaseModel | BaseFeature
+type ComponentProxy = (
+    ActorProxy[BaseStrategy] | ActorProxy[BaseModel] | ActorProxy[BaseFeature]
+)
 type EngineName = str
 type ComponentName = str
 type ColumnName = str

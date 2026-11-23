@@ -2487,6 +2487,7 @@ dependencies = [
     { name = "apscheduler" },
     { name = "numba" },
     { name = "pfeed" },
+    { name = "pfund-blocks" },
 ]
 
 [package.optional-dependencies]
@@ -2520,6 +2521,7 @@ requires-dist = [
     { name = "numba", specifier = ">=0.68.1" },
     { name = "pfeed", specifier = ">=0.0.25" },
     { name = "pfeed", extras = ["ray"], marker = "python_full_version < '3.15' and extra == 'ray'", specifier = ">=0.0.25" },
+    { name = "pfund-blocks", specifier = ">=0.0.7" },
     { name = "pfund-bybit", extras = ["data"], marker = "extra == 'bybit'", specifier = ">=0.0.4" },
     { name = "safetensors", marker = "extra == 'torch'", specifier = ">=0.8.0" },
     { name = "scikit-learn", marker = "extra == 'sklearn'", specifier = ">=1.9.1" },
