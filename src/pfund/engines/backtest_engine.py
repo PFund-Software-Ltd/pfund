@@ -388,6 +388,9 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             else:
                 backtestee = strategy
             backtest_result = self._backtest(backtestee, num_cpus=num_cpus)
+            if self.backtest_mode == BacktestMode.VECTORIZED:
+                backtestee.store._df = backtest_result
+                backtestee.store.persist_to_datalake()
 
         except Exception:
             self._logger.exception("Error in backtesting:")
@@ -403,13 +406,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         num_chunks = self.context.num_chunks
         is_using_ray = num_chunks > 1
         is_strategy = backtestee.is_strategy()
-        # each chunk starts from a fresh state, so a feature/model would warm up again at every chunk boundary,
-        # and without the chunk_num column (strategy-only) its artifact would look like one continuous run
-        if is_using_ray and not is_strategy:
-            raise ValueError(
-                f"{backtestee} cannot be backtested in chunks (num_chunks={num_chunks}), only strategies can. "
-                + "Run it with num_chunks=1."
-            )
 
         def _run_backtest(
             backtestee: Component,
@@ -543,9 +539,4 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             ]
         # combine the chunks into one df, ordered by (chunk_num, date): chunks are contiguous date ranges,
         # and the results are kept in chunk order.
-        backtest_df = pl.concat(backtest_dfs, how="vertical")
-        if self.backtest_mode == BacktestMode.VECTORIZED:
-            trading_store = backtestee.store
-            trading_store._df = backtest_df
-            trading_store.persist_to_datalake()
-        return backtest_df
+        return pl.concat(backtest_dfs, how="vertical")
