@@ -4,8 +4,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Literal, cast, override
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from pfund_blocks.datas import BarData, BaseData
     from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund_blocks.resolution import Resolution
@@ -101,6 +99,9 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
         cast("Any", component).__class__ = Backtest
         cast("BacktestMixin", component)._init_backtest_state()
         return component
+
+    def set_top_component(self):
+        self._is_top_component = True
 
     @property
     def context(self) -> BacktestEngineContext:
@@ -201,44 +202,72 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
 
         return isinstance(self, _DummyStrategy)
 
-    @staticmethod
-    def _validate_backtest_signature(
-        func: Callable[[pl.DataFrame], Any],
-    ):
-        """Validates the signature of the backtest() function.
-        The backtest() function must accept exactly 1 argument (df) and return the backtested dataframe.
+    def _validate_vectorized_backtest_inputs(self, df: pl.DataFrame) -> None:
+        """Validates the strategy's backtest() and its input df before running a vectorized backtest.
+
+        backtest() must exist and be callable with exactly one argument (df).
+        Its return value can only be checked after the call, see _vectorized_backtest().
+
+        The df must be in LONG form: one row per (date, product, resolution) bar
+        with shared OHLC columns, unique keys, sorted by date:
+
+            date | product | resolution | open | high | low | close | ...
+            d1   | BTC     | 1d         | ...
+            d1   | ETH     | 1d         | ...
+            d2   | BTC     | 1d         | ...
+
+        Wide form (e.g. 'BTC_close', 'ETH_close' columns) is not supported.
         """
-        import ast
         import inspect
-        import textwrap
 
-        sig = inspect.signature(func)
-        params = [p for p in sig.parameters if p not in ("self", "cls")]
-        if len(params) != 1:
-            raise TypeError(
-                f"backtest() must accept exactly 1 argument (df), got {len(params)}: {params}"
+        from pfund.components.bar_dataframe import KEY_COLS
+
+        backtest = getattr(self, "backtest", None)
+        if not callable(backtest):
+            raise NotImplementedError(
+                f"{self} has no backtest() method, which VECTORIZED backtesting requires. "
+                + "Implement `def backtest(self, df: pl.DataFrame) -> pl.DataFrame` "
+                + "that returns the backtested df, or backtest it in EVENT_DRIVEN mode instead."
             )
-
+        # dry-runs the argument matching of backtest(df) without calling it
         try:
-            source = textwrap.dedent(inspect.getsource(func))
-            tree = ast.parse(source)
-            func_def = tree.body[0]
-            has_return = any(
-                isinstance(node, ast.Return) and node.value is not None
-                for node in ast.walk(func_def)
+            inspect.signature(backtest).bind(None)
+        except TypeError as err:
+            raise TypeError(
+                f"backtest() must be callable with exactly 1 argument (df): {err}"
+            ) from None
+
+        # NOTE: volume is not required, the kernels ignore it (fills never depend on volume)
+        ohlc_cols = ["open", "high", "low", "close"]
+        missing_ohlc_cols = [c for c in ohlc_cols if c not in df.columns]
+        if missing_ohlc_cols:
+            raise ValueError(
+                f"missing column(s) {missing_ohlc_cols} — the dataframe must be in LONG form: "
+                + "one row per (date, product, resolution) bar with shared OHLC columns "
+                + f"({', '.join(ohlc_cols)}). "
+                + "Wide form (e.g. 'BTC_close', 'ETH_close') is not supported."
             )
-            if not has_return:
-                raise TypeError(
-                    "backtest() must return the backtested dataframe. No return statement found. Did you forget to return df?"
-                )
-        except OSError:
-            pass  # source not available (e.g. built-in), skip check
+        missing_key_cols = [c for c in KEY_COLS if c not in df.columns]
+        if missing_key_cols:
+            raise ValueError(
+                f"backtesting requires columns ({', '.join(KEY_COLS)}) "
+                + f"to identify each bar — missing column(s) {missing_key_cols}"
+            )
+        if df.select(KEY_COLS).is_duplicated().any():
+            raise ValueError(
+                f"({', '.join(KEY_COLS)}) keys must be unique for backtesting"
+            )
+        # bars are processed positionally per (product, resolution) combo: an
+        # unsorted df would silently produce garbage results
+        if not df.get_column("date").is_sorted():
+            raise ValueError("the dataframe must be sorted by 'date' (ascending)")
 
     @staticmethod
-    def _setup_backtest_df_for_vectorized_mode(df: pl.DataFrame) -> pl.DataFrame:
-        """Prepare a polars dataframe for FAST backtesting.
+    def _setup_df_for_vectorized_backtest(df: pl.DataFrame) -> None:
+        """Prepares a fresh vectorized backtest session for the df's class.
 
-        Attaches the two ENTRY methods to the df's class so they survive native
+        Clears the product and portfolio registries of any previous configuration,
+        then attaches the two ENTRY methods to the df's class so they survive native
         operations (filter/join/... construct plain dataframes of the same class):
             create_signal — product backtesting
             create_weight — portfolio backtesting
@@ -250,41 +279,6 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
         create_weight() attaches PortfolioBacktestMixin's backtest. (Consequence:
         chains must run sequentially — finish one chain before starting one of
         the other mode.)
-
-        Validates that the df is in LONG form — one row per bar with shared OHLCV
-        columns; for multiple (product, resolution) combos, one row per
-        (date, resolution, product):
-
-            date | resolution | product | open | high | low | close | volume
-            d1   | 1d         | BTC     | ...
-            d1   | 1d         | ETH     | ...
-            d2   | 1d         | BTC     | ...
-
-        Wide form (e.g. 'BTC_close', 'ETH_close' columns) is not supported.
-
-        Product backtesting is configured per (product, resolution) combo and
-        executed once — the configure chain only REGISTERS inputs:
-
-            for product, resolution in combos:
-                (df.filter(...)  # one combo
-                   .create_signal(...).open_position(...).close_position(...))
-            df = df.backtest()   # ONE call: kernel per configured combo
-
-        Dynamic periods (optional): wrap the configure loop in an outer period
-        loop and pass data_range=(period_start, period_end) to create_signal()
-        to register each combo per period with a point-in-time universe — all
-        params may vary per period. Registration controls instructions, never
-        data: the kernel still runs once per combo over its FULL rows, so
-        positions carry across periods and stops stay live on every bar (see
-        create_signal's docstring).
-
-        Every df must carry (date, resolution, product) — MarketDataStore
-        guarantees them; a single-product df is simply one combo, so the fluent
-        df.create_signal(...)....backtest() chain works on it directly.
-        Calling _setup_backtest_df_for_vectorized_mode starts a fresh session (clears the product
-        and portfolio registries of any previous configuration).
-
-        Returns the df unchanged.
         """
         from pfund.backtest._mixins import (
             portfolio_backtest_mixin,
@@ -302,54 +296,12 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
         df_class.create_signal = ProductBacktestMixin.create_signal  # ty: ignore[missing-attribute]
         df_class.create_weight = PortfolioBacktestMixin.create_weight  # ty: ignore[missing-attribute]
 
-        if "close" not in df.columns:
-            raise ValueError(
-                "'close' column not found — the dataframe must be in LONG form: "
-                + "one row per bar with shared OHLCV columns "
-                + "(one row per (date, product) for multiple products). "
-                + "Wide form (e.g. 'BTC_close', 'ETH_close') is not supported."
-            )
-        from pfund.components.bar_dataframe import KEY_COLS
-
-        key_cols = KEY_COLS
-        missing = [c for c in key_cols if c not in df.columns]
-        if missing:
-            raise ValueError(
-                f"backtesting requires columns ({', '.join(key_cols)}) "
-                + f"to identify each bar — missing column(s) {missing}"
-            )
-        if df.select(key_cols).is_duplicated().any():
-            raise ValueError(
-                f"({', '.join(key_cols)}) keys must be unique for backtesting"
-            )
-        # bars are processed positionally per (product, resolution) combo: an
-        # unsorted df would silently produce garbage results
-        if not df.get_column("date").is_sorted():
-            raise ValueError("the dataframe must be sorted by 'date' (ascending)")
-        return df
-
-    def set_top_component(self):
-        self._is_top_component = True
-
     def _vectorized_backtest(self, X: pl.DataFrame) -> pl.DataFrame:
         """Runs a vectorized backtest and completes the feature-only trading dataframe with the resulting signals."""
-        has_backtest_func = callable(getattr(self, "backtest", None))
         if self.is_strategy():
-            # only after we know a valid backtest() exists: prepares the df for the
-            # user's chain (attaches create_signal/create_weight, validates LONG form,
-            # clears registries); returns df unchanged
-            df = self._setup_backtest_df_for_vectorized_mode(X)
-
-            if not has_backtest_func:
-                raise NotImplementedError(
-                    f"{self} has no backtest() method, which VECTORIZED backtesting requires. "
-                    + "Implement `def backtest(self, df: pl.DataFrame) -> pl.DataFrame` "
-                    + "that returns the backtested df, or backtest it in EVENT_DRIVEN mode instead."
-                )
-            else:
-                backtest = cast("BacktestStrategyMixin", self).backtest
-                self._validate_backtest_signature(backtest)
-                backtest_df: Any = backtest(df)
+            self._validate_vectorized_backtest_inputs(X)
+            self._setup_df_for_vectorized_backtest(X)
+            backtest_df: Any = cast("BacktestStrategyMixin", self).backtest(X)
 
             # a lazy chain is fine, the backtest only needs its result
             if isinstance(backtest_df, pl.LazyFrame):
@@ -360,7 +312,7 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
                     f"{self.name}.backtest() must return the backtested polars DataFrame (or LazyFrame), got {type(backtest_df).__name__}. Did you forget to return df?"
                 )
             # check if returns a new df
-            if backtest_df is df:
+            if backtest_df is X:
                 cprint(
                     f"WARNING: {self.name} backtest() returned the same df unchanged.\n"
                     + "This is fine if you only used native e.g. Polars/Pandas operations on the original df.\n"
@@ -371,7 +323,7 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
                 )
             return backtest_df
         else:
-            if has_backtest_func:
+            if callable(getattr(self, "backtest", None)):
                 raise TypeError(
                     f"{self} defines a backtest() method, but only strategies can have one."
                 )
