@@ -20,6 +20,7 @@ from pfund.components.bar_dataframe import (
     KEY_COLS as BAR_KEY_COLS,
     PIVOT_COLS as BAR_PIVOT_COLS,
     align_df_to_spine,
+    long_bar_df_to_wide,
     pivot_long_to_wide,
     reorder_key_cols,
     validate_spine_df,
@@ -286,15 +287,7 @@ class BacktestDataFrameMixin(DataFrameMixin):
 
             validate_spine_df(df)
             if self.df_form == "wide":
-                value_cols = [col for col in df.columns if col not in BAR_KEY_COLS]
-                if value_cols:
-                    df = pivot_long_to_wide(
-                        df,
-                        index_col=BAR_INDEX_COL,
-                        pivot_cols=BAR_PIVOT_COLS,
-                    )
-                else:
-                    df = df.select(BAR_INDEX_COL).unique().sort(BAR_INDEX_COL)
+                df = long_bar_df_to_wide(df)
         else:
             spine_cols = BAR_KEY_COLS if self.df_form == "long" else [BAR_INDEX_COL]
             spine_dfs = [

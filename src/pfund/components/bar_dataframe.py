@@ -136,6 +136,21 @@ def pivot_long_to_wide(
     return wide.rename(rename).sort(index_col)
 
 
+def long_bar_df_to_wide(df: nw.DataFrame[Any]) -> nw.DataFrame[Any]:
+    """Converts a long-form bar dataframe to wide form.
+
+    A dataframe with only key columns has nothing to pivot, so only its
+    unique, sorted index column is kept.
+
+    Args:
+        df: bar dataframe in long form, keyed by ``KEY_COLS``
+    """
+    value_cols = [col for col in df.columns if col not in KEY_COLS]
+    if value_cols:
+        return pivot_long_to_wide(df, index_col=INDEX_COL, pivot_cols=PIVOT_COLS)
+    return df.select(INDEX_COL).unique().sort(INDEX_COL)
+
+
 def unpivot_wide_to_long(
     df: nw.DataFrame[Any],
     *,

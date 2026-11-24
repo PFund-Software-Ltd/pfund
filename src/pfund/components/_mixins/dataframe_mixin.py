@@ -12,10 +12,9 @@ from pfund.components._mixins.base_mixin import ComponentBaseMixin
 from pfund.components.bar_dataframe import (
     INDEX_COL as BAR_INDEX_COL,
     KEY_COLS as BAR_KEY_COLS,
-    PIVOT_COLS as BAR_PIVOT_COLS,
     aggregate_events_by_bar,
     align_df_to_spine,
-    pivot_long_to_wide,
+    long_bar_df_to_wide,
     reorder_key_cols,
 )
 
@@ -100,20 +99,10 @@ class DataFrameMixin(ComponentBaseMixin):
             # Data stores are canonically long-form. full_df follows the
             # component's configured form, just like its trading dataframe.
             if data_df is not None and self.df_form == "wide":
-                data_value_cols = [
-                    col for col in data_df.columns if col not in BAR_KEY_COLS
-                ]
-                if data_value_cols:
-                    data_df = cast(
-                        "pl.DataFrame",
-                        pivot_long_to_wide(
-                            nw.from_native(data_df),
-                            index_col=BAR_INDEX_COL,
-                            pivot_cols=BAR_PIVOT_COLS,
-                        ).to_native(),
-                    )
-                else:
-                    data_df = data_df.select(BAR_INDEX_COL).unique().sort(BAR_INDEX_COL)
+                data_df = cast(
+                    "pl.DataFrame",
+                    long_bar_df_to_wide(nw.from_native(data_df)).to_native(),
+                )
 
             trading_df: pl.DataFrame | None = self.store._df
 
