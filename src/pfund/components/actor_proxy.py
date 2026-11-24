@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, cast, overload
+from typing import TYPE_CHECKING, Any, Literal, Self, cast, overload
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from ray.actor import ActorClass, ActorHandle
 
     from pfund.components.features.feature_base import BaseFeature
@@ -100,6 +102,14 @@ class ActorProxy[ComponentT: Component]:
                 str(source_artifact_path)
             )
         )
+        # NOTE: the actor rebuilds the component from its constructor args only,
+        # so config/params loaded on the local instance (e.g. via load_params()) must be pushed explicitly
+        ray.get(
+            # NOTE: getattr() for the same reason as in _ensure_actor()
+            getattr(actor, "_set_config_and_params").remote(  # noqa: B009
+                component.config, component.params
+            )
+        )
         return actor
 
     @property
@@ -114,6 +124,50 @@ class ActorProxy[ComponentT: Component]:
     # NOTE: added __setstate__ and __getstate__ to avoid ray's serialization issues when returning ActorProxy objects
     def __setstate__(self, state: dict[str, Any]) -> None:
         self.__dict__.update(state)
+
+    def load_config(
+        self, config: dict[str, Any] | None = None, file_path: str | Path = ""
+    ) -> Self:
+        """Loads config into the remote component, see ComponentBaseMixin.load_config.
+
+        Returns:
+            The proxy itself (not the remote component), so the call can be chained.
+        """
+        return self._load("config", config, file_path)
+
+    def load_params(
+        self, params: dict[str, Any] | None = None, file_path: str | Path = ""
+    ) -> Self:
+        """Loads params into the remote component, see ComponentBaseMixin.load_params.
+
+        Returns:
+            The proxy itself (not the remote component), so the call can be chained.
+        """
+        return self._load("params", params, file_path)
+
+    def _load(
+        self,
+        kind: Literal["config", "params"],
+        values: dict[str, Any] | None,
+        file_path: str | Path,
+    ) -> Self:
+        if self._actor is None:
+            # actor not created yet, load into the local instance,
+            # _create_actor() pushes its config/params to the actor on creation
+            getattr(self._component, f"load_{kind}")(values, file_path)
+        else:
+            import ray
+
+            # read the file here, in the caller's process, so the actor never needs the file
+            # (it may run on another node), then only the dict is sent over
+            values = self._component._load_dict_or_toml(kind, values, file_path)
+            # NOTE: not forwarded via __getattr__: load_*() returns the component itself,
+            # which Ray would serialize and copy back here
+            ray.get(
+                # NOTE: getattr() for the same reason as in _ensure_actor()
+                getattr(self._actor, "_load_via_proxy").remote(kind, values)  # noqa: B009
+            )
+        return self
 
     def _add_component(
         self,

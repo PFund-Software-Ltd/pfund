@@ -46,19 +46,25 @@ class TALibIndicator(BaseFeature):
                 ) from exc
         self.indicator: TALibFunction = indicator
         super().__init__(indicator, *args, **kwargs)
-        if default_params := {
+        # NOTE: warned in _hydrate(), the logger is only set during hydration
+        self._default_params: dict[str, Any] = {
             k: v
             for k, v in self.get_indicator_params().items()
             if k not in self.__pfund_kwargs__
-        }:
-            self.logger.warning(
-                f"talib indicator {self.name} is using default parameters {default_params}"
-            )
+        }
+        default_params = self._default_params
         timeperiod = self.__pfund_kwargs__.get(
             "timeperiod", None
         ) or default_params.get("timeperiod", None)
         if timeperiod:
             self.config["lookback_period"] = int(timeperiod)
+
+    def _hydrate(self, *args: Any, **kwargs: Any) -> None:
+        super()._hydrate(*args, **kwargs)
+        if self._default_params:
+            self.logger.warning(
+                f"talib indicator {self.name} is using default parameters {self._default_params}"
+            )
 
     def _get_default_name(self) -> str:
         return self.get_indicator_name() or super()._get_default_name()

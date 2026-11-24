@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast, overload
+from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
 if TYPE_CHECKING:
     import polars as pl
@@ -24,8 +24,6 @@ from pathlib import Path
 
 from pfund_blocks.enums import DataCategory
 from pfund_blocks.resolution import Resolution
-from pfund_kit.style import RichColor, TextStyle, cprint
-from pfund_kit.utils import toml
 
 from pfund.components._mixins.base_mixin import ComponentBaseMixin
 from pfund.components._mixins.dataframe_mixin import DataFrameMixin
@@ -36,13 +34,6 @@ from pfund.utils.decorators import ray_method
 
 
 class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
-    config: ClassVar[dict[str, Any]] = {
-        "max_rows": None,  # None means no limit, component will keep all data in memory
-        "warmup_period": None,  # None means no warmup period, component will start right away
-        "lookback_period": None,  # None means using the whole dataset
-    }
-    params: ClassVar[dict[str, Any]] = {}
-
     def _hydrate(
         self,
         name: ComponentName,
@@ -66,7 +57,7 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
         self._df_form = df_form
         self._set_name(name)
         self._set_resolution(resolution)
-        self._set_logger(self.logger)
+        self._setup_logging()
 
     def _update_data_df(self, data: BaseData) -> None:
         data_store = self.get_data_store(data.category)
@@ -112,40 +103,6 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
     def _publish_signals(self, signals: Signals, data: BarData):
         if self._databoy.is_using_zmq():
             self._databoy._publish_signals(signals, data)
-
-    @classmethod
-    def load_config(cls, config: dict[str, Any] | None = None, file_path: str = ""):
-        """Loads config from a dict or a TOML file, overriding the class-level defaults.
-        Args:
-            config: Config dict to set directly.
-            file_path: Path to a TOML file to load config from.
-        """
-        if config and file_path:
-            raise ValueError("config and file_path cannot be provided at the same time")
-        if config:
-            cls.config = config
-        elif file_path:
-            config = toml.load(file_path)
-            if config is None:
-                raise ValueError(f"Failed to load config from {file_path}")
-            cls.config = config
-
-    @classmethod
-    def load_params(cls, params: dict[str, Any] | None = None, file_path: str = ""):
-        """Loads params from a dict or a TOML file, overriding the class-level defaults.
-        Args:
-            params: Params dict to set directly.
-            file_path: Path to a TOML file to load params from.
-        """
-        if params and file_path:
-            raise ValueError("params and file_path cannot be provided at the same time")
-        if params:
-            cls.params = params
-        elif file_path:
-            params = toml.load(file_path)
-            if params is None:
-                raise ValueError(f"Failed to load params from {file_path}")
-            cls.params = params
 
     def _check_input_sources(self):
         """Check that the component can establish its spine and features.
@@ -194,54 +151,6 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
             raise ValueError(
                 f"{self.name} has no features: add a child component via add_model() / add_feature(), "
                 + "or pass as_features=True when adding data"
-            )
-
-    def _check_config(self):
-        """Validates config and writes normalized values back into self.config,
-        so runtime readers (e.g. is_ready() comparing row count against warmup_period)
-        never see None."""
-        for key in ("max_rows", "warmup_period", "lookback_period"):
-            if key not in self.config:
-                raise ValueError(f"{key} is not set in {self.name} config")
-        max_rows = self.config["max_rows"]
-        warmup_period = self.config["warmup_period"]
-        lookback_period = self.config["lookback_period"]
-        if max_rows is None:
-            cprint(
-                f"'max_rows' is None. {self.name} data will be UNBOUNDED",
-                style=TextStyle.BOLD + RichColor.YELLOW,
-            )
-        if lookback_period is None:
-            cprint(
-                f"'lookback_period' is None. {self.name} will use the WHOLE DATASET to compute signals",
-                style=TextStyle.BOLD + RichColor.YELLOW,
-            )
-        else:
-            assert lookback_period >= 1, (
-                f"{self.name} {lookback_period=} is less than 1, please set lookback_period >= 1"
-            )
-        if warmup_period is None:
-            # a lookback window of N rows needs at least N rows of history, so an unset
-            # warmup_period defaults to lookback_period instead of tripping the
-            # lookback <= warmup check below with a warmup the user never set
-            warmup_period = lookback_period or 0
-            if warmup_period:
-                cprint(
-                    f"'warmup_period' is None. defaulting to {lookback_period=} for {self.name}",
-                    style=TextStyle.BOLD + RichColor.YELLOW,
-                )
-            else:
-                cprint(
-                    f"'warmup_period' is None. {self.name} will be ready to compute signals IMMEDIATELY",
-                    style=TextStyle.BOLD + RichColor.YELLOW,
-                )
-            self.config["warmup_period"] = warmup_period
-        assert warmup_period >= 0, (
-            f"{self.name} {warmup_period=} is less than 0, please set warmup_period >= 0"
-        )
-        if lookback_period is not None and lookback_period > warmup_period:
-            raise ValueError(
-                f"{self.name} config: {lookback_period=} is greater than {warmup_period=}, please set lookback_period <= warmup_period"
             )
 
     def to_dict(self) -> dict[str, Any]:
