@@ -24,6 +24,7 @@ class ActorProxy[ComponentT: Component]:
         component: ComponentT,
         name: str,
         resolution: Resolution | str,
+        df_form: Literal["wide", "long"],
         component_type: ComponentType,
         engine_context: BaseEngineContext[Any],
         ray_actor_options: dict[str, Any] | None = None,
@@ -47,6 +48,7 @@ class ActorProxy[ComponentT: Component]:
         self._hydrate_fields: dict[str, Any] | None = None
         self.name: str = name
         self.resolution: Resolution = Resolution(resolution)
+        self.df_form: Literal["wide", "long"] = df_form
         self.component_type: ComponentType = component_type
         self.context: BaseEngineContext[Any] = engine_context
         if isinstance(self.context.settings, TradeEngineSettings):

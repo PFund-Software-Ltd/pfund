@@ -10,16 +10,12 @@ if TYPE_CHECKING:
 
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel, UnderlyingModel
-    from pfund.engines.contexts.base_engine_context import BaseEngineContext
     from pfund.typing import (
         Component,
         ComponentName,
         Signals,
     )
 
-import hashlib
-import json
-from functools import cached_property
 from pathlib import Path
 
 from pfund_blocks.enums import DataCategory
@@ -34,31 +30,6 @@ from pfund.utils.decorators import ray_method
 
 
 class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
-    def _hydrate(
-        self,
-        name: ComponentName,
-        run_mode: RunMode,
-        resolution: Resolution | str,
-        engine_context: BaseEngineContext[Any],
-        df_form: Literal["wide", "long"],
-    ):
-        """
-        Hydrates the component with necessary attributes after initialization.
-
-        Args:
-            name (ComponentName): The name to assign to this component.
-            run_mode (RunMode): The mode in which the component will run (e.g., local or remote).
-            resolution (Resolution | str): The data resolution used by this component.
-            engine_context (BaseEngineContext): The engine context associated with this component. It is None if the component is running in a remote process.
-            df_form: DataFrame layout used by this component.
-        """
-        self._context = engine_context
-        self._run_mode = run_mode
-        self._df_form = df_form
-        self._set_name(name)
-        self._set_resolution(resolution)
-        self._setup_logging()
-
     def _update_data_df(self, data: BaseData) -> None:
         data_store = self.get_data_store(data.category)
         data_store.update_df(data)
@@ -104,62 +75,12 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
         if self._databoy.is_using_zmq():
             self._databoy._publish_signals(signals, data)
 
-    def _check_input_sources(self):
-        """Check that the component can establish its spine and features.
-
-        Spine invariant:
-        - If the component has market data, that market data defines its spine.
-        - Otherwise, a wide component needs a same-resolution child, while a
-          long component needs a same-resolution long-form child so the child
-          can provide ``(date, product, resolution)`` keys.
-        - Same-resolution children collectively define the spine.
-        - Coarser children may contribute values but cannot define the missing
-          finer bars.
-        """
-        has_market_data = bool(self.market_data_store.get_datas())
-        if not has_market_data:
-            if self.is_strategy():
-                raise ValueError(
-                    f"{self.name} has no market data, did you forget to call add_data() / add_datas()?"
-                )
-            elif not self.components:
-                raise ValueError(
-                    f"{self.name} has no input source, did you forget to call add_data() / add_datas(), "
-                    + "or add a child component via add_model() / add_feature()?"
-                )
-            elif not any(
-                child.resolution.is_strict_equal(self.resolution)
-                and (self.df_form == "wide" or child.df_form == "long")
-                for child in self.components
-            ):
-                required_child = (
-                    "same-resolution child"
-                    if self.df_form == "wide"
-                    else "same-resolution long-form child"
-                )
-                raise ValueError(
-                    f"{self.name} has no market data and no {required_child} "
-                    + "to establish its spine"
-                )
-
-        # With no children, at least one populated data category must provide features.
-        has_data_features = any(
-            store.data_as_features and bool(store.get_datas())
-            for store in self.data_stores.values()
-        )
-        if not self.components and not has_data_features:
-            raise ValueError(
-                f"{self.name} has no features: add a child component via add_model() / add_feature(), "
-                + "or pass as_features=True when adding data"
-            )
-
     def to_dict(self) -> dict[str, Any]:
         return {
             "component_id": self.component_id,
-            **self._identity_fields(),
+            # the same snapshot component_id was hashed from, not recomputed, see _identity
+            **self._identity,
             "signal_cols": self._signal_cols,
-            "data_start": self.context.data_start,
-            "data_end": self.context.data_end,
             "run_mode": self.run_mode,
             "settings": self.settings.model_dump(),
         }
@@ -169,9 +90,7 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
             "class_name": self.__class__.__name__,
             "engine_name": self.context.name,
             "component_name": self.name,
-            "source_sha256": hashlib.sha256(
-                self._source_artifact.read_bytes()
-            ).hexdigest(),
+            "source_sha256": self._hash_source_files(),
             "resolution": repr(self.resolution),
             "component_type": self.component_type,
             "df_form": self._df_form,
@@ -179,26 +98,20 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
             "config": self.config,
             "params": self.params,
             "datas": [data.to_dict() for data in self.get_datas()],
-            "models": sorted(self.models),
-            "features": sorted(self.features),
+            "data_start": self.context.data_start,
+            "data_end": self.context.data_end,
+            # child ids, not names: a change in a child (e.g. params loaded from a TOML file)
+            # must change the parent's id too, otherwise a non-top component reuses its
+            # persisted df computed from the old child, see BacktestMixin._materialize()
+            "models": {
+                name: model.get_component_id()
+                for name, model in sorted(self.models.items())
+            },
+            "features": {
+                name: feature.get_component_id()
+                for name, feature in sorted(self.features.items())
+            },
         }
-
-    # Component identity must remain fixed after its first use. Runtime work can
-    # mutate objects in the identity signature (e.g. materializing a PyTorch
-    # LazyLinear), so recomputing this property could write one component's
-    # artifacts under different IDs. Keep this cached so every artifact uses
-    # the same ID for the lifetime of the component.
-    @cached_property
-    def component_id(self) -> str:
-        identity = self._identity_fields()
-        payload = json.dumps(
-            identity,
-            sort_keys=True,
-            separators=(",", ":"),
-            default=str,
-        ).encode()
-        digest = hashlib.sha256(payload).hexdigest()[:12]
-        return f"{identity['class_name']}-{digest}"
 
     @property
     def _source_artifact(self) -> Path:
@@ -371,6 +284,7 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
                     component,
                     name=component_name,
                     resolution=component_resolution,
+                    df_form=df_form,
                     component_type=component_type,
                     engine_context=self.context,
                     ray_actor_options=ray_actor_options,

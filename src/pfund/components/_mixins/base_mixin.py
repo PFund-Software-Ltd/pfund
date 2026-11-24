@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from pfund_blocks.typing import ProductName, TradingVenue
     from pfund_kit.logging.loggers import ColoredLogger
 
+    from pfund.components._mixins.component_mixin import ComponentMixin
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel
     from pfund.data_config import DataConfig
@@ -20,13 +21,19 @@ if TYPE_CHECKING:
 
 import copy
 import datetime
+import hashlib
+import json
 import logging
+from decimal import Decimal
+from enum import Enum
+from functools import cached_property
 from pathlib import Path
 
 from pfund_blocks.enums import DataCategory
 from pfund_blocks.enums.env import Environment
 from pfund_blocks.resolution import Resolution
 from pfund_kit.style import RichColor, TextStyle
+from pydantic import BaseModel as PydanticModel
 
 from pfund.components.actor_proxy import ActorProxy
 from pfund.databoy import DataBoy
@@ -257,6 +264,59 @@ class ComponentBaseMixin:
                 f"{self} config: {lookback_period=} is greater than {max_rows=}, please set lookback_period <= max_rows"
             )
 
+    def _check_input_sources(self):
+        """Check that the component can establish its spine and features.
+
+        Spine invariant:
+        - If the component has market data, that market data defines its spine.
+        - Otherwise, a wide component needs a same-resolution child, while a
+          long component needs a same-resolution long-form child so the child
+          can provide ``(date, product, resolution)`` keys.
+        - Same-resolution children collectively define the spine.
+        - Coarser children may contribute values but cannot define the missing
+          finer bars.
+        """
+        has_market_data = bool(self.market_data_store.get_datas())
+        if not has_market_data:
+            if self.is_strategy():
+                raise ValueError(
+                    f"{self.name} has no market data, did you forget to call add_data()?"
+                )
+            if not self.components:
+                raise ValueError(
+                    f"{self.name} has no market data or components, did you forget to call add_data(), add_model() or add_feature()?"
+                )
+            # children whose rows can serve as this component's spine:
+            spine_children = [
+                child
+                for child in self.components
+                # same resolution: a coarser child can't supply the finer bars
+                if child.resolution.is_strict_equal(self.resolution)
+                # a long parent needs (date, product) keys, a wide child has no product
+                and (self.df_form == "wide" or child.df_form == "long")
+            ]
+            if not spine_children:
+                required_child = (
+                    "same-resolution child"
+                    if self.df_form == "wide"
+                    else "same-resolution long-form child"
+                )
+                raise ValueError(
+                    f"{self.name} has no market data and no {required_child} "
+                    + "to establish its spine"
+                )
+
+        # With no children, at least one populated data category must provide features.
+        has_data_features = any(
+            store.data_as_features and bool(store.get_datas())
+            for store in self.data_stores.values()
+        )
+        if not self.components and not has_data_features:
+            raise ValueError(
+                f"{self.name} has no features: add a child component via add_model() / add_feature(), "
+                + "or pass as_features=True when adding data"
+            )
+
     @property
     def context(self) -> BaseEngineContext[TradeEngineSettings]:
         assert self._context is not None, "context is not set"
@@ -316,6 +376,44 @@ class ComponentBaseMixin:
     @property
     def store(self) -> TradingStore:
         return self._store
+
+    @property
+    def component_id(self) -> str:
+        payload = json.dumps(
+            self._identity, sort_keys=True, separators=(",", ":")
+        ).encode()
+        digest = hashlib.sha256(payload).hexdigest()[:12]
+        return f"{self._identity['class_name']}-{digest}"
+
+    @ray_method
+    def get_component_id(self) -> str:
+        """component_id as a method, so it also works through ActorProxy (Ray only forwards methods)."""
+        return self.component_id
+
+    def _hydrate(
+        self,
+        name: ComponentName,
+        run_mode: RunMode,
+        resolution: Resolution | str,
+        engine_context: BaseEngineContext[Any],
+        df_form: Literal["wide", "long"],
+    ):
+        """
+        Hydrates the component with necessary attributes after initialization.
+
+        Args:
+            name (ComponentName): The name to assign to this component.
+            run_mode (RunMode): The mode in which the component will run (e.g., local or remote).
+            resolution (Resolution | str): The data resolution used by this component.
+            engine_context (BaseEngineContext): The engine context associated with this component. It is None if the component is running in a remote process.
+            df_form: DataFrame layout used by this component.
+        """
+        self._context = engine_context
+        self._run_mode = run_mode
+        self._df_form = df_form
+        self._set_name(name)
+        self._set_resolution(resolution)
+        self._setup_logging()
 
     def _setup_scheduler(self):
         self._databoy._setup_scheduler()
@@ -403,9 +501,7 @@ class ComponentBaseMixin:
     def get_trading_store(self) -> TradingStore:
         return self.store
 
-    def get_data(
-        self, product: ProductName, resolution: Resolution | str
-    ) -> MarketData | None:
+    def get_data(self, product: ProductName, resolution: Resolution | str) -> MarketData | None:
         return self.market_data_store.get_data(product, resolution)
 
     def get_datas(self) -> list[BaseData]:
@@ -443,8 +539,11 @@ class ComponentBaseMixin:
     def components(self) -> list[Component | ComponentProxy]:
         return self.get_components()
 
-    def get_component(self, name: ComponentName) -> Component | ComponentProxy | None:
-        return self.models.get(name, None) or self.features.get(name, None)
+    def get_component(self, name: ComponentName) -> Component | ComponentProxy:
+        for components in (self.models, self.features):
+            if name in components:
+                return components[name]
+        raise KeyError(f"{self.name} has no component named {name!r}")
 
     def get_components(self) -> list[Component | ComponentProxy]:
         return [
@@ -460,19 +559,103 @@ class ComponentBaseMixin:
     def get_signal_cols(self) -> list[str]:
         return self._signal_cols
 
+    # Frozen at first use, so the component keeps one component_id for its lifetime: runtime work
+    # can mutate objects in the identity (e.g. a PyTorch LazyLinear materializing on its first
+    # forward pass), and recomputing it would write the component's artifacts under different ids,
+    # or record to_dict() fields that differ from the hashed ones.
+    @cached_property
+    def _identity(self) -> dict[str, Any]:
+        # NOTE: the json round trip turns every value into plain data, caching the dict alone would
+        # still hold the live objects, which can change later
+        return json.loads(
+            json.dumps(
+                cast("ComponentMixin", self)._identity_fields(),
+                default=self._encode_identity_value,
+            )
+        )
+
+    def _hash_source_files(self) -> str:
+        """Hashes the source artifact plus every user-written class file in the component's MRO.
+
+        So editing a user-defined base class (e.g. MyBase in my_base.py, subclassed by Alpha in alpha.py)
+        changes component_id too, not only editing the component's own file.
+        Classes from pfund, the standard library and installed packages are skipped.
+        """
+        import inspect
+        import sysconfig
+
+        excluded_dirs = [
+            Path(sysconfig.get_paths()[key]).resolve()
+            for key in ("stdlib", "platstdlib", "purelib", "platlib")
+        ]
+        # NOTE: the source artifact first, it is not always in the MRO,
+        # e.g. built-in model adapters use the user's construction site, see BaseModel.__init__
+        source_files = [cast("ComponentMixin", self)._source_artifact.resolve()]
+        for klass in type(self).__mro__:
+            if klass.__module__.split(".")[0] == "pfund":
+                continue
+            try:
+                source_file = inspect.getsourcefile(klass)
+            except TypeError:  # built-in classes, e.g. object
+                continue
+            if source_file is None:
+                continue
+            path = Path(source_file).resolve()
+            # e.g. a class defined in a notebook cell, its source is only in linecache, not on disk
+            if not path.is_file():
+                continue
+            is_excluded = any(path.is_relative_to(d) for d in excluded_dirs)
+            if is_excluded or path in source_files:
+                continue
+            source_files.append(path)
+
+        # NOTE: same as hashing the single file when there is only one, so existing ids are unchanged
+        digest = hashlib.sha256()
+        for path in source_files:
+            digest.update(path.read_bytes())
+        return digest.hexdigest()
+
+    def _encode_identity_value(self, value: Any) -> Any:
+        """Encodes a value json can't, used by component_id.
+
+        Only encodings that are the same in every run are allowed, otherwise the same
+        component setup would get a new component_id (and a new artifact folder) each run.
+        """
+        if isinstance(value, (set, frozenset)):
+            # NOTE: set order changes across processes (hash randomization), sort it
+            return sorted(value, key=repr)
+        if isinstance(value, Enum):
+            return value.value
+        if isinstance(value, (datetime.date, datetime.time)):
+            return value.isoformat()
+        if isinstance(value, (Path, Decimal, Resolution)):
+            return str(value)
+        if isinstance(value, PydanticModel):
+            return value.model_dump(mode="json")
+        # e.g. sklearn estimators, whose repr lists their params
+        if type(value).__repr__ is not object.__repr__:
+            return repr(value)
+        # object.__repr__ includes the memory address, which changes every run
+        raise TypeError(
+            f"{self} component_id: cannot encode {type(value).__name__} {value!r} stably, "
+            + f"define {type(value).__name__}.__repr__ to return a value that is the same in every run"
+        )
+
     def _get_default_name(self):
         return self.__class__.__name__
 
-    def _get_descendant_names(self) -> list[str]:
+    def _get_descendants(self) -> list[ComponentName]:
         """Names of every component below this one, at any depth.
 
+        A component added to several parents (e.g. the same `ActorProxy` added to two strategies)
+        is listed once per parent, so it is reported as a duplicate name.
         Works through `ActorProxy` too: the call is forwarded to the actor,
         so children added inside a remote component are included.
         """
         return [
             name
             for component in self.get_components()
-            for name in (component.name, *component._get_descendant_names())
+            for name in (component.name, *component._get_descendants())
         ]
 
     def _get_default_signal_cols(self, num_cols: int) -> list[str]:
@@ -544,13 +727,11 @@ class ComponentBaseMixin:
             return is_remote
         try:
             import ray
-
-            if not ray.is_initialized():
-                return False
-            return ray.get_runtime_context().get_actor_id() is not None
-        except Exception:
+        except ImportError:
             return False
-        return False
+        if not ray.is_initialized():
+            return False
+        return ray.get_runtime_context().get_actor_id() is not None
 
     def is_running(self) -> bool:
         return self._is_running

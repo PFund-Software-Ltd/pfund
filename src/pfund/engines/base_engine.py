@@ -258,6 +258,7 @@ class BaseEngine[
                 strategy,
                 name=strat,
                 resolution=resolution,
+                df_form="long",
                 component_type=ComponentType.strategy,
                 engine_context=self._context,
                 ray_actor_options=ray_actor_options,
@@ -313,9 +314,9 @@ class BaseEngine[
         # Ray already running means someone else owns it, e.g. this engine
         # runs inside a Ray actor; shutting it down would kill that actor.
         self._owns_ray = not is_ray_initialized()
-        self._assert_unique_component_names()
         self._is_running = True
         self._setup()
+
         for strategy in self._strategies.values():
             strategy.start()
 
@@ -336,7 +337,7 @@ class BaseEngine[
         names = [
             name.casefold()
             for strat, strategy in self._strategies.items()
-            for name in (strat, *strategy._get_descendant_names())
+            for name in (strat, *strategy._get_descendants())
         ]
         if duplicates := sorted({name for name in names if names.count(name) > 1}):
             raise ValueError(
@@ -347,6 +348,7 @@ class BaseEngine[
         for strategy in self._strategies.values():
             strategy: BaseStrategy | ActorProxy[BaseStrategy]
             strategy._gather()
+        self._assert_unique_component_names()
 
     def _teardown(self):
         from pfund_kit.utils.ray import shutdown_ray

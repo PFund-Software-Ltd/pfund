@@ -81,8 +81,10 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
 
     rm = risk_manager
 
-    def get_component(self, name: ComponentName) -> Component | ComponentProxy | None:
-        return self.strategies.get(name, None) or super().get_component(name)
+    def get_component(self, name: ComponentName) -> Component | ComponentProxy:
+        if name in self.strategies:
+            return self.strategies[name]
+        return super().get_component(name)
 
     def get_components(self) -> list[Component | ComponentProxy]:
         return [*self.strategies.values(), *super().get_components()]
@@ -136,7 +138,11 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
     def _identity_fields(self) -> dict[str, Any]:
         return {
             **super()._identity_fields(),
-            "strategies": sorted(self.strategies),
+            # child ids, not names, see ComponentMixin._identity_fields()
+            "strategies": {
+                name: strategy.get_component_id()
+                for name, strategy in sorted(self.strategies.items())
+            },
         }
 
     def add_account(self, account: BaseAccount) -> BaseAccount:
