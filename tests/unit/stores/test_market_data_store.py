@@ -260,7 +260,7 @@ def env(
 
 
 def get_closes(store: MarketDataStore) -> list[float]:
-    return cast("pl.DataFrame", store.get_df(to_native=True))["close"].to_list()
+    return store.get_df()["close"].to_list()
 
 
 class TestMaterialize:
@@ -398,7 +398,7 @@ class TestMaterialize:
 
         env.store.materialize()
 
-        df = cast("pl.DataFrame", env.store.get_df(to_native=True))
+        df = env.store.get_df()
         assert df.columns[:3] == ["date", "product", "resolution"]
         assert df["source_type"].unique().to_list() == ["BATCH"]
         # sorted by (date, product, resolution)
