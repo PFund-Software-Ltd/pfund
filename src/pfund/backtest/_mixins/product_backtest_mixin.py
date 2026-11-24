@@ -1,4 +1,5 @@
-from typing import Literal
+# ty: ignore[missing-attribute]
+from typing import Literal, cast
 
 import datetime
 from collections.abc import Callable
@@ -20,6 +21,18 @@ _Identity = tuple[str, str] | str
 # scatters each segment's values onto them, so positions carry across
 # CONTIGUOUS segments and stops are evaluated on every covered bar; a position
 # on an uncovered (gap) row is closed — out of the universe (close-on-exit).
+# columns backtest() writes to the result df, in this order
+OUTPUT_COLS = (
+    "signal",
+    "order_price",
+    "order_size",
+    "trade_price",
+    "trade_size",
+    "position",
+    "avg_price",
+    "stop_price",
+)
+
 _registry: dict[tuple, dict] = {}
 # ((start_date, end_date), "BTC", "1d"): {  # key = (data_range, *combo); combo in PIVOT_COLS order
 #   "signal": np.array([1.0, nan, -1.0, ...]),  # positional over the entry's rows
@@ -136,12 +149,12 @@ def _to_float64(series: nw.Series) -> np.ndarray:
     return arr.astype(np.float64, copy=False)
 
 
-def _slice_series_to_data_range(
+def _slice_series_to_data_range[T: IntoSeries | int | float | None](
     df: nw.DataFrame,
     data_range: tuple[datetime.date, datetime.date],
-    series_input: IntoSeries | int | float | None,
+    series_input: T,
     name: str,
-) -> IntoSeries | int | float | None:
+) -> T:
     """Slice a full-window series down to its data_range rows.
 
     Mirrors create_signal: every series passed in the chain is positional over
@@ -167,7 +180,7 @@ def _slice_series_to_data_range(
     mask = _data_range_mask(df.get_column("date").to_numpy(), start, end)
     backend = nw.get_native_namespace(nw_series)
     nmask = nw.new_series("_mask", mask, nw.Boolean, backend=backend)
-    return nw_series.filter(nmask).to_native()
+    return cast(T, nw_series.filter(nmask).to_native())
 
 
 def _group_positions(pivot_arrs: list[np.ndarray], n: int) -> dict[tuple, np.ndarray]:
@@ -430,11 +443,11 @@ class ProductBacktestMixin:
                     .alias("signal")
                 ).drop("_buy", "_sell")
             else:
-                cond = nw.from_native(
-                    buy_condition if buy_condition is not None else sell_condition,
-                    series_only=True,
-                )
-                value = 1 if buy_condition is not None else -1
+                if buy_condition is not None:
+                    cond, value = nw.from_native(buy_condition, series_only=True), 1
+                else:
+                    assert sell_condition is not None
+                    cond, value = nw.from_native(sell_condition, series_only=True), -1
                 df = df.with_columns(cond.alias("_cond"))
                 df = df.with_columns(
                     nw.when(nw.col("_cond")).then(value).otherwise(None).alias("signal")
@@ -641,6 +654,14 @@ class ProductBacktestMixin:
             raise ValueError(
                 "backtest() cannot run, setup should have been called properly:\n"
                 + _PATTERN
+            )
+        from pfund.backtest._mixins import portfolio_backtest_mixin
+
+        # the two modes have separate registries, a chain of the other mode would be silently ignored
+        if portfolio_backtest_mixin._registry:
+            raise ValueError(
+                "cannot mix create_signal() and create_weight() in one backtest, "
+                + "use either one per backtest()"
             )
         # Consume the configuration: one configuration feeds exactly one
         # backtest() call (cleared even if this call fails), so nothing is
@@ -872,13 +893,9 @@ class ProductBacktestMixin:
         # stop_price is added unconditionally (all-nan when no stop ever
         # triggered) so the output schema never depends on the data
         result_df = df.with_columns(
-            _make_series("signal", signal_out),
-            _make_series("order_price", order_price_out),
-            _make_series("order_size", order_size_out),
-            _make_series("trade_price", trade_price_out),
-            _make_series("trade_size", trade_size_out),
-            _make_series("position", position_out),
-            _make_series("avg_price", avg_price_out),
-            _make_series("stop_price", stop_price_out),
+            _make_series(name, values)
+            for name, values in zip(
+                OUTPUT_COLS, (signal_out, *output_arrs), strict=True
+            )
         )
         return result_df.to_native()

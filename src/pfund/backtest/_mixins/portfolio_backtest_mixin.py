@@ -5,15 +5,28 @@ import numpy as np
 from narwhals.typing import IntoDataFrameT, IntoSeries
 from pfund_kit.style import RichColor, TextStyle, cprint
 
-from pfund.backtest.portfolio_backtest_kernel import portfolio_backtest_loop_kernel
 from pfund.backtest._mixins.product_backtest_mixin import (
     _group_positions,
     _resolve_targets,
     _series_to_positional_float64,
     _to_float64,
 )
+from pfund.backtest.portfolio_backtest_kernel import portfolio_backtest_loop_kernel
 
 # one entry per create_weight() call
+# columns backtest() writes to the result df, in this order
+OUTPUT_COLS = (
+    "weight",
+    "order_price",
+    "order_size",
+    "trade_price",
+    "trade_size",
+    "position",
+    "avg_price",
+    "cash",
+    "equity",
+)
+
 _registry: dict[tuple, dict] = {}
 # ((start_date, end_date), "BYBIT_BTC_USDT_PERPETUAL"): {  # key = (data_range, product); range resolved
 #   "weight": np.array([nan, ..., 0.5]) — positional over the entry's target rows
@@ -153,7 +166,7 @@ class PortfolioBacktestMixin:
 
         # dynamically add backtest method to the dataframe class
         df_class = type(self)
-        df_class.backtest = PortfolioBacktestMixin.backtest
+        df_class.backtest = PortfolioBacktestMixin.backtest  # ty: ignore[missing-attribute]
         return self
 
     def backtest(
@@ -199,6 +212,14 @@ class PortfolioBacktestMixin:
             raise ValueError(
                 "backtest() cannot run, setup should have been called properly:\n"
                 + _PATTERN
+            )
+        from pfund.backtest._mixins import product_backtest_mixin
+
+        # the two modes have separate registries, a chain of the other mode would be silently ignored
+        if product_backtest_mixin._registry:
+            raise ValueError(
+                "cannot mix create_signal() and create_weight() in one backtest, "
+                + "use either one per backtest()"
             )
         # Consume the configuration: one configuration feeds exactly one
         # backtest() call (cleared even if this call fails), so nothing is
@@ -445,15 +466,19 @@ class PortfolioBacktestMixin:
         def _make_series(name: str, values: np.ndarray) -> nw.Series:
             return nw.new_series(name, values, nw.Float64, backend=native_backend)
 
+        output_arrs = (
+            weight_out,
+            order_price_out,
+            order_size_out,
+            trade_price_out,
+            trade_size_out,
+            position_out,
+            avg_price_out,
+            cash_out,
+            equity_out,
+        )
         result_df = df.with_columns(
-            _make_series("weight", weight_out),
-            _make_series("order_price", order_price_out),
-            _make_series("order_size", order_size_out),
-            _make_series("trade_price", trade_price_out),
-            _make_series("trade_size", trade_size_out),
-            _make_series("position", position_out),
-            _make_series("avg_price", avg_price_out),
-            _make_series("cash", cash_out),
-            _make_series("equity", equity_out),
+            _make_series(name, values)
+            for name, values in zip(OUTPUT_COLS, output_arrs, strict=True)
         )
         return result_df.to_native()

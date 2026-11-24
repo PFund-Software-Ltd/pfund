@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     import pfund.hub as hub
     from pfund.backtest.cv.cross_validation import CrossValidation
     from pfund.backtest.cv.holdout import Holdout
-    from pfund.backtest.typing import PandasBacktestDataFrame, PolarsBacktestDataFrame
     from pfund.components.features.feature_base import BaseFeature as Feature
     from pfund.components.features.feature_talib import (
         TALibIndicator,
@@ -37,6 +36,7 @@ if TYPE_CHECKING:
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.engines.trade_engine import TradeEngine
     from pfund.simulated.simulated_account import SimulatedAccount
+    from pfund.typing import BacktestDataFrame
 
 from pfund.config import configure, configure_logging, get_config
 
@@ -70,14 +70,10 @@ def __getattr__(name: str):
         from pfund.data_config import DataConfig
 
         return DataConfig
-    elif name == "PolarsBacktestDataFrame":
-        from pfund.backtest.typing import PolarsBacktestDataFrame
+    elif name == "BacktestDataFrame":
+        from pfund.typing import BacktestDataFrame
 
-        return PolarsBacktestDataFrame
-    elif name == "PandasBacktestDataFrame":
-        from pfund.backtest.typing import PandasBacktestDataFrame
-
-        return PandasBacktestDataFrame
+        return BacktestDataFrame
     elif name == "SimulatedAccount":
         from pfund.simulated.simulated_account import SimulatedAccount
 
@@ -156,14 +152,12 @@ __all__ = (  # noqa: RUF022
     "SimulatedAccount",
     "Holdout",
     "CrossValidation",
+    "BacktestDataFrame",
     # engines
     "BacktestEngine",
     "TradeEngine",
     "TradeEngineSettings",
     "BacktestEngineSettings",
-    # backtest dfs
-    "PolarsBacktestDataFrame",
-    "PandasBacktestDataFrame",
     # components
     "Strategy",
     "Model",

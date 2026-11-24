@@ -617,22 +617,6 @@ class TestRunStrategy:
         assert result.get_column("signal").to_list() == [0, 2, 4, 6]
         assert engine.result is result
 
-    def test_result_is_postprocessed(
-        self, engine: BacktestEngine, strategy: Any, mocker: MockerFixture, persist: Any
-    ):
-        _stub_backtest(
-            mocker,
-            strategy,
-            _wide_df(2),
-            side_effect=lambda df: df.with_columns(_take_profit=pl.lit(True)),
-        )
-
-        result = engine.run()
-
-        assert result is not None
-        assert "_take_profit" not in result.columns
-        assert result.get_column("remark").to_list() == ["tp", "tp"]
-
     def test_result_is_persisted_once_in_vectorized_mode(
         self, engine: BacktestEngine, strategy: Any, mocker: MockerFixture, persist: Any
     ):
@@ -750,19 +734,17 @@ class TestRunFeature:
         mocker.patch.object(feature.store, "persist_to_datalake")
         return feature
 
-    def test_trading_df_is_backtested_without_chunk_col_or_postprocessing(
+    def test_trading_df_is_backtested_without_chunk_col(
         self, engine: BacktestEngine, feature: Any, mocker: MockerFixture
     ):
         df = _wide_df(3)
         backtest = _stub_backtest(mocker, feature, df, df_kind="trading_df")
-        postprocess = mocker.spy(BacktestStrategyMixin, "_postprocess_backtest_df")
 
         result = engine.run()
 
         assert backtest.call_args.args[0].equals(df)
         assert result is not None
         assert result.equals(_backtested(df))
-        postprocess.assert_not_called()
 
     def test_result_is_persisted_to_the_feature_store(
         self, engine: BacktestEngine, feature: Any, mocker: MockerFixture
@@ -964,7 +946,7 @@ class TestRunChunked:
             result.get_column(CHUNK_COL).to_list()
             == [0] * 3 + [1] * 3 + [2] * 2 + [3] * 2
         )
-        assert result.drop(CHUNK_COL, "remark").equals(_backtested(df))
+        assert result.drop(CHUNK_COL).equals(_backtested(df))
         assert strategy.store._df is result
         strategy.store.persist_to_datalake.assert_called_once_with()
 
@@ -987,20 +969,6 @@ class TestRunChunked:
         expected = [chunk for chunk, _ in _split_df_into_time_chunks(df, 3)]
         assert len(backtested) == len(expected)
         assert all(a.equals(b) for a, b in zip(backtested, expected, strict=True))
-
-    def test_each_chunk_is_postprocessed(
-        self,
-        engine: BacktestEngine,
-        strategy: Any,
-        mocker: MockerFixture,
-        fake_ray: FakeRay,
-    ):
-        _stub_backtest(mocker, strategy, _wide_df(6))
-        postprocess = mocker.spy(BacktestStrategyMixin, "_postprocess_backtest_df")
-
-        engine.run(num_chunks=3)
-
-        assert postprocess.call_count == 3
 
     def test_backtestee_is_put_once_with_its_dfs_detached(
         self,

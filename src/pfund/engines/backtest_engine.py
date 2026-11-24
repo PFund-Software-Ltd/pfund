@@ -9,7 +9,6 @@ if TYPE_CHECKING:
     from pfund_blocks.resolution import Resolution
 
     from pfund.backtest._mixins.backtest_mixin import BacktestMixin
-    from pfund.backtest._mixins.strategy_mixin import BacktestStrategyMixin
     from pfund.backtest.cv.dataset_splits import DatasetSplits
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel, UnderlyingModel
@@ -408,7 +407,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         return backtest_result
 
     def _backtest(self, backtestee: Component, num_cpus: int) -> pl.DataFrame:
-        ### Pre-Backtest ###
         num_chunks = self.context.num_chunks
         is_using_ray = num_chunks > 1
         is_strategy = backtestee.is_strategy()
@@ -434,7 +432,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                 pl.lit(chunk_num).alias(BacktestEngine.CHUNK_COL)
             )
 
-        ### Backtest ###
         backtest_dfs: list[pl.DataFrame] = []
         if self.backtest_mode == BacktestMode.EVENT_DRIVEN:
             df = backtestee.data_df
@@ -537,12 +534,6 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                     raise
             backtest_dfs = results
 
-        ### Post-Backtest ###
-        if is_strategy:
-            backtest_dfs = [
-                cast("BacktestStrategyMixin", backtestee)._postprocess_backtest_df(backtest_df)
-                for backtest_df in backtest_dfs
-            ]
         # combine the chunks into one df, ordered by (chunk_num, date): chunks are contiguous date ranges,
         # and the results are kept in chunk order.
         return pl.concat(backtest_dfs, how="vertical")
