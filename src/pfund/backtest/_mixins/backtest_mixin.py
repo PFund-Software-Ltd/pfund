@@ -23,12 +23,12 @@ from pathlib import Path
 import polars as pl
 from pfund_kit.style import RichColor, TextStyle
 
-from pfund.backtest._mixins.dataframe_mixin import BacktestDataFrameMixin
+from pfund.backtest.cv.indexing import SplittableData
 from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.enums import BacktestMode
 
 
-class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
+class BacktestMixin(ComponentMixin):
     """Backtest behavior layered over a component.
 
     Subclassed per component type (BacktestModelMixin, BacktestStrategyMixin,
@@ -117,6 +117,80 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
         return self.context.mode
 
     @property
+    def folds(self) -> tuple[CVFold[pl.DataFrame], ...]:
+        return self._folds
+
+    @property
+    def holdout_split(self) -> HoldoutSplit[pl.DataFrame] | None:
+        is_dataset_split = self._holdout_split is not None or bool(self._folds)
+        if not is_dataset_split:
+            raise RuntimeError(f"'{self.name}' dataset has not been split yet")
+        return self._holdout_split
+
+    def _split_dataset(self) -> None:
+        from pfund.backtest.cv.cross_validation import resolve_folds
+        from pfund.backtest.cv.holdout import Holdout, resolve_holdout
+        from pfund.backtest.cv.holdout_split import HoldoutSplit
+
+        splits = self.context.dataset_splits
+        if splits is None:
+            self._holdout_split, self._folds = HoldoutSplit(self.X), ()
+        elif isinstance(splits, Holdout):
+            self._holdout_split, self._folds = resolve_holdout(self.X, splits), ()
+        else:
+            self._holdout_split, self._folds = None, resolve_folds(self.X, splits)
+
+    def split[DataT: SplittableData](
+        self,
+        data: DataT,
+    ) -> tuple[DataT | None, DataT | None, DataT | None]:
+        """Split aligned data into the component's train/validation/test sets.
+
+        `data` is sliced positionally by selectors built from X, so it needs
+        no `date` column of its own — it only has to be row-aligned 1:1 with
+        X (same length and order). A target y, class labels, sample
+        weights, or any per-row companion of the features therefore uses the
+        same boundaries as X.
+
+            close = next(c for c in model.df.columns if c.endswith(":close"))
+            y = model.df.get_column(close).shift(-1) / model.df.get_column(close) - 1.0
+            X_train, X_val, _ = model.split(model.X)
+            y_train, y_val, _ = model.split(y)
+            model.fit(X_train, y_train)
+
+        Args:
+            data: a DataFrame, Series, or ndarray row-aligned 1:1 with X.
+
+        Returns a (train, val, test) tuple; any segment that collapsed to 0
+        timestamps or is undefined for the split is None.
+
+        Cross-validation has multiple splits, so call ``fold.split(data)`` on
+        each item in ``component.folds`` instead.
+        """
+        holdout_split = self.holdout_split
+        if holdout_split is None:
+            raise ValueError(
+                "component.split() is undefined under cross-validation; "
+                + "iterate over component.folds and call fold.split(data)"
+            )
+        return holdout_split.split(data)
+
+    @property
+    def X_train(self) -> pl.DataFrame | None:
+        holdout_split = self.holdout_split
+        return None if holdout_split is None else holdout_split.X_train
+
+    @property
+    def X_val(self) -> pl.DataFrame | None:
+        holdout_split = self.holdout_split
+        return None if holdout_split is None else holdout_split.X_val
+
+    @property
+    def X_test(self) -> pl.DataFrame | None:
+        holdout_split = self.holdout_split
+        return None if holdout_split is None else holdout_split.X_test
+
+    @property
     def _source_artifact(self) -> Path:
         if self._source_artifact_path is not None:
             return self._source_artifact_path
@@ -124,7 +198,7 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
         import inspect
 
         # the user's component class, stored by _adopt(); the MRO position isn't reliable
-        # since BacktestMixin's own bases (e.g. BacktestDataFrameMixin) precede it
+        # since BacktestMixin's own bases (e.g. ComponentMixin) precede it
         source_class: type = getattr(type(self), "__wrapped__")  # noqa: B009
         source_file = inspect.getsourcefile(source_class)
         if source_file is None:
@@ -135,12 +209,6 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
     def _data_artifact(self) -> pl.DataFrame | None:
         # store._df is never trimmed in backtesting, so it holds every row produced during the run
         return self.store._df
-
-    @property
-    def _max_rows(self) -> None:
-        # set max_rows to none so that trading_store._df can keep every row as data artifact.
-        # trimming trading_df is done in get_df() to preserve the same output as live trading
-        return None
 
     def to_dict(self) -> dict[str, Any]:
         """Adds how the component was backtested, e.g. so a chunked or vectorized df can't seed live trading."""

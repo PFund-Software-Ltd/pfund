@@ -12,10 +12,13 @@ from pfund.components._mixins.base_mixin import ComponentBaseMixin
 from pfund.components.bar_dataframe import (
     INDEX_COL as BAR_INDEX_COL,
     KEY_COLS as BAR_KEY_COLS,
+    PIVOT_COLS as BAR_PIVOT_COLS,
     aggregate_events_by_bar,
     align_df_to_spine,
     long_bar_df_to_wide,
+    pivot_long_to_wide,
     reorder_key_cols,
+    validate_spine_df,
 )
 
 
@@ -69,30 +72,38 @@ class DataFrameMixin(ComponentBaseMixin):
             window_size: Number of most recent rows to return.
                 Defaults to None, i.e. return the whole dataframe.
         """
+        needs_merged_data_df = kind == "full" or (
+            kind == "data" and data_category is None
+        )
+        merged_data_df: pl.DataFrame | None = None
+        if needs_merged_data_df:
+            data_dfs = {
+                category: nw.from_native(data_store.get_df(with_metadata=False))
+                for category, data_store in self.data_stores.items()
+                if data_store.get_datas() and data_store._df is not None
+            }
+            if data_dfs:
+                merged_data_df = cast(
+                    "pl.DataFrame", self._merge_data_dfs(data_dfs).to_native()
+                )
+
         if kind == "data":
             if data_category is not None:
                 store = self._databoy.get_data_store(data_category)
                 df = store.get_df(window_size=window_size)
             else:
-                # _merge_data_dfs stays narwhals, it's built on bar_dataframe's helpers
-                data_dfs: dict[DataCategory, nw.DataFrame[Any]] = {
-                    category: nw.from_native(store.get_df(window_size=window_size))
-                    for category, store in self.data_stores.items()
-                }
-                df = cast("pl.DataFrame", self._merge_data_dfs(data_dfs).to_native())
+                if merged_data_df is None:
+                    raise RuntimeError(f"{self.name} data df is not ready")
+                # trim after merging, so all categories cover the same last N bars
+                df = (
+                    merged_data_df
+                    if window_size is None
+                    else merged_data_df.tail(window_size)
+                )
         elif kind in ("features", "signals", "trading"):
             df = self.store.get_df(kind=kind, window_size=window_size)
         elif kind == "full":
-            data_dfs = {
-                category: nw.from_native(data_store.get_df(window_size=None))
-                for category, data_store in self.data_stores.items()
-                if data_store.get_datas() and data_store._df is not None
-            }
-            data_df: pl.DataFrame | None = (
-                cast("pl.DataFrame", self._merge_data_dfs(data_dfs).to_native())
-                if data_dfs
-                else None
-            )
+            data_df = merged_data_df
 
             # Data stores are canonically long-form. full_df follows the
             # component's configured form, just like its trading dataframe.
@@ -154,37 +165,22 @@ class DataFrameMixin(ComponentBaseMixin):
 
         Args:
             data_dfs: Narwhals dataframes per data category. All dataframes must
-                be in long form.
+                be in long form, without metadata columns, i.e. from
+                data_store.get_df(with_metadata=False).
         """
-        if not data_dfs:
-            raise ValueError(f"No data dfs provided for {self.name}")
         market_category = DataCategory.MARKET_DATA
         if market_category not in data_dfs:
             raise ValueError(
                 f"Market data is required as the bar spine for {self.name}"
             )
 
-        def _drop_metadata(
-            category: DataCategory,
-            df: nw.DataFrame[Any],
-        ) -> nw.DataFrame[Any]:
-            data_store = self._databoy.get_data_store(category)
-            metadata_cols = [
-                col for col in data_store.METADATA_COLS if col in df.columns
-            ]
-            return df.drop(metadata_cols) if metadata_cols else df
-
-        market_df = _drop_metadata(
-            market_category,
-            data_dfs[market_category],
-        )
+        data_dfs = dict(
+            data_dfs
+        )  # shallow copy, so pop() doesn't mutate the caller's dict
+        market_df = data_dfs.pop(market_category)
         data_df = market_df
 
         for category, contributor_df in data_dfs.items():
-            if category == market_category:
-                continue
-
-            contributor_df = _drop_metadata(category, contributor_df)
             category_name = category.value.lower().removesuffix("_data")
             event_time_col = f"{category_name}_date"
             events_col = f"{category_name}_events"
@@ -220,3 +216,168 @@ class DataFrameMixin(ComponentBaseMixin):
             ).with_columns(nw.col(count_col).fill_null(0))
 
         return data_df.sort(BAR_KEY_COLS)
+
+    def _build_spine_df(self) -> nw.DataFrame[Any]:
+        """Build the bar spine that child signals are joined onto.
+
+        The component's own data establishes the spine when present: market
+        data provides the bars, and data configured as features is included
+        as columns (market data's value columns are kept only if market data
+        is itself configured as features). Otherwise, the spine is the union
+        of same-resolution child signals' key columns.
+
+        Returns the spine in the component's df form.
+        """
+        data_dfs = {
+            category: nw.from_native(data_store.get_df(with_metadata=False))
+            for category, data_store in self.data_stores.items()
+            # NOTE: market data df is ALWAYS included to create the "spine" of the df
+            if (category == DataCategory.MARKET_DATA or data_store.data_as_features)
+            and data_store.get_datas()
+        }
+        if data_dfs:
+            df = self._merge_data_dfs(data_dfs)
+            market_data_store = self.market_data_store
+            # if data columns aren't considered as features, drop everything, keep the spine only
+            if not market_data_store.data_as_features:
+                market_data_df = market_data_store.get_df()
+                market_data_cols = [
+                    col
+                    for col in market_data_df.columns
+                    if col not in BAR_KEY_COLS + market_data_store.METADATA_COLS
+                ]
+                df = df.drop(market_data_cols, strict=False)
+
+            validate_spine_df(df)
+            if self.df_form == "wide":
+                df = long_bar_df_to_wide(df)
+        else:
+            children_signals = [
+                (
+                    child,
+                    nw.from_native(child.get_df(kind="signals", window_size=None)),
+                )
+                for child in self.components
+            ]
+            spine_cols = BAR_KEY_COLS if self.df_form == "long" else [BAR_INDEX_COL]
+            spine_dfs = [
+                child_signals.select(spine_cols)
+                for child, child_signals in children_signals
+                if child.resolution.is_strict_equal(self.resolution)
+                and (self.df_form == "wide" or child.df_form == "long")
+            ]
+            if not spine_dfs:
+                required_child = (
+                    "same-resolution child signals"
+                    if self.df_form == "wide"
+                    else "same-resolution long-form child signals"
+                )
+                raise ValueError(
+                    f"{self.name} has no data or {required_child} to establish "
+                    + "its bar spine"
+                )
+            df = nw.concat(spine_dfs).unique().sort(spine_cols)
+
+            if self.df_form == "long":
+                validate_spine_df(df)
+
+        return df
+
+    def _merge_signals_dfs(self) -> nw.DataFrame[Any]:
+        """Build this component's historical feature frame.
+
+        The component's own data establishes its receiving bar spine when
+        present. Otherwise, same-resolution child signals establish the spine.
+        Each child component's signal dataframe is then aligned to that spine
+        and merged as feature columns. Once established, child signals can add
+        values but cannot add rows to the receiving universe.
+
+        Strictly equal resolutions use exact alignment; other resolutions use
+        close-time as-of alignment. Long-form child signals are aligned per
+        product. Wide-form child signals are aligned as one cross-sectional
+        date stream and are broadcast by date when the receiver is long-form.
+        """
+
+        df = self._build_spine_df()
+
+        for child in self.components:
+            child_signals = nw.from_native(
+                child.get_df(kind="signals", window_size=None)
+            )
+            alignment_mode = (
+                "exact" if child.resolution.is_strict_equal(self.resolution) else "asof"
+            )
+            if self.df_form == "long" and child.df_form == "long":
+                join_cols = BAR_KEY_COLS
+                child_signals = align_df_to_spine(
+                    df,
+                    child_signals,
+                    mode=alignment_mode,
+                )
+            # align long child signals to wide parent
+            elif self.df_form == "wide" and child.df_form == "long":
+                join_cols = [BAR_INDEX_COL]
+                # A wide parent has no product rows on which to perform an as-of
+                # join. Temporarily expand its receiving dates across the child's
+                # products, align each product stream independently, then pivot the
+                # aligned result back to the parent's wide form.
+                child_products = child_signals.select("product").unique()
+                alignment_spine = (
+                    df.select(BAR_INDEX_COL)
+                    .unique()
+                    .join(child_products, how="cross")
+                    .with_columns(nw.lit(str(self.resolution)).alias("resolution"))
+                    .select(BAR_KEY_COLS)
+                )
+                aligned_signals = align_df_to_spine(
+                    alignment_spine,
+                    child_signals,
+                    mode=alignment_mode,
+                )
+                child_signals = pivot_long_to_wide(
+                    aligned_signals,
+                    index_col=BAR_INDEX_COL,
+                    pivot_cols=BAR_PIVOT_COLS,
+                )
+            # align wide child signals
+            else:
+                join_cols = [BAR_INDEX_COL]
+                # A wide dataframe is one cross-sectional stream keyed by date.
+                # Add a synthetic product and the known component resolutions so
+                # the canonical bar aligner can apply the same close-time rules.
+                wide_stream = "__wide_stream__"
+                alignment_spine = (
+                    df.select(BAR_INDEX_COL)
+                    .unique()
+                    .with_columns(
+                        nw.lit(wide_stream).alias("product"),
+                        nw.lit(str(self.resolution)).alias("resolution"),
+                    )
+                )
+                alignment_contributor = child_signals.with_columns(
+                    nw.lit(wide_stream).alias("product"),
+                    nw.lit(str(child.resolution)).alias("resolution"),
+                )
+                child_signals = align_df_to_spine(
+                    alignment_spine,
+                    alignment_contributor,
+                    mode=alignment_mode,
+                ).drop(BAR_PIVOT_COLS)
+
+            child_value_cols = [
+                col for col in child_signals.columns if col not in join_cols
+            ]
+            conflicting_cols = [col for col in child_value_cols if col in df.columns]
+            if conflicting_cols:
+                raise ValueError(
+                    f"child signal columns already exist in {self.name}'s features: "
+                    + f"{conflicting_cols}"
+                )
+            df = df.join(
+                child_signals,
+                on=join_cols,
+                how="left",
+            )
+
+        spine_cols = BAR_KEY_COLS if self.df_form == "long" else [BAR_INDEX_COL]
+        return reorder_key_cols(df.sort(spine_cols), df_form=self.df_form)

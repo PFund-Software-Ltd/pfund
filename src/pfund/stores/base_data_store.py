@@ -97,7 +97,19 @@ class BaseDataStore[DataT: BaseData, FeedT: BaseFeed](ABC):
             **metadata,
         )
 
-    def get_df(self, window_size: int | None = None) -> pl.DataFrame:
+    def get_df(
+        self, window_size: int | None = None, with_metadata: bool = True
+    ) -> pl.DataFrame:
+        """
+        Args:
+            window_size: Number of most recent rows to return.
+            with_metadata: if False, drop METADATA_COLS (e.g. source_type).
+        """
         if self._df is None:
             raise RuntimeError(f"{self.__class__.__name__} data df is not ready")
-        return self._df if window_size is None else self._df.tail(window_size)
+        df = (
+            self._df
+            if with_metadata
+            else self._df.drop(self.METADATA_COLS, strict=False)
+        )
+        return df if window_size is None else df.tail(window_size)
