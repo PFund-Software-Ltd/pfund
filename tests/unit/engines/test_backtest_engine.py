@@ -979,7 +979,7 @@ class TestRunChunked:
     ):
         _stub_backtest(mocker, strategy, _wide_df(6))
         df = _wide_df(1)
-        strategy.store._df = df
+        strategy.store.set_df(df)
 
         engine.run(num_chunks=3)
 

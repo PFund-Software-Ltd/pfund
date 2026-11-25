@@ -56,7 +56,9 @@ class Holdout:
         return self.val
 
 
-def resolve_holdout(X: IntoDataFrame, holdout: Holdout) -> HoldoutSplit:
+def resolve_holdout[DataFrameT: IntoDataFrame](
+    X: DataFrameT, holdout: Holdout
+) -> HoldoutSplit[DataFrameT]:
     """Resolve holdout ratios against the actual unique timestamps in ``X``."""
     time_spine, row_time_indices = resolve_time_spine(
         X,

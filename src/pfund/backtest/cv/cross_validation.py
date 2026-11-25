@@ -98,10 +98,10 @@ class CrossValidation(CrossValidator):
         return self.n_splits
 
 
-def resolve_folds(
-    X: IntoDataFrame,
+def resolve_folds[DataFrameT: IntoDataFrame](
+    X: DataFrameT,
     cross_validator: CrossValidator,
-) -> tuple[CVFold, ...]:
+) -> tuple[CVFold[DataFrameT], ...]:
     """Resolve a cross-validator against the actual ordered timestamps in ``X``.
 
     The cross-validator sees one sample per unique ``date`` value. Its time-level
@@ -114,7 +114,7 @@ def resolve_folds(
     )
     num_times = len(time_spine)
 
-    folds: list[CVFold] = []
+    folds: list[CVFold[DataFrameT]] = []
     for index, (train_time_indices, val_time_indices) in enumerate(
         cross_validator.split(time_spine)
     ):

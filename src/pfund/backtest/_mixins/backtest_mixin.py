@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 from pathlib import Path
 
 import polars as pl
-from pfund_kit.style import RichColor, TextStyle, cprint
+from pfund_kit.style import RichColor, TextStyle
 
 from pfund.backtest._mixins.dataframe_mixin import BacktestDataFrameMixin
 from pfund.components._mixins.component_mixin import ComponentMixin
@@ -60,8 +60,8 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
     def _init_backtest_state(self) -> None:
         # top components are the ones added by engine.add_strategy/model/feature()
         self._is_top_component = False
-        self._holdout_split: HoldoutSplit | None = None
-        self._folds: tuple[CVFold, ...] = ()
+        self._holdout_split: HoldoutSplit[pl.DataFrame] | None = None
+        self._folds: tuple[CVFold[pl.DataFrame], ...] = ()
 
     @classmethod
     def _adopt[C: Component](cls, component: C) -> C:
@@ -287,26 +287,28 @@ class BacktestMixin(BacktestDataFrameMixin, ComponentMixin):
 
     @override
     def _materialize(self):
-        self.store.setup_lakehouse()
         for data_store in self.data_stores.values():
             data_store.materialize()
         if self.backtest_mode == BacktestMode.VECTORIZED:
-            # child component will try to load its trading_df
-            if not self._is_top_component:
+            if self._is_top_component:
+                # backtestee: only prepare its input, engine._backtest() runs its backtest later
+                self.store.set_df(self._merge_signals_dfs().to_native())
+            else:
+                # child component will load its trading_df so that its signals can be merged into its parent's trading df
                 self.store.materialize()
-            if self.store._df is None:
-                X = self._merge_signals_dfs().to_native()
-                if not self._is_top_component:
-                    cprint(
+                if self.store._df is None:
+                    self.logger.warning(
                         f"No persisted trading dataframe found for '{self.name}'. "
                         + "Running its vectorized backtest on the fly...",
                         style=TextStyle.BOLD + RichColor.YELLOW,
                     )
-                    self.store._df = self._vectorized_backtest(X)
-                    self.store.persist_to_datalake()
-                else:
-                    self.store._df = X
-            self._resolve_dataset_splits()
+                    X = self._merge_signals_dfs().to_native()
+                    backtest_df = self._vectorized_backtest(X)
+                    self.store.set_df(backtest_df, persist=True)
+            self._split_dataset()
+        # FIXME: event-driven should also call self._split_dataset(),
+        # brainstorm: let it own trading df the same way as VECTORIZED, empty it before looping
+        # blocker: building X needs child signals up front (_merge_signals_dfs), but without reuse_signals children only compute them during the loop
         elif self.backtest_mode == BacktestMode.EVENT_DRIVEN:
             if self._reuse_child_component_signals:
                 self.store.materialize()

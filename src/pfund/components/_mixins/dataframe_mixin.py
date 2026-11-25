@@ -69,8 +69,6 @@ class DataFrameMixin(ComponentBaseMixin):
             window_size: Number of most recent rows to return.
                 Defaults to None, i.e. return the whole dataframe.
         """
-        import polars as pl
-
         if kind == "data":
             if data_category is not None:
                 store = self._databoy.get_data_store(data_category)
@@ -105,16 +103,15 @@ class DataFrameMixin(ComponentBaseMixin):
                 )
 
             trading_df: pl.DataFrame | None = self.store._df
+            join_cols = BAR_KEY_COLS if self.df_form == "long" else [BAR_INDEX_COL]
 
-            if data_df is None and trading_df is None:
-                raise RuntimeError(f"{self.name} full df is not ready")
             if data_df is None:
-                assert trading_df is not None
+                if trading_df is None:
+                    raise RuntimeError(f"{self.name} full df is not ready")
                 df = trading_df
             elif trading_df is None:
                 df = data_df
             else:
-                join_cols = BAR_KEY_COLS if self.df_form == "long" else [BAR_INDEX_COL]
                 missing_join_cols = [
                     col
                     for col in join_cols
@@ -135,27 +132,13 @@ class DataFrameMixin(ComponentBaseMixin):
                     for col in trading_df.columns
                     if col not in join_cols and col in data_df.columns
                 ]
-                if overlapping_value_cols:
-                    trading_df = trading_df.drop(overlapping_value_cols)
-
-                df = data_df.join(trading_df, on=join_cols, how="full")
-
-                for key in join_cols:
-                    right_key = f"{key}_right"
-                    if right_key in df.columns:
-                        df = df.with_columns(
-                            pl.coalesce(key, right_key).alias(key)
-                        ).drop(right_key)
+                trading_df = trading_df.drop(overlapping_value_cols)
+                df = data_df.join(trading_df, on=join_cols, how="full", coalesce=True)
 
             df = cast(
                 "pl.DataFrame",
                 reorder_key_cols(
-                    nw.from_native(
-                        df.sort(
-                            BAR_KEY_COLS if self.df_form == "long" else [BAR_INDEX_COL]
-                        )
-                    ),
-                    df_form=self.df_form,
+                    nw.from_native(df.sort(join_cols)), df_form=self.df_form
                 ).to_native(),
             )
             if window_size is not None:

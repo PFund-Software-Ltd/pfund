@@ -288,7 +288,7 @@ class MarketDataStore(BaseDataStore[MarketData, MarketFeed]):
                 resamplee_update["resolution"] = data_resamplee.resolution
                 self.update_bar(resamplee_update)
 
-    # TODO
+    # TODO: trim data df, using sth like max_rows in component, but should be set in engine settings
     def update_df(self, data: MarketData):
         print("***update_df", data)
         print("***update_df", self._df)

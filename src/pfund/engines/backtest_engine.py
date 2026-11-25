@@ -305,15 +305,12 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             resolution
         )
         self._assert_no_component_in_dummy_strategy()
-        feature = cast(
-            "FeatureT",
-            dummy_strategy.add_feature(
+        feature = dummy_strategy.add_feature(
                 feature=feature,
                 resolution=resolution,
                 name=name,
                 df_form=df_form,
-            ),
-        )
+            )
         cast("BacktestMixin", feature).set_top_component()
         return feature
 
@@ -361,7 +358,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         # NOTE: before super().run(), which sets up the components, so their metadata records it, see BacktestMixin.to_dict()
         self.context.set_num_chunks(num_chunks)
 
-        backtest_result: pl.DataFrame | None = None
+        backtest_df: pl.DataFrame | None = None
         try:
             # NOTE: inside the try, so the engine still ends if the component setup fails
             super().run(run=run)
@@ -380,8 +377,8 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                                 f"No trained model found for '{model.name}', event-driven backtesting needs a trained model, "
                                 + "train it in a vectorized backtest first and call save()"
                             )
-                        self.result = backtest_result
-                        return backtest_result
+                        self.result = backtest_df
+                        return backtest_df
                     backtestee = model
                 elif strategy.features:
                     feature: BaseFeature = cast(
@@ -392,10 +389,8 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
                     raise ValueError("No model or feature to backtest")
             else:
                 backtestee = strategy
-            backtest_result = self._backtest(backtestee, num_cpus=num_cpus)
-            if self.backtest_mode == BacktestMode.VECTORIZED:
-                backtestee.store._df = backtest_result
-                backtestee.store.persist_to_datalake()
+            backtest_df = self._backtest(backtestee, num_cpus=num_cpus)
+            backtestee.store.set_df(backtest_df, persist=True)
 
         except Exception:
             self._logger.exception("Error in backtesting:")
@@ -403,8 +398,8 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         finally:
             self.end()
 
-        self.result = backtest_result
-        return backtest_result
+        self.result = backtest_df
+        return self.result
 
     def _backtest(self, backtestee: Component, num_cpus: int) -> pl.DataFrame:
         num_chunks = self.context.num_chunks

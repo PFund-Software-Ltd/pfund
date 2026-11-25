@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, override
+from typing import TYPE_CHECKING, Any, Literal, cast, override
 
 if TYPE_CHECKING:
     import polars as pl
-    from narwhals.typing import IntoDataFrame
 
+    from pfund.backtest._mixins.backtest_mixin import BacktestMixin
     from pfund.backtest.cv.cv_fold import CVFold
     from pfund.backtest.cv.holdout_split import HoldoutSplit
     from pfund.typing import Component
@@ -29,8 +29,15 @@ from pfund.components.bar_dataframe import (
 
 class BacktestDataFrameMixin(DataFrameMixin):
     @property
-    def folds(self) -> tuple[CVFold, ...]:
+    def folds(self) -> tuple[CVFold[pl.DataFrame], ...]:
         return self._folds
+
+    @property
+    def holdout_split(self) -> HoldoutSplit[pl.DataFrame] | None:
+        is_dataset_split = self._holdout_split is not None or bool(self._folds)
+        if not is_dataset_split:
+            raise RuntimeError(f"'{self.name}' dataset has not been split yet")
+        return self._holdout_split
 
     @override
     def get_df(
@@ -40,13 +47,11 @@ class BacktestDataFrameMixin(DataFrameMixin):
         data_category: DataCategory | str | None = DataCategory.MARKET_DATA,
         window_size: int | None = None,
     ) -> pl.DataFrame:
-        # store._df is untrimmed in backtesting (_max_rows is None),
-        # apply the real max_rows on access so users see the df live trading would keep
-        # NOTE: kind="full" drifts slightly from live trading. full_df outer-joins data_df with the
-        # trading df and applies window_size AFTER the join. In live trading, store._df is trimmed
-        # BEFORE the join, so when data_df has more rows than max_rows, live full_df keeps the older
-        # data rows with null trading columns, while here they're trimmed away. The last max_rows
-        # rows are identical. store._df can't be trimmed in backtesting since it's the data artifact.
+        # store._df is untrimmed in backtesting (_max_rows is None), it can't be trimmed in backtesting since it's the data artifact.
+        # trim it dynamically here to stay consistent with live trading.
+        # CAVEAT: data df drifts slightly from live trading.
+            # backtesting: data df is never trimmed on its own, only together with trading_df when kind="full"
+            # live trading: data df is trimmed
         max_rows = self.config["max_rows"]
         if kind != "data" and max_rows is not None:
             window_size = (
@@ -56,23 +61,18 @@ class BacktestDataFrameMixin(DataFrameMixin):
             kind=kind, data_category=data_category, window_size=window_size
         )
 
-    def _resolve_dataset_splits(self) -> None:
+    def _split_dataset(self) -> None:
         from pfund.backtest.cv.cross_validation import resolve_folds
         from pfund.backtest.cv.holdout import Holdout, resolve_holdout
         from pfund.backtest.cv.holdout_split import HoldoutSplit
 
-        splits = self.context.dataset_splits
+        splits = cast("BacktestMixin", self).context.dataset_splits
         if splits is None:
             self._holdout_split, self._folds = HoldoutSplit(self.X), ()
         elif isinstance(splits, Holdout):
             self._holdout_split, self._folds = resolve_holdout(self.X, splits), ()
         else:
             self._holdout_split, self._folds = None, resolve_folds(self.X, splits)
-
-    def _get_holdout_split(self) -> HoldoutSplit | None:
-        if self._holdout_split is None and not self._folds:
-            self._resolve_dataset_splits()
-        return self._holdout_split
 
     def split[DataT: SplittableData](
         self,
@@ -101,7 +101,7 @@ class BacktestDataFrameMixin(DataFrameMixin):
         Cross-validation has multiple splits, so call ``fold.split(data)`` on
         each item in ``component.folds`` instead.
         """
-        holdout_split = self._get_holdout_split()
+        holdout_split = self.holdout_split
         if holdout_split is None:
             raise ValueError(
                 "component.split() is undefined under cross-validation; "
@@ -110,32 +110,18 @@ class BacktestDataFrameMixin(DataFrameMixin):
         return holdout_split.split(data)
 
     @property
-    def X_train(self) -> IntoDataFrame | None:
-        """Feature rows in the single training split.
-
-        Cross-validation has multiple training splits, so access them through
-        ``fold.X_train`` instead.
-        """
-        holdout_split = self._get_holdout_split()
+    def X_train(self) -> pl.DataFrame | None:
+        holdout_split = self.holdout_split
         return None if holdout_split is None else holdout_split.X_train
 
     @property
-    def X_val(self) -> IntoDataFrame | None:
-        """Feature rows in the single validation split.
-
-        Cross-validation has multiple validation splits, so access them through
-        ``fold.X_val`` instead.
-        """
-        holdout_split = self._get_holdout_split()
+    def X_val(self) -> pl.DataFrame | None:
+        holdout_split = self.holdout_split
         return None if holdout_split is None else holdout_split.X_val
 
     @property
-    def X_test(self) -> IntoDataFrame | None:
-        """Feature rows in the single test split.
-
-        Cross-validation does not define a test split.
-        """
-        holdout_split = self._get_holdout_split()
+    def X_test(self) -> pl.DataFrame | None:
+        holdout_split = self.holdout_split
         return None if holdout_split is None else holdout_split.X_test
 
     def _merge_signals_dfs(self) -> nw.DataFrame[Any]:

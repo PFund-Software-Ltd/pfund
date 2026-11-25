@@ -547,7 +547,6 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
 
     def _materialize(self):
         """Materialize historical frames only when a data range was requested."""
-        self.store.setup_lakehouse()
         if self.context.data_start is None and self.context.data_end is None:
             return
         for data_store in self.data_stores.values():
@@ -576,6 +575,7 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
             self._assert_unique_child_signal_cols()
 
             # 5. Materialize this component from its prepared dependencies.
+            self.store.setup_lakehouse()
             self._materialize()
 
             # 6. Persist provenance only after successful setup.

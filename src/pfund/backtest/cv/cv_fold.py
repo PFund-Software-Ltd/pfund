@@ -17,7 +17,7 @@ from pfund.backtest.cv.indexing import (
 )
 
 
-class CVFold:
+class CVFold[DataFrameT: IntoDataFrame]:
     """One resolved cross-validation train/validation split.
 
     A fold is bound to a materialized feature dataframe and stores only
@@ -29,7 +29,7 @@ class CVFold:
         self,
         *,
         index: int,
-        X: IntoDataFrame,
+        X: DataFrameT,
         train_indices: NDArray[Any],
         val_indices: NDArray[Any],
     ):
@@ -76,11 +76,11 @@ class CVFold:
         return self._val_indices
 
     @property
-    def X_train(self) -> IntoDataFrame:
+    def X_train(self) -> DataFrameT:
         return take_rows(self._X, self._train_indices)
 
     @property
-    def X_val(self) -> IntoDataFrame:
+    def X_val(self) -> DataFrameT:
         return take_rows(self._X, self._val_indices)
 
     def split[DataT: SplittableData](self, data: DataT) -> tuple[DataT, DataT]:

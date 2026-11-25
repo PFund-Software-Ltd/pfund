@@ -296,6 +296,20 @@ class TradingStore:
         if metadata and metadata["signal_cols"]:
             self._component.set_signal_cols(metadata["signal_cols"])
 
+    def set_df(self, df: pl.DataFrame, persist: bool = False) -> None:
+        """Replace this component's whole trading_df.
+
+        Backtesting produces the complete trading_df in one go,
+        unlike live trading, which grows it row by row via update_df().
+
+        Args:
+            df: the new trading_df.
+            persist: if True, also persist it as the data artifact, see persist_to_datalake().
+        """
+        self._df = df
+        if persist:
+            self.persist_to_datalake()
+
     def persist_to_datalake(self) -> None:
         """Persist the component's current data artifact through pfeed.
 

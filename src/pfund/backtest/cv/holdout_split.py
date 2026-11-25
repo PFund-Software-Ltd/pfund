@@ -17,7 +17,7 @@ from pfund.backtest.cv.indexing import (
 )
 
 
-class HoldoutSplit:
+class HoldoutSplit[DataFrameT: IntoDataFrame]:
     """One component-bound train/validation/test partition.
 
     With no positional selectors, the complete feature dataset is the training
@@ -26,7 +26,7 @@ class HoldoutSplit:
 
     def __init__(
         self,
-        X: IntoDataFrame,
+        X: DataFrameT,
         *,
         indices: tuple[
             NDArray[np.int64],
@@ -78,24 +78,24 @@ class HoldoutSplit:
 
         self._indices = normalized_indices
 
-    def _get_X_split(self, index: int) -> IntoDataFrame | None:
+    def _get_X_split(self, index: int) -> DataFrameT | None:
         if self._indices is None:
             return self._X if index == 0 else None
         indices = self._indices[index]
         return None if indices is None else take_rows(self._X, indices)
 
     @property
-    def X_train(self) -> IntoDataFrame:
+    def X_train(self) -> DataFrameT:
         X_train = self._get_X_split(0)
         assert X_train is not None
         return X_train
 
     @property
-    def X_val(self) -> IntoDataFrame | None:
+    def X_val(self) -> DataFrameT | None:
         return self._get_X_split(1)
 
     @property
-    def X_test(self) -> IntoDataFrame | None:
+    def X_test(self) -> DataFrameT | None:
         return self._get_X_split(2)
 
     def split[DataT: SplittableData](
