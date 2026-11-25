@@ -79,7 +79,7 @@ class ActorProxy[ComponentT: Component]:
     ) -> ActorHandle[ComponentT]:
         import ray
 
-        source_artifact_path = component._source_artifact.resolve()
+        source_file_path = component._source_file_path.resolve()
         ComponentClass: type[ComponentT] = component.__class__
         try:
             ComponentActor: ActorClass[ComponentT] = ray.remote(**ray_kwargs)(
@@ -100,8 +100,8 @@ class ActorProxy[ComponentT: Component]:
         )
         ray.get(
             # NOTE: getattr() for the same reason as in _ensure_actor()
-            getattr(actor, "_set_source_artifact_path").remote(  # noqa: B009
-                str(source_artifact_path)
+            getattr(actor, "_set_source_file_path").remote(  # noqa: B009
+                str(source_file_path)
             )
         )
         # NOTE: the actor rebuilds the component from its constructor args only,

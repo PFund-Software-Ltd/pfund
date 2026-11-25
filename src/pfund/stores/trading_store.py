@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 if TYPE_CHECKING:
     from pfeed.io.blob_io import BlobIO
     from pfeed.io.table_io import TableIO, VacuumResult
     from pfund_blocks.datas import BarData
 
-    from pfund._pfeed_source.component.feed import PFundComponentFeed
-    from pfund.typing import ColumnName, Component, Signals
+    from pfund.typing import BaseModel, ColumnName, Component, Signals
 
 import datetime
 
@@ -23,15 +22,12 @@ class TradingStore:
     TRADING_DF_DIR_NAME: ClassVar[str] = "trading_df"
 
     def __init__(self, component: Component):
-        import pfeed as pe
-
         self._component: Component = component
         # trading_df = [features_df] + [signals_df], in the component's df_form:
         # vectorized backtesting constructs it from the component's data and
         # child signals; event-driven/live execution fills it incrementally;
         # materialize() rehydrates the component's own persisted trading_df.
         self._df: pl.DataFrame | None = None
-        self._feed: PFundComponentFeed = pe.PFund().component_feed
         # child components signals = component's feature columns
         self._features: dict[ColumnName, Any] = {}
         self._datalake: TableIO | None = None
@@ -88,7 +84,7 @@ class TradingStore:
             }
             # NOTE: posixpath, not Path, which collapses the "//" of a URI (e.g. s3://)
             lakehouse_path = posixpath.join(datalake._base_path, context.name)
-        component_path = self._feed.create_data_model(
+        component_path = self._component._feed.create_data_model(
             self._component, ArtifactType.data
         ).component_path
         self._datalake = DataLakeIO(
@@ -127,6 +123,10 @@ class TradingStore:
             raise ValueError(f"unsupported dataframe form {component.df_form!r}")
 
         return not df.filter(predicate).is_empty()
+
+    # TODO: check if df is a valid trading df (features + signals)
+    def set_df(self, df: pl.DataFrame):
+        self._df = df
 
     def get_df(
         self,
@@ -267,55 +267,24 @@ class TradingStore:
                 # every other column is filled with null
                 df = pl.concat([df, new_row], how="diagonal")
 
-        max_rows = component._max_rows
+        max_rows = component.config["max_rows"]
         if max_rows is not None and len(df) > max_rows:
             df = df.tail(max_rows)
         self._df = df
 
-    def _save_source_artifact(self) -> None:
-        self._feed.save_artifact(self._component, ArtifactType.source)
-
-    # TODO: remove strategy columns, e.g. "signal", "order_xxx" and "trade_xxx"
-    # they are unnecessary and could be misleading (if created by vectorized backtesting, results are inaccurate)
     def materialize(self):
         """Load this component's own trading_df.delta (data artifact)."""
-        data = self._feed.load_artifact(self._component, ArtifactType.data)
-        if data is None:
-            self._df = None
-            self.logger.debug(
-                f"No persisted trading dataframe found for '{self._component.name}'"
-            )
-            return
-
-        assert isinstance(data, pl.LazyFrame), (
-            f"data artifact must be a polars LazyFrame, got {type(data)}"
-        )
-        self._df = data.collect()
-
-        metadata = self._feed.load_metadata(self._component)
+        self._df = self._component.load_df().collect()
+        if self._component.is_model():
+            cast("BaseModel", self)._component.load()
+        metadata = self._component._feed.load_metadata(self._component)
         if metadata and metadata["signal_cols"]:
             self._component.set_signal_cols(metadata["signal_cols"])
-
-    def set_df(self, df: pl.DataFrame, persist: bool = False) -> None:
-        """Replace this component's whole trading_df.
-
-        Backtesting produces the complete trading_df in one go,
-        unlike live trading, which grows it row by row via update_df().
-
-        Args:
-            df: the new trading_df.
-            persist: if True, also persist it as the data artifact, see persist_to_datalake().
-        """
-        self._df = df
-        if persist:
-            self.persist_to_datalake()
 
     def persist_to_datalake(self) -> None:
         """Persist the component's current data artifact through pfeed.
 
-        The dataframe is not passed directly to pfeed. The component feed treats
-        the bound component as a data source and extracts ``component._data_artifact``
-        when it saves.
+        ``component._data_artifact`` is passed to pfeed as the df to save.
 
         Which rows are exposed by ``data_artifact`` depends on the execution mode:
         backtesting (vectorized and event-driven) exposes the complete trading
@@ -330,7 +299,8 @@ class TradingStore:
         if not has_signals:
             self.logger.debug(f"{component.name} has no signals to persist yet")
             return
-        self._feed.save_artifact(component, ArtifactType.data)
+        # FIXME: should not always write the whole df
+        self._component.save_df(self._df)
 
     def optimize_datalake(self) -> None:
         """Compacts the datalake's tables, see ``TableIO.optimize()``."""

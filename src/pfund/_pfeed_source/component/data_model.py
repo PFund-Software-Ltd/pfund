@@ -85,7 +85,7 @@ class PFundComponentDataModel(PFundBaseDataModel):
                 return DataArtifact(**artifact_kwargs)
             case ArtifactType.source:
                 return SourceArtifact(
-                    filename=component._source_artifact.name, **artifact_kwargs
+                    filename=component._source_file_path.name, **artifact_kwargs
                 )
             case ArtifactType.checkpoint:
                 from pfund.components.models.pytorch_model import PyTorchModel

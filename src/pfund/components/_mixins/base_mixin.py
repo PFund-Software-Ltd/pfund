@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from pfund_blocks.typing import ProductName, TradingVenue
     from pfund_kit.logging.loggers import ColoredLogger
 
+    from pfund._pfeed_source.component.feed import PFundComponentFeed
     from pfund.components._mixins.component_mixin import ComponentMixin
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel
@@ -54,6 +55,8 @@ class ComponentBaseMixin:
     params: dict[str, Any] = {}  # noqa: RUF012
 
     def __mixin_post_init__(self, component_type: ComponentType, *args: Any, **kwargs: Any):
+        import pfeed as pe
+
         self.__pfund_args__ = args
         self.__pfund_kwargs__ = kwargs
 
@@ -66,7 +69,7 @@ class ComponentBaseMixin:
         self._df_form: Literal["wide", "long"] | None = None
         self._resolution: Resolution | None = None
         self._context: BaseEngineContext[Any] | None = None
-        self._source_artifact_path: Path | None = None
+        self._source_file_path_provided: Path | None = None
 
         # set in _setup_logging() during hydration, see the NOTE there
         self._logger: ColoredLogger | None = None
@@ -75,6 +78,7 @@ class ComponentBaseMixin:
         component = cast("Component", self)
         self._databoy = DataBoy(component)
         self._store = TradingStore(component)
+        self._feed: PFundComponentFeed = pe.PFund().component_feed
 
         self._signal_cols: list[str] = []
         # Last successfully computed signals; may not belong to the current bar.
@@ -590,7 +594,7 @@ class ComponentBaseMixin:
         ]
         # NOTE: the source artifact first, it is not always in the MRO,
         # e.g. built-in model adapters use the user's construction site, see BaseModel.__init__
-        source_files = [cast("ComponentMixin", self)._source_artifact.resolve()]
+        source_files = [cast("ComponentMixin", self)._source_file_path.resolve()]
         for klass in type(self).__mro__:
             if klass.__module__.split(".")[0] == "pfund":
                 continue

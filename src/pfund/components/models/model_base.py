@@ -25,7 +25,7 @@ from pfund.components.models.model_meta import MetaModel
 from pfund.enums import ArtifactType, ComponentType
 
 
-def _get_caller_source_artifact_path() -> str | None:
+def _get_caller_source_file_path() -> str | None:
     """Return the first caller source file outside pfund itself."""
     import inspect
     from pathlib import Path
@@ -35,12 +35,12 @@ def _get_caller_source_artifact_path() -> str | None:
     try:
         frame = frame.f_back if frame is not None else None
         while frame is not None:
-            source_artifact_path = Path(frame.f_code.co_filename).resolve()
+            source_file_path = Path(frame.f_code.co_filename).resolve()
             if (
-                not source_artifact_path.is_relative_to(pfund_package_path)
-                and source_artifact_path.is_file()
+                not source_file_path.is_relative_to(pfund_package_path)
+                and source_file_path.is_file()
             ):
-                return str(source_artifact_path)
+                return str(source_file_path)
             frame = frame.f_back
     finally:
         del frame
@@ -58,8 +58,8 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         # PyTorchModel(model) and automatic wrapping retain user provenance.
         # User-defined wrapper classes keep their class file as the artifact.
         if type(self).__module__.startswith("pfund."):
-            if source_artifact_path := _get_caller_source_artifact_path():
-                self._set_source_artifact_path(source_artifact_path)
+            if source_file_path := _get_caller_source_file_path():
+                self._set_source_file_path(source_file_path)
         self._assert_no_model_method_collisions()
 
     def _assert_no_model_method_collisions(self) -> None:
@@ -115,16 +115,15 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
                 f"'{self.name}' and its underlying model '{self.model.__class__.__name__}' both have no attribute '{name}'"
             )
 
-    def signalize(self, X: pl.DataFrame) -> Signals:
-        """Creates signals of this component
+    def to_signals(self, pred: NDArray[Any] | Tensor | Array) -> Signals:
+        """Converts the output of predict() to signals
 
         Args:
-            X: features df
+            pred: the prediction returned by predict()
 
         Returns:
             dict[ColumnName, Any]: The predicted signals.
         """
-        pred: Tensor | NDArray[Any] = self.predict(X)
         if pred is None:
             raise ValueError(
                 f"{self.name} predict() returned None, did you forget the return statement?"
@@ -191,16 +190,8 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         signal_cols = header.get("__metadata__", {}).get("signal_cols")
         return json.loads(signal_cols) if signal_cols else []
 
-    @property
-    def _model_artifact(self) -> bytes:
-        return self._encode({"model": self.model, "signal_cols": self._signal_cols})
-
-    def _materialize(self):
-        super()._materialize()
-        self.load()
-
     def load(self) -> None:
-        data = self.store._feed.load_artifact(self, ArtifactType.model)
+        data = self._feed.load_artifact(self, ArtifactType.model)
         if data is None:
             raise FileNotFoundError(
                 f"no saved model found for '{self.name}'; call save() after training first"
@@ -212,4 +203,7 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         self._decode(data)
 
     def save(self) -> None:
-        self.store._feed.save_artifact(self, ArtifactType.model)
+        artifact = self._encode({"model": self.model, "signal_cols": self._signal_cols})
+        self._feed.save_artifact(
+            self, ArtifactType.model, artifact=artifact
+        )

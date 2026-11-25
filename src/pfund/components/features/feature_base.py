@@ -36,16 +36,17 @@ class BaseFeature(ComponentMixin, ABC, metaclass=MetaFeature):
         """Extract features from the input data"""
         pass
 
-    def signalize(self, X: pl.DataFrame) -> Signals:
-        """Creates signals of this component
+    def to_signals(
+        self, features: FeatureValue | dict[ColumnName, FeatureValue]
+    ) -> Signals:
+        """Converts the output of transform() to signals
 
         Args:
-            X: features df
+            features: the features returned by transform()
 
         Returns:
-            dict[ColumnName, Any]: The predicted signals.
+            dict[ColumnName, Any]: The signals.
         """
-        features = self.transform(X)
         if features is None:
             raise ValueError(
                 f"{self.name} transform() returned None, did you forget the return statement?"

@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel, UnderlyingModel
+    from pfund.components.strategies.strategy_base import BaseStrategy
     from pfund.typing import (
         Component,
         ComponentName,
@@ -25,7 +26,7 @@ from pfund.components._mixins.base_mixin import ComponentBaseMixin
 from pfund.components._mixins.dataframe_mixin import DataFrameMixin
 from pfund.components.actor_proxy import ActorProxy
 from pfund.data_config import DataConfig
-from pfund.enums import ComponentType, RunMode
+from pfund.enums import ArtifactType, ComponentType, RunMode
 from pfund.utils.decorators import ray_method
 
 
@@ -64,12 +65,33 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
                 kind="features",
                 window_size=self.config["lookback_period"],
             )
-            signals = self.signalize(X)
+            signals = self._signalize(X)
             self._latest_signals = signals
             self.store.update_df(signals, data=data)
             self._publish_signals(signals, data)
         except Exception:
             self.logger.exception("Error forwarding data:")
+
+    def _signalize(self, X: pl.DataFrame) -> Signals:
+        """Creates signals of this component
+
+        Args:
+            X: features df
+
+        Returns:
+            dict[ColumnName, Any]: The signals.
+        """
+        if self.is_strategy():
+            strategy = cast("BaseStrategy", self)
+            return strategy.to_signals(strategy.trade(X))
+        elif self.is_model():
+            model = cast("BaseModel", self)
+            return model.to_signals(model.predict(X))
+        elif self.is_feature():
+            feature = cast("BaseFeature", self)
+            return feature.to_signals(feature.transform(X))
+        else:
+            raise ValueError(f"unknown component type {self.component_type}")
 
     def _publish_signals(self, signals: Signals, data: BarData):
         if self._databoy.is_using_zmq():
@@ -114,9 +136,9 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
         }
 
     @property
-    def _source_artifact(self) -> Path:
-        if self._source_artifact_path is not None:
-            return self._source_artifact_path
+    def _source_file_path(self) -> Path:
+        if self._source_file_path_provided is not None:
+            return self._source_file_path_provided
 
         import inspect
 
@@ -126,18 +148,8 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
         return Path(source_file)
 
     @ray_method
-    def _set_source_artifact_path(self, source_artifact_path: str) -> None:
-        self._source_artifact_path = Path(source_artifact_path)
-
-    @property
-    def _max_rows(self) -> int | None:
-        """Max rows the trading store keeps in its df, None means unbounded."""
-        return self.config["max_rows"]
-
-    @property
-    def _data_artifact(self) -> pl.DataFrame:
-        # TODO: extract the latest rows (that have not been written to pfeed) from the trading store's df
-        raise NotImplementedError
+    def _set_source_file_path(self, source_file_path: str) -> None:
+        self._source_file_path_provided = Path(source_file_path)
 
     def _add_product(
         self,
@@ -583,7 +595,11 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
             # pfeed normalizes data.config.storage_config.data_domain from "" to
             # "MARKET_DATA"; that changes the `datas` payload in component_id.
             # Save only after such mutations so every artifact uses the same ID.
-            self.store._save_source_artifact()
+            self._feed.save_artifact(
+                cast("Component", self),
+                ArtifactType.source,
+                artifact=self._source_file_path.read_bytes(),
+            )
 
             self._is_gathered = True
             self.logger.debug(f"'{self.name}' has gathered")

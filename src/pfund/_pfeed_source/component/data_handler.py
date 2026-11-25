@@ -218,13 +218,13 @@ class PFundComponentDataHandler(
         product last, so the rows of a date in long form come in a deterministic order.
         Only the schema is read, so lf stays lazy.
         """
+        from pfund.backtest._mixins.strategy_mixin import BacktestStrategyMixin
         from pfund.components.bar_dataframe import INDEX_COL, PIVOT_COLS
-        from pfund.engines.backtest_engine import BacktestEngine
 
         schema = lf.collect_schema()
         sort_cols = [
             col
-            for col in (BacktestEngine.CHUNK_COL, INDEX_COL, PIVOT_COLS[0])
+            for col in (BacktestStrategyMixin.CHUNK_COL, INDEX_COL, PIVOT_COLS[0])
             if col in schema
         ]
         return lf.sort(sort_cols, maintain_order=True) if sort_cols else lf

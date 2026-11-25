@@ -145,6 +145,10 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
             },
         }
 
+    # TODO: venue should be read-only by default
+    def add_venue(self):
+        pass
+
     def add_account(self, account: BaseAccount) -> BaseAccount:
         if self.is_substrategy():
             raise ValueError(f"Sub-strategy '{self.name}' cannot add accounts")
@@ -224,16 +228,15 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
             **ray_kwargs,
         )
 
-    def signalize(self, X: pl.DataFrame) -> Signals:
-        """Creates signals of this component
+    def to_signals(self, orders: list[BaseOrder]) -> Signals:
+        """Converts the output of trade() to signals
 
         Args:
-            X: features df
+            orders: the orders returned by trade()
 
         Returns:
-            dict[ColumnName, Any]: The predicted signals.
+            dict[ColumnName, Any]: The signals.
         """
-        orders = self.trade(X)
         if orders is None:
             orders = []
         if not isinstance(orders, (list, set)):

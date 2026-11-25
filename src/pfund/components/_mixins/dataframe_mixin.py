@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 if TYPE_CHECKING:
     import polars as pl
 
+    from pfund.typing import Component
+
 import narwhals as nw
 from pfund_blocks.enums import DataCategory
 
@@ -20,6 +22,7 @@ from pfund.components.bar_dataframe import (
     reorder_key_cols,
     validate_spine_df,
 )
+from pfund.enums import ArtifactType
 
 
 class DataFrameMixin(ComponentBaseMixin):
@@ -49,6 +52,21 @@ class DataFrameMixin(ComponentBaseMixin):
 
     complete_df = full_df
 
+    def load_df(self) -> pl.LazyFrame:
+        """Reads back the trading df saved by save_df(), i.e. the component's data artifact.
+
+        Returns the df only, the component's trading df in memory is left as is.
+        """
+        data = self._feed.load_artifact(cast("Component", self), ArtifactType.data)
+        if data is None:
+            raise FileNotFoundError(
+                f"no saved trading df found for '{self.name}'; call save_df() first"
+            )
+        return cast("pl.LazyFrame", data)
+
+    def save_df(self, df: pl.DataFrame):
+        self._feed.save_artifact(cast("Component", self), ArtifactType.data, artifact=df)
+
     def get_df(
         self,
         *,
@@ -72,28 +90,21 @@ class DataFrameMixin(ComponentBaseMixin):
             window_size: Number of most recent rows to return.
                 Defaults to None, i.e. return the whole dataframe.
         """
-        needs_merged_data_df = kind == "full" or (
-            kind == "data" and data_category is None
-        )
-        merged_data_df: pl.DataFrame | None = None
-        if needs_merged_data_df:
-            data_dfs = {
-                category: nw.from_native(data_store.get_df(with_metadata=False))
-                for category, data_store in self.data_stores.items()
-                if data_store.get_datas() and data_store._df is not None
-            }
-            if data_dfs:
-                merged_data_df = cast(
-                    "pl.DataFrame", self._merge_data_dfs(data_dfs).to_native()
-                )
-
         if kind == "data":
             if data_category is not None:
                 store = self._databoy.get_data_store(data_category)
                 df = store.get_df(window_size=window_size)
             else:
-                if merged_data_df is None:
+                data_dfs = {
+                    category: nw.from_native(data_store.get_df(with_metadata=False))
+                    for category, data_store in self.data_stores.items()
+                    if data_store.get_datas() and data_store._df is not None
+                }
+                if not data_dfs:
                     raise RuntimeError(f"{self.name} data df is not ready")
+                merged_data_df = cast(
+                    "pl.DataFrame", self._build_data_df(data_dfs).to_native()
+                )
                 # trim after merging, so all categories cover the same last N bars
                 df = (
                     merged_data_df
@@ -103,62 +114,67 @@ class DataFrameMixin(ComponentBaseMixin):
         elif kind in ("features", "signals", "trading"):
             df = self.store.get_df(kind=kind, window_size=window_size)
         elif kind == "full":
-            data_df = merged_data_df
-
-            # Data stores are canonically long-form. full_df follows the
-            # component's configured form, just like its trading dataframe.
-            if data_df is not None and self.df_form == "wide":
-                data_df = cast(
-                    "pl.DataFrame",
-                    long_bar_df_to_wide(nw.from_native(data_df)).to_native(),
-                )
-
-            trading_df: pl.DataFrame | None = self.store._df
-            join_cols = BAR_KEY_COLS if self.df_form == "long" else [BAR_INDEX_COL]
-
-            if data_df is None:
-                if trading_df is None:
-                    raise RuntimeError(f"{self.name} full df is not ready")
-                df = trading_df
-            elif trading_df is None:
-                df = data_df
-            else:
-                missing_join_cols = [
-                    col
-                    for col in join_cols
-                    if col not in data_df.columns or col not in trading_df.columns
-                ]
-                if missing_join_cols:
-                    raise ValueError(
-                        f"Cannot build {self.name}'s full df; data_df and "
-                        + f"trading_df must both contain key columns {join_cols}, "
-                        + f"missing {missing_join_cols}"
-                    )
-
-                # Data configured as features is present in both frames. Keep
-                # the canonical data-store copy and remove the duplicate from
-                # trading_df before joining features and signals onto it.
-                overlapping_value_cols = [
-                    col
-                    for col in trading_df.columns
-                    if col not in join_cols and col in data_df.columns
-                ]
-                trading_df = trading_df.drop(overlapping_value_cols)
-                df = data_df.join(trading_df, on=join_cols, how="full", coalesce=True)
-
-            df = cast(
-                "pl.DataFrame",
-                reorder_key_cols(
-                    nw.from_native(df.sort(join_cols)), df_form=self.df_form
-                ).to_native(),
-            )
+            df = self._build_full_df()
             if window_size is not None:
                 df = df.tail(window_size)
         else:
             raise ValueError(f"Invalid {kind=} for component {self.name}")
         return df
 
-    def _merge_data_dfs(
+    def _build_full_df(self) -> pl.DataFrame:
+        """Builds full_df = data_df (merged data dfs from different categories) + trading_df (features + signals).
+
+        Covers every bar of both frames (full join), in the component's df_form.
+        data_df always exists, since market data is the spine.
+        """
+        data_df = self.get_df(kind="data", data_category=None)
+
+        # Data stores are canonically long-form. full_df follows the
+        # component's configured form, just like its trading dataframe.
+        if self.df_form == "wide":
+            data_df = cast(
+                "pl.DataFrame",
+                long_bar_df_to_wide(nw.from_native(data_df)).to_native(),
+            )
+
+        trading_df: pl.DataFrame | None = self.store._df
+        join_cols = BAR_KEY_COLS if self.df_form == "long" else [BAR_INDEX_COL]
+
+        if trading_df is None:
+            df = data_df
+        else:
+            missing_join_cols = [
+                col
+                for col in join_cols
+                if col not in data_df.columns or col not in trading_df.columns
+            ]
+            if missing_join_cols:
+                raise ValueError(
+                    f"Cannot build {self.name}'s full df; data_df and "
+                    + f"trading_df must both contain key columns {join_cols}, "
+                    + f"missing {missing_join_cols}"
+                )
+
+            # Data configured as features is present in both frames. Keep
+            # the canonical data-store copy and remove the duplicate from
+            # trading_df before joining features and signals onto it.
+            overlapping_value_cols = [
+                col
+                for col in trading_df.columns
+                if col not in join_cols and col in data_df.columns
+            ]
+            trading_df = trading_df.drop(overlapping_value_cols)
+            df = data_df.join(trading_df, on=join_cols, how="full", coalesce=True)
+
+        df = cast(
+            "pl.DataFrame",
+            reorder_key_cols(
+                nw.from_native(df.sort(join_cols)), df_form=self.df_form
+            ).to_native(),
+        )
+        return df
+
+    def _build_data_df(
         self, data_dfs: dict[DataCategory, nw.DataFrame[Any]]
     ) -> nw.DataFrame[Any]:
         """Enrich the component's primary-resolution market-data spine.
@@ -236,7 +252,7 @@ class DataFrameMixin(ComponentBaseMixin):
             and data_store.get_datas()
         }
         if data_dfs:
-            df = self._merge_data_dfs(data_dfs)
+            df = self._build_data_df(data_dfs)
             market_data_store = self.market_data_store
             # if data columns aren't considered as features, drop everything, keep the spine only
             if not market_data_store.data_as_features:
@@ -283,7 +299,7 @@ class DataFrameMixin(ComponentBaseMixin):
 
         return df
 
-    def _merge_signals_dfs(self) -> nw.DataFrame[Any]:
+    def _build_features_df(self) -> nw.DataFrame[Any]:
         """Build this component's historical feature frame.
 
         The component's own data establishes its receiving bar spine when

@@ -1,14 +1,93 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Any, ClassVar, cast, override
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Generator
+
+    from pfund.typing import Component
+
+    type ChunkNum = int
+
+from contextlib import contextmanager
 
 import polars as pl
 
 from pfund.backtest._mixins import portfolio_backtest_mixin, product_backtest_mixin
 from pfund.backtest._mixins.backtest_mixin import BacktestMixin
+from pfund.components.bar_dataframe import KEY_COLS as BAR_KEY_COLS
+
+
+def _split_df_into_time_chunks(
+    df: pl.DataFrame,
+    num_chunks: int,
+) -> list[tuple[pl.DataFrame, ChunkNum]]:
+    """Splits a date-sorted df into contiguous, timestamp-safe chunks.
+
+    The unique dates are split like np.array_split (the extra dates go to the first chunks),
+    so the rows of one date never end up in two chunks, e.g. in long form.
+    """
+    if num_chunks < 1:
+        raise ValueError("num_chunks must be greater than 0")
+    if "date" not in df.columns:
+        raise ValueError("chunked backtesting requires a 'date' column")
+
+    date = df.get_column("date")
+    if date.is_empty():
+        raise ValueError("chunked backtesting requires at least one row")
+    if date.has_nulls():
+        raise ValueError("chunked backtesting does not support null dates")
+    if not date.is_sorted():
+        raise ValueError("the dataframe must be sorted by 'date' before chunking")
+
+    # 0, 0, 1, 1, 2, ...: the index of each row's date among the unique dates
+    time_ids = date.rle_id()
+    num_times = cast("int", time_ids[-1]) + 1
+    if num_chunks > num_times:
+        raise ValueError(
+            f"num_chunks ({num_chunks}) cannot exceed the number of unique "
+            + f"timestamps ({num_times})"
+        )
+
+    # chunk k covers the dates [time_bounds[k], time_bounds[k + 1])
+    q, r = divmod(num_times, num_chunks)
+    time_bounds = [k * q + min(k, r) for k in range(num_chunks + 1)]
+    # the first row of each bound's date, the last bound (num_times) maps to len(df)
+    row_bounds = time_ids.search_sorted(
+        pl.Series(time_bounds, dtype=time_ids.dtype), side="left"
+    ).to_list()
+    return [
+        (df.slice(row_bounds[k], row_bounds[k + 1] - row_bounds[k]), k)
+        for k in range(num_chunks)
+    ]
+
+
+@contextmanager
+def _without_dfs(component: Component) -> Generator[None]:
+    """Temporarily detaches the dfs of the component tree, i.e. its data stores' dfs and store._df, children included.
+
+    Used around ray.put() in chunked backtesting: otherwise every Ray worker in flight holds a copy of the
+    full dataset (~67MB per product-year of 1m bars, ~4GB at 1s), though a chunk task only uses its df_chunk.
+    So inside a chunk task, the backtestee's own dfs are None,
+    i.e. a user's backtest() must use the df passed in, not self.data_df/self.df.
+    The dfs are restored on exit.
+    """
+    detached: list[tuple[Any, pl.DataFrame | None]] = []
+
+    def _detach(comp: Component) -> None:
+        for store in [comp.store, *comp.data_stores.values()]:
+            detached.append((store, store._df))
+            store._df = None
+        for child in comp.components:
+            # components always run locally in backtesting, never as ActorProxy
+            _detach(cast("Component", child))
+
+    try:
+        _detach(component)
+        yield
+    finally:
+        for store, df in detached:
+            store._df = df
 
 
 class BacktestStrategyMixin(BacktestMixin):
@@ -16,8 +95,182 @@ class BacktestStrategyMixin(BacktestMixin):
 
     Adopted onto a strategy via ``BacktestStrategyMixin._adopt(strategy)``.
     """
-    # defined by the user's strategy
-    backtest: Callable[[pl.DataFrame], pl.DataFrame]
+
+    # column telling apart the standalone backtests (chunks) in a strategy's backtest df, 0 for an unchunked run
+    CHUNK_COL: ClassVar[str] = "chunk_num"
+
+    def backtest(
+        self,
+        X: pl.DataFrame,
+        num_chunks: int = 1,
+        num_cpus: int | None = None,
+    ) -> pl.DataFrame:
+        """Runs a vectorized backtest of the strategy on ``X``.
+
+        Overrides the user's backtest(df): _adopt() puts this mixin before the user's
+        strategy class in the MRO, so ``strategy.backtest(X)`` lands here first,
+        then calls the user's backtest(df) on each chunk, see _backtest_chunk().
+
+        Args:
+            X: self.X or a row subset of it, e.g. X_train, X_val or a fold.
+                The data columns missing from X (e.g. OHLCV with add_data(as_features=False))
+                are joined back before the user's backtest(df), see _prepare_backtest_df().
+            num_chunks:
+                Number of standalone backtests to split ``df`` into.
+                if <= 1, process the whole df all at once (values below 1 are treated as 1).
+                if > 1, use Ray for parallel processing.
+                When chunked, the strategy's dfs (e.g. self.data_df, self.df) are None inside its backtest(),
+                use the df passed in.
+            num_cpus:
+                Maximum number of chunks (Ray tasks) in flight at once, i.e. how many chunks run in parallel.
+                if None, defaults to os.cpu_count().
+                This will be ignored if Ray is not used (i.e. num_chunks = 1).
+
+        Returns:
+            The backtest df, all chunks concatenated in chunk order, with each row's chunk in the CHUNK_COL column.
+            Use df.partition_by(CHUNK_COL, as_dict=True) to get the per-chunk dfs.
+        """
+        import os
+
+        df = self._prepare_backtest_df(X)
+
+        if num_chunks <= 1:
+            return self._backtest_chunk(df)
+
+        from itertools import islice
+
+        import ray
+        from pfund_kit.utils.progress_bar import ProgressBar
+        from pfund_kit.utils.ray import (
+            ray_logging_context,
+            setup_logger_in_ray_task,
+            setup_ray,
+        )
+        from ray.util.queue import Queue
+
+        num_cpus = (os.cpu_count() or 1) if num_cpus is None else max(1, num_cpus)
+
+        @ray.remote
+        def ray_task(
+            log_queue: Queue,
+            # passed in as an ObjectRef, Ray resolves top-level ObjectRef args before the task runs
+            strategy: BacktestStrategyMixin,
+            df_chunk: pl.DataFrame,
+            chunk_num: int,
+        ) -> pl.DataFrame:
+            logger = setup_logger_in_ray_task(strategy.logger.name, log_queue)
+            try:
+                return strategy._backtest_chunk(df_chunk, chunk_num=chunk_num)
+            except Exception:
+                # log it to the log file, then re-raise: ray.get() raises it in the driver,
+                # which cancels the other chunks, so a partial set of chunks is never returned
+                logger.exception(f"Error in Backtest-Chunk{chunk_num}:")
+                raise
+
+        df_chunks: list[tuple[pl.DataFrame, int]] = _split_df_into_time_chunks(
+            df, num_chunks
+        )
+
+        self.logger.debug("setting up ray...")
+        setup_ray()
+        # serialize the strategy into the object store once, instead of once per chunk,
+        # each task still deserializes its own copy, so chunks don't share state.
+        # its dfs are left out, see _without_dfs()
+        with _without_dfs(cast("Any", self)):
+            strategy_ref: ray.ObjectRef[BacktestStrategyMixin] = ray.put(self)
+
+        logger = self.logger
+        with ray_logging_context(logger) as log_queue:
+            unfinished: list[ray.ObjectRef] = []
+            try:
+                pending = iter(df_chunks)
+                # chunks finish in any order, keep the results in chunk order,
+                # chunks are contiguous date ranges, so the combined df stays sorted by (chunk_num, date)
+                ref_to_chunk_num: dict[ray.ObjectRef, int] = {}
+                # placeholders, every slot is filled before the chunks are combined
+                results: list[pl.DataFrame] = cast(
+                    "list[pl.DataFrame]", [None] * len(df_chunks)
+                )
+
+                def submit_next(df_chunk: pl.DataFrame, chunk_num: int) -> ray.ObjectRef:
+                    # Ray's .remote() only takes positional arguments (for type checkers)
+                    ref = ray_task.remote(log_queue, strategy_ref, df_chunk, chunk_num)
+                    ref_to_chunk_num[ref] = chunk_num
+                    return ref
+
+                # sliding window: keep num_cpus chunks in flight, start the next chunk
+                # as soon as one finishes, so a slow chunk doesn't leave the other workers idle
+                unfinished = [submit_next(*item) for item in islice(pending, num_cpus)]
+                with ProgressBar(
+                    total=len(df_chunks),
+                    description=f"Backtesting {self.name} ({len(df_chunks)} chunks, {min(num_cpus, len(df_chunks))} in parallel)",
+                ) as pbar:
+                    while unfinished:
+                        finished, unfinished = ray.wait(unfinished, num_returns=1)
+                        results[ref_to_chunk_num[finished[0]]] = ray.get(finished[0])
+                        pbar.advance(1)
+                        if (item := next(pending, None)) is not None:
+                            unfinished.append(submit_next(*item))
+            except BaseException:
+                # e.g. KeyboardInterrupt or a crashed worker: cancel the in-flight chunks,
+                # otherwise they keep running after the backtest returns, and re-raise.
+                # force=True kills the worker, a non-forced cancel doesn't stop a task that's already running
+                for ref in unfinished:
+                    ray.cancel(ref, force=True)
+                raise
+
+        # combine the chunks into one df, ordered by (chunk_num, date): chunks are contiguous date ranges,
+        # and the results are kept in chunk order.
+        return pl.concat(results, how="vertical")
+
+    def _prepare_backtest_df(self, X: pl.DataFrame) -> pl.DataFrame:
+        """Validates the X passed into backtest() and returns the full df of its rows.
+
+        X must be a row subset of self.X (e.g. X_train, X_val, a fold or any filter of self.X)
+        with exactly self.X's columns.
+        Before backtest(), the strategy's trading_df has no signals yet, i.e. trading_df = self.X,
+        so the full df (data + trading_df) is built over every bar, then trimmed to X's rows.
+        This way the backtest also gets the data not configured as features,
+        e.g. OHLCV with add_data(as_features=False).
+
+        Runs before chunking, since the dfs are detached inside the chunk tasks, see _without_dfs().
+        """
+        if X.columns != self.X.columns:
+            raise ValueError(
+                f"{self.name}.backtest() expects the columns of {self.name}.X, "
+                + f"got extra {[c for c in X.columns if c not in self.X.columns]}, "
+                + f"missing {[c for c in self.X.columns if c not in X.columns]}. "
+                + "Pass X or a row subset of it, e.g. X_train, X_val or a fold"
+            )
+        num_unknown_rows = X.join(self.X, on=BAR_KEY_COLS, how="anti").height
+        if num_unknown_rows:
+            raise ValueError(
+                f"{self.name}.backtest() got {num_unknown_rows} rows not found in {self.name}.X, "
+                + "pass X or a row subset of it, e.g. X_train, X_val or a fold"
+            )
+        full_df = self.get_df(kind="full")
+        # full_df is built from self.X (the full dataset), but the input X could be a subset of it
+        # (e.g. X_train/X_val/X_test or a fold), so trim full_df to the input X's rows
+        return full_df.join(
+            X.select(BAR_KEY_COLS),
+            on=BAR_KEY_COLS,
+            how="semi",
+            maintain_order="left",
+        )
+
+    def _backtest_chunk(self, df: pl.DataFrame, chunk_num: int = 0) -> pl.DataFrame:
+        """Runs the user's backtest(df) on one chunk, in between the pre/postprocessing.
+
+        Chunks are standalone backtests, the CHUNK_COL column tells them apart;
+        an unchunked run is chunk 0, so every strategy backtest df has the same schema.
+        """
+        self._preprocess_for_vectorized_backtest(df)
+        # the user's backtest(), next in the MRO after this mixin
+        backtest_df = cast("Any", super()).backtest(df)
+        backtest_df = self._postprocess_for_vectorized_backtest(backtest_df)
+        return backtest_df.with_columns(
+            pl.lit(chunk_num).alias(BacktestStrategyMixin.CHUNK_COL)
+        )
 
     @override
     def _set_name(self, name: str):
@@ -50,7 +303,8 @@ class BacktestStrategyMixin(BacktestMixin):
 
         from pfund.components.bar_dataframe import KEY_COLS
 
-        backtest = getattr(self, "backtest", None)
+        # the user's backtest(), self.backtest is this mixin's override
+        backtest = getattr(super(), "backtest", None)
         if not callable(backtest):
             raise NotImplementedError(
                 f"{self} has no backtest() method, which VECTORIZED backtesting requires. "
@@ -104,15 +358,13 @@ class BacktestStrategyMixin(BacktestMixin):
         if not df.get_column("date").is_sorted():
             raise ValueError("the dataframe must be sorted by 'date' (ascending)")
 
-        from pfund.engines.backtest_engine import BacktestEngine
-
         # the mode (product/portfolio) is unknown until backtest() runs, so both modes'
         # output columns are reserved, plus the engine's chunk column;
         # an input column with the same name would be silently overwritten
         reserved_cols = {
             *product_backtest_mixin.OUTPUT_COLS,
             *portfolio_backtest_mixin.OUTPUT_COLS,
-            BacktestEngine.CHUNK_COL,
+            BacktestStrategyMixin.CHUNK_COL,
         }
         clashing_cols = [c for c in df.columns if c in reserved_cols]
         if clashing_cols:
