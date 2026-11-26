@@ -309,6 +309,19 @@ class BacktestMixin(ComponentMixin):
     def _publish_signals(self, signals: Signals, data: BarData):
         pass
 
+    def _compute_signals_on_the_fly(self):
+        self.logger.warning(
+            f"No persisted trading dataframe found for '{self.name}'. "
+            + "Running its vectorized backtest on the fly...",
+            style=TextStyle.BOLD + RichColor.YELLOW,
+        )
+        X = self.X
+        signals = cast("Component", self)._signalize(X)
+        signals_df = pl.DataFrame(signals)
+        trading_df = pl.concat([X, signals_df], how="horizontal")
+        self.store.set_df(trading_df)
+        self.save_df()
+
     @override
     def _materialize(self):
         for data_store in self.data_stores.values():
@@ -321,22 +334,8 @@ class BacktestMixin(ComponentMixin):
                 # child component will load its trading_df so that its signals can be merged into its parent's trading df
                 self.store.materialize()
                 if self.store._df is None:
-                    self.logger.warning(
-                        f"No persisted trading dataframe found for '{self.name}'. "
-                        + "Running its vectorized backtest on the fly...",
-                        style=TextStyle.BOLD + RichColor.YELLOW,
-                    )
                     self.store.set_df(self._build_features_df().to_native())
-
-                    # signals over the parent's whole period; a child refit per CV fold
-                    # can't share one df, it needs per-fold output (not supported yet)
-                    X = self.X
-                    # TODO: this calls model.predict(), thats a bug without a trained model
-                    signals = cast("Component", self)._signalize(X)
-                    signals_df = pl.DataFrame(signals)
-                    backtest_df = pl.concat([X, signals_df], how="horizontal")
-                    self.store.set_df(backtest_df)
-                    self.save_df()
+                    self._compute_signals_on_the_fly()
             self._assert_split_resolution()
         # FIXME: event-driven should also call self._assert_split_resolution(),
         # brainstorm: let it own trading df the same way as VECTORIZED, empty it before looping

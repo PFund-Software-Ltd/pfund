@@ -22,7 +22,7 @@ class BacktestModelMixin(BacktestMixin):
 
     @override
     def _materialize(self):
-        super()._materialize()
+        # load first: super()._materialize() may predict on the fly, which needs the trained model
         try:
             # the mixin only ever runs as part of a model
             cast("BaseModel", self).load()
@@ -35,6 +35,17 @@ class BacktestModelMixin(BacktestMixin):
                 style=TextStyle.BOLD + RichColor.YELLOW,
             )
             self._is_training = True
+        super()._materialize()
+
+    @override
+    def _compute_signals_on_the_fly(self):
+        if self.is_training():
+            raise FileNotFoundError(
+                f"No persisted trading dataframe or trained model found for child model '{self.name}', "
+                + "signals can be computed on the fly but the model can't be trained on the fly. "
+                + "Backtest (train) it on its own first and call save()"
+            )
+        super()._compute_signals_on_the_fly()
 
     def load_checkpoint(self, step: int) -> dict[str, Any]:
         """Read back the checkpoint written by save_checkpoint() at `step`. Restores
