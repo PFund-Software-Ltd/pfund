@@ -1,8 +1,9 @@
-"""Tests BacktestEngine: construction, the add-component and add-data flows, and run(), i.e. picking the backtestee,
-chunking the df (sequentially or over Ray), and post-processing, persisting and returning the backtest df.
+"""Tests BacktestEngine: construction, the add-component and add-data flows, and run(), plus the strategy's
+chunked vectorized backtest, i.e. strategy.backtest(X) chunking the df (sequentially or over Ray).
 
-The backtestee's own backtest (BacktestMixin._vectorized_backtest/_event_driven_backtest) and the component setup
-(gather/start/stop) are stubbed in the run() tests, only the engine's orchestration is tested here.
+engine.run() only sets up the components and prepares the data, the component setup (gather/start/stop) is
+stubbed in the run() tests. In the strategy.backtest(X) tests, the df preparation and the per-chunk backtest
+(_prepare_backtest_df/_backtest_chunk) are stubbed, only the chunking is tested here.
 """
 
 from __future__ import annotations
@@ -27,18 +28,18 @@ from sklearn.linear_model import LinearRegression
 import pfund as pf
 from pfund.backtest._mixins.feature_mixin import BacktestFeatureMixin
 from pfund.backtest._mixins.model_mixin import BacktestModelMixin
-from pfund.backtest._mixins.strategy_mixin import BacktestStrategyMixin
+from pfund.backtest._mixins.strategy_mixin import (
+    BacktestStrategyMixin,
+    _split_df_into_time_chunks,
+    _without_dfs,
+)
 from pfund.backtest.cv.dataset_splits import DatasetSplits
 from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.components.actor_proxy import ActorProxy
 from pfund.components.models.sklearn_model import SKLearnModel
 from pfund.components.strategies._dummy_strategy import _DummyStrategy
 from pfund.data_config import DataConfig
-from pfund.engines.backtest_engine import (
-    BacktestEngine,
-    _split_df_into_time_chunks,
-    _without_dfs,
-)
+from pfund.engines.backtest_engine import BacktestEngine
 from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
 from pfund.enums import BacktestMode, RunMode
 from pfund.simulated import SimulatedVenue
@@ -47,7 +48,7 @@ VENUE = "BYBIT"
 BTC = "BTC_USDT_PERP"
 ETH = "ETH_USDT_PERP"
 BTC_NAME = "BYBIT_BTC_USDT_PERPETUAL"
-CHUNK_COL = BacktestEngine.CHUNK_COL
+CHUNK_COL = BacktestStrategyMixin.CHUNK_COL
 
 
 class MyStrategy(pf.Strategy):
@@ -93,7 +94,6 @@ class TestInit:
         assert engine.backtest_mode == BacktestMode.VECTORIZED
         assert engine.context.num_chunks == 1
         assert engine.context.dataset_splits is None
-        assert engine.result is None
         assert not engine.is_running()
 
     def test_mode_accepts_a_string(self):
@@ -563,27 +563,6 @@ def _backtested(df: pl.DataFrame) -> pl.DataFrame:
     return df.with_columns((pl.col("x") * 2).alias("signal"))
 
 
-def _stub_backtest(
-    mocker: MockerFixture,
-    component: Any,
-    df: pl.DataFrame,
-    *,
-    df_kind: str = "full_df",
-    side_effect: Callable[[pl.DataFrame], pl.DataFrame] | Exception = _backtested,
-    method: str = "_vectorized_backtest",
-) -> Any:
-    """Makes `component.{df_kind}` return df, and the other df kinds raise, then stubs its backtest method."""
-    for kind in ("data_df", "trading_df", "full_df"):
-        if kind == df_kind:
-            prop = mocker.PropertyMock(return_value=df)
-        else:
-            prop = mocker.PropertyMock(
-                side_effect=AssertionError(f"{kind} must not be read")
-            )
-        mocker.patch.object(type(component), kind, new_callable=lambda prop=prop: prop)
-    return mocker.patch.object(component, method, side_effect=side_effect)
-
-
 @pytest.fixture
 def no_component_setup(engine: BacktestEngine, mocker: MockerFixture) -> Any:
     """Skips the component setup in run(): gathering needs data and accounts (the BacktestMixin side),
@@ -594,112 +573,23 @@ def no_component_setup(engine: BacktestEngine, mocker: MockerFixture) -> Any:
 
 
 @pytest.mark.usefixtures("no_component_setup")
-class TestRunStrategy:
-    @pytest.fixture
-    def strategy(self, engine: BacktestEngine) -> Any:
-        return engine.add_strategy(MyStrategy(), "1d", name="alpha")
-
-    @pytest.fixture
-    def persist(self, strategy: Any, mocker: MockerFixture) -> Any:
-        return mocker.patch.object(strategy.store, "persist_to_datalake")
-
-    def test_full_df_is_backtested_and_returned_as_chunk_0(
-        self, engine: BacktestEngine, strategy: Any, mocker: MockerFixture, persist: Any
+class TestRun:
+    def test_vectorized_run_only_sets_up_the_components(
+        self, engine: BacktestEngine, mocker: MockerFixture, no_component_setup: Any
     ):
-        df = _wide_df(4)
-        backtest = _stub_backtest(mocker, strategy, df)
+        strategy = engine.add_strategy(MyStrategy(), "1d", name="alpha")
+        backtest_chunk = mocker.patch.object(strategy, "_backtest_chunk")
 
-        result = engine.run()
+        assert engine.run() is None
 
-        backtest.assert_called_once()
-        assert backtest.call_args.args[0].equals(df)
-        assert result is not None
-        assert result.get_column(CHUNK_COL).to_list() == [0] * 4
-        assert result.get_column("signal").to_list() == [0, 2, 4, 6]
-        assert engine.result is result
-
-    def test_result_is_persisted_once_in_vectorized_mode(
-        self, engine: BacktestEngine, strategy: Any, mocker: MockerFixture, persist: Any
-    ):
-        _stub_backtest(mocker, strategy, _wide_df(3))
-
-        result = engine.run()
-
-        persist.assert_called_once_with()
-        assert strategy.store._df is result
-
-    def test_event_driven_backtests_data_df_and_does_not_persist(
-        self, engine: BacktestEngine, strategy: Any, mocker: MockerFixture, persist: Any
-    ):
-        mocker.patch.object(engine.context, "mode", BacktestMode.EVENT_DRIVEN)
-        df = _wide_df(3)
-        backtest = _stub_backtest(
-            mocker, strategy, df, df_kind="data_df", method="_event_driven_backtest"
-        )
-
-        result = engine.run()
-
-        assert backtest.call_args.args[0].equals(df)
-        assert result is not None
-        assert result.get_column(CHUNK_COL).to_list() == [0] * 3
-        persist.assert_not_called()
-
-    def test_num_chunks_is_set_before_the_components_are_set_up(
-        self,
-        engine: BacktestEngine,
-        strategy: Any,
-        mocker: MockerFixture,
-        persist: Any,
-        no_component_setup: Any,
-        fake_ray: FakeRay,
-    ):
-        _stub_backtest(mocker, strategy, _wide_df(3))
-        num_chunks_at_setup: list[int] = []
-        no_component_setup.side_effect = lambda: num_chunks_at_setup.append(
-            engine.context.num_chunks
-        )
-
-        engine.run(num_chunks=3)
-
-        assert num_chunks_at_setup == [3]
-
-    @pytest.mark.parametrize("num_chunks", [0, -1])
-    def test_num_chunks_below_one_is_one(
-        self,
-        engine: BacktestEngine,
-        strategy: Any,
-        mocker: MockerFixture,
-        persist: Any,
-        num_chunks: int,
-    ):
-        _stub_backtest(mocker, strategy, _wide_df(3))
-
-        result = engine.run(num_chunks=num_chunks)
-
-        assert engine.context.num_chunks == 1
-        assert result is not None
-        assert result.get_column(CHUNK_COL).to_list() == [0] * 3
-
-    def test_error_is_logged_reraised_and_the_engine_ends(
-        self, engine: BacktestEngine, strategy: Any, mocker: MockerFixture, persist: Any
-    ):
-        _stub_backtest(
-            mocker, strategy, _wide_df(3), side_effect=ValueError("bad backtest")
-        )
-        log_exception = mocker.patch.object(engine._logger, "exception")
-
-        with pytest.raises(ValueError, match="bad backtest"):
-            engine.run()
-
-        log_exception.assert_called_once()
-        assert not engine.is_running()
-        assert engine.result is None
-        persist.assert_not_called()
+        no_component_setup.assert_called_once_with()
+        # the user backtests it via strategy.backtest(X) after run()
+        backtest_chunk.assert_not_called()
 
     def test_engine_ends_after_a_successful_run(
-        self, engine: BacktestEngine, strategy: Any, mocker: MockerFixture, persist: Any
+        self, engine: BacktestEngine, mocker: MockerFixture
     ):
-        _stub_backtest(mocker, strategy, _wide_df(3))
+        engine.add_strategy(MyStrategy(), "1d", name="alpha")
         end = mocker.spy(engine, "end")
 
         engine.run()
@@ -707,100 +597,27 @@ class TestRunStrategy:
         end.assert_called_once()
         assert not engine.is_running()
 
-    def test_engine_ends_when_the_component_setup_fails(
-        self,
-        engine: BacktestEngine,
-        strategy: Any,
-        mocker: MockerFixture,
-        persist: Any,
-        no_component_setup: Any,
+    def test_setup_error_is_logged_reraised_and_the_engine_ends(
+        self, engine: BacktestEngine, mocker: MockerFixture, no_component_setup: Any
     ):
-        _stub_backtest(mocker, strategy, _wide_df(3))
+        engine.add_strategy(MyStrategy(), "1d", name="alpha")
         no_component_setup.side_effect = RuntimeError("setup failed")
+        log_exception = mocker.patch.object(engine._logger, "exception")
 
         with pytest.raises(RuntimeError, match="setup failed"):
             engine.run()
 
+        log_exception.assert_called_once()
         assert not engine.is_running()
         # the engine can run again
         no_component_setup.side_effect = None
-        assert engine.run() is not None
-
-
-@pytest.mark.usefixtures("no_component_setup")
-class TestRunFeature:
-    @pytest.fixture
-    def feature(self, engine: BacktestEngine, mocker: MockerFixture) -> Any:
-        feature = engine.add_feature(MyFeature(), "1d", name="ema")
-        mocker.patch.object(feature.store, "persist_to_datalake")
-        return feature
-
-    def test_trading_df_is_backtested_without_chunk_col(
-        self, engine: BacktestEngine, feature: Any, mocker: MockerFixture
-    ):
-        df = _wide_df(3)
-        backtest = _stub_backtest(mocker, feature, df, df_kind="trading_df")
-
-        result = engine.run()
-
-        assert backtest.call_args.args[0].equals(df)
-        assert result is not None
-        assert result.equals(_backtested(df))
-
-    def test_result_is_persisted_to_the_feature_store(
-        self, engine: BacktestEngine, feature: Any, mocker: MockerFixture
-    ):
-        _stub_backtest(mocker, feature, _wide_df(3), df_kind="trading_df")
-        dummy = engine.get_strategy(_DummyStrategy.__name__)
-        dummy_persist = mocker.patch.object(dummy.store, "persist_to_datalake")
-
-        result = engine.run()
-
-        feature.store.persist_to_datalake.assert_called_once_with()
-        assert feature.store._df is result
-        dummy_persist.assert_not_called()
-
-    def test_chunking_falls_back_to_one_chunk_with_a_warning(
-        self, engine: BacktestEngine, feature: Any, mocker: MockerFixture
-    ):
-        backtest = _stub_backtest(mocker, feature, _wide_df(4), df_kind="trading_df")
-        warning = mocker.patch.object(engine._logger, "warning")
-
-        engine.run(num_chunks=2)
-
-        assert engine.context.num_chunks == 1
-        backtest.assert_called_once()
-        assert any(
-            "only supported for strategy backtesting" in call.args[0]
-            for call in warning.call_args_list
-        )
-
-
-@pytest.mark.usefixtures("no_component_setup")
-class TestRunModel:
-    @pytest.fixture
-    def model(self, engine: BacktestEngine, mocker: MockerFixture) -> Any:
-        model = engine.add_model(LinearRegression(), "1d", name="lr")
-        mocker.patch.object(model.store, "persist_to_datalake")
-        return model
-
-    def test_training_returns_none_without_backtesting(
-        self, engine: BacktestEngine, model: Any, mocker: MockerFixture
-    ):
-        model._is_training = True
-        backtest = _stub_backtest(mocker, model, _wide_df(3), df_kind="trading_df")
-
-        result = engine.run()
-
-        assert result is None
-        assert engine.result is None
-        backtest.assert_not_called()
-        model.store.persist_to_datalake.assert_not_called()
+        engine.run()
         assert not engine.is_running()
 
     def test_event_driven_training_is_rejected(
-        self, engine: BacktestEngine, model: Any, mocker: MockerFixture
+        self, engine: BacktestEngine, mocker: MockerFixture
     ):
+        model = engine.add_model(LinearRegression(), "1d", name="lr")
         mocker.patch.object(engine.context, "mode", BacktestMode.EVENT_DRIVEN)
         model._is_training = True
 
@@ -809,39 +626,16 @@ class TestRunModel:
 
         assert not engine.is_running()
 
-    def test_trained_model_is_backtested(
-        self, engine: BacktestEngine, model: Any, mocker: MockerFixture
+    def test_event_driven_dummy_strategy_without_model_or_feature_is_rejected(
+        self, engine: BacktestEngine, mocker: MockerFixture
     ):
-        df = _wide_df(3)
-        backtest = _stub_backtest(mocker, model, df, df_kind="trading_df")
+        engine._create_dummy_strategy("1d")
+        mocker.patch.object(engine.context, "mode", BacktestMode.EVENT_DRIVEN)
 
-        result = engine.run()
+        with pytest.raises(ValueError, match="No model or feature to backtest"):
+            engine.run()
 
-        assert backtest.call_args.args[0].equals(df)
-        assert result is not None
-        assert result.equals(_backtested(df))
-        assert CHUNK_COL not in result.columns
-
-
-@pytest.mark.usefixtures("no_component_setup")
-def test_run_without_a_strategy_is_rejected(
-    engine: BacktestEngine, no_component_setup: Any
-):
-    with pytest.raises(ValueError, match="Nothing to backtest"):
-        engine.run()
-
-    assert not engine.is_running()
-    no_component_setup.assert_not_called()
-
-
-@pytest.mark.usefixtures("no_component_setup")
-def test_dummy_strategy_without_model_or_feature_is_rejected(engine: BacktestEngine):
-    engine._create_dummy_strategy("1d")
-
-    with pytest.raises(ValueError, match="No model or feature to backtest"):
-        engine.run()
-
-    assert not engine.is_running()
+        assert not engine.is_running()
 
 
 class FakeRay:
@@ -920,48 +714,82 @@ def fake_ray(mocker: MockerFixture) -> FakeRay:
     return fake
 
 
-@pytest.mark.usefixtures("no_component_setup")
-class TestRunChunked:
+def _stub_strategy_backtest(
+    mocker: MockerFixture,
+    strategy: Any,
+    df: pl.DataFrame,
+    side_effect: Callable[[pl.DataFrame], pl.DataFrame] = _backtested,
+) -> tuple[Any, Any]:
+    """Makes strategy.backtest(X) work on df: its df preparation returns df, and each chunk is backtested
+    by side_effect, tagged with its chunk_num like _backtest_chunk() does."""
+    prepare = mocker.patch.object(strategy, "_prepare_backtest_df", return_value=df)
+
+    def backtest_chunk(df_chunk: pl.DataFrame, chunk_num: int = 0) -> pl.DataFrame:
+        return side_effect(df_chunk).with_columns(pl.lit(chunk_num).alias(CHUNK_COL))
+
+    backtest = mocker.patch.object(
+        strategy, "_backtest_chunk", side_effect=backtest_chunk
+    )
+    return prepare, backtest
+
+
+class TestStrategyBacktest:
     @pytest.fixture
-    def strategy(self, engine: BacktestEngine, mocker: MockerFixture) -> Any:
-        strategy = engine.add_strategy(MyStrategy(), "1d", name="alpha")
-        mocker.patch.object(strategy.store, "persist_to_datalake")
-        return strategy
+    def strategy(self, engine: BacktestEngine) -> Any:
+        return engine.add_strategy(MyStrategy(), "1d", name="alpha")
+
+    def test_unchunked_backtest_is_chunk_0_of_the_prepared_df(
+        self, strategy: Any, mocker: MockerFixture, fake_ray: FakeRay
+    ):
+        df = _wide_df(4)
+        X = mocker.Mock()
+        prepare, backtest = _stub_strategy_backtest(mocker, strategy, df)
+
+        result = strategy.backtest(X)
+
+        prepare.assert_called_once_with(X)
+        backtest.assert_called_once()
+        assert backtest.call_args.args[0].equals(df)
+        assert result.get_column(CHUNK_COL).to_list() == [0] * 4
+        assert result.get_column("signal").to_list() == [0, 2, 4, 6]
+        # no Ray without chunking
+        assert fake_ray.put_with_dfs_detached == []
+        assert fake_ray.finish_order == []
+
+    @pytest.mark.parametrize("num_chunks", [0, -1])
+    def test_num_chunks_below_one_is_one(
+        self, strategy: Any, mocker: MockerFixture, fake_ray: FakeRay, num_chunks: int
+    ):
+        _stub_strategy_backtest(mocker, strategy, _wide_df(3))
+
+        result = strategy.backtest(mocker.Mock(), num_chunks=num_chunks)
+
+        assert result.get_column(CHUNK_COL).to_list() == [0] * 3
+        assert fake_ray.finish_order == []
 
     def test_chunks_are_combined_in_chunk_order(
-        self,
-        engine: BacktestEngine,
-        strategy: Any,
-        mocker: MockerFixture,
-        fake_ray: FakeRay,
+        self, strategy: Any, mocker: MockerFixture, fake_ray: FakeRay
     ):
         df = _wide_df(10)
-        _stub_backtest(mocker, strategy, df)
+        _stub_strategy_backtest(mocker, strategy, df)
 
-        result = engine.run(num_chunks=4, num_cpus=2)
+        result = strategy.backtest(mocker.Mock(), num_chunks=4, num_cpus=2)
 
         # finished out of order, combined in order
         assert fake_ray.finish_order != sorted(fake_ray.finish_order)
-        assert result is not None
         assert (
             result.get_column(CHUNK_COL).to_list()
             == [0] * 3 + [1] * 3 + [2] * 2 + [3] * 2
         )
         assert result.drop(CHUNK_COL).equals(_backtested(df))
-        assert strategy.store._df is result
-        strategy.store.persist_to_datalake.assert_called_once_with()
 
     def test_each_chunk_is_backtested_on_its_own_date_range(
-        self,
-        engine: BacktestEngine,
-        strategy: Any,
-        mocker: MockerFixture,
-        fake_ray: FakeRay,
+        self, strategy: Any, mocker: MockerFixture, fake_ray: FakeRay
     ):
         df = _long_df(6, ["BTC", "ETH"])
-        backtest = _stub_backtest(mocker, strategy, df)
+        _, backtest = _stub_strategy_backtest(mocker, strategy, df)
 
-        engine.run(num_chunks=3)
+        strategy.backtest(mocker.Mock(), num_chunks=3)
 
         backtested = sorted(
             (call.args[0] for call in backtest.call_args_list),
@@ -971,20 +799,18 @@ class TestRunChunked:
         assert len(backtested) == len(expected)
         assert all(a.equals(b) for a, b in zip(backtested, expected, strict=True))
 
-    def test_backtestee_is_put_once_with_its_dfs_detached(
-        self,
-        engine: BacktestEngine,
-        strategy: Any,
-        mocker: MockerFixture,
-        fake_ray: FakeRay,
+    def test_strategy_is_put_once_with_its_dfs_detached(
+        self, strategy: Any, mocker: MockerFixture, fake_ray: FakeRay
     ):
-        _stub_backtest(mocker, strategy, _wide_df(6))
+        _stub_strategy_backtest(mocker, strategy, _wide_df(6))
         df = _wide_df(1)
         strategy.store._df = df
 
-        engine.run(num_chunks=3)
+        strategy.backtest(mocker.Mock(), num_chunks=3)
 
         assert fake_ray.put_with_dfs_detached == [True]
+        # restored after ray.put()
+        assert strategy.store._df is df
 
     @pytest.mark.parametrize(
         ("num_cpus", "cpu_count", "expected"),
@@ -992,7 +818,6 @@ class TestRunChunked:
     )
     def test_num_cpus_caps_the_chunks_in_flight(
         self,
-        engine: BacktestEngine,
         strategy: Any,
         mocker: MockerFixture,
         fake_ray: FakeRay,
@@ -1001,20 +826,15 @@ class TestRunChunked:
         expected: int,
     ):
         mocker.patch("os.cpu_count", return_value=cpu_count)
-        _stub_backtest(mocker, strategy, _wide_df(10))
+        _stub_strategy_backtest(mocker, strategy, _wide_df(10))
 
-        result = engine.run(num_chunks=5, num_cpus=num_cpus)
+        result = strategy.backtest(mocker.Mock(), num_chunks=5, num_cpus=num_cpus)
 
         assert fake_ray.max_in_flight == expected
-        assert result is not None
         assert result.get_column(CHUNK_COL).unique().sort().to_list() == [0, 1, 2, 3, 4]
 
     def test_failed_chunk_cancels_the_chunks_in_flight(
-        self,
-        engine: BacktestEngine,
-        strategy: Any,
-        mocker: MockerFixture,
-        fake_ray: FakeRay,
+        self, strategy: Any, mocker: MockerFixture, fake_ray: FakeRay
     ):
         def backtest(df: pl.DataFrame) -> pl.DataFrame:
             # chunk 1 of 3 (x = 2, 3) fails
@@ -1022,28 +842,11 @@ class TestRunChunked:
                 raise ValueError("chunk failed")
             return _backtested(df)
 
-        _stub_backtest(mocker, strategy, _wide_df(6), side_effect=backtest)
+        _stub_strategy_backtest(mocker, strategy, _wide_df(6), side_effect=backtest)
 
         with pytest.raises(ValueError, match="chunk failed"):
-            engine.run(num_chunks=3, num_cpus=2)
+            strategy.backtest(mocker.Mock(), num_chunks=3, num_cpus=2)
 
         # chunks 0 and 1 in flight, chunk 1 finishes first and fails, chunk 0 is force-cancelled, chunk 2 never starts
         assert fake_ray.finish_order == [1]
         assert fake_ray.cancelled == [(0, True)]
-        assert engine.result is None
-        strategy.store.persist_to_datalake.assert_not_called()
-        assert not engine.is_running()
-
-    def test_unchunked_run_does_not_use_ray(
-        self,
-        engine: BacktestEngine,
-        strategy: Any,
-        mocker: MockerFixture,
-        fake_ray: FakeRay,
-    ):
-        _stub_backtest(mocker, strategy, _wide_df(3))
-
-        engine.run(num_chunks=1)
-
-        assert fake_ray.put_with_dfs_detached == []
-        assert fake_ray.finish_order == []
