@@ -281,6 +281,7 @@ class TradingStore:
         if metadata and metadata["signal_cols"]:
             self._component.set_signal_cols(metadata["signal_cols"])
 
+    # TODO: add watermark?
     def persist_to_datalake(self) -> None:
         """Persist the component's current data artifact through pfeed.
 
