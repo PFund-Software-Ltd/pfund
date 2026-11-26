@@ -64,8 +64,13 @@ class DataFrameMixin(ComponentBaseMixin):
             )
         return cast("pl.LazyFrame", data)
 
-    def save_df(self, df: pl.DataFrame):
-        self._feed.save_artifact(cast("Component", self), ArtifactType.data, artifact=df)
+    def save_df(self) -> None:
+        """Saves the component's trading df as its data artifact, read back by load_df()."""
+        self._feed.save_artifact(
+            cast("Component", self),
+            ArtifactType.data,
+            artifact=self.get_df(kind="trading"),
+        )
 
     def get_df(
         self,

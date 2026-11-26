@@ -301,7 +301,7 @@ class TradingStore:
             self.logger.debug(f"{component.name} has no signals to persist yet")
             return
         # FIXME: should not always write the whole df
-        self._component.save_df(self._df)
+        self._component.save_df()
 
     def optimize_datalake(self) -> None:
         """Compacts the datalake's tables, see ``TableIO.optimize()``."""

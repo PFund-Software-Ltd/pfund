@@ -335,8 +335,8 @@ class BacktestMixin(ComponentMixin):
                     signals = cast("Component", self)._signalize(X)
                     signals_df = pl.DataFrame(signals)
                     backtest_df = pl.concat([X, signals_df], how="horizontal")
-
-                    self.save_df(backtest_df)
+                    self.store.set_df(backtest_df)
+                    self.save_df()
             self._assert_split_resolution()
         # FIXME: event-driven should also call self._assert_split_resolution(),
         # brainstorm: let it own trading df the same way as VECTORIZED, empty it before looping

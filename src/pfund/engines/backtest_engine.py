@@ -266,7 +266,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
     def use_split(self, part: SplitPart, fold: int | None = None) -> None:
         """Sets X (the trading df) of every component to its rows in one split part.
 
-        pfund's internal flow reads X (features df, save_df(), backtest()), so it then works on that
+        pfund's internal flow reads X (features df, backtest()), so it then works on that
         split without passing X_train etc. around. Data from component.split(data) has to be
         row-aligned with the current X.
 
@@ -274,7 +274,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             engine.use_split("train", fold=k)
             model.fit(model.X, y_train)
             engine.use_split("val", fold=k)
-            model.save_df(model.predict(model.X))
+            model.predict(model.X)
 
         Args:
             part: ``train``/``val`` of a fold, ``trainval`` (everything before test) or ``test``.
