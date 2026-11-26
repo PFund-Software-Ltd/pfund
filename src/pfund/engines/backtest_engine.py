@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from pfund_blocks.resolution import Resolution
 
     from pfund.backtest._mixins.backtest_mixin import BacktestMixin
-    from pfund.backtest.cv.dataset_splits import DatasetSplitsInput
+    from pfund.backtest.cv.dataset_splits import DatasetSplitsInput, SplitPart
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel, UnderlyingModel
     from pfund.components.strategies.strategy_base import BaseStrategy
@@ -229,6 +229,34 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         )
         cast("BacktestMixin", feature).set_top_component()
         return feature
+
+    def use_split(self, part: SplitPart, fold: int | None = None) -> None:
+        """Sets X (the trading df) of every component to its rows in one split part.
+
+        pfund's internal flow reads X (features df, save_df(), backtest()), so it then works on that
+        split without passing X_train etc. around. Data from component.split(data) has to be
+        row-aligned with the current X.
+
+            engine.use_split("train", fold=k)
+            model.fit(model.X, y_train)
+            engine.use_split("val", fold=k)
+            model.save_df(model.predict(model.X))
+
+        Args:
+            part: ``train``/``val`` of a fold, ``trainval`` (everything before test) or ``test``.
+            fold: required for ``train``/``val`` under cross-validation,
+                optional (only 0) under holdout.
+        """
+        if not self._strategies:
+            raise ValueError("Nothing to split, add a strategy/model/feature first")
+        # NOTE: only one strategy exists in backtesting, it carries the whole component tree
+        backtestee: Any = next(iter(self._strategies.values()))
+        if dummy_strategy := self._get_dummy_strategy():
+            # the dummy strategy has no trading df of its own, split the one model/feature it hosts
+            backtestee = next(
+                iter({**dummy_strategy.models, **dummy_strategy.features}.values())
+            )
+        cast("BacktestMixin", backtestee)._use_split(part, fold)
 
     def run(
         self,

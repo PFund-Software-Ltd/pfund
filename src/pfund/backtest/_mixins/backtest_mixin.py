@@ -58,6 +58,8 @@ class BacktestMixin(ComponentMixin):
     def _init_backtest_state(self) -> None:
         # top components are the ones added by engine.add_strategy/model/feature()
         self._is_top_component = False
+        # the trading df over the whole data range, kept by _use_split() while X holds one split
+        self._unsplit_df: pl.DataFrame | None = None
 
     @classmethod
     def _adopt[C: Component](cls, component: C) -> C:
@@ -140,6 +142,35 @@ class BacktestMixin(ComponentMixin):
             return data if part == "train" else None
         rows = dataset_splits.row_indices(self.X, part, fold)
         return None if rows.size == 0 else take_rows(data, rows)
+
+    def _use_split(self, part: SplitPart, fold: int | None = None) -> None:
+        """Sets X (the trading df) of this component and its children to their rows in one split part.
+
+        Internal, called by BacktestEngine.use_split(): the split is engine state,
+        so a component never sits on a different split from its parent.
+        """
+        if self.dataset_splits is None:
+            raise ValueError(
+                "no dataset_splits on the backtest engine, pass dataset_splits=... to BacktestEngine()"
+            )
+        if self._unsplit_df is None:
+            if self.store._df is None:
+                raise RuntimeError(
+                    f"{self.name} trading df is not ready, run the engine before engine.use_split()"
+                )
+            self._unsplit_df = self.store._df
+        rows = self.dataset_splits.row_indices(self._unsplit_df, part, fold)
+        if rows.size == 0:
+            raise ValueError(f"{self.name} has no rows in the {part!r} set")
+        self.store.set_df(take_rows(self._unsplit_df, rows))
+        in_fold = "" if fold is None else f" (fold {fold})"
+        self.logger.warning(
+            f"{self.name}.X now only holds the {part!r} set{in_fold}",
+            style=TextStyle.BOLD + RichColor.YELLOW,
+        )
+        for component in self.components:
+            # components always run locally in backtesting, never as ActorProxy
+            cast("BacktestMixin", component)._use_split(part, fold)
 
     def split[DataT: SplittableData](
         self,
@@ -304,6 +335,7 @@ class BacktestMixin(ComponentMixin):
                     # signals over the parent's whole period; a child refit per CV fold
                     # can't share one df, it needs per-fold output (not supported yet)
                     X = self.X
+                    # TODO: this calls model.predict(), thats a bug without a trained model
                     signals = cast("Component", self)._signalize(X)
                     signals_df = pl.DataFrame(signals)
                     backtest_df = pl.concat([X, signals_df], how="horizontal")
