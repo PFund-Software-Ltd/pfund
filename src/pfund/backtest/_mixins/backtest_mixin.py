@@ -154,11 +154,8 @@ class BacktestMixin(ComponentMixin):
                 "no dataset_splits on the backtest engine, pass dataset_splits=... to BacktestEngine()"
             )
         if self._unsplit_df is None:
-            if self.store._df is None:
-                raise RuntimeError(
-                    f"{self.name} trading df is not ready, run the engine before engine.use_split()"
-                )
-            self._unsplit_df = self.store._df
+            # raises if the trading df is not ready, i.e. the engine hasn't run yet
+            self._unsplit_df = self.get_df(kind="trading")
         rows = self.dataset_splits.row_indices(self._unsplit_df, part, fold)
         if rows.size == 0:
             raise ValueError(f"{self.name} has no rows in the {part!r} set")

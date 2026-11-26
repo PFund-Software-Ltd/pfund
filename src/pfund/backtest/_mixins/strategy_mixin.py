@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast, override
 if TYPE_CHECKING:
     from collections.abc import Generator
 
+    from pfund_blocks.datas import MarketData
+
     from pfund.typing import Component
 
     type ChunkNum = int
@@ -15,7 +17,7 @@ import polars as pl
 
 from pfund.backtest._mixins import portfolio_backtest_mixin, product_backtest_mixin
 from pfund.backtest._mixins.backtest_mixin import BacktestMixin
-from pfund.components.bar_dataframe import KEY_COLS as BAR_KEY_COLS
+from pfund.enums import BacktestMode
 
 
 def _split_df_into_time_chunks(
@@ -112,9 +114,9 @@ class BacktestStrategyMixin(BacktestMixin):
         then calls the user's backtest(df) on each chunk, see _backtest_chunk().
 
         Args:
-            X: self.X or a row subset of it, e.g. a split from component.split(X).
-                The data columns missing from X (e.g. OHLCV with add_data(as_features=False))
-                are joined back before the user's backtest(df), see _prepare_backtest_df().
+            X: the df passed to the user's backtest(df) as is, usually self.X after engine.use_split().
+                It has the market data columns (e.g. OHLCV), since add_data() always sets
+                as_features=True in vectorized backtesting.
             num_chunks:
                 Number of standalone backtests to split ``df`` into.
                 if <= 1, process the whole df all at once (values below 1 are treated as 1).
@@ -132,10 +134,8 @@ class BacktestStrategyMixin(BacktestMixin):
         """
         import os
 
-        df = self._prepare_backtest_df(X)
-
         if num_chunks <= 1:
-            return self._backtest_chunk(df)
+            return self._backtest_chunk(X)
 
         from itertools import islice
 
@@ -168,7 +168,7 @@ class BacktestStrategyMixin(BacktestMixin):
                 raise
 
         df_chunks: list[tuple[pl.DataFrame, int]] = _split_df_into_time_chunks(
-            df, num_chunks
+            X, num_chunks
         )
 
         self.logger.debug("setting up ray...")
@@ -192,7 +192,9 @@ class BacktestStrategyMixin(BacktestMixin):
                     "list[pl.DataFrame]", [None] * len(df_chunks)
                 )
 
-                def submit_next(df_chunk: pl.DataFrame, chunk_num: int) -> ray.ObjectRef:
+                def submit_next(
+                    df_chunk: pl.DataFrame, chunk_num: int
+                ) -> ray.ObjectRef:
                     # Ray's .remote() only takes positional arguments (for type checkers)
                     ref = ray_task.remote(log_queue, strategy_ref, df_chunk, chunk_num)
                     ref_to_chunk_num[ref] = chunk_num
@@ -223,40 +225,25 @@ class BacktestStrategyMixin(BacktestMixin):
         # and the results are kept in chunk order.
         return pl.concat(results, how="vertical")
 
-    def _prepare_backtest_df(self, X: pl.DataFrame) -> pl.DataFrame:
-        """Validates the X passed into backtest() and returns the full df of its rows.
+    @override
+    def add_data(
+        self, *args: Any, as_features: bool = True, **kwargs: Any
+    ) -> list[MarketData]:
+        """Same as ComponentMixin.add_data(), but always sets as_features=True in vectorized backtesting.
 
-        X must be a row subset of self.X (e.g. a split from component.split(X) or any filter of self.X)
-        with exactly self.X's columns.
-        Before backtest(), the strategy's trading_df has no signals yet, i.e. trading_df = self.X,
-        so the full df (data + trading_df) is built over every bar, then trimmed to X's rows.
-        This way the backtest also gets the data not configured as features,
-        e.g. OHLCV with add_data(as_features=False).
-
-        Runs before chunking, since the dfs are detached inside the chunk tasks, see _without_dfs().
+        The vectorized backtest kernel needs the market data (OHLC) in the df, and X is that df,
+        see backtest(). It doesn't affect event-driven backtesting, where trade(X) gets the
+        latest bar via self.get_data(), so X doesn't need the market data.
         """
-        if X.columns != self.X.columns:
-            raise ValueError(
-                f"{self.name}.backtest() expects the columns of {self.name}.X, "
-                + f"got extra {[c for c in X.columns if c not in self.X.columns]}, "
-                + f"missing {[c for c in self.X.columns if c not in X.columns]}. "
-                + "Pass X or a row subset of it, e.g. a split from component.split(X)"
+        if self.backtest_mode == BacktestMode.VECTORIZED and not as_features:
+            self.logger.warning(
+                f"{self.name}: as_features set to True in vectorized backtesting, "
+                + "i.e. X (or features_df) will have the OHLC columns."
             )
-        num_unknown_rows = X.join(self.X, on=BAR_KEY_COLS, how="anti").height
-        if num_unknown_rows:
-            raise ValueError(
-                f"{self.name}.backtest() got {num_unknown_rows} rows not found in {self.name}.X, "
-                + "pass X or a row subset of it, e.g. a split from component.split(X)"
-            )
-        full_df = self.get_df(kind="full")
-        # full_df is built from self.X (the full dataset), but the input X could be a subset of it
-        # (e.g. a split from component.split(X)), so trim full_df to the input X's rows
-        return full_df.join(
-            X.select(BAR_KEY_COLS),
-            on=BAR_KEY_COLS,
-            how="semi",
-            maintain_order="left",
-        )
+            as_features = True
+        return super().add_data(*args, as_features=as_features, **kwargs)
+
+    add_market_data = add_data
 
     def _backtest_chunk(self, df: pl.DataFrame, chunk_num: int = 0) -> pl.DataFrame:
         """Runs the user's backtest(df) on one chunk, in between the pre/postprocessing.
