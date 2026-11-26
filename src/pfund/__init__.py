@@ -12,8 +12,7 @@ if TYPE_CHECKING:
     # from pfund_binance import Binance
     # from pfund_okx import OKX
     import pfund.hub as hub
-    from pfund.backtest.cv.cross_validation import CrossValidation
-    from pfund.backtest.cv.holdout import Holdout
+    from pfund.backtest.cv.cross_validation import WalkForward
     from pfund.components.features.feature_base import BaseFeature as Feature
     from pfund.components.features.feature_talib import (
         TALibIndicator,
@@ -58,14 +57,10 @@ def __getattr__(name: str):
         from pfund.engines.backtest_engine import BacktestEngine
 
         return BacktestEngine
-    elif name == "Holdout":
-        from pfund.backtest.cv.holdout import Holdout
+    elif name == "WalkForward":
+        from pfund.backtest.cv.cross_validation import WalkForward
 
-        return Holdout
-    elif name == "CrossValidation":
-        from pfund.backtest.cv.cross_validation import CrossValidation
-
-        return CrossValidation
+        return WalkForward
     elif name == "DataConfig":
         from pfund.data_config import DataConfig
 
@@ -150,8 +145,7 @@ __all__ = (  # noqa: RUF022
     "DataConfig",
     "VenueConfig",
     "SimulatedAccount",
-    "Holdout",
-    "CrossValidation",
+    "WalkForward",
     "BacktestDataFrame",
     # engines
     "BacktestEngine",

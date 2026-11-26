@@ -12,7 +12,7 @@ if TYPE_CHECKING:
         dev: float
         test: float
         # cross-validation folds over everything before the test tail,
-        # only combined with `test`, e.g. {"test": 0.1, "folds": CrossValidation()}
+        # only combined with `test`, e.g. {"test": 0.1, "folds": WalkForward()}
         folds: CrossValidator
 
     # the user-facing way to say how to split the dataset:

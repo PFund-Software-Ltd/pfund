@@ -8,7 +8,7 @@ import math
 import polars as pl
 import pytest
 
-from pfund.backtest.cv.cross_validation import CrossValidation
+from pfund.backtest.cv.cross_validation import WalkForward
 from pfund.backtest.cv.dataset_splits import DatasetSplits, _parse
 from pfund.backtest.cv.holdout import Holdout
 
@@ -29,7 +29,7 @@ class TestPassThrough:
         assert to_recipe(holdout) is holdout
 
     def test_cross_validator(self):
-        cv = CrossValidation(n_splits=3)
+        cv = WalkForward(n_splits=3)
         assert to_recipe(cv) is cv
 
     def test_sklearn_splitter(self):

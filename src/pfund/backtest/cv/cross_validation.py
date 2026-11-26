@@ -25,27 +25,29 @@ class CrossValidator(Protocol):
 
 
 @dataclass(frozen=True)
-class CrossValidation(CrossValidator):
-    """Expanding-window cross-validation for ordered time-series samples.
+class WalkForward(CrossValidator):
+    """Walk-forward splits for ordered time-series samples.
 
-    The arguments and split behavior follow sklearn's ``TimeSeriesSplit``.
+    Expanding train windows by default, rolling with ``max_train_size``.
+    The arguments and split behavior follow sklearn's ``TimeSeriesSplit``,
+    except that its per-fold ``test_size`` is named ``val_size`` here: the
+    held-out window of each fold is the validation set, and the final test
+    tail comes from ``{"test": ..., "folds": WalkForward()}``, not from the folds.
     ``DatasetSplits`` runs it on the split grid of everything before the test tail,
-    so every component shares the same fold boundaries. Sklearn's per-fold
-    ``test_size`` is exposed by PFund as the validation set; the final test
-    tail comes from ``{"test": ..., "folds": cv}``, not from the folds.
+    so every component shares the same fold boundaries.
     """
 
     n_splits: int = 5
     max_train_size: int | None = None
-    test_size: int | None = None
+    val_size: int | None = None
     gap: int = 0
 
     def __post_init__(self) -> None:
         self._validate_positive_int("n_splits", self.n_splits, minimum=2)
         if self.max_train_size is not None:
             self._validate_positive_int("max_train_size", self.max_train_size)
-        if self.test_size is not None:
-            self._validate_positive_int("test_size", self.test_size)
+        if self.val_size is not None:
+            self._validate_positive_int("val_size", self.val_size)
         self._validate_positive_int("gap", self.gap, minimum=0)
 
     @staticmethod
@@ -60,7 +62,7 @@ class CrossValidation(CrossValidator):
             from sklearn.model_selection import TimeSeriesSplit
         except ImportError as exc:
             raise ImportError(
-                "scikit-learn is required to use CrossValidation; "
+                "scikit-learn is required to use WalkForward; "
                 + "install pfund with the 'sklearn' extra"
             ) from exc
 
@@ -69,7 +71,7 @@ class CrossValidation(CrossValidator):
             TimeSeriesSplit(
                 n_splits=self.n_splits,
                 max_train_size=self.max_train_size,
-                test_size=self.test_size,
+                test_size=self.val_size,
                 gap=self.gap,
             ),
         )

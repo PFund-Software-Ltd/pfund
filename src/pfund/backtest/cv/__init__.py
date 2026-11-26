@@ -23,7 +23,7 @@ cut over everything before it (``trainval``)::
   resolution, or a bar would straddle a cut. Components never split on their own.
 """
 
-from pfund.backtest.cv.cross_validation import CrossValidation, CrossValidator
+from pfund.backtest.cv.cross_validation import CrossValidator, WalkForward
 from pfund.backtest.cv.dataset_splits import (
     DatasetSplits,
     Fold,
@@ -31,9 +31,9 @@ from pfund.backtest.cv.dataset_splits import (
 from pfund.backtest.cv.holdout import Holdout
 
 __all__ = [
-    "CrossValidation",
     "CrossValidator",
     "DatasetSplits",
     "Fold",
     "Holdout",
+    "WalkForward",
 ]
