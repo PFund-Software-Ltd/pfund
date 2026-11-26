@@ -16,3 +16,11 @@ class BacktestEngineSettings(BaseEngineSettings):
             If False, recompute on every access. Trades memory for speed.
         """,
     )
+    split_resolution: str = Field(
+        default="1d",
+        description="""
+            Time grid the dataset splits are cut on, e.g. '1d', '1h'.
+            Every split boundary falls on this grid, so it must not be finer
+            than any component's resolution (a bar would straddle a cut).
+        """,
+    )

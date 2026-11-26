@@ -14,8 +14,8 @@ implementation instead:
       (now behind Hudson & Thames' paid tier)
 
 CPCV breaks the current one-return-shape assumption: it emits paths rather than
-only independent CVFold objects. Design the path-assembly type here when
-implementing; the current tuple of folds does not capture that structure.
+only independent folds. Design the path-assembly type here when
+implementing; ``DatasetSplits.folds`` (a tuple of folds) does not capture that structure.
 
 PREREQUISITE: same as purged K-Fold — needs per-sample label end-times (`t1`) and
 an embargo fraction, which PFund's current split configuration does not carry.

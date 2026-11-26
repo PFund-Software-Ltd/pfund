@@ -1,19 +1,13 @@
-# ruff: noqa: N802
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from pytest_mock import MockerFixture
+from typing import Any
 
 import dataclasses
 import math
 
-import numpy as np
-import polars as pl
 import pytest
 
-from pfund.backtest.cv.holdout import Holdout, resolve_holdout
+from pfund.backtest.cv.holdout import Holdout
 
 
 class TestDefaults:
@@ -98,95 +92,3 @@ class TestImmutability:
 
 def test_dev_aliases_val():
     assert Holdout(train=0.6, val=0.3, test=0.1).dev == 0.3
-
-
-def _make_X(num_dates: int, rows_per_date: int = 1) -> pl.DataFrame:
-    dates = [d for d in range(num_dates) for _ in range(rows_per_date)]
-    return pl.DataFrame({"date": dates, "row": range(len(dates))})
-
-
-def _rows(df: Any) -> list[int]:
-    return df["row"].to_list()
-
-
-def _dates(df: Any) -> list[int]:
-    return sorted(set(df["date"].to_list()))
-
-
-class TestResolveHoldout:
-    def test_default_ratios_over_ten_dates(self):
-        split = resolve_holdout(_make_X(10), Holdout())
-        assert _dates(split.X_train) == list(range(7))
-        assert split.X_val is not None and _dates(split.X_val) == [7, 8]
-        assert split.X_test is not None and _dates(split.X_test) == [9]
-
-    def test_sets_are_chronological(self):
-        split = resolve_holdout(_make_X(10), Holdout())
-        assert split.X_val is not None and split.X_test is not None
-        assert max(_dates(split.X_train)) < min(_dates(split.X_val))
-        assert max(_dates(split.X_val)) < min(_dates(split.X_test))
-
-    def test_splits_by_timestamp_not_row(self):
-        """All rows sharing a date land in the same set."""
-        split = resolve_holdout(_make_X(10, rows_per_date=3), Holdout())
-        assert split.X_val is not None and split.X_test is not None
-        assert len(split.X_train) == 21
-        assert len(split.X_val) == 6
-        assert len(split.X_test) == 3
-        assert set(_dates(split.X_train)).isdisjoint(_dates(split.X_val))
-
-    def test_partitions_every_row_once(self):
-        X = _make_X(7, rows_per_date=2)
-        split = resolve_holdout(X, Holdout(train=0.5, val=0.3, test=0.2))
-        rows = [
-            row
-            for df in (split.X_train, split.X_val, split.X_test)
-            if df is not None
-            for row in _rows(df)
-        ]
-        assert sorted(rows) == list(range(len(X)))
-
-    def test_rounds_half_up(self):
-        # 0.5 * 5 = 2.5 -> 3 train dates, the remaining 2 go to val
-        split = resolve_holdout(_make_X(5), Holdout(train=0.5, val=0.5, test=0.0))
-        assert _dates(split.X_train) == [0, 1, 2]
-        assert split.X_val is not None and _dates(split.X_val) == [3, 4]
-        assert split.X_test is None
-
-    def test_zero_ratios_give_none(self):
-        split = resolve_holdout(_make_X(4), Holdout(train=1.0, val=0.0, test=0.0))
-        assert len(split.X_train) == 4
-        assert split.X_val is None
-        assert split.X_test is None
-
-    def test_split_applies_to_aligned_labels(self):
-        X = _make_X(10)
-        y = np.arange(10) * 10
-        y_train, y_val, y_test = resolve_holdout(X, Holdout()).split(y)
-        assert y_train.tolist() == [0, 10, 20, 30, 40, 50, 60]
-        assert y_val is not None and y_val.tolist() == [70, 80]
-        assert y_test is not None and y_test.tolist() == [90]
-
-    def test_empty_train_raises(self):
-        with pytest.raises(ValueError, match="resulting training set is empty"):
-            resolve_holdout(_make_X(10), Holdout(train=0.01, val=0.99, test=0.0))
-
-    def test_empty_val_and_test_warn(self, mocker: MockerFixture):
-        cprint = mocker.patch("pfund.backtest.cv.holdout.cprint")
-        # 0.96 * 10 rounds to all 10 dates, leaving nothing for val and test
-        split = resolve_holdout(_make_X(10), Holdout(train=0.96, val=0.02, test=0.02))
-        assert split.X_val is None
-        assert split.X_test is None
-        messages = [call.args[0] for call in cprint.call_args_list]
-        assert len(messages) == 2
-        assert messages[0].startswith("validation set is EMPTY")
-        assert messages[1].startswith("test set is EMPTY")
-
-    def test_no_warning_when_ratio_is_zero(self, mocker: MockerFixture):
-        cprint = mocker.patch("pfund.backtest.cv.holdout.cprint")
-        resolve_holdout(_make_X(10), Holdout(train=1.0, val=0.0, test=0.0))
-        cprint.assert_not_called()
-
-    def test_requires_date_column(self):
-        with pytest.raises(ValueError, match="holdout splitting requires a 'date'"):
-            resolve_holdout(pl.DataFrame({"x": [1, 2]}), Holdout())

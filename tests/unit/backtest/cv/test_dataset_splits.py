@@ -2,13 +2,20 @@ from __future__ import annotations
 
 from typing import Any
 
+import datetime
 import math
 
+import polars as pl
 import pytest
 
 from pfund.backtest.cv.cross_validation import CrossValidation
-from pfund.backtest.cv.dataset_splits import to_recipe
+from pfund.backtest.cv.dataset_splits import DatasetSplits, _parse
 from pfund.backtest.cv.holdout import Holdout
+
+
+def to_recipe(dataset_splits: Any) -> Any:
+    _test_ratio, recipe = _parse(dataset_splits)
+    return recipe
 
 
 def _ratios(holdout: Any) -> tuple[float, float, float]:
@@ -129,3 +136,34 @@ class TestDict:
 def test_unsupported_type_raises(bad: Any):
     with pytest.raises(TypeError, match="must be an int, a dict"):
         to_recipe(bad)
+
+
+class TestRowIndices:
+    @pytest.fixture
+    def splits(self) -> DatasetSplits:
+        return DatasetSplits(
+            721,
+            data_start=datetime.date(2025, 1, 1),
+            data_end=datetime.date(2025, 1, 10),
+            split_resolution="1d",
+        )
+
+    @staticmethod
+    def _X(dates: list[datetime.datetime | None]) -> pl.DataFrame:
+        return pl.DataFrame({"date": pl.Series(dates, dtype=pl.Datetime("us"))})
+
+    def test_rows_map_to_their_part(self, splits: DatasetSplits):
+        X = self._X([datetime.datetime(2025, 1, 1), datetime.datetime(2025, 1, 10)])
+        assert splits.row_indices(X, "train").tolist() == [0]
+        assert splits.row_indices(X, "test").tolist() == [1]
+
+    def test_row_outside_data_range_raises(self, splits: DatasetSplits):
+        X = self._X([datetime.datetime(2024, 12, 31)])
+        with pytest.raises(ValueError, match="outside the engine's data range"):
+            splits.row_indices(X, "test")
+
+    def test_missing_date_raises(self, splits: DatasetSplits):
+        # NaT would make min()/max() NaT and slip past the range check
+        X = self._X([datetime.datetime(2024, 12, 31), None])
+        with pytest.raises(ValueError, match="missing date"):
+            splits.row_indices(X, "test")

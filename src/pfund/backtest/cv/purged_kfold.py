@@ -15,8 +15,8 @@ sklearn-compatible implementation instead:
 Whatever we adopt exposes the sklearn splitter API
 (`.split(X, y, groups) -> Iterator[(train_idx, test_idx)]`), but it does NOT drop
 into a calendar-date-span representation: purging can remove samples from the
-middle of the training set. PFund's current positional CVFold representation can
-preserve those gaps, but the labeling metadata still needs to reach the splitter.
+middle of the training set. ``DatasetSplits`` stores each fold as grid positions, which
+preserves those gaps, but the labeling metadata still needs to reach the splitter.
 
 PREREQUISITE: purging needs per-sample label end-times (`t1`) and an embargo
 fraction — metadata PFund's current split configuration does not carry. Wiring

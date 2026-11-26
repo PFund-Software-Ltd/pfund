@@ -1,4 +1,3 @@
-# ruff: noqa: N802, N803
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -18,7 +17,6 @@ from sklearn.model_selection import KFold, TimeSeriesSplit
 from pfund.backtest.cv.cross_validation import (
     CrossValidation,
     CrossValidator,
-    resolve_folds,
 )
 
 
@@ -110,70 +108,3 @@ class TestCrossValidatorProtocol:
 
     def test_object_without_split_does_not_conform(self):
         assert not isinstance(object(), CrossValidator)
-
-
-class TestResolveFolds:
-    def test_matches_time_series_split_on_dates(self):
-        X = _make_X(10)
-        folds = resolve_folds(X, CrossValidation(n_splits=3))
-        expected = list(TimeSeriesSplit(n_splits=3).split(np.arange(10)))
-        assert [fold.index for fold in folds] == [0, 1, 2]
-        for fold, (train, val) in zip(folds, expected, strict=True):
-            assert _dates(fold.X_train) == train.tolist()
-            assert _dates(fold.X_val) == val.tolist()
-
-    def test_splits_by_timestamp_not_row(self):
-        """The splitter sees one sample per date; every row of a date follows it."""
-        X = _make_X(10, rows_per_date=3)
-        folds = resolve_folds(X, CrossValidation(n_splits=3))
-        assert len(folds) == 3
-        for fold in folds:
-            assert len(fold.X_train) == 3 * len(_dates(fold.X_train))
-            assert len(fold.X_val) == 3 * len(_dates(fold.X_val))
-            assert set(_dates(fold.X_train)).isdisjoint(_dates(fold.X_val))
-
-    def test_gap_leaves_rows_out(self):
-        X = _make_X(10, rows_per_date=2)
-        for fold in resolve_folds(X, CrossValidation(n_splits=3, gap=1)):
-            assert max(_dates(fold.X_train)) + 1 < min(_dates(fold.X_val))
-
-    def test_accepts_any_sklearn_splitter(self):
-        """Non-chronological splitters (e.g. KFold) are passed through as given."""
-        X = _make_X(6, rows_per_date=2)
-        folds = resolve_folds(X, KFold(n_splits=3))
-        assert [_dates(fold.X_val) for fold in folds] == [[0, 1], [2, 3], [4, 5]]
-        assert _dates(folds[1].X_train) == [0, 1, 4, 5]
-
-    def test_split_applies_to_aligned_labels(self):
-        X = _make_X(6)
-        y = np.arange(6) * 10
-        fold = resolve_folds(X, CrossValidation(n_splits=2))[0]
-        y_train, y_val = fold.split(y)
-        assert y_train.tolist() == [0, 10]
-        assert y_val.tolist() == [20, 30]
-
-    def test_no_folds_raises(self):
-        class EmptySplitter:
-            def get_n_splits(self, X=None, y=None, groups=None) -> int:
-                return 0
-
-            def split(self, X, y=None, groups=None) -> Iterator[tuple[Any, Any]]:
-                yield from ()
-
-        with pytest.raises(ValueError, match="cross-validator produced no folds"):
-            resolve_folds(_make_X(5), EmptySplitter())
-
-    def test_bad_splitter_output_raises(self):
-        class OutOfRangeSplitter:
-            def get_n_splits(self, X=None, y=None, groups=None) -> int:
-                return 1
-
-            def split(self, X, y=None, groups=None) -> Iterator[tuple[Any, Any]]:
-                yield np.array([0]), np.array([len(X)])
-
-        with pytest.raises(IndexError, match="validation indices contains a position"):
-            resolve_folds(_make_X(5), OutOfRangeSplitter())
-
-    def test_requires_date_column(self):
-        with pytest.raises(ValueError, match="cross-validation requires a 'date'"):
-            resolve_folds(pl.DataFrame({"x": [1, 2]}), CrossValidation(n_splits=2))

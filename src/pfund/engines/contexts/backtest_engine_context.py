@@ -3,9 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
-    from pfund.backtest.cv.cross_validation import CrossValidator
-    from pfund.backtest.cv.dataset_splits import DatasetSplits
-    from pfund.backtest.cv.holdout import Holdout
+    from pfund.backtest.cv.dataset_splits import DatasetSplitsInput
     from pfund.engines.base_engine import DataRangeDict
 
 import os
@@ -14,7 +12,7 @@ import warnings
 from pfund_blocks.enums.env import Environment
 from pfund_blocks.resolution import Resolution
 
-from pfund.backtest.cv.dataset_splits import to_recipe
+from pfund.backtest.cv.dataset_splits import DatasetSplits
 from pfund.engines.contexts.base_engine_context import BaseEngineContext
 from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
 from pfund.enums import BacktestMode
@@ -30,7 +28,7 @@ class BacktestEngineContext(BaseEngineContext[BacktestEngineSettings]):
         settings: BacktestEngineSettings | None = None,
         mode: BacktestMode
         | Literal["vectorized", "event_driven"] = BacktestMode.VECTORIZED,
-        dataset_splits: DatasetSplits | None = None,
+        dataset_splits: DatasetSplitsInput | None = None,
     ):
         super().__init__(
             env=env,
@@ -40,11 +38,9 @@ class BacktestEngineContext(BaseEngineContext[BacktestEngineSettings]):
         )
         self.mode = BacktestMode[mode.upper()]
 
-
         # TEMP
         if self.mode == BacktestMode.EVENT_DRIVEN:
             raise ValueError("Event-driven backtesting is not supported yet")
-
 
         self.num_chunks: int = 1
         if self.mode == BacktestMode.EVENT_DRIVEN and self.settings.reuse_signals:
@@ -64,9 +60,15 @@ class BacktestEngineContext(BaseEngineContext[BacktestEngineSettings]):
                 ),
             )
         # None means no split: the whole dataset is the training set
-        self.dataset_splits: Holdout | CrossValidator | None = (
-            None if dataset_splits is None else to_recipe(dataset_splits)
-        )
+        self.dataset_splits: DatasetSplits | None = None
+        if dataset_splits is not None:
+            assert self.data_start is not None and self.data_end is not None
+            self.dataset_splits = DatasetSplits(
+                dataset_splits,
+                data_start=self.data_start,
+                data_end=self.data_end,
+                split_resolution=self.settings.split_resolution,
+            )
 
     def set_num_chunks(self, num_chunks: int) -> None:
         """Sets the number of chunks, values below 1 are treated as 1.

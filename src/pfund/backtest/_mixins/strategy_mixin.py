@@ -112,7 +112,7 @@ class BacktestStrategyMixin(BacktestMixin):
         then calls the user's backtest(df) on each chunk, see _backtest_chunk().
 
         Args:
-            X: self.X or a row subset of it, e.g. X_train, X_val or a fold.
+            X: self.X or a row subset of it, e.g. a split from component.split(X).
                 The data columns missing from X (e.g. OHLCV with add_data(as_features=False))
                 are joined back before the user's backtest(df), see _prepare_backtest_df().
             num_chunks:
@@ -226,7 +226,7 @@ class BacktestStrategyMixin(BacktestMixin):
     def _prepare_backtest_df(self, X: pl.DataFrame) -> pl.DataFrame:
         """Validates the X passed into backtest() and returns the full df of its rows.
 
-        X must be a row subset of self.X (e.g. X_train, X_val, a fold or any filter of self.X)
+        X must be a row subset of self.X (e.g. a split from component.split(X) or any filter of self.X)
         with exactly self.X's columns.
         Before backtest(), the strategy's trading_df has no signals yet, i.e. trading_df = self.X,
         so the full df (data + trading_df) is built over every bar, then trimmed to X's rows.
@@ -240,17 +240,17 @@ class BacktestStrategyMixin(BacktestMixin):
                 f"{self.name}.backtest() expects the columns of {self.name}.X, "
                 + f"got extra {[c for c in X.columns if c not in self.X.columns]}, "
                 + f"missing {[c for c in self.X.columns if c not in X.columns]}. "
-                + "Pass X or a row subset of it, e.g. X_train, X_val or a fold"
+                + "Pass X or a row subset of it, e.g. a split from component.split(X)"
             )
         num_unknown_rows = X.join(self.X, on=BAR_KEY_COLS, how="anti").height
         if num_unknown_rows:
             raise ValueError(
                 f"{self.name}.backtest() got {num_unknown_rows} rows not found in {self.name}.X, "
-                + "pass X or a row subset of it, e.g. X_train, X_val or a fold"
+                + "pass X or a row subset of it, e.g. a split from component.split(X)"
             )
         full_df = self.get_df(kind="full")
         # full_df is built from self.X (the full dataset), but the input X could be a subset of it
-        # (e.g. X_train/X_val/X_test or a fold), so trim full_df to the input X's rows
+        # (e.g. a split from component.split(X)), so trim full_df to the input X's rows
         return full_df.join(
             X.select(BAR_KEY_COLS),
             on=BAR_KEY_COLS,

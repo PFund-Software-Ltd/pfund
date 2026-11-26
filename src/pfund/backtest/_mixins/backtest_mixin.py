@@ -8,8 +8,7 @@ if TYPE_CHECKING:
     from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund_blocks.resolution import Resolution
 
-    from pfund.backtest.cv.cv_fold import CVFold
-    from pfund.backtest.cv.holdout_split import HoldoutSplit
+    from pfund.backtest.cv.dataset_splits import DatasetSplits, SplitPart
     from pfund.components.actor_proxy import ActorProxy
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel
@@ -22,7 +21,7 @@ from pathlib import Path
 import polars as pl
 from pfund_kit.style import RichColor, TextStyle
 
-from pfund.backtest.cv.indexing import SplittableData
+from pfund.backtest.cv.indexing import SplittableData, take_rows, validate_aligned
 from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.enums import BacktestMode
 
@@ -59,8 +58,6 @@ class BacktestMixin(ComponentMixin):
     def _init_backtest_state(self) -> None:
         # top components are the ones added by engine.add_strategy/model/feature()
         self._is_top_component = False
-        self._holdout_split: HoldoutSplit[pl.DataFrame] | None = None
-        self._folds: tuple[CVFold[pl.DataFrame], ...] = ()
 
     @classmethod
     def _adopt[C: Component](cls, component: C) -> C:
@@ -116,38 +113,44 @@ class BacktestMixin(ComponentMixin):
         return self.context.mode
 
     @property
-    def folds(self) -> tuple[CVFold[pl.DataFrame], ...]:
-        return self._folds
+    def dataset_splits(self) -> DatasetSplits | None:
+        return self.context.dataset_splits
 
-    @property
-    def holdout_split(self) -> HoldoutSplit[pl.DataFrame] | None:
-        is_dataset_split = self._holdout_split is not None or bool(self._folds)
-        if not is_dataset_split:
-            raise RuntimeError(f"'{self.name}' dataset has not been split yet")
-        return self._holdout_split
+    def _assert_split_resolution(self) -> None:
+        """Raises if split boundaries could fall inside one of this component's bars."""
+        from pfund_blocks.resolution import Resolution
 
-    def _split_dataset(self) -> None:
-        from pfund.backtest.cv.cross_validation import resolve_folds
-        from pfund.backtest.cv.holdout import Holdout, resolve_holdout
-        from pfund.backtest.cv.holdout_split import HoldoutSplit
+        if self.dataset_splits is None:
+            return
+        split_resolution = Resolution(self.settings.split_resolution)
+        if split_resolution > self.resolution:
+            raise ValueError(
+                f"split_resolution {split_resolution!r} is finer than {self.component_type} "
+                + f"'{self.name}' resolution {self.resolution!r}; a split boundary would fall "
+                + "inside a bar, set split_resolution in the backtest engine settings "
+                + "to be equal to or coarser than every component's resolution"
+            )
 
-        splits = self.context.dataset_splits
-        if splits is None:
-            self._holdout_split, self._folds = HoldoutSplit(self.X), ()
-        elif isinstance(splits, Holdout):
-            self._holdout_split, self._folds = resolve_holdout(self.X, splits), ()
-        else:
-            self._holdout_split, self._folds = None, resolve_folds(self.X, splits)
+    def _take_split[DataT: SplittableData](
+        self, data: DataT, part: SplitPart, fold: int | None = None
+    ) -> DataT | None:
+        """Rows of ``data`` (row-aligned with X) in one split part, None if empty."""
+        dataset_splits = self.dataset_splits
+        if dataset_splits is None:
+            return data if part == "train" else None
+        rows = dataset_splits.row_indices(self.X, part, fold)
+        return None if rows.size == 0 else take_rows(data, rows)
 
     def split[DataT: SplittableData](
         self,
         data: DataT,
+        fold: int | None = None,
     ) -> tuple[DataT | None, DataT | None, DataT | None]:
         """Split aligned data into the component's train/validation/test sets.
 
-        `data` is sliced positionally by selectors built from X, so it needs
-        no `date` column of its own — it only has to be row-aligned 1:1 with
-        X (same length and order). A target y, class labels, sample
+        `data` is sliced positionally by the engine's splits mapped onto X, so it
+        needs no `date` column of its own — it only has to be row-aligned 1:1
+        with X (same length and order). A target y, class labels, sample
         weights, or any per-row companion of the features therefore uses the
         same boundaries as X.
 
@@ -159,35 +162,18 @@ class BacktestMixin(ComponentMixin):
 
         Args:
             data: a DataFrame, Series, or ndarray row-aligned 1:1 with X.
+            fold: the fold to split by, required under cross-validation,
+                optional (only 0) under holdout.
 
         Returns a (train, val, test) tuple; any segment that collapsed to 0
-        timestamps or is undefined for the split is None.
-
-        Cross-validation has multiple splits, so call ``fold.split(data)`` on
-        each item in ``component.folds`` instead.
+        rows or is undefined for the split is None.
         """
-        holdout_split = self.holdout_split
-        if holdout_split is None:
-            raise ValueError(
-                "component.split() is undefined under cross-validation; "
-                + "iterate over component.folds and call fold.split(data)"
-            )
-        return holdout_split.split(data)
-
-    @property
-    def X_train(self) -> pl.DataFrame | None:
-        holdout_split = self.holdout_split
-        return None if holdout_split is None else holdout_split.X_train
-
-    @property
-    def X_val(self) -> pl.DataFrame | None:
-        holdout_split = self.holdout_split
-        return None if holdout_split is None else holdout_split.X_val
-
-    @property
-    def X_test(self) -> pl.DataFrame | None:
-        holdout_split = self.holdout_split
-        return None if holdout_split is None else holdout_split.X_test
+        validate_aligned(data, self.X)
+        return (
+            self._take_split(data, "train", fold),
+            self._take_split(data, "val", fold),
+            self._take_split(data, "test"),
+        )
 
     @property
     def _source_file_path(self) -> Path:
@@ -315,15 +301,16 @@ class BacktestMixin(ComponentMixin):
                     )
                     self.store.set_df(self._build_features_df().to_native())
 
-                    # FIXME: theres no X_train before split_dataset?
-                    # same flow as what a user would do:
-                    signals = cast("Component", self)._signalize(self.X_train)
+                    # signals over the parent's whole period; a child refit per CV fold
+                    # can't share one df, it needs per-fold output (not supported yet)
+                    X = self.X
+                    signals = cast("Component", self)._signalize(X)
                     signals_df = pl.DataFrame(signals)
                     backtest_df = pl.concat([X, signals_df], how="horizontal")
 
                     self.save_df(backtest_df)
-            self._split_dataset()
-        # FIXME: event-driven should also call self._split_dataset(),
+            self._assert_split_resolution()
+        # FIXME: event-driven should also call self._assert_split_resolution(),
         # brainstorm: let it own trading df the same way as VECTORIZED, empty it before looping
         # blocker: building X needs child signals up front (_build_features_df), but without reuse_signals children only compute them during the loop
         elif self.backtest_mode == BacktestMode.EVENT_DRIVEN:

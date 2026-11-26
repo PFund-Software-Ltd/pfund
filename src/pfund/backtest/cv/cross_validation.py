@@ -1,15 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
-
-if TYPE_CHECKING:
-    from narwhals.typing import IntoDataFrame
+from typing import Any, Protocol, cast, runtime_checkable
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-
-from pfund.backtest.cv.cv_fold import CVFold
-from pfund.backtest.cv.indexing import expand_time_indices, resolve_time_spine
 
 
 @runtime_checkable
@@ -35,10 +29,10 @@ class CrossValidation(CrossValidator):
     """Expanding-window cross-validation for ordered time-series samples.
 
     The arguments and split behavior follow sklearn's ``TimeSeriesSplit``.
-    PFund resolves the resulting timestamp selectors against the component's
-    materialized feature dataframe, keeping every row at one timestamp in the
-    same fold. Sklearn's per-fold ``test_size`` is exposed by PFund as the
-    validation set; cross-validation does not create a final test holdout.
+    ``DatasetSplits`` runs it on the split grid of everything before the test tail,
+    so every component shares the same fold boundaries. Sklearn's per-fold
+    ``test_size`` is exposed by PFund as the validation set; the final test
+    tail comes from ``{"test": ..., "folds": cv}``, not from the folds.
     """
 
     n_splits: int = 5
@@ -96,49 +90,3 @@ class CrossValidation(CrossValidator):
     ) -> int:
         _ = X, y, groups
         return self.n_splits
-
-
-def resolve_folds[DataFrameT: IntoDataFrame](
-    X: DataFrameT,
-    cross_validator: CrossValidator,
-) -> tuple[CVFold[DataFrameT], ...]:
-    """Resolve a cross-validator against the actual ordered timestamps in ``X``.
-
-    The cross-validator sees one sample per unique ``date`` value. Its time-level
-    selectors are then expanded into positional row selectors, keeping every row
-    at the same timestamp in the same side of a fold.
-    """
-    time_spine, row_time_indices = resolve_time_spine(
-        X,
-        operation="cross-validation",
-    )
-    num_times = len(time_spine)
-
-    folds: list[CVFold[DataFrameT]] = []
-    for index, (train_time_indices, val_time_indices) in enumerate(
-        cross_validator.split(time_spine)
-    ):
-        train_indices = expand_time_indices(
-            train_time_indices,
-            row_time_indices=row_time_indices,
-            num_times=num_times,
-            name="train indices",
-        )
-        val_indices = expand_time_indices(
-            val_time_indices,
-            row_time_indices=row_time_indices,
-            num_times=num_times,
-            name="validation indices",
-        )
-        folds.append(
-            CVFold(
-                index=index,
-                X=X,
-                train_indices=train_indices,
-                val_indices=val_indices,
-            )
-        )
-
-    if not folds:
-        raise ValueError("cross-validator produced no folds")
-    return tuple(folds)

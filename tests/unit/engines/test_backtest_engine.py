@@ -28,7 +28,7 @@ import pfund as pf
 from pfund.backtest._mixins.feature_mixin import BacktestFeatureMixin
 from pfund.backtest._mixins.model_mixin import BacktestModelMixin
 from pfund.backtest._mixins.strategy_mixin import BacktestStrategyMixin
-from pfund.backtest.cv.holdout import Holdout
+from pfund.backtest.cv.dataset_splits import DatasetSplits
 from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.components.actor_proxy import ActorProxy
 from pfund.components.models.sklearn_model import SKLearnModel
@@ -101,10 +101,11 @@ class TestInit:
 
         assert engine.backtest_mode == BacktestMode.VECTORIZED
 
-    def test_dataset_splits_is_turned_into_a_recipe(self):
+    def test_dataset_splits_is_resolved_into_splits(self):
         engine = BacktestEngine(settings=BacktestEngineSettings(), dataset_splits=721)
 
-        assert isinstance(engine.context.dataset_splits, Holdout)
+        assert isinstance(engine.context.dataset_splits, DatasetSplits)
+        assert engine.context.dataset_splits.is_holdout
 
 
 class TestEngineAddStrategy:
