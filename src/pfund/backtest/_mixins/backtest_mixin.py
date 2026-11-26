@@ -219,11 +219,10 @@ class BacktestMixin(ComponentMixin):
         return Path(source_file)
 
     def to_dict(self) -> dict[str, Any]:
-        """Adds how the component was backtested, e.g. so a chunked or vectorized df can't seed live trading."""
+        """Adds how the component was backtested, e.g. so a vectorized df can't seed live trading."""
         return {
             **super().to_dict(),
             "backtest_mode": self.backtest_mode,
-            "num_chunks": self.context.num_chunks,
         }
 
     @override

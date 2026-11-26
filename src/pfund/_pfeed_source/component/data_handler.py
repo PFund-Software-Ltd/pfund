@@ -243,7 +243,7 @@ class PFundComponentDataHandler(
             "schema_version": self.METADATA_SCHEMA_VERSION,
             # isoformat(): default=str below would write it with a space instead of the ISO "T"
             "created_at": get_utc_now().isoformat(),
-            # in backtesting, it also has backtest_mode and num_chunks, see BacktestMixin.to_dict()
+            # in backtesting, it also has backtest_mode, see BacktestMixin.to_dict()
             **self._data_model.component.to_dict(),
         }
         # default=str: the signature/config/params can hold objects JSON can't express, e.g. a torch module,

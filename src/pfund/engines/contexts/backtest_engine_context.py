@@ -42,7 +42,6 @@ class BacktestEngineContext(BaseEngineContext[BacktestEngineSettings]):
         if self.mode == BacktestMode.EVENT_DRIVEN:
             raise ValueError("Event-driven backtesting is not supported yet")
 
-        self.num_chunks: int = 1
         if self.mode == BacktestMode.EVENT_DRIVEN and self.settings.reuse_signals:
             import pfund_kit
 
@@ -69,11 +68,3 @@ class BacktestEngineContext(BaseEngineContext[BacktestEngineSettings]):
                 data_end=self.data_end,
                 split_resolution=self.settings.split_resolution,
             )
-
-    def set_num_chunks(self, num_chunks: int) -> None:
-        """Sets the number of chunks, values below 1 are treated as 1.
-
-        Set by BacktestEngine.run(num_chunks=...) before the components are set up,
-        so their metadata records it, see BacktestMixin.to_dict().
-        """
-        self.num_chunks = max(1, num_chunks)

@@ -92,7 +92,6 @@ class TestInit:
     def test_defaults(self, engine: BacktestEngine):
         assert engine.env == Environment.BACKTEST
         assert engine.backtest_mode == BacktestMode.VECTORIZED
-        assert engine.context.num_chunks == 1
         assert engine.context.dataset_splits is None
         assert not engine.is_running()
 
