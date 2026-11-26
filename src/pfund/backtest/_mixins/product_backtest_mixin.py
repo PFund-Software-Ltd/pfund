@@ -677,7 +677,12 @@ class ProductBacktestMixin:
         high_arr = _to_float64(df.get_column("high"))
         low_arr = _to_float64(df.get_column("low"))
         close_arr = _to_float64(df.get_column("close"))
-        volume_arr = _to_float64(df.get_column("volume"))
+        # volume is optional (fills never depend on it), all-nan when the df has no volume column
+        volume_arr = (
+            _to_float64(df.get_column("volume"))
+            if "volume" in df.columns
+            else np.full(n, np.nan)
+        )
         date_arr = df.get_column("date").to_numpy()
 
         # Group rows by combo once (O(n log n))
