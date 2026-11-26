@@ -400,20 +400,26 @@ class BacktestStrategyMixin(BacktestMixin):
         df_class.create_weight = PortfolioBacktestMixin.create_weight  # ty: ignore[missing-attribute]
 
     def _postprocess_for_vectorized_backtest(self, backtest_df: Any) -> pl.DataFrame:
-        """Validates the backtest DataFrame returned by backtest(), then merges internal
-        debug columns into a single 'remark' column and drops them.
+        """Validates the backtest DataFrame returned by backtest(), adds a 'remark'
+        debug column, then drops internal ('_'-prefixed) columns.
 
-        Remark abbreviations:
-            sc  = signal_change — signal direction flipped (buy <-> sell)
-            pc  = position_change — position closed or flipped (new trade streak)
-            ft  = first_trade — first trade in a filtered trade streak
-            sl  = stop_loss — position closed by stop loss
-            tp  = take_profit — position closed by take profit
-            tw  = time_window — position closed by time window expiry
+        The remark is derived from the product backtest's output columns only, per
+        (product, resolution), e.g. "pc,sl"; a row with no event gets "".
+        Portfolio backtesting has no such events, its remark is always "".
 
-        Columns dropped without remark (pure intermediates):
-            _agg_costs, _immediate_stop, _gap_through_stop,
-            _stop_side, _trade_side, _first_stop_order
+        Remark abbreviations, and the row each one is on:
+            sc  = signal_change — the signal starts a new streak (first signal or buy <-> sell), signal row
+            pc  = position_change — the position opens, closes or flips, fill row
+            sl  = stop_loss — a stop below avg_price (long) / above it (short) fires next bar,
+                  order row (same row as stop_price)
+            tp  = take_profit — a stop on the profit side of avg_price fires next bar, order row
+            ex  = exit — a close with no order and no stop on the row before,
+                  i.e. a time_window close or an out-of-universe close, fill row
+
+        Limitations (the outputs don't carry the reason):
+            a trailing stop reads as sl, or as tp once it trails above avg_price (long) / below it (short);
+            ex doesn't tell time_window from out-of-universe;
+            a time_window close that beats a pending order on the same bar gets no ex.
         """
         # a lazy chain is fine, the backtest only needs its result
         if isinstance(backtest_df, pl.LazyFrame):
@@ -444,31 +450,53 @@ class BacktestStrategyMixin(BacktestMixin):
                 + f"or {list(portfolio_backtest_mixin.OUTPUT_COLS)}"
             )
 
-        REMARK_COLS: dict[str, str] = {
-            "_signal_change": "sc",
-            "_position_change": "pc",
-            "_first_trade": "ft",
-            "_stop_loss": "sl",
-            "_take_profit": "tp",
-            "_time_window": "tw",
-        }
-
-        # each flag that is set contributes its abbreviation, unset ones are null and skipped,
-        # e.g. "sc,tp"; a row with no flags gets ""
-        remark_parts = [
-            pl.when(pl.col(col)).then(pl.lit(abbr))
-            for col, abbr in REMARK_COLS.items()
-            if col in backtest_df.columns
-        ]
         remark = (
-            pl.concat_str(remark_parts, separator=",", ignore_nulls=True)
-            if remark_parts
+            self._build_remark_col_for_product_kernel()
+            if cols.issuperset(product_backtest_mixin.OUTPUT_COLS)
             else pl.lit("")
         )
         df = backtest_df.with_columns(remark.alias("remark"))
 
         # Drop all internal columns (prefixed with '_')
         return df.drop(col for col in df.columns if col.startswith("_"))
+
+    @staticmethod
+    def _build_remark_col_for_product_kernel() -> pl.Expr:
+        """The 'remark' expression of a product backtest df, see _postprocess_for_vectorized_backtest()."""
+        from pfund.components.bar_dataframe import PIVOT_COLS
+
+        # the outputs are nan (not null) where nothing happened, nan -> null for null-aware ops
+        def output(col: str) -> pl.Expr:
+            return pl.col(col).fill_nan(None)
+
+        signal_ffill = output("signal").forward_fill()
+        position_sign = output("position").sign()
+        has_stop = output("stop_price").is_not_null()
+        # > 0: the stop is on the losing side of avg_price
+        stop_vs_avg = output("position") * (output("avg_price") - output("stop_price"))
+        is_exit_without_order = (
+            output("trade_size").is_not_null()
+            & output("order_size").shift(1).is_null()
+            & output("stop_price").shift(1).is_null()
+        )
+        events: dict[str, pl.Expr] = {
+            "sc": signal_ffill.is_not_null()
+            & (signal_ffill != signal_ffill.shift(1)).fill_null(True),
+            "pc": position_sign.is_not_null()
+            & (position_sign != position_sign.shift(1).fill_null(0)),
+            "sl": has_stop & (stop_vs_avg > 0),
+            "tp": has_stop & (stop_vs_avg < 0),
+            "ex": is_exit_without_order,
+        }
+        # each event that is set contributes its abbreviation, unset ones are null and skipped
+        return pl.concat_str(
+            [
+                pl.when(event.over(PIVOT_COLS)).then(pl.lit(abbr))
+                for abbr, event in events.items()
+            ],
+            separator=",",
+            ignore_nulls=True,
+        )
 
     # TODO: update order manager directly
     async def place_orders(self):
