@@ -358,3 +358,13 @@ class BacktestMixin(ComponentMixin):
             self._is_gathered = True
         else:
             return super()._gather()
+
+    @override
+    def _build(self) -> None:
+        if self._is_dummy_strategy():
+            # the dummy strategy only hosts its component, nothing of its own to build
+            component = cast("BaseModel | BaseFeature", self.components[0])
+            component._build()
+            self._is_built = True
+        else:
+            return super()._build()

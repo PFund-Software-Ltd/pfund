@@ -254,6 +254,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         split without passing X_train etc. around. Data from component.split(data) has to be
         row-aligned with the current X.
 
+            engine.build()
             engine.use_split("train", fold=k)
             model.fit(model.X, y_train)
             engine.use_split("val", fold=k)
@@ -264,6 +265,10 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             fold: required for ``train``/``val`` under cross-validation,
                 optional (only 0) under holdout.
         """
+        if not self._is_built:
+            raise RuntimeError(
+                f"{self.name} has not built yet, call engine.build() first"
+            )
         cast("BacktestMixin", self._backtestee)._use_split(part, fold)
 
     def run(
@@ -271,22 +276,24 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         *,
         run: MTFlowRun | None = None,
     ) -> None:
-        """
+        """Runs the event-driven backtest, calls build() first if it has not been called.
+
+        Vectorized backtesting has nothing to run, use engine.build() and then
+        strategy.backtest(strategy.X) or model.predict(model.X) instead.
+
         Args:
             run:
                 mtflow run to track this backtest, each run is written to its own folder (e.g. run001, run002).
                 if None, the reused default_run/ folder is overwritten.
-
-        Returns:
-            The backtest df.
-            None if there is nothing to return, e.g. model training.
         """
+        if self.backtest_mode != BacktestMode.EVENT_DRIVEN:
+            raise RuntimeError(
+                "Nothing to run in vectorized backtesting, call engine.build(), "
+                + "then strategy.backtest(strategy.X) or model.predict(model.X)"
+            )
         try:
             # NOTE: inside the try, so the engine still ends if the component setup fails
             super().run(run=run)
-            # NOTE: in vectorized backtesting, engine only prepares the df for users, nothing to run
-            if self.backtest_mode != BacktestMode.EVENT_DRIVEN:
-                return
             backtestee = self._backtestee
             if backtestee.is_model() and cast("BaseModel", backtestee).is_training():
                 raise ValueError(

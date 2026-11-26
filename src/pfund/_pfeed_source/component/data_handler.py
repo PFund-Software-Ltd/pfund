@@ -287,7 +287,7 @@ class PFundComponentDataHandler(
                 {self._blob_partition(): (data, metadata)},
                 file_name=self._blob_file_name(),
             )
-            # the source is written once per run per component, at the end of the component's setup (see _gather()),
+            # the source is written once per run per component, at the end of the component's build (see _build()),
             # when its snapshot is final, so pfund's metadata.json is written with it
             if self._data_model.artifact_type == ArtifactType.source:
                 self._write_component_metadata()
@@ -307,7 +307,7 @@ class PFundComponentDataHandler(
         """
         # TODO: use this to write live trading data to the trading df (data artifact), once the live trading flow is decided,
         # e.g. streaming data -> TradingStore updates its df in memory -> the new rows -> write_stream() -> buffered, appended by flush().
-        # needs _build_streaming_schema() (the trading df's columns depend on the component, e.g. from store._df after _gather())
+        # needs _build_streaming_schema() (the trading df's columns depend on the component, e.g. from store._df after _build())
         # and _stream_partitions() (just {(): metadata}, the data artifact is unpartitioned),
         # and an IO that supports append (e.g. DuckLakeIO, not ParquetIO)
         raise NotImplementedError(
@@ -322,7 +322,7 @@ class PFundComponentDataHandler(
         """Reads the component's artifact: a frame for data, bytes for the others (of its step, for a checkpoint).
 
         Each partition's metadata comes with pfund's metadata.json of the component attached (see its `component`),
-        None if metadata.json isn't stored, e.g. a child's data artifact written before its source (see _gather()).
+        None if metadata.json isn't stored, e.g. a child's data artifact written before its source (see _build()).
 
         Returns (None, {}) if it isn't stored.
         """

@@ -1,8 +1,8 @@
-"""Tests BacktestEngine: construction, the add-component and add-data flows, and run(), plus the strategy's
-chunked vectorized backtest, i.e. strategy.backtest(X) chunking the df (sequentially or over Ray).
+"""Tests BacktestEngine: construction, the add-component and add-data flows, build() and run(), plus the
+strategy's chunked vectorized backtest, i.e. strategy.backtest(X) chunking the df (sequentially or over Ray).
 
-engine.run() only sets up the components and prepares the data, the component setup (gather/start/stop) is
-stubbed in the run() tests. In the strategy.backtest(X) tests, the per-chunk backtest (_backtest_chunk) is
+engine.build() gathers and builds the components, the component side (_gather/_build/start/stop) is
+stubbed in the build() and run() tests. In the strategy.backtest(X) tests, the per-chunk backtest (_backtest_chunk) is
 stubbed, only the chunking is tested here.
 """
 
@@ -26,6 +26,7 @@ from pfund_blocks.resolution import Resolution
 from sklearn.linear_model import LinearRegression
 
 import pfund as pf
+from pfund.backtest._mixins.backtest_mixin import BacktestMixin
 from pfund.backtest._mixins.feature_mixin import BacktestFeatureMixin
 from pfund.backtest._mixins.model_mixin import BacktestModelMixin
 from pfund.backtest._mixins.strategy_mixin import (
@@ -582,28 +583,122 @@ def _backtested(df: pl.DataFrame) -> pl.DataFrame:
 
 
 @pytest.fixture
-def no_component_setup(engine: BacktestEngine, mocker: MockerFixture) -> Any:
-    """Skips the component setup in run(): gathering needs data and accounts (the BacktestMixin side),
-    so run() only exercises the engine's own flow."""
+def calls() -> list[str]:
+    """Records the order of the stubbed component steps."""
+    return []
+
+
+@pytest.fixture
+def no_component_build(mocker: MockerFixture, calls: list[str]) -> Any:
+    """Stubs the component side of build(): gathering and building need data and accounts,
+    so build() and run() only exercise the engine's own flow."""
     mocker.patch.object(ComponentMixin, "start")
     mocker.patch.object(ComponentMixin, "stop")
-    return mocker.patch.object(engine, "_setup")
+    mocker.patch.object(
+        BacktestMixin,
+        "_gather",
+        autospec=True,
+        side_effect=lambda component: calls.append(f"gather {component.name}"),
+    )
+    return mocker.patch.object(
+        BacktestMixin,
+        "_build",
+        autospec=True,
+        side_effect=lambda component: calls.append(f"build {component.name}"),
+    )
 
 
-@pytest.mark.usefixtures("no_component_setup")
-class TestRun:
-    def test_vectorized_run_only_sets_up_the_components(
-        self, engine: BacktestEngine, mocker: MockerFixture, no_component_setup: Any
+@pytest.fixture
+def event_driven(engine: BacktestEngine, mocker: MockerFixture) -> None:
+    mocker.patch.object(engine.context, "mode", BacktestMode.EVENT_DRIVEN)
+
+
+@pytest.mark.usefixtures("no_component_build")
+class TestBuild:
+    def test_graph_is_validated_before_any_component_is_built(
+        self, engine: BacktestEngine, mocker: MockerFixture, calls: list[str]
+    ):
+        engine.add_strategy(MyStrategy(), "1d", name="alpha")
+        mocker.patch.object(
+            engine,
+            "_assert_unique_component_names",
+            side_effect=lambda: calls.append("assert unique names"),
+        )
+
+        engine.build()
+
+        assert calls == ["gather alpha", "assert unique names", "build alpha"]
+
+    def test_build_does_not_start_the_engine(
+        self, engine: BacktestEngine, mocker: MockerFixture
     ):
         strategy = engine.add_strategy(MyStrategy(), "1d", name="alpha")
-        backtest_chunk = mocker.patch.object(strategy, "_backtest_chunk")
+        start = mocker.spy(strategy, "start")
 
-        assert engine.run() is None
+        engine.build()
 
-        no_component_setup.assert_called_once_with()
-        # the user backtests it via strategy.backtest(X) after run()
-        backtest_chunk.assert_not_called()
+        assert not engine.is_running()
+        start.assert_not_called()
 
+    def test_second_build_is_a_no_op(self, engine: BacktestEngine, calls: list[str]):
+        engine.add_strategy(MyStrategy(), "1d", name="alpha")
+
+        engine.build()
+        engine.build()
+
+        assert calls == ["gather alpha", "build alpha"]
+
+    def test_failed_build_can_be_retried(
+        self, engine: BacktestEngine, no_component_build: Any, calls: list[str]
+    ):
+        engine.add_strategy(MyStrategy(), "1d", name="alpha")
+        no_component_build.side_effect = RuntimeError("build failed")
+
+        with pytest.raises(RuntimeError, match="build failed"):
+            engine.build()
+
+        no_component_build.side_effect = None
+        engine.build()
+        assert no_component_build.call_count == 2
+
+    def test_use_split_before_build_is_rejected(self, engine: BacktestEngine):
+        engine.add_strategy(MyStrategy(), "1d", name="alpha")
+
+        with pytest.raises(RuntimeError, match=r"call engine.build\(\) first"):
+            engine.use_split("train")
+
+
+@pytest.mark.usefixtures("no_component_build")
+class TestRun:
+    def test_vectorized_run_is_rejected(self, engine: BacktestEngine, calls: list[str]):
+        engine.add_strategy(MyStrategy(), "1d", name="alpha")
+
+        with pytest.raises(RuntimeError, match="Nothing to run in vectorized"):
+            engine.run()
+
+        assert calls == []
+        assert not engine.is_running()
+
+    @pytest.mark.usefixtures("event_driven")
+    def test_run_builds_if_not_built(self, engine: BacktestEngine, calls: list[str]):
+        engine.add_strategy(MyStrategy(), "1d", name="alpha")
+
+        engine.run()
+
+        assert calls == ["gather alpha", "build alpha"]
+
+    @pytest.mark.usefixtures("event_driven")
+    def test_run_does_not_rebuild_after_build(
+        self, engine: BacktestEngine, calls: list[str]
+    ):
+        engine.add_strategy(MyStrategy(), "1d", name="alpha")
+
+        engine.build()
+        engine.run()
+
+        assert calls == ["gather alpha", "build alpha"]
+
+    @pytest.mark.usefixtures("event_driven")
     def test_engine_ends_after_a_successful_run(
         self, engine: BacktestEngine, mocker: MockerFixture
     ):
@@ -615,28 +710,27 @@ class TestRun:
         end.assert_called_once()
         assert not engine.is_running()
 
-    def test_setup_error_is_logged_reraised_and_the_engine_ends(
-        self, engine: BacktestEngine, mocker: MockerFixture, no_component_setup: Any
+    @pytest.mark.usefixtures("event_driven")
+    def test_build_error_is_logged_reraised_and_the_engine_ends(
+        self, engine: BacktestEngine, mocker: MockerFixture, no_component_build: Any
     ):
         engine.add_strategy(MyStrategy(), "1d", name="alpha")
-        no_component_setup.side_effect = RuntimeError("setup failed")
+        no_component_build.side_effect = RuntimeError("build failed")
         log_exception = mocker.patch.object(engine._logger, "exception")
 
-        with pytest.raises(RuntimeError, match="setup failed"):
+        with pytest.raises(RuntimeError, match="build failed"):
             engine.run()
 
         log_exception.assert_called_once()
         assert not engine.is_running()
         # the engine can run again
-        no_component_setup.side_effect = None
+        no_component_build.side_effect = None
         engine.run()
         assert not engine.is_running()
 
-    def test_event_driven_training_is_rejected(
-        self, engine: BacktestEngine, mocker: MockerFixture
-    ):
+    @pytest.mark.usefixtures("event_driven")
+    def test_event_driven_training_is_rejected(self, engine: BacktestEngine):
         model = engine.add_model(LinearRegression(), "1d", name="lr")
-        mocker.patch.object(engine.context, "mode", BacktestMode.EVENT_DRIVEN)
         model._is_training = True
 
         with pytest.raises(ValueError, match="needs a trained model"):
@@ -644,11 +738,11 @@ class TestRun:
 
         assert not engine.is_running()
 
+    @pytest.mark.usefixtures("event_driven")
     def test_event_driven_dummy_strategy_without_model_or_feature_is_rejected(
-        self, engine: BacktestEngine, mocker: MockerFixture
+        self, engine: BacktestEngine
     ):
         engine._create_dummy_strategy("1d")
-        mocker.patch.object(engine.context, "mode", BacktestMode.EVENT_DRIVEN)
 
         with pytest.raises(ValueError, match="No model or feature to backtest"):
             engine.run()

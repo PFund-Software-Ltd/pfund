@@ -89,6 +89,7 @@ class ComponentBaseMixin:
 
         self._is_running = False
         self._is_gathered = False
+        self._is_built = False
 
     @classmethod
     def _merge_class_dicts(cls, attr: Literal["config", "params"]) -> dict[str, Any]:

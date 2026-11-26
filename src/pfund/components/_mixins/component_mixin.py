@@ -566,7 +566,7 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
         self.store.materialize()
 
     def _gather(self) -> None:
-        """Sets up everything before start"""
+        """Declares and validates the component graph, cheap, no data is loaded."""
         # NOTE: use is_gathered to avoid a component being gathered multiple times when it's a shared component
         if not self._is_gathered:
             # 1. Let the component declare its complete graph.
@@ -579,19 +579,33 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
             self._check_config()
             self._reload_markets()
 
-            # 3. Prepare dependencies completely, bottom-up.
+            # 3. Gather dependencies completely, bottom-up.
             for component in self.components:
                 component._gather()
 
             # 4. Validate state that child gathering establishes.
             self._assert_unique_child_signal_cols()
 
-            # 5. Materialize this component from its prepared dependencies.
+            self._is_gathered = True
+            self.logger.debug(f"'{self.name}' has gathered")
+        else:
+            self.logger.debug(f"'{self.name}' has already gathered")
+
+    def _build(self) -> None:
+        """Loads the data and builds the stores (e.g. X) of a gathered component, bottom-up."""
+        # NOTE: use is_built to avoid a component being built multiple times when it's a shared component
+        if not self._is_built:
+            assert self._is_gathered, f"'{self.name}' must be gathered before build"
+            # 1. Build dependencies completely, bottom-up.
+            for component in self.components:
+                component._build()
+
+            # 2. Materialize this component from its built dependencies.
             self.store.setup_lakehouse()
             self._materialize()
 
-            # 6. Persist provenance only after successful setup.
-            # NOTE: Keep this as the last setup step. During materialization,
+            # 3. Persist provenance only after successful build.
+            # NOTE: Keep this as the last build step. During materialization,
             # pfeed normalizes data.config.storage_config.data_domain from "" to
             # "MARKET_DATA"; that changes the `datas` payload in component_id.
             # Save only after such mutations so every artifact uses the same ID.
@@ -601,10 +615,10 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
                 artifact=self._source_file_path.read_bytes(),
             )
 
-            self._is_gathered = True
-            self.logger.debug(f"'{self.name}' has gathered")
+            self._is_built = True
+            self.logger.debug(f"'{self.name}' has built")
         else:
-            self.logger.debug(f"'{self.name}' has already gathered")
+            self.logger.debug(f"'{self.name}' has already built")
 
     def start(self) -> None:
         if not self.is_running():

@@ -62,7 +62,7 @@ class BaseEngine[
         setup_logging(env=self.env, config=self._context.config)
         self._logger: ColoredLogger = cast("ColoredLogger", logging.getLogger("pfund"))
         self._is_running = False
-        self._owns_ray = False
+        self._is_built = False
         self._strategies: dict[
             ComponentName, BaseStrategy | ActorProxy[BaseStrategy]
         ] = {}
@@ -309,13 +309,9 @@ class BaseEngine[
             f"{self.env} {self.name} is running (data_range=({self._context.data_start}, {self._context.data_end}))",
             style=_ENV_COLORS[self.env],
         )
-        from pfund_kit.utils.ray import is_ray_initialized
-
-        # Ray already running means someone else owns it, e.g. this engine
-        # runs inside a Ray actor; shutting it down would kill that actor.
-        self._owns_ray = not is_ray_initialized()
+        if not self._is_built:
+            self.build()
         self._is_running = True
-        self._setup()
 
         for strategy in self._strategies.values():
             strategy.start()
@@ -325,7 +321,6 @@ class BaseEngine[
         for strategy in self._strategies.values():
             strategy.stop()
         self._is_running = False
-        self._teardown()
 
     def _assert_unique_component_names(self):
         """Rejects two components with the same name anywhere in the engine.
@@ -344,14 +339,27 @@ class BaseEngine[
                 f"Component names must be unique across the engine, duplicates: {duplicates}"
             )
 
-    def _setup(self):
+    def build(self) -> None:
+        """Gathers and validates every component, then loads their data and builds their stores (e.g. X).
+
+        After build(), components are ready to use, e.g. in vectorized backtesting:
+
+            engine.build()
+            engine.use_split("train")
+            strategy.backtest(strategy.X)
+
+        run() calls it if it has not been called. Calling it again is a no-op.
+        It does not start the engine or the strategies.
+        """
+        if self._is_built:
+            self._logger.debug(f"{self.name} has already built")
+            return
+        # NOTE: gather the whole graph first, so it is validated before any data is loaded
         for strategy in self._strategies.values():
             strategy: BaseStrategy | ActorProxy[BaseStrategy]
             strategy._gather()
         self._assert_unique_component_names()
-
-    def _teardown(self):
-        from pfund_kit.utils.ray import shutdown_ray
-
-        if self._owns_ray:
-            shutdown_ray()
+        # TODO: mtflow, build() saves the source artifacts before run(run=...) could configure a tracking run
+        for strategy in self._strategies.values():
+            strategy._build()
+        self._is_built = True

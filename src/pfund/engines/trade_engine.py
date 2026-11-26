@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 import logging
 import queue
 import time
-from threading import Thread
+from threading import Event, Thread
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from pfeed.io.table_io import TableIO
@@ -93,6 +93,9 @@ class TradeEngine(
         self._data_engine: DataEngine | None = None
         self._zmq_thread: Thread | None = None
         self._updates_thread: Thread | None = None
+        # stops the zmq and updates loops, they start before the engine is running (see run())
+        self._stop_loops = Event()
+        self._owns_ray = False
         self._queue: queue.Queue[Any] = queue.Queue()
         self._scheduler: BackgroundScheduler = BackgroundScheduler()
         self._schedule_jobs(self._scheduler)
@@ -275,7 +278,7 @@ class TradeEngine(
         assert self._proxy is not None, "proxy is not set"
         assert self._worker is not None, "worker is not set"
 
-        while self.is_running():
+        while not self._stop_loops.is_set():
             try:
                 if msg := self._proxy.recv():
                     channel, topic, data, msg_ts = msg
@@ -319,9 +322,9 @@ class TradeEngine(
         venue._set_queue(), regardless of ZMQ. This loop is the single consumer, so the
         manager-routing runs identically in local and ZMQ modes with no duplicated code.
         Runs in its own thread; blocks on the queue (no busy-spin) and re-checks
-        is_running() every 100ms for clean shutdown.
+        the stop event every 100ms for clean shutdown.
         """
-        while self.is_running():
+        while not self._stop_loops.is_set():
             try:
                 update = self._queue.get(timeout=0.1)
             except queue.Empty:
@@ -383,8 +386,25 @@ class TradeEngine(
         trading_venue._set_queue(self._queue)
         return trading_venue
 
+    @override
+    def build(self) -> None:
+        if not self._is_built:
+            from pfund_kit.utils.ray import is_ray_initialized
+
+            # NOTE: before any Ray actor is created, i.e. before gathering (ActorProxy creates its actor on first use)
+            # Ray already running means someone else owns it, e.g. this engine
+            # runs inside a Ray actor; shutting it down would kill that actor.
+            self._owns_ray = not is_ray_initialized()
+        super().build()
+
+    @override
     def run(self, *, run: MTFlowRun | None = None):
+        if self.is_running():
+            raise RuntimeError("Engine is already running")
         try:
+            self.build()
+            # NOTE: venues and loops must be up before the strategies start, on_start() may place orders
+            self._setup()
             super().run(run=run)
             if self._data_engine:
                 self._data_engine.run()  # blocking call
@@ -438,7 +458,8 @@ class TradeEngine(
         return data_configs
 
     def _setup(self):
-        super()._setup()
+        """Runtime wiring before the strategies start, the components are already built."""
+        self._stop_loops.clear()
         for strategy in self._strategies.values():
             strategy._setup_scheduler()
             for account in strategy.get_accounts():
@@ -481,8 +502,8 @@ class TradeEngine(
             venue.stop()
         if self._data_engine:
             self._data_engine.end()
-        # join both loops before touching their sockets — is_running() is already False,
-        # so each exits within its poll/timeout window
+        # join both loops before touching their sockets, each exits within its poll/timeout window
+        self._stop_loops.set()
         for thread_name, thread in (
             ("zmq", self._zmq_thread),
             ("updates", self._updates_thread),
@@ -500,4 +521,13 @@ class TradeEngine(
             self._proxy.terminate()
         if self._worker is not None:
             self._worker.terminate()
-        super()._teardown()
+        from pfund_kit.utils.ray import shutdown_ray
+
+        if self._owns_ray:
+            shutdown_ray()
+
+    @override
+    def end(self, reason: str = ""):
+        # NOTE: strategies stop first, then the venues, loops and Ray are torn down
+        super().end(reason=reason)
+        self._teardown()
