@@ -131,7 +131,7 @@ class TestEngineAddStrategy:
         strategy = MyStrategy()
 
         added = engine.add_strategy(
-            strategy, "1d", ray_actor_options={"name": "x"}, num_cpus=1
+            strategy, "1d", ray_actor_options={"name": "x"}, num_gpus=1
         )
 
         assert added is strategy
@@ -841,12 +841,18 @@ def _stub_strategy_backtest(
 
 class TestStrategyBacktest:
     @pytest.fixture
-    def strategy(self, engine: BacktestEngine) -> Any:
-        return engine.add_strategy(MyStrategy(), "1d", name="alpha")
+    def add_strategy(self, engine: BacktestEngine) -> Callable[..., Any]:
+        """Adds the strategy with the given chunking kwargs (num_chunks, num_cpus)."""
+
+        def add(**chunking: Any) -> Any:
+            return engine.add_strategy(MyStrategy(), "1d", name="alpha", **chunking)
+
+        return add
 
     def test_unchunked_backtest_is_chunk_0_of_X(
-        self, strategy: Any, mocker: MockerFixture, fake_ray: FakeRay
+        self, add_strategy: Callable[..., Any], mocker: MockerFixture, fake_ray: FakeRay
     ):
+        strategy = add_strategy()
         X = _wide_df(4)
         backtest = _stub_strategy_backtest(mocker, strategy)
 
@@ -863,22 +869,28 @@ class TestStrategyBacktest:
 
     @pytest.mark.parametrize("num_chunks", [0, -1])
     def test_num_chunks_below_one_is_one(
-        self, strategy: Any, mocker: MockerFixture, fake_ray: FakeRay, num_chunks: int
+        self,
+        add_strategy: Callable[..., Any],
+        mocker: MockerFixture,
+        fake_ray: FakeRay,
+        num_chunks: int,
     ):
+        strategy = add_strategy(num_chunks=num_chunks)
         _stub_strategy_backtest(mocker, strategy)
 
-        result = strategy.backtest(_wide_df(3), num_chunks=num_chunks)
+        result = strategy.backtest(_wide_df(3))
 
         assert result.get_column(CHUNK_COL).to_list() == [0] * 3
         assert fake_ray.finish_order == []
 
     def test_chunks_are_combined_in_chunk_order(
-        self, strategy: Any, mocker: MockerFixture, fake_ray: FakeRay
+        self, add_strategy: Callable[..., Any], mocker: MockerFixture, fake_ray: FakeRay
     ):
+        strategy = add_strategy(num_chunks=4, num_cpus=2)
         df = _wide_df(10)
         _stub_strategy_backtest(mocker, strategy)
 
-        result = strategy.backtest(df, num_chunks=4, num_cpus=2)
+        result = strategy.backtest(df)
 
         # finished out of order, combined in order
         assert fake_ray.finish_order != sorted(fake_ray.finish_order)
@@ -889,12 +901,13 @@ class TestStrategyBacktest:
         assert result.drop(CHUNK_COL).equals(_backtested(df))
 
     def test_each_chunk_is_backtested_on_its_own_date_range(
-        self, strategy: Any, mocker: MockerFixture, fake_ray: FakeRay
+        self, add_strategy: Callable[..., Any], mocker: MockerFixture, fake_ray: FakeRay
     ):
+        strategy = add_strategy(num_chunks=3)
         df = _long_df(6, ["BTC", "ETH"])
         backtest = _stub_strategy_backtest(mocker, strategy)
 
-        strategy.backtest(df, num_chunks=3)
+        strategy.backtest(df)
 
         backtested = sorted(
             (call.args[0] for call in backtest.call_args_list),
@@ -905,13 +918,14 @@ class TestStrategyBacktest:
         assert all(a.equals(b) for a, b in zip(backtested, expected, strict=True))
 
     def test_strategy_is_put_once_with_its_dfs_detached(
-        self, strategy: Any, mocker: MockerFixture, fake_ray: FakeRay
+        self, add_strategy: Callable[..., Any], mocker: MockerFixture, fake_ray: FakeRay
     ):
+        strategy = add_strategy(num_chunks=3)
         _stub_strategy_backtest(mocker, strategy)
         df = _wide_df(1)
         strategy.store._df = df
 
-        strategy.backtest(_wide_df(6), num_chunks=3)
+        strategy.backtest(_wide_df(6))
 
         assert fake_ray.put_with_dfs_detached == [True]
         # restored after ray.put()
@@ -923,24 +937,28 @@ class TestStrategyBacktest:
     )
     def test_num_cpus_caps_the_chunks_in_flight(
         self,
-        strategy: Any,
+        add_strategy: Callable[..., Any],
         mocker: MockerFixture,
         fake_ray: FakeRay,
         num_cpus: int | None,
         cpu_count: int | None,
         expected: int,
     ):
+        # num_cpus is resolved in add_strategy(), so os.cpu_count() is patched before it
         mocker.patch("os.cpu_count", return_value=cpu_count)
+        strategy = add_strategy(num_chunks=5, num_cpus=num_cpus)
         _stub_strategy_backtest(mocker, strategy)
 
-        result = strategy.backtest(_wide_df(10), num_chunks=5, num_cpus=num_cpus)
+        result = strategy.backtest(_wide_df(10))
 
         assert fake_ray.max_in_flight == expected
         assert result.get_column(CHUNK_COL).unique().sort().to_list() == [0, 1, 2, 3, 4]
 
     def test_failed_chunk_cancels_the_chunks_in_flight(
-        self, strategy: Any, mocker: MockerFixture, fake_ray: FakeRay
+        self, add_strategy: Callable[..., Any], mocker: MockerFixture, fake_ray: FakeRay
     ):
+        strategy = add_strategy(num_chunks=3, num_cpus=2)
+
         def backtest(df: pl.DataFrame) -> pl.DataFrame:
             # chunk 1 of 3 (x = 2, 3) fails
             if 2 in df.get_column("x").to_list():
@@ -950,7 +968,7 @@ class TestStrategyBacktest:
         _stub_strategy_backtest(mocker, strategy, side_effect=backtest)
 
         with pytest.raises(ValueError, match="chunk failed"):
-            strategy.backtest(_wide_df(6), num_chunks=3, num_cpus=2)
+            strategy.backtest(_wide_df(6))
 
         # chunks 0 and 1 in flight, chunk 1 finishes first and fails, chunk 0 is force-cancelled, chunk 2 never starts
         assert fake_ray.finish_order == [1]

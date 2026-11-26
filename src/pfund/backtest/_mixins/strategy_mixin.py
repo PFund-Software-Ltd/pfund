@@ -101,40 +101,42 @@ class BacktestStrategyMixin(BacktestMixin):
     # column telling apart the standalone backtests (chunks) in a strategy's backtest df, 0 for an unchunked run
     CHUNK_COL: ClassVar[str] = "chunk_num"
 
-    def backtest(
-        self,
-        X: pl.DataFrame,
-        num_chunks: int = 1,
-        num_cpus: int | None = None,
-    ) -> pl.DataFrame:
+    @override
+    def _init_backtest_state(self) -> None:
+        super()._init_backtest_state()
+        import os
+
+        # set by BacktestEngine.add_strategy(), see its docstring
+        self._num_chunks: int = 1
+        self._num_cpus: int = os.cpu_count() or 1
+
+    def _set_chunking(self, num_chunks: int, num_cpus: float | None) -> None:
+        import os
+
+        self._num_chunks = max(1, num_chunks)
+        self._num_cpus = (
+            (os.cpu_count() or 1) if num_cpus is None else max(1, int(num_cpus))
+        )
+
+    def backtest(self, X: pl.DataFrame, /) -> pl.DataFrame:
         """Runs a vectorized backtest of the strategy on ``X``.
 
         Overrides the user's backtest(df): _adopt() puts this mixin before the user's
         strategy class in the MRO, so ``strategy.backtest(X)`` lands here first,
         then calls the user's backtest(df) on each chunk, see _backtest_chunk().
+        It has the same signature as the user's backtest(df), so the type checker sees what runs.
+        Chunking (num_chunks, num_cpus) is set once in BacktestEngine.add_strategy().
 
         Args:
             X: the df passed to the user's backtest(df) as is, usually self.X after engine.use_split().
                 It has the market data columns (e.g. OHLCV), since add_data() always sets
                 as_features=True in vectorized backtesting.
-            num_chunks:
-                Number of standalone backtests to split ``df`` into.
-                if <= 1, process the whole df all at once (values below 1 are treated as 1).
-                if > 1, use Ray for parallel processing.
-                When chunked, the strategy's dfs (e.g. self.data_df, self.df) are None inside its backtest(),
-                use the df passed in.
-            num_cpus:
-                Maximum number of chunks (Ray tasks) in flight at once, i.e. how many chunks run in parallel.
-                if None, defaults to os.cpu_count().
-                This will be ignored if Ray is not used (i.e. num_chunks = 1).
 
         Returns:
             The backtest df, all chunks concatenated in chunk order, with each row's chunk in the CHUNK_COL column.
             Use df.partition_by(CHUNK_COL, as_dict=True) to get the per-chunk dfs.
         """
-        import os
-
-        if num_chunks <= 1:
+        if self._num_chunks == 1:
             return self._backtest_chunk(X)
 
         from itertools import islice
@@ -147,8 +149,6 @@ class BacktestStrategyMixin(BacktestMixin):
             setup_ray,
         )
         from ray.util.queue import Queue
-
-        num_cpus = (os.cpu_count() or 1) if num_cpus is None else max(1, num_cpus)
 
         @ray.remote
         def ray_task(
@@ -168,7 +168,7 @@ class BacktestStrategyMixin(BacktestMixin):
                 raise
 
         df_chunks: list[tuple[pl.DataFrame, int]] = _split_df_into_time_chunks(
-            X, num_chunks
+            X, self._num_chunks
         )
 
         self.logger.debug("setting up ray...")
@@ -202,10 +202,12 @@ class BacktestStrategyMixin(BacktestMixin):
 
                 # sliding window: keep num_cpus chunks in flight, start the next chunk
                 # as soon as one finishes, so a slow chunk doesn't leave the other workers idle
-                unfinished = [submit_next(*item) for item in islice(pending, num_cpus)]
+                unfinished = [
+                    submit_next(*item) for item in islice(pending, self._num_cpus)
+                ]
                 with ProgressBar(
                     total=len(df_chunks),
-                    description=f"Backtesting {self.name} ({len(df_chunks)} chunks, {min(num_cpus, len(df_chunks))} in parallel)",
+                    description=f"Backtesting {self.name} ({len(df_chunks)} chunks, {min(self._num_cpus, len(df_chunks))} in parallel)",
                 ) as pbar:
                     while unfinished:
                         finished, unfinished = ray.wait(unfinished, num_returns=1)

@@ -88,6 +88,9 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         name: str = "",
         # NOTE: ray args are ignored in backtesting, same as BacktestMixin._add_component
         ray_actor_options: dict[str, Any] | None = None,
+        *,
+        num_chunks: int = 1,
+        num_cpus: float | None = None,
         **ray_kwargs: Any,
     ) -> StrategyT:
         """Add a strategy as the top-level backtesting component.
@@ -98,6 +101,18 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             strategy: Strategy instance to backtest.
             resolution: Resolution at which the strategy runs.
             name: Optional name for the strategy. Defaults to its class name.
+            num_chunks:
+                Number of standalone backtests strategy.backtest(X) splits X into.
+                if <= 1, process the whole df all at once (values below 1 are treated as 1).
+                if > 1, use Ray for parallel processing.
+                When chunked, the strategy's dfs (e.g. self.data_df, self.df) are None inside its backtest(),
+                use the df passed in.
+            num_cpus:
+                Maximum number of chunks (Ray tasks) in flight at once, i.e. how many chunks run in parallel.
+                if None, defaults to os.cpu_count(). A float is floored, e.g. 2.5 -> 2 (min. 1).
+                Typed as float to match BaseEngine.add_strategy(), where it is the Ray actor's num_cpus.
+                This will be ignored if Ray is not used (i.e. num_chunks = 1).
+                Unlike in TradeEngine.add_strategy(), it does NOT run the strategy as a Ray actor.
 
         Returns:
             The strategy configured for backtesting.
@@ -121,6 +136,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             )
 
         strategy = BacktestStrategyMixin._adopt(strategy)
+        cast("BacktestStrategyMixin", strategy)._set_chunking(num_chunks, num_cpus)
         strategy = cast(
             "StrategyT",
             super().add_strategy(strategy=strategy, resolution=resolution, name=name),
