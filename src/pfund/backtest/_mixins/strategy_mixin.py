@@ -297,7 +297,7 @@ class BacktestStrategyMixin(BacktestMixin):
         if not callable(backtest):
             raise NotImplementedError(
                 f"{self} has no backtest() method, which VECTORIZED backtesting requires. "
-                + "Implement `def backtest(self, df: pl.DataFrame) -> pl.DataFrame` "
+                + "Implement `def backtest(self, df: pf.BacktestDataFrame) -> pl.DataFrame` "
                 + "that returns the backtested df, or backtest it in EVENT_DRIVEN mode instead."
             )
         # dry-runs the argument matching of backtest(df) without calling it
