@@ -15,6 +15,37 @@ from pfund_kit.utils.json import stable_dumps
 from pfund.utils.decorators import ray_method
 
 
+def _normalize_source(source: str) -> str:
+    """The class source without what can't change behavior: comments, formatting and docstrings.
+
+    Dumps the source's AST, which keeps no comments, whitespace or line numbers, with every docstring removed.
+    Falls back to the raw source if it doesn't parse on its own (e.g. a nested class whose
+    multi-line string breaks the dedent), so a change is never missed, only possibly over-reported.
+    NOTE: ast.dump()'s output can change across Python versions, so upgrading Python can mark artifacts stale once.
+    """
+    import ast
+    import textwrap
+
+    try:
+        tree = ast.parse(textwrap.dedent(source))
+    except SyntaxError:
+        return source
+    for node in ast.walk(tree):
+        if not isinstance(
+            node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+        ):
+            continue
+        # same rule as ast.get_docstring(): a string literal as the first statement of the body
+        first = node.body[0] if node.body else None
+        if (
+            isinstance(first, ast.Expr)
+            and isinstance(first.value, ast.Constant)
+            and isinstance(first.value.value, str)
+        ):
+            node.body = node.body[1:]
+    return ast.dump(tree)
+
+
 class ArtifactMixin:
     """What a component stamps on its artifacts and checks them against.
 
@@ -38,6 +69,7 @@ class ArtifactMixin:
         Each artifact is stamped with it when written, and compared on load, see _setup_sha256.
         Only the classes' source, not their whole files: editing a script that defines a component
         (e.g. uncommenting a line that runs it) must not mark the component's artifacts as stale.
+        Comments, formatting and docstrings inside a class don't count either, see _normalize_source().
         Classes from pfund, the standard library and installed packages are skipped.
         Module-level helpers a class uses are not covered.
         """
@@ -61,7 +93,7 @@ class ArtifactMixin:
             ):
                 continue
             try:
-                source = inspect.getsource(klass)
+                source = _normalize_source(inspect.getsource(klass))
             # e.g. a class created dynamically, it has no source
             except (OSError, TypeError):
                 continue
