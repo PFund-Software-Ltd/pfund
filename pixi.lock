@@ -140,6 +140,7 @@ environments:
       - pypi: ../mtflow
       - pypi: ../pfeed
       - pypi: ../pfund-blocks
+      - pypi: ../pfund-kit
       - pypi: ./
       - pypi: git+https://github.com/litestar-org/litestar.git?branch=main#574e436d2a629a1a8775ea0bed11091a80f50703
       - pypi: https://files.pythonhosted.org/packages/00/0b/b170089cd44848f25dbc9efda08e5aa4a8402d9a13f0d4d0f3d7808be539/wadler_lindig-0.1.8-py3-none-any.whl
@@ -278,7 +279,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/71/b4/4a9fcfb2aef6ba44d9073ecd301443aa00b3dac95de5619f2a7de7ec8a91/hpack-4.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/74/27/e5b8f34d02d9995b80abcef563ea1f8b56d20134d8f4e5e81733b1feceb2/pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/78/9d/225a525821b08b4ce85a7343fc8d21dcda6e75a825b90e9b6a29feedc2ee/jaxlib-0.12.0.1-cp313-cp313-manylinux_2_27_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/79/2d/e819986fd232b1dd32ed514df129d02bf39e68cab7e3dd925ea42770cee1/pfund_kit-0.1.25-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/79/c2/c8bc972d6dcba13910fc92b622420704a2f655dd6b01ed54269a1bf7c2d2/pandas-3.1.1-cp313-cp313-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/79/c6/4b44abbffa01f85d6d0f0b9325a712019b4e2e6208f999ac6846d8da1346/fonttools-4.68.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
@@ -534,6 +534,7 @@ environments:
       - pypi: ../mtflow
       - pypi: ../pfeed
       - pypi: ../pfund-blocks
+      - pypi: ../pfund-kit
       - pypi: ./
       - pypi: git+https://github.com/litestar-org/litestar.git?branch=main#574e436d2a629a1a8775ea0bed11091a80f50703
       - pypi: https://files.pythonhosted.org/packages/00/0b/b170089cd44848f25dbc9efda08e5aa4a8402d9a13f0d4d0f3d7808be539/wadler_lindig-0.1.8-py3-none-any.whl
@@ -671,7 +672,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/71/46/17f022dd3e953bf20a04a028a21ec746d942f8d2af30fa0f124fa0e6a684/pygments-2.21.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/71/b4/4a9fcfb2aef6ba44d9073ecd301443aa00b3dac95de5619f2a7de7ec8a91/hpack-4.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/73/36/0093091ebb270fcd1bc1f6e095f93b2e0ed7f1011c28837dc2dbe5f96b99/propcache-0.5.4-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl
-      - pypi: https://files.pythonhosted.org/packages/79/2d/e819986fd232b1dd32ed514df129d02bf39e68cab7e3dd925ea42770cee1/pfund_kit-0.1.25-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/7b/3d/2e4bc4fd1ef9770871669adb348d612a6e4786b303a23f9935b81c48dd60/httpx2-2.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/7b/c1/9be4e1a8a30db8729a86628073910e56f85aaf8a659e053f376a2e6ea5a8/tzlocal-5.4.5-py3-none-any.whl
@@ -883,6 +883,7 @@ environments:
       - pypi: ../mtflow
       - pypi: ../pfeed
       - pypi: ../pfund-blocks
+      - pypi: ../pfund-kit
       - pypi: ./
       - pypi: git+https://github.com/litestar-org/litestar.git?branch=main#574e436d2a629a1a8775ea0bed11091a80f50703
       - pypi: https://files.pythonhosted.org/packages/00/0b/b170089cd44848f25dbc9efda08e5aa4a8402d9a13f0d4d0f3d7808be539/wadler_lindig-0.1.8-py3-none-any.whl
@@ -1006,7 +1007,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/71/46/17f022dd3e953bf20a04a028a21ec746d942f8d2af30fa0f124fa0e6a684/pygments-2.21.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/71/b4/4a9fcfb2aef6ba44d9073ecd301443aa00b3dac95de5619f2a7de7ec8a91/hpack-4.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/78/d8/372b6454e664284c97575a9ece72ffcb1ae2ae47f3b44a24100425c2de24/simplejson-4.3.0-cp313-cp313-macosx_11_0_arm64.whl
-      - pypi: https://files.pythonhosted.org/packages/79/2d/e819986fd232b1dd32ed514df129d02bf39e68cab7e3dd925ea42770cee1/pfund_kit-0.1.25-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/7b/3d/2e4bc4fd1ef9770871669adb348d612a6e4786b303a23f9935b81c48dd60/httpx2-2.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/7b/c1/9be4e1a8a30db8729a86628073910e56f85aaf8a659e053f376a2e6ea5a8/tzlocal-5.4.5-py3-none-any.whl
@@ -1224,6 +1224,7 @@ environments:
       - pypi: ../mtflow
       - pypi: ../pfeed
       - pypi: ../pfund-blocks
+      - pypi: ../pfund-kit
       - pypi: ./
       - pypi: git+https://github.com/litestar-org/litestar.git?branch=main#574e436d2a629a1a8775ea0bed11091a80f50703
       - pypi: https://files.pythonhosted.org/packages/00/0b/b170089cd44848f25dbc9efda08e5aa4a8402d9a13f0d4d0f3d7808be539/wadler_lindig-0.1.8-py3-none-any.whl
@@ -1348,7 +1349,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/71/b4/4a9fcfb2aef6ba44d9073ecd301443aa00b3dac95de5619f2a7de7ec8a91/hpack-4.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/74/69/d23079cd4bc16d11e49c3f51c2540c018736f26701a2a73183cae9255a1c/httptools-0.9.0-cp313-cp313-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/74/6b/3f90a565e6eb94266d197d91cca5833b34ab89768a24f7f07b29bc186e09/multidict-7.2.1-cp313-cp313-win_amd64.whl
-      - pypi: https://files.pythonhosted.org/packages/79/2d/e819986fd232b1dd32ed514df129d02bf39e68cab7e3dd925ea42770cee1/pfund_kit-0.1.25-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/7b/3d/2e4bc4fd1ef9770871669adb348d612a6e4786b303a23f9935b81c48dd60/httpx2-2.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/7b/c1/9be4e1a8a30db8729a86628073910e56f85aaf8a659e053f376a2e6ea5a8/tzlocal-5.4.5-py3-none-any.whl
@@ -9273,6 +9273,21 @@ packages:
   - websockets>=16.1.1
   - msgspec>=0.20.0
   - pydantic>=2.12.5
+  requires_python: '>=3.13'
+- pypi: ../pfund-kit
+  name: pfund-kit
+  requires_dist:
+  - rich>=15.0.0
+  - tqdm>=4.70.1
+  - click>=8.5.0
+  - trogon>=0.6.0 ; sys_platform != 'emscripten'
+  - pyyaml>=6.0.3
+  - tomlkit>=0.15.2
+  - packaging>=26.1
+  - pydantic>=2.12.5
+  - python-dotenv>=1.2.4
+  - prompt-toolkit>=3.0.53
+  - pytz>=2026.1
   requires_python: '>=3.13'
 - pypi: ./
   name: pfund

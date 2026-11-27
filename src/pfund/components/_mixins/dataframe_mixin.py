@@ -65,7 +65,8 @@ class DataFrameMixin(ComponentBaseMixin):
             raise FileNotFoundError(
                 f"no saved trading df found for '{self.name}'; call save_df() first"
             )
-        if reason := self._get_stale_reason(metadata, check_data_range=True):
+        component = cast("Component", self)
+        if reason := component._get_stale_reason(metadata, check_data_range=True):
             self.logger.warning(f"'{self.name}' saved trading df is stale: {reason}")
         return cast("pl.LazyFrame", data)
 

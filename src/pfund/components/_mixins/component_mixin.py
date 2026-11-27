@@ -22,6 +22,7 @@ from pathlib import Path
 from pfund_blocks.enums import DataCategory
 from pfund_blocks.resolution import Resolution
 
+from pfund.components._mixins.artifact_mixin import ArtifactMixin
 from pfund.components._mixins.base_mixin import ComponentBaseMixin
 from pfund.components._mixins.dataframe_mixin import DataFrameMixin
 from pfund.components.actor_proxy import ActorProxy
@@ -30,7 +31,7 @@ from pfund.enums import ArtifactType, ComponentType, RunMode
 from pfund.utils.decorators import ray_method
 
 
-class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
+class ComponentMixin(DataFrameMixin, ArtifactMixin, ComponentBaseMixin):
     def _update_data_df(self, data: BaseData) -> None:
         data_store = self.get_data_store(data.category)
         data_store.update_df(data)
@@ -99,15 +100,15 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            # the same snapshot _setup_sha256 was hashed from, not recomputed, see _setup
-            **self._setup,
+            # the fields _setup_sha256 hashes, recomputed here, so a value mutated since the build
+            # (e.g. the datas, see _build()) is recorded as it is now
+            **self._setup_fields(),
             "engine_name": self.context.name,
             # recorded here, each artifact is also stamped with them, see PFundComponentDataMetadata
             "setup_sha256": self._setup_sha256,
             "source_sha256": self._source_sha256,
             "data_start": self.context.data_start,
             "data_end": self.context.data_end,
-            "signal_cols": self._signal_cols,
             "run_mode": self.run_mode,
             "settings": self.settings.model_dump(),
         }
@@ -127,6 +128,8 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
             "signature": (self.__pfund_args__, self.__pfund_kwargs__),
             "config": self.config,
             "params": self.params,
+            # the names the user declared via set_signal_cols(), [] when left to the default
+            "signal_cols": list(self._signal_cols),
             "datas": [data.to_dict() for data in self.get_datas()],
             # child stamps, not names: a change in a child (e.g. params loaded from a TOML file, or its code)
             # must make the parent's artifacts stale too, otherwise a non-top component reuses its

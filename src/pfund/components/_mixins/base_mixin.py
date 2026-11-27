@@ -9,9 +9,7 @@ if TYPE_CHECKING:
     from pfund_blocks.typing import ProductName, TradingVenue
     from pfund_kit.logging.loggers import ColoredLogger
 
-    from pfund._pfeed_source.component.data_handler import PFundComponentDataMetadata
     from pfund._pfeed_source.component.feed import PFundComponentFeed
-    from pfund.components._mixins.component_mixin import ComponentMixin
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel
     from pfund.data_config import DataConfig
@@ -23,19 +21,13 @@ if TYPE_CHECKING:
 
 import copy
 import datetime
-import hashlib
-import json
 import logging
-from decimal import Decimal
-from enum import Enum
-from functools import cached_property
 from pathlib import Path
 
 from pfund_blocks.enums import DataCategory
 from pfund_blocks.enums.env import Environment
 from pfund_blocks.resolution import Resolution
 from pfund_kit.style import RichColor, TextStyle
-from pydantic import BaseModel as PydanticModel
 
 from pfund.components.actor_proxy import ActorProxy
 from pfund.databoy import DataBoy
@@ -385,62 +377,6 @@ class ComponentBaseMixin:
     def store(self) -> TradingStore:
         return self._store
 
-    @cached_property
-    def _setup_sha256(self) -> str:
-        """Hashes the component's setup, see _setup_fields().
-
-        The artifacts are found by the component's name (its dir, unique across the engine, see
-        PFundComponentDataModel.component_path), then validated by stamps written on each of them:
-        - `_setup_sha256` answers "were these produced by this component as it is set up now?",
-          i.e. the same params, config, data and children.
-        - `_source_sha256` answers "were these produced by the code that's running now?"
-        - the data range answers "were these produced on the data this run uses?", trading df only.
-        See _get_stale_reason().
-        """
-        payload = json.dumps(
-            self._setup, sort_keys=True, separators=(",", ":")
-        ).encode()
-        return hashlib.sha256(payload).hexdigest()
-
-    @ray_method
-    def get_artifact_stamp(self) -> dict[str, str]:
-        """The setup and source hashes, as a method so it also works through ActorProxy (Ray only forwards methods).
-
-        A parent's setup holds its children's stamps, so a change in a child (its params or its code)
-        makes the parent's artifacts stale too.
-        """
-        return {
-            "setup_sha256": self._setup_sha256,
-            "source_sha256": self._source_sha256,
-        }
-
-    def _get_stale_reason(
-        self,
-        metadata: PFundComponentDataMetadata | None,
-        *,
-        check_data_range: bool = False,
-    ) -> str | None:
-        """Why an artifact stamped with `metadata` doesn't belong to the component as it runs now, None if it does.
-
-        Args:
-            metadata: the artifact's per-partition metadata, None if it has none.
-            check_data_range: also require the artifact to be written on the engine's data range,
-                for a trading df, whose rows depend on it. A trained model doesn't.
-        """
-        if metadata is None:
-            return "it has no stamp"
-        if metadata.setup_sha256 != self._setup_sha256:
-            return "its setup (params, config, data or child components) has changed"
-        if metadata.source_sha256 != self._source_sha256:
-            return "its code has changed"
-        data_range = (self.context.data_start, self.context.data_end)
-        if check_data_range and (metadata.data_start, metadata.data_end) != data_range:
-            return (
-                f"it was saved on data range ({metadata.data_start}, {metadata.data_end}), "
-                + f"not on ({data_range[0]}, {data_range[1]})"
-            )
-        return None
-
     def _hydrate(
         self,
         name: ComponentName,
@@ -611,99 +547,6 @@ class ComponentBaseMixin:
     @ray_method
     def get_signal_cols(self) -> list[str]:
         return self._signal_cols
-
-    # Frozen at first use, so the component keeps one setup for its lifetime: runtime work
-    # can mutate objects in the setup (e.g. a PyTorch LazyLinear materializing on its first
-    # forward pass), and recomputing it would stamp the component's artifacts with different hashes,
-    # or record to_dict() fields that differ from the hashed ones.
-    # NOTE: _build() freezes it before _materialize(), which mutates the datas, see ComponentMixin._build()
-    @cached_property
-    def _setup(self) -> dict[str, Any]:
-        # NOTE: the json round trip turns every value into plain data, caching the dict alone would
-        # still hold the live objects, which can change later
-        return json.loads(
-            json.dumps(
-                cast("ComponentMixin", self)._setup_fields(),
-                default=self._encode_setup_value,
-            )
-        )
-
-    def _get_source_classes(self) -> list[type]:
-        """The classes whose source is the component's code, hashed by _source_sha256.
-
-        The component's MRO, so editing a user-defined base class (e.g. MyBase subclassed by Alpha) counts too.
-        Overridden by BaseModel to add the underlying model's classes, e.g. a torch nn.Module.
-        """
-        return list(type(self).__mro__)
-
-    # Frozen at first use like _setup, every artifact of the run is stamped with the same hash
-    @cached_property
-    def _source_sha256(self) -> str:
-        """Hashes the source of every user-written class in _get_source_classes().
-
-        Each artifact is stamped with it when written, and compared on load, see _setup_sha256.
-        Only the classes' source, not their whole files: editing a script that defines a component
-        (e.g. uncommenting a line that runs it) must not mark the component's artifacts as stale.
-        Classes from pfund, the standard library and installed packages are skipped.
-        Module-level helpers a class uses are not covered.
-        """
-        import inspect
-        import sysconfig
-
-        excluded_dirs = [
-            Path(sysconfig.get_paths()[key]).resolve()
-            for key in ("stdlib", "platstdlib", "purelib", "platlib")
-        ]
-        sources: list[str] = []
-        for klass in dict.fromkeys(self._get_source_classes()):
-            if klass.__module__.split(".")[0] == "pfund":
-                continue
-            try:
-                source_file = inspect.getsourcefile(klass)
-            except TypeError:  # built-in classes, e.g. object
-                continue
-            if source_file is not None and any(
-                Path(source_file).resolve().is_relative_to(d) for d in excluded_dirs
-            ):
-                continue
-            try:
-                source = inspect.getsource(klass)
-            # e.g. a class created dynamically, it has no source
-            except (OSError, TypeError):
-                continue
-            if source not in sources:
-                sources.append(source)
-
-        digest = hashlib.sha256()
-        for source in sources:
-            digest.update(source.encode())
-        return digest.hexdigest()
-
-    def _encode_setup_value(self, value: Any) -> Any:
-        """Encodes a value json can't, used by _setup.
-
-        Only encodings that are the same in every run are allowed, otherwise the same
-        component setup would get a new _setup_sha256 each run, and its artifacts would always be stale.
-        """
-        if isinstance(value, (set, frozenset)):
-            # NOTE: set order changes across processes (hash randomization), sort it
-            return sorted(value, key=repr)
-        if isinstance(value, Enum):
-            return value.value
-        if isinstance(value, (datetime.date, datetime.time)):
-            return value.isoformat()
-        if isinstance(value, (Path, Decimal, Resolution)):
-            return str(value)
-        if isinstance(value, PydanticModel):
-            return value.model_dump(mode="json")
-        # e.g. sklearn estimators, whose repr lists their params
-        if type(value).__repr__ is not object.__repr__:
-            return repr(value)
-        # object.__repr__ includes the memory address, which changes every run
-        raise TypeError(
-            f"{self} setup: cannot encode {type(value).__name__} {value!r} stably, "
-            + f"define {type(value).__name__}.__repr__ to return a value that is the same in every run"
-        )
 
     def _get_default_name(self):
         return self.__class__.__name__
