@@ -21,7 +21,7 @@ from pathlib import Path
 import polars as pl
 from pfund_kit.style import RichColor, TextStyle
 
-from pfund.backtest.cv.indexing import SplittableData, take_rows, validate_aligned
+from pfund.backtest.cv.indexing import SplittableData, take_rows
 from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.enums import BacktestMode
 from pfund.errors import StaleArtifactError
@@ -60,7 +60,7 @@ class BacktestMixin(ComponentMixin):
         # top components are the ones added by engine.add_strategy/model/feature()
         self._is_backtestee = False
         # the trading df over the whole data range, kept by _use_split() while X holds one split
-        self._unsplit_df: pl.DataFrame | None = None
+        self._unsplit_trading_df: pl.DataFrame | None = None
 
     @classmethod
     def _adopt[C: Component](cls, component: C) -> C:
@@ -134,18 +134,27 @@ class BacktestMixin(ComponentMixin):
                 + "to be equal to or coarser than every component's resolution"
             )
 
+    def _get_trading_df(self) -> pl.DataFrame:
+        """The trading df over the whole data range, whether or not use_split() has sliced it."""
+        if self._unsplit_trading_df is not None:
+            return self._unsplit_trading_df
+        return self.get_df(kind="trading")
+
     def _take_split[DataT: SplittableData](
         self, data: DataT, part: SplitPart, fold: int | None = None
     ) -> DataT | None:
-        """Rows of ``data`` (row-aligned with X) in one split part, None if empty."""
+        """Rows of ``data`` in one split part, None if empty.
+
+        ``data`` is row-aligned with the unsplit trading df, whose dates map its rows onto the split grid,
+        so the result doesn't depend on which split use_split() has set.
+        """
         dataset_splits = self.dataset_splits
-        if dataset_splits is None:
-            return data if part == "train" else None
-        rows = dataset_splits.row_indices(self.X, part, fold)
+        assert dataset_splits is not None, "no dataset_splits on the backtest engine"
+        rows = dataset_splits.row_indices(self._get_trading_df(), part, fold)
         return None if rows.size == 0 else take_rows(data, rows)
 
     def _use_split(self, part: SplitPart, fold: int | None = None) -> None:
-        """Sets X (the trading df) of this component and its children to their rows in one split part.
+        """Sets the trading df of this component and its children to their rows in one split part, so X (its features) holds that split.
 
         Internal, called by BacktestEngine.use_split(): the split is engine state,
         so a component never sits on a different split from its parent.
@@ -154,13 +163,13 @@ class BacktestMixin(ComponentMixin):
             raise ValueError(
                 "no dataset_splits on the backtest engine, pass dataset_splits=... to BacktestEngine()"
             )
-        if self._unsplit_df is None:
-            # raises if the trading df is not ready, i.e. the engine hasn't run yet
-            self._unsplit_df = self.get_df(kind="trading")
-        rows = self.dataset_splits.row_indices(self._unsplit_df, part, fold)
-        if rows.size == 0:
+        # raises if the trading df is not ready, i.e. the engine hasn't run yet
+        trading_df = self._get_trading_df()
+        split_df = self._take_split(trading_df, part, fold)
+        if split_df is None:
             raise ValueError(f"{self.name} has no rows in the {part!r} set")
-        self.store.set_df(take_rows(self._unsplit_df, rows))
+        self._unsplit_trading_df = trading_df
+        self.store.set_df(split_df)
         in_fold = "" if fold is None else f" (fold {fold})"
         self.logger.warning(
             f"{self.name}.X now only holds the {part!r} set{in_fold}",
@@ -170,39 +179,13 @@ class BacktestMixin(ComponentMixin):
             # components always run locally in backtesting, never as ActorProxy
             cast("BacktestMixin", component)._use_split(part, fold)
 
-    def split[DataT: SplittableData](
-        self,
-        data: DataT,
-        fold: int | None = None,
-    ) -> tuple[DataT | None, DataT | None, DataT | None]:
-        """Split aligned data into the component's train/validation/test sets.
-
-        `data` is sliced positionally by the engine's splits mapped onto X, so it
-        needs no `date` column of its own — it only has to be row-aligned 1:1
-        with X (same length and order). A target y, class labels, sample
-        weights, or any per-row companion of the features therefore uses the
-        same boundaries as X.
-
-            close = next(c for c in model.df.columns if c.endswith(":close"))
-            y = model.df.get_column(close).shift(-1) / model.df.get_column(close) - 1.0
-            X_train, X_val, _ = model.split(model.X)
-            y_train, y_val, _ = model.split(y)
-            model.fit(X_train, y_train)
-
-        Args:
-            data: a DataFrame, Series, or ndarray row-aligned 1:1 with X.
-            fold: the fold to split by, required under cross-validation,
-                optional (only 0) under holdout.
-
-        Returns a (train, val, test) tuple; any segment that collapsed to 0
-        rows or is undefined for the split is None.
-        """
-        validate_aligned(data, self.X)
-        return (
-            self._take_split(data, "train", fold),
-            self._take_split(data, "val", fold),
-            self._take_split(data, "test"),
-        )
+    def _clear_split(self) -> None:
+        """Sets the trading df of this component and its children back to the whole data range, see _use_split()."""
+        if self._unsplit_trading_df is not None:
+            self.store.set_df(self._unsplit_trading_df)
+            self._unsplit_trading_df = None
+        for component in self.components:
+            cast("BacktestMixin", component)._clear_split()
 
     @property
     def _source_file_path(self) -> Path:

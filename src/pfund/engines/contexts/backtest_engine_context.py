@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
-    from pfund.backtest.cv.dataset_splits import DatasetSplitsInput
+    from pfund.backtest.cv.dataset_splits import DatasetSplitsInput, SplitPart
     from pfund.engines.base_engine import DataRangeDict
 
 import os
@@ -68,3 +68,5 @@ class BacktestEngineContext(BaseEngineContext[BacktestEngineSettings]):
                 data_end=self.data_end,
                 split_resolution=self.settings.split_resolution,
             )
+        # the (part, fold) set by engine.use_split(), None when X holds the whole data range
+        self.active_split: tuple[SplitPart, int | None] | None = None

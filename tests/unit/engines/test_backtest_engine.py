@@ -967,3 +967,168 @@ class TestStrategyBacktest:
         # chunks 0 and 1 in flight, chunk 1 finishes first and fails, chunk 0 is force-cancelled, chunk 2 never starts
         assert fake_ray.finish_order == [1]
         assert fake_ray.cancelled == [(0, True)]
+
+
+class _SplitModel(SKLearnModel):
+    def predict(self, X: Any, *args: Any, **kwargs: Any) -> Any:
+        return [0]
+
+
+SPLIT_DATES = [
+    datetime.datetime(2024, 1, 1) + datetime.timedelta(days=i) for i in range(10)
+]
+
+
+@pytest.fixture
+def split_engine() -> BacktestEngine:
+    # 721 over 10 daily bars: train 1/1-1/7, val 1/8-1/9, test 1/10
+    return BacktestEngine(
+        data_range=("2024-01-01", "2024-01-10"),
+        settings=BacktestEngineSettings(),
+        dataset_splits=721,
+    )
+
+
+def _seed_model(engine: BacktestEngine) -> Any:
+    """A model as the backtestee with its trading df seeded, as if the engine had built it."""
+    model = engine.add_model(_SplitModel(LinearRegression()), "1d", name="model")
+    model.store.set_df(pl.DataFrame({"date": SPLIT_DATES, "x": list(range(10))}))
+    engine._is_built = True
+    return model
+
+
+@pytest.fixture
+def split_model(split_engine: BacktestEngine) -> Any:
+    return _seed_model(split_engine)
+
+
+def _x_values(model: Any) -> list[int]:
+    return model.X.get_column("x").to_list()
+
+
+class TestUseSplit:
+    def test_sets_x_and_records_the_split(
+        self, split_engine: BacktestEngine, split_model: Any
+    ):
+        split_engine.use_split("train")
+
+        assert _x_values(split_model) == list(range(7))
+        assert split_engine.context.active_split == ("train", None)
+
+    def test_clear_split_restores_the_whole_range(
+        self, split_engine: BacktestEngine, split_model: Any
+    ):
+        split_engine.use_split("test")
+        split_engine.clear_split()
+
+        assert _x_values(split_model) == list(range(10))
+        assert split_engine.context.active_split is None
+
+    def test_clear_split_without_a_split_is_a_no_op(
+        self, split_engine: BacktestEngine, split_model: Any
+    ):
+        split_engine.clear_split()
+
+        assert _x_values(split_model) == list(range(10))
+
+    def test_switching_splits_maps_on_the_whole_range(
+        self, split_engine: BacktestEngine, split_model: Any
+    ):
+        split_engine.use_split("test")
+        split_engine.use_split("val")
+
+        assert _x_values(split_model) == [7, 8]
+
+    def test_context_manager_clears_on_exit(
+        self, split_engine: BacktestEngine, split_model: Any
+    ):
+        with split_engine.use_split("train"):
+            assert _x_values(split_model) == list(range(7))
+
+        assert _x_values(split_model) == list(range(10))
+        assert split_engine.context.active_split is None
+
+    def test_context_manager_clears_on_error(
+        self, split_engine: BacktestEngine, split_model: Any
+    ):
+        with pytest.raises(RuntimeError, match="boom"), split_engine.use_split("train"):
+            raise RuntimeError("boom")
+
+        assert _x_values(split_model) == list(range(10))
+        assert split_engine.context.active_split is None
+
+
+class TestApplySplit:
+    def test_returns_the_rows_of_the_active_split(
+        self, split_engine: BacktestEngine, split_model: Any
+    ):
+        y = pl.Series("y", [i * 10 for i in range(10)])
+
+        with split_engine.use_split("val"):
+            assert split_engine.apply_split(y).to_list() == [70, 80]
+
+    def test_is_aligned_with_x(self, split_engine: BacktestEngine, split_model: Any):
+        y = pl.Series("y", list(range(10)))
+
+        with split_engine.use_split("train"):
+            assert split_engine.apply_split(y).to_list() == _x_values(split_model)
+
+    def test_requires_an_active_split(
+        self, split_engine: BacktestEngine, split_model: Any
+    ):
+        with pytest.raises(RuntimeError, match=r"call engine.use_split\(\) before"):
+            split_engine.apply_split(pl.Series("y", list(range(10))))
+
+    def test_rejects_data_aligned_with_the_split_x(
+        self, split_engine: BacktestEngine, split_model: Any
+    ):
+        with (
+            split_engine.use_split("train"),
+            pytest.raises(ValueError, match="row-aligned"),
+        ):
+            split_engine.apply_split(pl.Series("y", list(range(7))))
+
+
+class TestTrainedOn:
+    def test_stamps_the_active_split(
+        self, split_engine: BacktestEngine, split_model: Any
+    ):
+        with split_engine.use_split("train"):
+            trained_on = split_model._get_trained_on()
+
+        assert trained_on.part == "train"
+        assert trained_on.fold is None
+        assert trained_on.intervals == [(SPLIT_DATES[0], SPLIT_DATES[7])]
+
+    def test_trainval_is_allowed(self, split_engine: BacktestEngine, split_model: Any):
+        with split_engine.use_split("trainval"):
+            trained_on = split_model._get_trained_on()
+
+        assert trained_on.intervals == [(SPLIT_DATES[0], SPLIT_DATES[9])]
+
+    def test_no_split_in_use_is_rejected(self, split_model: Any):
+        with pytest.raises(RuntimeError, match="no split in use"):
+            split_model._get_trained_on()
+
+    @pytest.mark.parametrize("part", ["val", "test"])
+    def test_val_and_test_are_rejected(
+        self, split_engine: BacktestEngine, split_model: Any, part: Any
+    ):
+        with (
+            split_engine.use_split(part),
+            pytest.raises(ValueError, match=f"trained on the {part} set"),
+        ):
+            split_model._get_trained_on()
+
+    def test_without_dataset_splits_it_is_the_whole_range(self):
+        engine = BacktestEngine(
+            data_range=("2024-01-01", "2024-01-10"), settings=BacktestEngineSettings()
+        )
+        model = _seed_model(engine)
+
+        trained_on = model._get_trained_on()
+
+        assert trained_on.part is None
+        assert trained_on.intervals == [
+            (SPLIT_DATES[0], SPLIT_DATES[-1] + datetime.timedelta(days=1))
+        ]

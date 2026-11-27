@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from sklearn.base import BaseEstimator
     from torch import Tensor
 
+    from pfund._pfeed_source.component.data_handler import TrainedOn
     from pfund.typing import Signals
 
     type UnderlyingModel = nn.Module | BaseEstimator | linen.Module | eqx.Module
@@ -219,6 +220,19 @@ class BaseModel[UnderlyingModelT: UnderlyingModel = Any](
                 + "retrain and save() it if the change affects the model"
             )
         self._decode(data)
+
+    def _get_trained_on(self) -> TrainedOn | None:
+        """What the model was trained on, stamped on its model and checkpoint artifacts.
+
+        The whole data range, overridden in backtesting, where the engine can split it.
+        None if the engine has no data range, e.g. live trading.
+        """
+        from pfund._pfeed_source.component.data_handler import TrainedOn
+
+        data_start, data_end = self.context.data_start, self.context.data_end
+        if data_start is None or data_end is None:
+            return None
+        return TrainedOn.whole_range(data_start, data_end)
 
     def save(self) -> None:
         artifact = self._encode()

@@ -11,6 +11,7 @@ if TYPE_CHECKING:
         PFundComponentDataModel,
         SourceArtifact,
     )
+    from pfund.components.models.model_base import BaseModel
 
 import datetime
 import json
@@ -22,11 +23,45 @@ from pfeed.enums import DataLayer
 from pfeed.io.base_io import BaseIO, DatasetKey
 from pfeed.io.blob_io import BlobIO
 from pfund_kit.utils.temporal import get_utc_now
-from pydantic import Field
+from pydantic import BaseModel as PydanticModel, Field
 
 from pfund._pfeed_source.base.data_handler import PFundBaseDataHandler
 from pfund._pfeed_source.data_category import PFundDataCategory
 from pfund.enums import ArtifactType
+
+
+class TrainedOn(PydanticModel):
+    """The rows a model was trained on, stamped on its model and checkpoint artifacts.
+
+    The engine's data range alone doesn't say it: a model trained on the train set of
+    T1-T100 only saw e.g. T1-T70, see BacktestModelMixin._get_trained_on().
+    """
+
+    # the split part set by engine.use_split(), e.g. "train", None if the engine has no dataset_splits,
+    # i.e. trained on the whole data range
+    part: str | None = None
+    # the cross-validation fold, None under holdout or with no dataset_splits
+    fold: int | None = None
+    # the grid the split was cut on, e.g. "1d", None with no dataset_splits
+    split_resolution: str | None = None
+    # [start, end) of each contiguous run of the rows, a cross-validation fold may have gaps
+    intervals: list[tuple[datetime.datetime, datetime.datetime]]
+
+    @classmethod
+    def whole_range(
+        cls, data_start: datetime.date, data_end: datetime.date
+    ) -> TrainedOn:
+        """Trained on the whole data range, data_end inclusive."""
+        return cls(
+            intervals=[
+                (
+                    datetime.datetime.combine(data_start, datetime.time.min),
+                    datetime.datetime.combine(
+                        data_end + datetime.timedelta(days=1), datetime.time.min
+                    ),
+                )
+            ]
+        )
 
 
 class PFundComponentDataMetadata(BaseDataMetadata):
@@ -51,6 +86,9 @@ class PFundComponentDataMetadata(BaseDataMetadata):
     # metadata.json is written at build time, before default names are filled in by to_signals().
     # None for a non-data artifact or a df written before it was stamped
     signal_cols: list[str] | None = None
+    # the rows the model was trained on, see TrainedOn.
+    # None for a non-model artifact or a model written before it was stamped
+    trained_on: TrainedOn | None = None
     # pfund's metadata.json of the component, attached by PFundComponentDataHandler.read(),
     # excluded from model_dump(), so it is never written into the per-partition metadata
     component: dict[str, Any] | None = Field(default=None, exclude=True)
@@ -248,13 +286,22 @@ class PFundComponentDataHandler(
 
     def _create_metadata(self) -> PFundComponentDataMetadata:
         component = self._data_model.component
+        artifact_type = self._data_model.artifact_type
+        is_trained_artifact = artifact_type in (
+            ArtifactType.model,
+            ArtifactType.checkpoint,
+        )
         return PFundComponentDataMetadata(
             setup_sha256=component._setup_sha256,
             source_sha256=component._source_sha256,
             data_start=component.context.data_start,
             data_end=component.context.data_end,
             signal_cols=list(component._signal_cols)
-            if self._data_model.artifact_type == ArtifactType.data
+            if artifact_type == ArtifactType.data
+            else None,
+            # raises if what the model was trained on is unknown, before anything is written
+            trained_on=cast("BaseModel", component)._get_trained_on()
+            if is_trained_artifact
             else None,
         )
 

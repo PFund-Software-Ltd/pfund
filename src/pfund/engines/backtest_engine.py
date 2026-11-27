@@ -8,6 +8,7 @@ if TYPE_CHECKING:
 
     from pfund.backtest._mixins.backtest_mixin import BacktestMixin
     from pfund.backtest.cv.dataset_splits import DatasetSplitsInput, SplitPart
+    from pfund.backtest.cv.indexing import SplittableData
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel, UnderlyingModel
     from pfund.components.strategies.strategy_base import BaseStrategy
@@ -23,6 +24,19 @@ from pfund.engines.base_engine import BaseEngine
 from pfund.engines.contexts.backtest_engine_context import BacktestEngineContext
 from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
 from pfund.enums import BacktestMode
+
+
+class _SplitScope:
+    """Returned by BacktestEngine.use_split(): the split is already set, exiting a `with` block clears it."""
+
+    def __init__(self, engine: BacktestEngine):
+        self._engine = engine
+
+    def __enter__(self) -> None:
+        return None
+
+    def __exit__(self, *exc_info: object) -> None:
+        self._engine.clear_split()
 
 
 class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
@@ -260,18 +274,24 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         cast("BacktestMixin", feature).set_as_backtestee()
         return feature
 
-    def use_split(self, part: SplitPart, fold: int | None = None) -> None:
-        """Sets X (the trading df) of every component to its rows in one split part.
+    def use_split(self, part: SplitPart, fold: int | None = None) -> _SplitScope:
+        """Sets the trading df of every component to its rows in one split part, so X (its features) holds that split.
 
         pfund's internal flow reads X (features df, backtest()), so it then works on that
-        split without passing X_train etc. around. Data from component.split(data) has to be
-        row-aligned with the current X.
+        split without passing X_train etc. around. Any other data row-aligned with X
+        (a target y, sample weights, ...) is split with apply_split().
+        The split is recorded, so model.save() stamps what the model was trained on.
+
+        Use it as a context manager, so the split can't leak into the code after it:
 
             engine.build()
-            engine.use_split("train", fold=k)
-            model.fit(model.X, y_train)
-            engine.use_split("val", fold=k)
-            model.predict(model.X)
+            with engine.use_split("train", fold=k):
+                model.fit(model.X, engine.apply_split(y))
+                model.save()
+            with engine.use_split("val", fold=k):
+                model.predict(model.X)
+
+        or call it plainly (e.g. across notebook cells) and end it with clear_split().
 
         Args:
             part: ``train``/``val`` of a fold, ``trainval`` (everything before test) or ``test``.
@@ -282,7 +302,51 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             raise RuntimeError(
                 f"{self.name} has not built yet, call engine.build() first"
             )
-        cast("BacktestMixin", self._backtestee)._use_split(part, fold)
+        try:
+            cast("BacktestMixin", self._backtestee)._use_split(part, fold)
+        except Exception:
+            # e.g. a child has no rows in the part: undo the components already split
+            self.clear_split()
+            raise
+        self.context.active_split = (part, fold)
+        return _SplitScope(self)
+
+    def clear_split(self) -> None:
+        """Sets the trading df of every component back to the whole data range, ending use_split().
+
+        A no-op if no split is in use.
+        """
+        cast("BacktestMixin", self._backtestee)._clear_split()
+        self.context.active_split = None
+
+    def apply_split[DataT: SplittableData](self, data: DataT) -> DataT:
+        """The rows of `data` in the split set by use_split(), i.e. row-aligned with X.
+
+        `data` needs no `date` column of its own: it only has to be row-aligned 1:1 with
+        the backtestee's trading df over the whole data range (same length and order),
+        e.g. a target y, class labels or sample weights built from model.df before use_split().
+
+            y = model.df.get_column(close).shift(-1) / model.df.get_column(close) - 1.0
+            with engine.use_split("train"):
+                model.fit(model.X, engine.apply_split(y))
+
+        Args:
+            data: a DataFrame, Series, or ndarray row-aligned 1:1 with the whole trading df.
+        """
+        from pfund.backtest.cv.indexing import validate_aligned
+
+        active_split = self.context.active_split
+        if active_split is None:
+            raise RuntimeError(
+                "no split is in use, call engine.use_split() before apply_split()"
+            )
+        backtestee = cast("BacktestMixin", self._backtestee)
+        validate_aligned(data, backtestee._get_trading_df())
+        part, fold = active_split
+        split_data = backtestee._take_split(data, part, fold)
+        # use_split() has already rejected an empty split part
+        assert split_data is not None
+        return split_data
 
     def run(
         self,

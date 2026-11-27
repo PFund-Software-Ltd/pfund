@@ -167,3 +167,38 @@ class TestRowIndices:
         X = self._X([datetime.datetime(2024, 12, 31), None])
         with pytest.raises(ValueError, match="missing date"):
             splits.row_indices(X, "test")
+
+
+class TestIntervals:
+    @pytest.fixture
+    def splits(self) -> DatasetSplits:
+        # 10 daily bars, 1/1-1/10
+        return DatasetSplits(
+            721,
+            data_start=datetime.date(2024, 1, 1),
+            data_end=datetime.date(2024, 1, 10),
+            split_resolution="1d",
+        )
+
+    @staticmethod
+    def _day(day: int) -> datetime.datetime:
+        return datetime.datetime(2024, 1, day)
+
+    def test_contiguous_part_is_one_interval(self, splits: DatasetSplits):
+        assert splits.intervals("train") == [(self._day(1), self._day(8))]
+
+    def test_last_part_ends_at_the_end_of_the_range(self, splits: DatasetSplits):
+        assert splits.intervals("test") == [(self._day(10), self._day(11))]
+
+    def test_gaps_split_into_intervals(self, splits: DatasetSplits):
+        import numpy as np
+
+        from pfund.backtest.cv.dataset_splits import Fold
+
+        # e.g. a purged k-fold's train, around its val block
+        splits.folds = (Fold(train=np.array([0, 1, 2, 6, 7]), val=np.array([4])),)
+
+        assert splits.intervals("train") == [
+            (self._day(1), self._day(4)),
+            (self._day(7), self._day(9)),
+        ]

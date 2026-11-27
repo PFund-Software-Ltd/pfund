@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast, override
 
 if TYPE_CHECKING:
+    from pfund._pfeed_source.component.data_handler import TrainedOn
     from pfund.components.models.model_base import BaseModel
 
 from pfund.backtest._mixins.backtest_mixin import BacktestMixin
@@ -42,6 +43,46 @@ class BacktestModelMixin(BacktestMixin):
                 )
                 self._is_training = True
         super()._materialize()
+
+    def _get_trained_on(self) -> TrainedOn | None:
+        """The split set by engine.use_split() when the model is saved, see BaseModel._get_trained_on().
+
+        pfund doesn't see what fit() receives, so with dataset_splits on the engine the model must be
+        trained and saved under engine.use_split(), with engine.apply_split() for its target etc.
+
+        Raises:
+            RuntimeError: the engine has dataset_splits but no split is in use, i.e. it's unknown what
+                the model was trained on, and the whole data range would include the test set.
+            ValueError: the split in use is the val or test set.
+        """
+        from pfund._pfeed_source.component.data_handler import TrainedOn
+
+        dataset_splits = self.dataset_splits
+        context = self.context
+        if dataset_splits is None:
+            assert context.data_start is not None and context.data_end is not None
+            return TrainedOn.whole_range(context.data_start, context.data_end)
+        if context.active_split is None:
+            raise RuntimeError(
+                f"'{self.name}' is saved with dataset_splits on the engine but no split in use, "
+                + "so what it was trained on is unknown, and the whole data range includes the test set. "
+                + "Train and save it under the split instead:\n"
+                + "    with engine.use_split('train'):\n"
+                + "        model.fit(model.X, engine.apply_split(y))\n"
+                + "        model.save()"
+            )
+        part, fold = context.active_split
+        if part in ("val", "test"):
+            raise ValueError(
+                f"'{self.name}' is saved under engine.use_split({part!r}), "
+                + f"a model must not be trained on the {part} set, use 'train' or 'trainval'"
+            )
+        return TrainedOn(
+            part=part,
+            fold=fold,
+            split_resolution=repr(dataset_splits.split_resolution),
+            intervals=dataset_splits.intervals(part, fold),
+        )
 
     def load_checkpoint(self, step: int) -> dict[str, Any]:
         """Read back the checkpoint written by save_checkpoint() at `step`. Returns the user's

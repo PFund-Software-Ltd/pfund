@@ -124,6 +124,28 @@ class DatasetSplits:
             )
         return getattr(self.folds[fold], part)
 
+    def intervals(
+        self, part: SplitPart, fold: int | None = None
+    ) -> list[tuple[datetime.datetime, datetime.datetime]]:
+        """Time intervals of one split part, ``[start, end)``, one per contiguous run of its grid bars.
+
+        A cross-validation fold may have gaps (e.g. a purged k-fold's train), hence a list.
+        """
+        positions = np.sort(self.positions(part, fold))
+        if positions.size == 0:
+            return []
+        breaks = np.flatnonzero(np.diff(positions) != 1)
+        run_starts = positions[np.r_[0, breaks + 1]]
+        run_ends = positions[np.r_[breaks, positions.size - 1]]
+        num_times = len(self.grid)
+        return [
+            (
+                self.grid[start].item(),
+                (self.grid[end + 1] if end + 1 < num_times else self.grid_end).item(),
+            )
+            for start, end in zip(run_starts, run_ends, strict=True)
+        ]
+
     def row_indices(
         self, X: IntoDataFrame, part: SplitPart, fold: int | None = None
     ) -> NDArray[np.int64]:
