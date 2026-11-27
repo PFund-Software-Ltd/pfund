@@ -293,9 +293,9 @@ class TradingStore:
                 f"'{component.name}' saved trading df is stale: {reason}"
             )
         self._df = cast("pl.LazyFrame", lf).collect()
-        pfund_metadata = self._component._feed.load_metadata(self._component)
-        if pfund_metadata and pfund_metadata["signal_cols"]:
-            self._component.set_signal_cols(pfund_metadata["signal_cols"])
+        # the names the df was written with, stamped with it, see PFundComponentDataMetadata.signal_cols
+        if metadata and metadata.signal_cols:
+            component.set_signal_cols(metadata.signal_cols)
 
     # TODO: add watermark?
     def persist_to_datalake(self) -> None:

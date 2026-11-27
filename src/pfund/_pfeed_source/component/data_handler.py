@@ -47,6 +47,10 @@ class PFundComponentDataMetadata(BaseDataMetadata):
     # same reason: a trading df computed on another range is stale, see TradingStore.materialize()
     data_start: datetime.date | None = None
     data_end: datetime.date | None = None
+    # the signal columns of the trading df (component._signal_cols when it is written), stamped with the df:
+    # metadata.json is written at build time, before default names are filled in by to_signals().
+    # None for a non-data artifact or a df written before it was stamped
+    signal_cols: list[str] | None = None
     # pfund's metadata.json of the component, attached by PFundComponentDataHandler.read(),
     # excluded from model_dump(), so it is never written into the per-partition metadata
     component: dict[str, Any] | None = Field(default=None, exclude=True)
@@ -247,6 +251,9 @@ class PFundComponentDataHandler(
             source_sha256=component._source_sha256,
             data_start=component.context.data_start,
             data_end=component.context.data_end,
+            signal_cols=list(component._signal_cols)
+            if self._data_model.artifact_type == ArtifactType.data
+            else None,
         )
 
     def _write_component_metadata(self) -> None:
