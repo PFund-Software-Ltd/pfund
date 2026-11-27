@@ -7,9 +7,7 @@ if TYPE_CHECKING:
     from jax import Array
 
 import io
-import json
 import pickle
-import struct
 
 import numpy as np
 import polars as pl
@@ -84,16 +82,13 @@ class JAXModel(BaseModel):
             return False
         return isinstance(self.model, eqx.Module)
 
-    def _encode(self, payload: dict[str, Any]) -> bytes:
+    def _encode(self) -> bytes:
         if self._is_equinox():
             import equinox as eqx
 
-            # eqx serialises only array leaves and has no metadata slot, so wrap it:
-            #   [8-byte LE length][signal_cols json][eqx leaf bytes]
-            signal_cols = json.dumps(payload["signal_cols"]).encode()
             buffer = io.BytesIO()
             eqx.tree_serialise_leaves(buffer, self.model)
-            return struct.pack("<Q", len(signal_cols)) + signal_cols + buffer.getvalue()
+            return buffer.getvalue()
 
         from flax.traverse_util import flatten_dict
         from safetensors.flax import save
@@ -106,22 +101,15 @@ class JAXModel(BaseModel):
         flat_params = {
             "/".join(key): value for key, value in flatten_dict(self.variables).items()
         }
-        metadata = {"signal_cols": json.dumps(payload["signal_cols"])}
-        data = save(flat_params, metadata=metadata)
-        return data
+        return save(flat_params)
 
     def _decode(self, data: bytes) -> None:
         if self._is_equinox():
             import equinox as eqx
 
-            (n,) = struct.unpack("<Q", data[:8])
-            signal_cols = json.loads(data[8 : 8 + n])
             # deserialise leaves INTO the current model as the structural template —
             # like load_state_dict, self.model must already be the right architecture
-            self.model = eqx.tree_deserialise_leaves(
-                io.BytesIO(data[8 + n :]), self.model
-            )
-            self.set_signal_cols(signal_cols)
+            self.model = eqx.tree_deserialise_leaves(io.BytesIO(data), self.model)
             return
 
         from flax.traverse_util import unflatten_dict
@@ -130,7 +118,6 @@ class JAXModel(BaseModel):
         self.variables = unflatten_dict(
             {tuple(k.split("/")): v for k, v in load(data).items()}
         )
-        self.set_signal_cols(self._read_safetensors_signal_cols(data))
 
     # --- checkpointing (training state: params + optimizer + bookkeeping) --------
     # The checkpoint is the user's opaque training-state pytree, so there's no
@@ -140,13 +127,10 @@ class JAXModel(BaseModel):
     # restore would flatten them to dicts and break resume.
 
     def _encode_checkpoint(self, checkpoint: dict[str, Any]) -> bytes:
-        # user owns the checkpoint pytree; pfund only stamps in the framework
-        # essential (signal_cols) so the wrapper restores on resume.
-        return pickle.dumps({**checkpoint, "signal_cols": self._signal_cols})
+        # the user owns the checkpoint pytree, pfund saves it as is
+        return pickle.dumps(checkpoint)
 
     def _decode_checkpoint(self, data: bytes) -> dict[str, Any]:
         # pfund wrote this blob; pickle rebuilds the pytree's node types as-is, so
         # optax opt_state NamedTuples survive and optimizer.update() can resume.
-        checkpoint = pickle.loads(data)
-        self.set_signal_cols(checkpoint.pop("signal_cols"))
-        return checkpoint
+        return pickle.loads(data)

@@ -40,7 +40,7 @@ class MyModel(pf.Model):
     def predict(self, X: Any, *args: Any, **kwargs: Any) -> Any:
         return [0]
 
-    def _encode(self, payload: dict[str, Any]) -> bytes:
+    def _encode(self) -> bytes:
         return b""
 
     def _decode(self, data: bytes) -> None:

@@ -6,7 +6,6 @@ if TYPE_CHECKING:
     from torch import Tensor
 
 import io
-import json
 
 import numpy as np
 import polars as pl
@@ -68,14 +67,10 @@ class PyTorchModel[UnderlyingModelT: nn.Module = nn.Module](
             )
         return torch.tensor(array, dtype=dtype, device=device)
 
-    def _encode(self, payload: dict[str, Any]) -> bytes:
-        model = payload["model"]
-        metadata = {"signal_cols": json.dumps(payload["signal_cols"])}
-        data = safetensors.torch.save(model.state_dict(), metadata=metadata)
-        return data
+    def _encode(self) -> bytes:
+        return safetensors.torch.save(self.model.state_dict())
 
     def _decode(self, data: bytes) -> None:
-
         # frame torch's raw strict-load error so architecture drift reads as a
         # pfund message instead of a bare "Missing key(s) in state_dict"
         try:
@@ -85,21 +80,15 @@ class PyTorchModel[UnderlyingModelT: nn.Module = nn.Module](
                 f"failed to load saved weights into '{self.name}': the saved "
                 + "state_dict does not match the current model architecture"
             ) from err
-        self.set_signal_cols(self._read_safetensors_signal_cols(data))
 
     def _encode_checkpoint(self, checkpoint: dict[str, Any]) -> bytes:
-        # user owns the checkpoint dict; pfund only stamps in the framework
-        # essential (signal_cols) so the wrapper restores on resume.
+        # the user owns the checkpoint dict, pfund saves it as is
         buffer = io.BytesIO()
-        torch.save({**checkpoint, "signal_cols": self._signal_cols}, buffer)
+        torch.save(checkpoint, buffer)
         return buffer.getvalue()
 
     def _decode_checkpoint(self, data: bytes) -> dict[str, Any]:
         # weights_only=False: it's a user dict, not a bare state_dict, and pfund wrote it.
         # map_location="cpu": land every tensor (incl. optimizer state) on CPU so a
         # GPU-saved checkpoint reloads on any box; the caller re-homes with .to(device).
-        checkpoint = torch.load(
-            io.BytesIO(data), weights_only=False, map_location="cpu"
-        )
-        self.set_signal_cols(checkpoint.pop("signal_cols"))
-        return checkpoint
+        return torch.load(io.BytesIO(data), weights_only=False, map_location="cpu")

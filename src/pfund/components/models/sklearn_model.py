@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 if TYPE_CHECKING:
     import polars as pl
     from numpy.typing import NDArray
     from sklearn.base import BaseEstimator
+
+    class _Predictor(Protocol):
+        def predict(self, X: Any, *args: Any, **kwargs: Any) -> NDArray[Any]: ...
 
 import io
 
@@ -20,15 +23,14 @@ class SKLearnModel[UnderlyingModelT: BaseEstimator = BaseEstimator](
     _artifact_extension = ".joblib"
 
     def predict(self, X: pl.DataFrame, *args: Any, **kwargs: Any) -> NDArray[Any]:
-        pred_y = self.model.predict(X, *args, **kwargs)
+        # BaseEstimator doesn't declare predict(), every fitted sklearn estimator does
+        pred_y = cast("_Predictor", self.model).predict(X, *args, **kwargs)
         return pred_y
 
-    def _encode(self, payload: dict[str, Any]) -> bytes:
+    def _encode(self) -> bytes:
         buffer = io.BytesIO()
-        joblib.dump(payload, buffer)
+        joblib.dump(self.model, buffer)
         return buffer.getvalue()
 
     def _decode(self, data: bytes) -> None:
-        payload = joblib.load(io.BytesIO(data))
-        self.model = payload["model"]
-        self.set_signal_cols(payload["signal_cols"])
+        self.model = joblib.load(io.BytesIO(data))

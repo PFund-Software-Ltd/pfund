@@ -44,8 +44,7 @@ class BacktestModelMixin(BacktestMixin):
         super()._materialize()
 
     def load_checkpoint(self, step: int) -> dict[str, Any]:
-        """Read back the checkpoint written by save_checkpoint() at `step`. Restores
-        the framework essentials (signal_cols) into the model and returns the user's
+        """Read back the checkpoint written by save_checkpoint() at `step`. Returns the user's
         own dict (weights, optimizer, epoch, ...) so they can resume their loop.
         """
         if not hasattr(self, "_decode_checkpoint"):

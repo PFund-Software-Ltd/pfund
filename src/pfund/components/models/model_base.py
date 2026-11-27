@@ -195,22 +195,10 @@ class BaseModel[UnderlyingModelT: UnderlyingModel = Any](
         }
 
     @abstractmethod
-    def _encode(self, payload: dict[str, Any]) -> bytes: ...
+    def _encode(self) -> bytes: ...
 
     @abstractmethod
     def _decode(self, data: bytes) -> None: ...
-
-    @staticmethod
-    def _read_safetensors_signal_cols(data: bytes) -> list[str]:
-        # safetensors layout: 8-byte LE u64 header length, then a JSON header
-        # whose "__metadata__" holds the str->str dict _encode wrote signal_cols into.
-        import json
-        import struct
-
-        (header_len,) = struct.unpack("<Q", data[:8])
-        header = json.loads(data[8 : 8 + header_len])
-        signal_cols = header.get("__metadata__", {}).get("signal_cols")
-        return json.loads(signal_cols) if signal_cols else []
 
     def load(self) -> None:
         data, metadata = self._feed.load_artifact(
@@ -233,5 +221,5 @@ class BaseModel[UnderlyingModelT: UnderlyingModel = Any](
         self._decode(data)
 
     def save(self) -> None:
-        artifact = self._encode({"model": self.model, "signal_cols": self._signal_cols})
+        artifact = self._encode()
         self._feed.save_artifact(self, ArtifactType.model, artifact=artifact)
