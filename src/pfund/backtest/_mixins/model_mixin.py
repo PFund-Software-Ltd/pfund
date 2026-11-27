@@ -6,6 +6,8 @@ if TYPE_CHECKING:
     from pfund._pfeed_source.component.data_handler import TrainedOn
     from pfund.components.models.model_base import BaseModel
 
+import datetime
+
 from pfund.backtest._mixins.backtest_mixin import BacktestMixin
 from pfund.enums import ArtifactType
 
@@ -42,10 +44,64 @@ class BacktestModelMixin(BacktestMixin):
                     style=TextStyle.BOLD + RichColor.YELLOW,
                 )
                 self._is_training = True
+        else:
+            self._warn_in_sample()
         super()._materialize()
 
-    def _get_trained_on(self) -> TrainedOn | None:
-        """The split set by engine.use_split() when the model is saved, see BaseModel._get_trained_on().
+    def _get_in_sample_intervals(
+        self,
+    ) -> list[tuple[datetime.datetime, datetime.datetime]] | None:
+        """The parts of this run's data range the loaded model was trained on, ``[start, end)``.
+
+        Its predictions there are in-sample, i.e. look better than they would on unseen data.
+        An empty list if they don't overlap, None if what the model was trained on is unknown.
+        """
+        trained_on = cast("BaseModel", self).trained_on
+        if trained_on is None:
+            return None
+        context = self.context
+        assert context.data_start is not None and context.data_end is not None
+        run_start = datetime.datetime.combine(context.data_start, datetime.time.min)
+        run_end = datetime.datetime.combine(
+            context.data_end + datetime.timedelta(days=1), datetime.time.min
+        )
+        overlaps = [
+            (max(start, run_start), min(end, run_end))
+            for start, end in trained_on.intervals
+        ]
+        return [(start, end) for start, end in overlaps if start < end]
+
+    def _warn_in_sample(self) -> None:
+        """Warns if the loaded model predicts on rows it was trained on, see _get_in_sample_intervals()."""
+        from pfund_kit.style import RichColor, TextStyle
+
+        in_sample = self._get_in_sample_intervals()
+        if in_sample == []:
+            return
+        if in_sample is None:
+            reason = "what it was trained on wasn't recorded, it may overlap this run's data range"
+        else:
+            ranges = ", ".join(
+                f"{start.isoformat()} -> {end.isoformat()}" for start, end in in_sample
+            )
+            reason = f"it was trained on {ranges} of this run's data range"
+        self.logger.warning(
+            f"'{self.name}' predictions are in-sample where it was trained: {reason}. "
+            + "Its results there look better than on unseen data, "
+            + "evaluate it out-of-sample, e.g. under engine.use_split('test')",
+            style=TextStyle.BOLD + RichColor.YELLOW,
+        )
+
+    def save(self) -> None:
+        """Persists the trained model, stamped with what it was trained on, see _get_trained_on()."""
+        model = cast("BaseModel", self)
+        # raises if what the model was trained on is unknown, before anything is written
+        self._trained_on = self._get_trained_on()
+        self._feed.save_artifact(model, ArtifactType.model, artifact=model._encode())
+
+    def _get_trained_on(self) -> TrainedOn:
+        """What the model was trained on (BaseModel.trained_on), from the split set by engine.use_split(),
+        set before it's stamped on a model or checkpoint artifact.
 
         pfund doesn't see what fit() receives, so with dataset_splits on the engine the model must be
         trained and saved under engine.use_split(), with engine.apply_split() for its target etc.
@@ -60,7 +116,17 @@ class BacktestModelMixin(BacktestMixin):
         dataset_splits = self.dataset_splits
         context = self.context
         if dataset_splits is None:
+            from pfund_kit.style import RichColor, TextStyle
+
+            # no dataset_splits: assumed to be trained on the whole data range, pfund doesn't see fit()
             assert context.data_start is not None and context.data_end is not None
+            self.logger.warning(
+                f"'{self.name}' is saved with no dataset_splits on the engine, so it's assumed to be trained on "
+                + f"the whole data range ({context.data_start} -> {context.data_end}). "
+                + "To make it explicit, pass dataset_splits=100 (100% train) to BacktestEngine() "
+                + "and save the model under engine.use_split('train')",
+                style=TextStyle.BOLD + RichColor.YELLOW,
+            )
             return TrainedOn.whole_range(context.data_start, context.data_end)
         if context.active_split is None:
             raise RuntimeError(
@@ -124,6 +190,7 @@ class BacktestModelMixin(BacktestMixin):
             raise NotImplementedError(
                 "save_checkpoint is not implemented for this model"
             )
+        self._trained_on = self._get_trained_on()
         self._feed.save_artifact(
             cast("BaseModel", self),
             ArtifactType.checkpoint,

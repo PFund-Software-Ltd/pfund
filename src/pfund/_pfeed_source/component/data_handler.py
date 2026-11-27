@@ -299,8 +299,7 @@ class PFundComponentDataHandler(
             signal_cols=list(component._signal_cols)
             if artifact_type == ArtifactType.data
             else None,
-            # raises if what the model was trained on is unknown, before anything is written
-            trained_on=cast("BaseModel", component)._get_trained_on()
+            trained_on=cast("BaseModel", component).trained_on
             if is_trained_artifact
             else None,
         )

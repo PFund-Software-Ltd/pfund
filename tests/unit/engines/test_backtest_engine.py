@@ -1120,6 +1120,37 @@ class TestTrainedOn:
         ):
             split_model._get_trained_on()
 
+    def test_without_dataset_splits_it_warns(self, mocker: MockerFixture):
+        engine = BacktestEngine(
+            data_range=("2024-01-01", "2024-01-10"), settings=BacktestEngineSettings()
+        )
+        model = _seed_model(engine)
+        warning = mocker.patch.object(model.logger, "warning")
+
+        model._get_trained_on()
+
+        assert "dataset_splits=100" in warning.call_args.args[0]
+
+    def test_all_train_split_is_explicit(self, mocker: MockerFixture):
+        engine = BacktestEngine(
+            data_range=("2024-01-01", "2024-01-10"),
+            settings=BacktestEngineSettings(),
+            dataset_splits=100,
+        )
+        model = _seed_model(engine)
+        warning = mocker.patch.object(model.logger, "warning")
+
+        with engine.use_split("train"):
+            trained_on = model._get_trained_on()
+
+        assert trained_on.part == "train"
+        assert trained_on.intervals == [
+            (SPLIT_DATES[0], SPLIT_DATES[-1] + datetime.timedelta(days=1))
+        ]
+        assert not any(
+            "dataset_splits" in str(c.args[0]) for c in warning.call_args_list
+        )
+
     def test_without_dataset_splits_it_is_the_whole_range(self):
         engine = BacktestEngine(
             data_range=("2024-01-01", "2024-01-10"), settings=BacktestEngineSettings()
@@ -1132,3 +1163,124 @@ class TestTrainedOn:
         assert trained_on.intervals == [
             (SPLIT_DATES[0], SPLIT_DATES[-1] + datetime.timedelta(days=1))
         ]
+
+
+def _trained_on(*intervals: tuple[datetime.datetime, datetime.datetime]) -> Any:
+    from pfund._pfeed_source.component.data_handler import TrainedOn
+
+    return TrainedOn(part="train", intervals=list(intervals))
+
+
+JAN = [datetime.datetime(2024, 1, day) for day in range(1, 12)]  # JAN[0] = 2024-01-01
+
+
+class TestInSample:
+    def test_training_rows_inside_the_run(self, split_model: Any):
+        split_model._trained_on = _trained_on((JAN[0], JAN[7]))
+
+        assert split_model._get_in_sample_intervals() == [(JAN[0], JAN[7])]
+
+    def test_clipped_to_the_run(self, split_model: Any):
+        split_model._trained_on = _trained_on(
+            (datetime.datetime(2023, 12, 1), JAN[3]),
+            (JAN[8], datetime.datetime(2024, 2, 1)),
+        )
+
+        assert split_model._get_in_sample_intervals() == [
+            (JAN[0], JAN[3]),
+            (JAN[8], JAN[10]),
+        ]
+
+    def test_no_overlap(self, split_model: Any):
+        split_model._trained_on = _trained_on(
+            (datetime.datetime(2023, 1, 1), datetime.datetime(2024, 1, 1))
+        )
+
+        assert split_model._get_in_sample_intervals() == []
+
+    def test_unknown_training_rows(self, split_model: Any):
+        assert split_model._get_in_sample_intervals() is None
+
+    def test_warns_on_overlap(self, split_model: Any, mocker: MockerFixture):
+        warning = mocker.patch.object(split_model.logger, "warning")
+        split_model._trained_on = _trained_on((JAN[0], JAN[7]))
+
+        split_model._warn_in_sample()
+
+        assert "in-sample" in warning.call_args.args[0]
+        assert "2024-01-01T00:00:00 -> 2024-01-08T00:00:00" in warning.call_args.args[0]
+
+    def test_warns_when_unknown(self, split_model: Any, mocker: MockerFixture):
+        warning = mocker.patch.object(split_model.logger, "warning")
+
+        split_model._warn_in_sample()
+
+        assert "wasn't recorded" in warning.call_args.args[0]
+
+    def test_no_warning_without_overlap(self, split_model: Any, mocker: MockerFixture):
+        warning = mocker.patch.object(split_model.logger, "warning")
+        split_model._trained_on = _trained_on(
+            (datetime.datetime(2023, 1, 1), datetime.datetime(2024, 1, 1))
+        )
+
+        split_model._warn_in_sample()
+
+        warning.assert_not_called()
+
+
+class TestTrainedOnProperty:
+    def test_save_sets_it(
+        self, split_engine: BacktestEngine, split_model: Any, mocker: MockerFixture
+    ):
+        mocker.patch.object(split_model, "_encode", return_value=b"model")
+        save_artifact = mocker.patch.object(split_model._feed, "save_artifact")
+
+        with split_engine.use_split("train"):
+            split_model.save()
+
+        save_artifact.assert_called_once()
+        assert split_model.trained_on.intervals == [(JAN[0], JAN[7])]
+
+    def test_load_reads_it_from_the_stamp(
+        self, split_model: Any, mocker: MockerFixture
+    ):
+        from pfund._pfeed_source.component.data_handler import (
+            PFundComponentDataMetadata,
+        )
+
+        metadata = PFundComponentDataMetadata(
+            setup_sha256=split_model._setup_sha256,
+            source_sha256=split_model._source_sha256,
+            trained_on=_trained_on((JAN[0], JAN[7])),
+        )
+        mocker.patch.object(
+            split_model._feed, "load_artifact", return_value=(b"model", metadata)
+        )
+        mocker.patch.object(split_model, "_decode")
+
+        split_model.load()
+
+        assert split_model.trained_on.intervals == [(JAN[0], JAN[7])]
+
+
+class TestSaveIsBacktestOnly:
+    @pytest.mark.parametrize(
+        "call",
+        [
+            pytest.param(lambda model: model.save(), id="save"),
+            pytest.param(
+                lambda model: model.save_checkpoint({}, step=1), id="save_checkpoint"
+            ),
+            pytest.param(
+                lambda model: model.load_checkpoint(step=1), id="load_checkpoint"
+            ),
+        ],
+    )
+    def test_raises_outside_the_backtest_engine(self, call: Callable[[Any], Any]):
+        # not adopted by a BacktestEngine, e.g. a model under a TradeEngine
+        model = _SplitModel(LinearRegression())
+
+        with pytest.raises(
+            RuntimeError, match="only available under the BacktestEngine"
+        ):
+            call(model)

@@ -70,6 +70,8 @@ class BaseModel[UnderlyingModelT: UnderlyingModel = Any](
     def __init__(self, model: UnderlyingModelT, *args: Any, **kwargs: Any):
         self.__mixin_post_init__(ComponentType.model, model, *args, **kwargs)
         self.model: UnderlyingModelT = model
+        # what the saved model was trained on, set by load() and save(), see trained_on
+        self._trained_on: TrainedOn | None = None
         # Built-in adapters otherwise resolve their source artifact to this
         # pfund file. Capture the user's construction site here so both
         # PyTorchModel(model) and automatic wrapping retain user provenance.
@@ -220,20 +222,35 @@ class BaseModel[UnderlyingModelT: UnderlyingModel = Any](
                 + "retrain and save() it if the change affects the model"
             )
         self._decode(data)
+        self._trained_on = metadata.trained_on if metadata else None
 
-    def _get_trained_on(self) -> TrainedOn | None:
-        """What the model was trained on, stamped on its model and checkpoint artifacts.
+    @property
+    def trained_on(self) -> TrainedOn | None:
+        """What the saved model was trained on, e.g. its split part and time intervals.
 
-        The whole data range, overridden in backtesting, where the engine can split it.
-        None if the engine has no data range, e.g. live trading.
+        Read from the model artifact's stamp by load(), set before each save in backtesting,
+        see BacktestModelMixin._get_trained_on(), and stamped on the model and checkpoint artifacts.
+        None if the model hasn't been loaded or saved, or its training rows weren't recorded.
         """
-        from pfund._pfeed_source.component.data_handler import TrainedOn
+        return self._trained_on
 
-        data_start, data_end = self.context.data_start, self.context.data_end
-        if data_start is None or data_end is None:
-            return None
-        return TrainedOn.whole_range(data_start, data_end)
-
+    # NOTE: training happens only under the BacktestEngine, where the engine records what the model is
+    # trained on (see trained_on), so saving is backtest only: BacktestModelMixin overrides these.
+    # They are declared here, so a model's type (e.g. MyModel(pf.SKLearnModel)) still has them.
     def save(self) -> None:
-        artifact = self._encode()
-        self._feed.save_artifact(self, ArtifactType.model, artifact=artifact)
+        """Persists the trained model, see BacktestModelMixin.save()."""
+        raise self._backtest_only_error("save()")
+
+    def save_checkpoint(self, checkpoint: dict[str, Any], step: int) -> None:
+        """Persists a training checkpoint, see BacktestModelMixin.save_checkpoint()."""
+        raise self._backtest_only_error("save_checkpoint()")
+
+    def load_checkpoint(self, step: int) -> dict[str, Any]:
+        """Reads back a training checkpoint, see BacktestModelMixin.load_checkpoint()."""
+        raise self._backtest_only_error("load_checkpoint()")
+
+    def _backtest_only_error(self, method: str) -> RuntimeError:
+        return RuntimeError(
+            f"'{self.name}'.{method} is only available under the BacktestEngine: models are trained there, "
+            + "where what they are trained on is recorded; other engines only load them"
+        )
