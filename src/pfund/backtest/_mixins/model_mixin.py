@@ -27,25 +27,21 @@ class BacktestModelMixin(BacktestMixin):
             # the mixin only ever runs as part of a model
             cast("BaseModel", self).load()
         except FileNotFoundError:
-            from pfund_kit.style import RichColor, TextStyle, cprint
+            from pfund_kit.style import RichColor, TextStyle
 
-            cprint(
-                f"No trained model found for '{self.name}' — treating this run as a training session. "
-                + "Fit your model, then call save() so future runs can load it and generate predictions.",
-                style=TextStyle.BOLD + RichColor.YELLOW,
-            )
-            self._is_training = True
+            # only the backtestee can be trained, a child model must already be trained
+            if not self._is_backtestee:
+                raise FileNotFoundError(
+                    f"No trained model found for model '{self.name}'. "
+                ) from None
+            else:
+                self.logger.warning(
+                    f"No trained model found for '{self.name}' — treating this run as a training session. "
+                    + "Fit your model, then call save() so future runs can load it and generate predictions.",
+                    style=TextStyle.BOLD + RichColor.YELLOW,
+                )
+                self._is_training = True
         super()._materialize()
-
-    @override
-    def _compute_signals_on_the_fly(self):
-        if self.is_training():
-            raise FileNotFoundError(
-                f"No persisted trading dataframe or trained model found for child model '{self.name}', "
-                + "signals can be computed on the fly but the model can't be trained on the fly. "
-                + "Backtest (train) it on its own first and call save()"
-            )
-        super()._compute_signals_on_the_fly()
 
     def load_checkpoint(self, step: int) -> dict[str, Any]:
         """Read back the checkpoint written by save_checkpoint() at `step`. Restores

@@ -384,6 +384,17 @@ class ComponentBaseMixin:
 
     @property
     def component_id(self) -> str:
+        """Finds the component's artifacts, validated by _source_sha256 once found.
+
+        - `component_id` finds the artifacts. It decides the folder, so it answers
+          "which component's artifacts are these?" It's built from what defines the component:
+          class name, name, params, config, data and children, see _identity_fields().
+          It's coarse and changes rarely.
+        - `_source_sha256` validates the artifacts that were found. It answers
+          "were these produced by the code that's running now?" It covers the source of the
+          user classes in the MRO (plus the underlying model's classes).
+          It's strict and changes on every edit inside those classes.
+        """
         payload = json.dumps(
             self._identity, sort_keys=True, separators=(",", ":")
         ).encode()
@@ -579,12 +590,25 @@ class ComponentBaseMixin:
             )
         )
 
-    def _hash_source_files(self) -> str:
-        """Hashes the source artifact plus every user-written class file in the component's MRO.
+    def _get_source_classes(self) -> list[type]:
+        """The classes whose source is the component's code, hashed by _source_sha256.
 
-        So editing a user-defined base class (e.g. MyBase in my_base.py, subclassed by Alpha in alpha.py)
-        changes component_id too, not only editing the component's own file.
+        The component's MRO, so editing a user-defined base class (e.g. MyBase subclassed by Alpha) counts too.
+        Overridden by BaseModel to add the underlying model's classes, e.g. a torch nn.Module.
+        """
+        return list(type(self).__mro__)
+
+    # Frozen at first use like _identity, every artifact of the run is stamped with the same hash
+    @cached_property
+    def _source_sha256(self) -> str:
+        """Hashes the source of every user-written class in _get_source_classes().
+
+        Validates the artifacts component_id found, see component_id for how the two differ:
+        each artifact is stamped with it when written, and compared on load.
+        Only the classes' source, not their whole files: editing a script that defines a component
+        (e.g. uncommenting a line that runs it) must not mark the component's artifacts as stale.
         Classes from pfund, the standard library and installed packages are skipped.
+        Module-level helpers a class uses are not covered.
         """
         import inspect
         import sysconfig
@@ -593,31 +617,29 @@ class ComponentBaseMixin:
             Path(sysconfig.get_paths()[key]).resolve()
             for key in ("stdlib", "platstdlib", "purelib", "platlib")
         ]
-        # NOTE: the source artifact first, it is not always in the MRO,
-        # e.g. built-in model adapters use the user's construction site, see BaseModel.__init__
-        source_files = [cast("ComponentMixin", self)._source_file_path.resolve()]
-        for klass in type(self).__mro__:
+        sources: list[str] = []
+        for klass in dict.fromkeys(self._get_source_classes()):
             if klass.__module__.split(".")[0] == "pfund":
                 continue
             try:
                 source_file = inspect.getsourcefile(klass)
             except TypeError:  # built-in classes, e.g. object
                 continue
-            if source_file is None:
+            if source_file is not None and any(
+                Path(source_file).resolve().is_relative_to(d) for d in excluded_dirs
+            ):
                 continue
-            path = Path(source_file).resolve()
-            # e.g. a class defined in a notebook cell, its source is only in linecache, not on disk
-            if not path.is_file():
+            try:
+                source = inspect.getsource(klass)
+            # e.g. a class created dynamically, it has no source
+            except (OSError, TypeError):
                 continue
-            is_excluded = any(path.is_relative_to(d) for d in excluded_dirs)
-            if is_excluded or path in source_files:
-                continue
-            source_files.append(path)
+            if source not in sources:
+                sources.append(source)
 
-        # NOTE: same as hashing the single file when there is only one, so existing ids are unchanged
         digest = hashlib.sha256()
-        for path in source_files:
-            digest.update(path.read_bytes())
+        for source in sources:
+            digest.update(source.encode())
         return digest.hexdigest()
 
     def _encode_identity_value(self, value: Any) -> Any:

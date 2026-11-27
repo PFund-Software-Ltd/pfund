@@ -36,6 +36,14 @@ class PFundComponentDataMetadata(BaseDataMetadata):
     """
 
     created_at: datetime.datetime = Field(default_factory=get_utc_now, frozen=True)
+    # hash of the code that wrote the artifact (component._source_sha256), stamped per artifact, not in metadata.json:
+    # metadata.json is rewritten every run, the artifact only when it is rewritten, so a match means it came from this code.
+    # None for an artifact written before it was stamped, i.e. unknown code
+    source_sha256: str | None = None
+    # the engine's data range the artifact was written in (component.context.data_start/data_end), stamped for the
+    # same reason: a trading df computed on another range is stale, see TradingStore.materialize()
+    data_start: datetime.date | None = None
+    data_end: datetime.date | None = None
     # pfund's metadata.json of the component, attached by PFundComponentDataHandler.read(),
     # excluded from model_dump(), so it is never written into the per-partition metadata
     component: dict[str, Any] | None = Field(default=None, exclude=True)
@@ -230,7 +238,12 @@ class PFundComponentDataHandler(
         return lf.sort(sort_cols, maintain_order=True) if sort_cols else lf
 
     def _create_metadata(self) -> PFundComponentDataMetadata:
-        return PFundComponentDataMetadata()
+        component = self._data_model.component
+        return PFundComponentDataMetadata(
+            source_sha256=component._source_sha256,
+            data_start=component.context.data_start,
+            data_end=component.context.data_end,
+        )
 
     def _write_component_metadata(self) -> None:
         """Writes pfund's metadata.json of the component (what it was in its run), replacing the stored one.

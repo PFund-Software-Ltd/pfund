@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, override
 
 if TYPE_CHECKING:
     import equinox as eqx
@@ -14,8 +14,9 @@ if TYPE_CHECKING:
 
     from pfund.typing import Signals
 
-    UnderlyingModel = nn.Module | BaseEstimator | linen.Module | eqx.Module
+    type UnderlyingModel = nn.Module | BaseEstimator | linen.Module | eqx.Module
 
+import sys
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -47,19 +48,35 @@ def _get_caller_source_file_path() -> str | None:
     return None
 
 
-class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
-    _allowed_model_method_collisions: ClassVar[frozenset[str]] = frozenset({"predict"})
+class BaseModel[UnderlyingModelT: UnderlyingModel = Any](
+    ComponentMixin, ABC, metaclass=MetaModel
+):
+    """Wraps an underlying ML model, e.g. a torch nn.Module or an sklearn estimator.
 
-    def __init__(self, model: UnderlyingModel, *args: Any, **kwargs: Any):
+    Generic over the underlying model's type, so `self.model` keeps it,
+    e.g. self.model is TorchLinearRegression in PyTorchModel[TorchLinearRegression].
+
+    The default is Any, not UnderlyingModel: BaseModel is invariant in it (self.model is writable),
+    so a bare BaseModel annotation, e.g. a [ModelT: BaseModel] bound, must accept any BaseModel[...].
+    """
+
+    _allowed_model_method_collisions: ClassVar[frozenset[str]] = frozenset({"predict"})
+    # file extensions of the bytes _encode() / _encode_checkpoint() produce, e.g. model.safetensors in storage.
+    # adapters set their format's extension, a user model subclassing BaseModel directly can override them
+    _artifact_extension: ClassVar[str] = ".bin"
+    _checkpoint_extension: ClassVar[str] = ".bin"
+
+    def __init__(self, model: UnderlyingModelT, *args: Any, **kwargs: Any):
         self.__mixin_post_init__(ComponentType.model, model, *args, **kwargs)
-        self.model: UnderlyingModel = model
+        self.model: UnderlyingModelT = model
         # Built-in adapters otherwise resolve their source artifact to this
         # pfund file. Capture the user's construction site here so both
         # PyTorchModel(model) and automatic wrapping retain user provenance.
         # User-defined wrapper classes keep their class file as the artifact.
-        if type(self).__module__.startswith("pfund."):
-            if source_file_path := _get_caller_source_file_path():
-                self._set_source_file_path(source_file_path)
+        if type(self).__module__.startswith("pfund.") and (
+            source_file_path := _get_caller_source_file_path()
+        ):
+            self._set_source_file_path(source_file_path)
         self._assert_no_model_method_collisions()
 
     def _assert_no_model_method_collisions(self) -> None:
@@ -107,13 +124,15 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             raise AttributeError(name)
         model = self.__dict__.get("model")
         if model is None:
-            raise AttributeError(f"'{self.name}' has no attribute '{name}'")
+            # NOT self.name: _name may be unset too (e.g. mid-unpickle), and self.name would recurse back here
+            raise AttributeError(f"'{type(self).__name__}' has no attribute '{name}'")
         try:
             return getattr(model, name)
-        except AttributeError:
+        except AttributeError as err:
+            # from err, not from None: the AttributeError may come from inside a property of the model
             raise AttributeError(
                 f"'{self.name}' and its underlying model '{self.model.__class__.__name__}' both have no attribute '{name}'"
-            )
+            ) from err
 
     def to_signals(self, pred: NDArray[Any] | Tensor | Array) -> Signals:
         """Converts the output of predict() to signals
@@ -124,17 +143,10 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         Returns:
             dict[ColumnName, Any]: The predicted signals.
         """
-        if pred is None:
-            raise ValueError(
-                f"{self.name} predict() returned None, did you forget the return statement?"
-            )
-
-        is_from_pytorch = type(pred).__module__.startswith("torch")
-        if is_from_pytorch:
-            pred = pred.detach().cpu().numpy()
-        pred = np.asarray(
-            pred
-        )  # normalizes JAX/other array-likes; no copy if already ndarray
+        torch = sys.modules.get("torch")
+        is_tensor = torch is not None and isinstance(pred, torch.Tensor)
+        # np.asarray() normalizes JAX/other array-likes; no copy if already ndarray
+        pred = pred.detach().cpu().numpy() if is_tensor else np.asarray(pred)
         if pred.ndim == 0:
             raise ValueError(
                 f"{self.name} predict() returned a scalar; "
@@ -166,6 +178,16 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
                 signals[col] = list(values) if values.ndim > 1 else values
         return signals
 
+    @override
+    def _get_source_classes(self) -> list[type]:
+        # the underlying model is code too, e.g. the user's nn.Module wrapped by pf.PyTorchModel
+        return [*super()._get_source_classes(), *type(self.model).__mro__]
+
+    @override
+    def _materialize(self):
+        self.load()
+        super()._materialize()
+
     def to_dict(self) -> dict[str, Any]:
         return {
             **super().to_dict(),
@@ -191,7 +213,9 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
         return json.loads(signal_cols) if signal_cols else []
 
     def load(self) -> None:
-        data = self._feed.load_artifact(self, ArtifactType.model)
+        data, metadata = self._feed.load_artifact(
+            self, ArtifactType.model, include_metadata=True
+        )
         if data is None:
             raise FileNotFoundError(
                 f"no saved model found for '{self.name}'; call save() after training first"
@@ -200,10 +224,14 @@ class BaseModel(ComponentMixin, ABC, metaclass=MetaModel):
             raise TypeError(
                 f"saved model for '{self.name}' returned {type(data).__name__}, expected bytes"
             )
+        # warn only: the trained weights are still valid data, the user decides whether to retrain
+        if metadata is None or metadata.source_sha256 != self._source_sha256:
+            self.logger.warning(
+                f"'{self.name}' code has changed since the loaded model was saved; "
+                + "retrain and save() it if the change affects the model"
+            )
         self._decode(data)
 
     def save(self) -> None:
         artifact = self._encode({"model": self.model, "signal_cols": self._signal_cols})
-        self._feed.save_artifact(
-            self, ArtifactType.model, artifact=artifact
-        )
+        self._feed.save_artifact(self, ArtifactType.model, artifact=artifact)

@@ -5,14 +5,20 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import polars as pl
     from numpy.typing import NDArray
+    from sklearn.base import BaseEstimator
 
 import io
+
 import joblib
 
 from pfund.components.models.model_base import BaseModel
 
 
-class SKLearnModel(BaseModel):
+class SKLearnModel[UnderlyingModelT: BaseEstimator = BaseEstimator](
+    BaseModel[UnderlyingModelT]
+):
+    _artifact_extension = ".joblib"
+
     def predict(self, X: pl.DataFrame, *args: Any, **kwargs: Any) -> NDArray[Any]:
         pred_y = self.model.predict(X, *args, **kwargs)
         return pred_y

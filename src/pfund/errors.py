@@ -18,3 +18,9 @@ class MissingSymbolError(PFundError):
     """Raised when a symbol must be provided but is missing for product"""
 
     pass
+
+
+class StaleArtifactError(PFundError):
+    """Raised when a stored artifact was written by a different version of the component's code"""
+
+    pass

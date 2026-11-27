@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from pfeed.io.table_io import TableIO, VacuumResult
     from pfund_blocks.datas import BarData
 
-    from pfund.typing import BaseModel, ColumnName, Component, Signals
+    from pfund.typing import ColumnName, Component, Signals
 
 import datetime
 
@@ -273,13 +273,35 @@ class TradingStore:
         self._df = df
 
     def materialize(self):
-        """Load this component's own trading_df.delta (data artifact)."""
-        self._df = self._component.load_df().collect()
-        if self._component.is_model():
-            cast("BaseModel", self)._component.load()
-        metadata = self._component._feed.load_metadata(self._component)
-        if metadata and metadata["signal_cols"]:
-            self._component.set_signal_cols(metadata["signal_cols"])
+        """Load this component's own persisted trading_df (data artifact).
+
+        Raises:
+            FileNotFoundError: the trading_df isn't stored.
+            StaleArtifactError: the trading_df was written by different code or on a different data range,
+                its signals can't be reused.
+        """
+        from pfund.errors import StaleArtifactError
+
+        component = self._component
+        lf, metadata = component._feed.load_artifact(
+            component, ArtifactType.data, include_metadata=True
+        )
+        if lf is None:
+            raise FileNotFoundError(f"no saved trading df found for '{component.name}'")
+        if metadata is None or metadata.source_sha256 != component._source_sha256:
+            raise StaleArtifactError(
+                f"'{component.name}' code has changed since its trading df was saved"
+            )
+        data_range = (component.context.data_start, component.context.data_end)
+        if (metadata.data_start, metadata.data_end) != data_range:
+            raise StaleArtifactError(
+                f"'{component.name}' trading df was saved on data range ({metadata.data_start}, {metadata.data_end}), "
+                + f"not on ({data_range[0]}, {data_range[1]})"
+            )
+        self._df = cast("pl.LazyFrame", lf).collect()
+        pfund_metadata = self._component._feed.load_metadata(self._component)
+        if pfund_metadata and pfund_metadata["signal_cols"]:
+            self._component.set_signal_cols(pfund_metadata["signal_cols"])
 
     # TODO: add watermark?
     def persist_to_datalake(self) -> None:

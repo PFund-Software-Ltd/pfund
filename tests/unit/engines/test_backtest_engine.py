@@ -36,6 +36,7 @@ from pfund.backtest._mixins.strategy_mixin import (
 )
 from pfund.backtest.cv.dataset_splits import DatasetSplits
 from pfund.components._mixins.component_mixin import ComponentMixin
+from pfund.components._mixins.dataframe_mixin import DataFrameMixin
 from pfund.components.actor_proxy import ActorProxy
 from pfund.components.models.sklearn_model import SKLearnModel
 from pfund.components.strategies._dummy_strategy import _DummyStrategy
@@ -62,8 +63,8 @@ class MyFeature(pf.Feature):
         return [0]
 
 
-def _is_top_component(component: Any) -> bool:
-    return component._is_top_component
+def _is_backtestee(component: Any) -> bool:
+    return component._is_backtestee
 
 
 @pytest.fixture
@@ -121,7 +122,7 @@ class TestEngineAddStrategy:
         assert strategy.run_mode == RunMode.LOCAL
         assert strategy.resolution == Resolution("1d")
         assert strategy.df_form == "long"
-        assert _is_top_component(strategy)
+        assert _is_backtestee(strategy)
         assert engine.get_strategy("alpha") is strategy
 
     def test_ray_args_are_ignored_with_a_warning(
@@ -170,7 +171,7 @@ class TestEngineAddTopLevelModelFeature:
         assert model.name == "lr"
         assert model.df_form == "wide"
         assert dummy.models == {"lr": model}
-        assert _is_top_component(model)
+        assert _is_backtestee(model)
 
     def test_feature_is_hosted_by_dummy_strategy(self, engine: BacktestEngine):
         feature = MyFeature()
@@ -183,7 +184,7 @@ class TestEngineAddTopLevelModelFeature:
         assert feature.name == "ema"
         assert feature.df_form == "long"
         assert dummy.features == {"ema": feature}
-        assert _is_top_component(feature)
+        assert _is_backtestee(feature)
 
     @pytest.mark.parametrize("second", ["model", "feature"])
     def test_only_one_top_level_model_or_feature_is_allowed(
@@ -220,7 +221,7 @@ class TestComponentAddChildren:
         assert feature.name == "ema"
         assert feature.resolution == strategy.resolution
         assert strategy.features == {"ema": feature}
-        assert not _is_top_component(feature)
+        assert not _is_backtestee(feature)
 
     def test_child_model_is_wrapped_and_adopted(self, strategy: MyStrategy):
         model = strategy.add_model(LinearRegression())
@@ -228,7 +229,7 @@ class TestComponentAddChildren:
         assert isinstance(model, SKLearnModel)
         assert isinstance(model, BacktestModelMixin)
         assert strategy.models == {"LinearRegression": model}
-        assert not _is_top_component(model)
+        assert not _is_backtestee(model)
 
     def test_substrategy_is_adopted_and_marked(self, strategy: MyStrategy):
         sub = MyStrategy()
@@ -239,7 +240,7 @@ class TestComponentAddChildren:
         assert isinstance(sub, BacktestStrategyMixin)
         assert sub.is_substrategy()
         assert strategy.strategies == {"sub": sub}
-        assert not _is_top_component(sub)
+        assert not _is_backtestee(sub)
 
     def test_grandchild_is_adopted(self, strategy: MyStrategy):
         parent = strategy.add_feature(MyFeature(), name="parent")
@@ -611,6 +612,8 @@ def no_component_build(mocker: MockerFixture, calls: list[str]) -> Any:
 @pytest.fixture
 def event_driven(engine: BacktestEngine, mocker: MockerFixture) -> None:
     mocker.patch.object(engine.context, "mode", BacktestMode.EVENT_DRIVEN)
+    # the build is mocked, so no market data is loaded: an empty df makes the bar loop a no-op
+    mocker.patch.object(DataFrameMixin, "get_df", return_value=pl.DataFrame())
 
 
 @pytest.mark.usefixtures("no_component_build")
@@ -670,13 +673,14 @@ class TestBuild:
 
 @pytest.mark.usefixtures("no_component_build")
 class TestRun:
-    def test_vectorized_run_is_rejected(self, engine: BacktestEngine, calls: list[str]):
+    def test_vectorized_run_builds_and_ends(
+        self, engine: BacktestEngine, calls: list[str]
+    ):
         engine.add_strategy(MyStrategy(), "1d", name="alpha")
 
-        with pytest.raises(RuntimeError, match="Nothing to run in vectorized"):
-            engine.run()
+        engine.run()
 
-        assert calls == []
+        assert calls == ["gather alpha", "build alpha"]
         assert not engine.is_running()
 
     @pytest.mark.usefixtures("event_driven")
@@ -726,16 +730,6 @@ class TestRun:
         # the engine can run again
         no_component_build.side_effect = None
         engine.run()
-        assert not engine.is_running()
-
-    @pytest.mark.usefixtures("event_driven")
-    def test_event_driven_training_is_rejected(self, engine: BacktestEngine):
-        model = engine.add_model(LinearRegression(), "1d", name="lr")
-        model._is_training = True
-
-        with pytest.raises(ValueError, match="needs a trained model"):
-            engine.run()
-
         assert not engine.is_running()
 
     @pytest.mark.usefixtures("event_driven")

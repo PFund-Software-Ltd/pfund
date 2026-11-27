@@ -10,14 +10,20 @@ import json
 
 import numpy as np
 import polars as pl
+import safetensors.torch
 import torch
-from safetensors.torch import load, save
+import torch.nn as nn
 
 from pfund.components.bar_dataframe import KEY_COLS as BAR_KEY_COLS
 from pfund.components.models.model_base import BaseModel
 
 
-class PyTorchModel(BaseModel):
+class PyTorchModel[UnderlyingModelT: nn.Module = nn.Module](
+    BaseModel[UnderlyingModelT]
+):
+    _artifact_extension = ".safetensors"
+    _checkpoint_extension = ".pth"
+
     def predict(self, X: pl.DataFrame, *args: Any, **kwargs: Any) -> Tensor:
         # inference: eval() gives dropout/batchnorm their inference behavior and
         # no_grad() skips the autograd graph. restore the prior mode so calling
@@ -26,12 +32,12 @@ class PyTorchModel(BaseModel):
         self.model.eval()
         try:
             with torch.no_grad():
-                pred_y = self.model(self._to_tensor(X), *args, **kwargs)
+                pred_y = self.model(self.to_tensor(X), *args, **kwargs)
         finally:
             self.model.train(was_training)
         return pred_y
 
-    def _to_tensor(self, X: Tensor | np.ndarray | pl.DataFrame) -> Tensor:
+    def to_tensor(self, X: Tensor | np.ndarray | pl.DataFrame) -> Tensor:
         """Coerce X to a tensor matching the model's dtype and device.
 
         Accepts a torch.Tensor (passed through), a numpy array, or a polars dataframe.
@@ -65,14 +71,15 @@ class PyTorchModel(BaseModel):
     def _encode(self, payload: dict[str, Any]) -> bytes:
         model = payload["model"]
         metadata = {"signal_cols": json.dumps(payload["signal_cols"])}
-        data = save(model.state_dict(), metadata=metadata)
+        data = safetensors.torch.save(model.state_dict(), metadata=metadata)
         return data
 
     def _decode(self, data: bytes) -> None:
+
         # frame torch's raw strict-load error so architecture drift reads as a
         # pfund message instead of a bare "Missing key(s) in state_dict"
         try:
-            self.model.load_state_dict(load(data))
+            self.model.load_state_dict(safetensors.torch.load(data))
         except RuntimeError as err:
             raise RuntimeError(
                 f"failed to load saved weights into '{self.name}': the saved "

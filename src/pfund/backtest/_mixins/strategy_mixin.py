@@ -7,7 +7,8 @@ if TYPE_CHECKING:
 
     from pfund_blocks.datas import MarketData
 
-    from pfund.typing import Component
+    from pfund.simulated.simulated_account import SimulatedAccount
+    from pfund.typing import BaseStrategy, Component
 
     type ChunkNum = int
 
@@ -246,6 +247,21 @@ class BacktestStrategyMixin(BacktestMixin):
         return super().add_data(*args, as_features=as_features, **kwargs)
 
     add_market_data = add_data
+
+    def add_account(self, account: SimulatedAccount) -> SimulatedAccount:
+        """Same as BaseStrategy.add_account(), but only accepts a SimulatedAccount in backtesting.
+
+        Overrides BaseStrategy.add_account() at runtime: _adopt() puts this mixin before
+        the user's strategy class in the MRO.
+        """
+        from pfund.simulated.simulated_account import SimulatedAccount
+
+        if not isinstance(account, SimulatedAccount):
+            raise TypeError(
+                f"{self.name}: backtesting only accepts SimulatedAccount, got {type(account).__name__}. "
+                + "Create one with pf.SimulatedAccount(venue=..., balances=...)"
+            )
+        return cast("SimulatedAccount", cast("BaseStrategy", super()).add_account(account))
 
     def _backtest_chunk(self, df: pl.DataFrame, chunk_num: int = 0) -> pl.DataFrame:
         """Runs the user's backtest(df) on one chunk, in between the pre/postprocessing.

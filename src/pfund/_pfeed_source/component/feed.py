@@ -1,13 +1,16 @@
 # ty: ignore[incompatible-attribute-override,incompatible-mutable-override]
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, overload
 
 if TYPE_CHECKING:
     from pfeed.io.base_io import BaseIO
     from pfeed.io.blob_io import BlobIO
 
-    from pfund._pfeed_source.component.data_handler import PFundComponentDataHandler
+    from pfund._pfeed_source.component.data_handler import (
+        PFundComponentDataHandler,
+        PFundComponentDataMetadata,
+    )
     from pfund.typing import Component
 
 import polars as pl
@@ -157,6 +160,30 @@ class PFundComponentFeed[PipelineT: bool = Literal[False]](
             artifact.collect() if isinstance(artifact, pl.LazyFrame) else artifact
         )
 
+    @overload
+    def load_artifact(
+        self,
+        component: Component,
+        artifact_type: ArtifactType | str,
+        *,
+        project: str | None = ...,
+        run: str | None = ...,
+        checkpoint_step: int | None = ...,
+        include_metadata: Literal[False] = ...,
+    ) -> pl.LazyFrame | bytes | None: ...
+
+    @overload
+    def load_artifact(
+        self,
+        component: Component,
+        artifact_type: ArtifactType | str,
+        *,
+        project: str | None = ...,
+        run: str | None = ...,
+        checkpoint_step: int | None = ...,
+        include_metadata: Literal[True],
+    ) -> tuple[pl.LazyFrame | bytes | None, PFundComponentDataMetadata | None]: ...
+
     def load_artifact(
         self,
         component: Component,
@@ -165,14 +192,24 @@ class PFundComponentFeed[PipelineT: bool = Literal[False]](
         project: str | None = None,
         run: str | None = None,
         checkpoint_step: int | None = None,
-    ) -> pl.LazyFrame | bytes | None:
+        include_metadata: bool = False,
+    ) -> (
+        pl.LazyFrame
+        | bytes
+        | tuple[pl.LazyFrame | bytes | None, PFundComponentDataMetadata | None]
+        | None
+    ):
         """Read a component artifact back from the storage save_artifact() writes to, eagerly.
 
         Errors raise, so None only means the artifact isn't stored.
-        pfund's metadata.json of the component is read by retrieve_metadata().
+        pfund's metadata.json of the component is read by load_metadata().
+
+        Args:
+            include_metadata: also return the artifact's own metadata, e.g. its source_sha256 stamp.
 
         Returns:
             A LazyFrame for the data artifact, bytes for the others, None if it isn't stored.
+            With include_metadata, (artifact, metadata), (None, None) if it isn't stored.
         """
         setup_logging(env=component.env)
         artifact_type = ArtifactType(artifact_type.lower())
@@ -184,7 +221,7 @@ class PFundComponentFeed[PipelineT: bool = Literal[False]](
             run=run,
             checkpoint_step=checkpoint_step,
         )
-        data, _ = handler.read()
+        data, metadata = handler.read()
         if (
             artifact_type == ArtifactType.data
             and data is not None
@@ -193,7 +230,10 @@ class PFundComponentFeed[PipelineT: bool = Literal[False]](
             raise TypeError(
                 f"data artifact of '{component.name}' must be a polars LazyFrame, got {type(data).__name__}"
             )
-        return data
+        if not include_metadata:
+            return data
+        # an artifact is one partition: the data artifact is unpartitioned, a bytes artifact is read by its own partition
+        return data, next(iter(metadata.values()), None)
 
     def _create_data_handler(
         self,

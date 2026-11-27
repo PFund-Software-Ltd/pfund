@@ -24,6 +24,7 @@ from pfund_kit.style import RichColor, TextStyle
 from pfund.backtest.cv.indexing import SplittableData, take_rows, validate_aligned
 from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.enums import BacktestMode
+from pfund.errors import StaleArtifactError
 
 
 class BacktestMixin(ComponentMixin):
@@ -57,7 +58,7 @@ class BacktestMixin(ComponentMixin):
 
     def _init_backtest_state(self) -> None:
         # top components are the ones added by engine.add_strategy/model/feature()
-        self._is_top_component = False
+        self._is_backtestee = False
         # the trading df over the whole data range, kept by _use_split() while X holds one split
         self._unsplit_df: pl.DataFrame | None = None
 
@@ -98,8 +99,8 @@ class BacktestMixin(ComponentMixin):
         cast("BacktestMixin", component)._init_backtest_state()
         return component
 
-    def set_top_component(self):
-        self._is_top_component = True
+    def set_as_backtestee(self):
+        self._is_backtestee = True
 
     @property
     def context(self) -> BacktestEngineContext:
@@ -279,7 +280,7 @@ class BacktestMixin(ComponentMixin):
 
     @property
     def _reuse_child_component_signals(self):
-        return not self._is_top_component and self.settings.reuse_signals
+        return not self._is_backtestee and self.settings.reuse_signals
 
     @override
     def _get_components_signals(self, data: BarData) -> dict[ComponentName, Signals]:
@@ -309,10 +310,14 @@ class BacktestMixin(ComponentMixin):
     def _publish_signals(self, signals: Signals, data: BarData):
         pass
 
-    def _compute_signals_on_the_fly(self):
+    def _compute_signals_on_the_fly(self, reason: str):
+        """Computes the trading df of a child whose persisted one can't be reused, and persists it.
+
+        Args:
+            reason: why the persisted trading df can't be reused, e.g. it isn't stored or it is stale.
+        """
         self.logger.warning(
-            f"No persisted trading dataframe found for '{self.name}'. "
-            + "Running its vectorized backtest on the fly...",
+            f"{reason}. Running its vectorized backtest on the fly...",
             style=TextStyle.BOLD + RichColor.YELLOW,
         )
         X = self.X
@@ -327,15 +332,16 @@ class BacktestMixin(ComponentMixin):
         for data_store in self.data_stores.values():
             data_store.materialize()
         if self.backtest_mode == BacktestMode.VECTORIZED:
-            if self._is_top_component:
+            if self._is_backtestee:
                 # backtestee: only prepare its input, engine._backtest() runs its backtest later
                 self.store.set_df(self._build_features_df().to_native())
             else:
                 # child component will load its trading_df so that its signals can be merged into its parent's trading df
-                self.store.materialize()
-                if self.store._df is None:
+                try:
+                    self.store.materialize()
+                except (FileNotFoundError, StaleArtifactError) as err:
                     self.store.set_df(self._build_features_df().to_native())
-                    self._compute_signals_on_the_fly()
+                    self._compute_signals_on_the_fly(reason=str(err))
             self._assert_split_resolution()
         # FIXME: event-driven should also call self._assert_split_resolution(),
         # brainstorm: let it own trading df the same way as VECTORIZED, empty it before looping

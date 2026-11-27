@@ -8,9 +8,7 @@ if TYPE_CHECKING:
     from pfund.backtest._mixins.portfolio_backtest_mixin import PortfolioBacktestMixin
     from pfund.backtest._mixins.product_backtest_mixin import ProductBacktestMixin
 
-    class BacktestDataFrame(
-        ProductBacktestMixin, PortfolioBacktestMixin, pl.DataFrame
-    ):
+    class BacktestDataFrame(ProductBacktestMixin, PortfolioBacktestMixin, pl.DataFrame):
         """Annotation-only type: at runtime the df is a plain native DataFrame
         whose class has the backtest methods attached by _setup_backtest_df_for_vectorized_mode()."""
 

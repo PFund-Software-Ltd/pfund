@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, ClassVar, Literal, assert_never
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, assert_never, cast
+
+if TYPE_CHECKING:
+    from pfund.components.models.model_base import BaseModel
 
 from pathlib import Path
 
@@ -71,15 +74,8 @@ class PFundComponentDataModel(PFundBaseDataModel):
             artifact_kwargs["run"] = run
         match artifact_type:
             case ArtifactType.model:
-                from pfund.components.models.pytorch_model import PyTorchModel
-                from pfund.components.models.sklearn_model import SKLearnModel
-
-                if isinstance(component, SKLearnModel):
-                    extension = ".joblib"
-                elif isinstance(component, PyTorchModel):
-                    extension = ".safetensors"
-                else:
-                    raise ValueError(f"Unsupported model type: {type(component)}")
+                # the model decides its own serialization format, see BaseModel._artifact_extension
+                extension = cast("BaseModel", component)._artifact_extension
                 return ModelArtifact(extension=extension, **artifact_kwargs)
             case ArtifactType.data:
                 return DataArtifact(**artifact_kwargs)
@@ -88,16 +84,9 @@ class PFundComponentDataModel(PFundBaseDataModel):
                     filename=component._source_file_path.name, **artifact_kwargs
                 )
             case ArtifactType.checkpoint:
-                from pfund.components.models.pytorch_model import PyTorchModel
-
                 if checkpoint_step is None:
                     raise ValueError("checkpoint_step is required for a checkpoint")
-                if isinstance(component, PyTorchModel):
-                    extension = ".pth"
-                else:
-                    raise ValueError(
-                        f"Unsupported checkpoint model type: {type(component)}"
-                    )
+                extension = cast("BaseModel", component)._checkpoint_extension
                 return CheckpointArtifact(
                     extension=extension, step=checkpoint_step, **artifact_kwargs
                 )
@@ -121,18 +110,17 @@ class SourceArtifact(PFundComponentDataModel):
     filename: str  # e.g. "my_alpha.py"
 
 
+# NOTE: extension is a free str, the model sets it (BaseModel._artifact_extension / _checkpoint_extension),
+# e.g. ".safetensors" (torch), ".joblib" (sklearn), ".bin" (default for a user model)
+_EXTENSION_PATTERN = r"^\.[A-Za-z0-9]+$"
+
+
 class ModelArtifact(PFundComponentDataModel):
-    extension: Literal[
-        ".joblib",  # sklearn model
-        ".safetensors",  # torch/jax model
-    ]
+    extension: str = Field(pattern=_EXTENSION_PATTERN)
 
 
 class CheckpointArtifact(PFundComponentDataModel):
-    extension: Literal[
-        ".pth",  # pytorch checkpoint
-        ".pkl",  # jax checkpoint
-    ]
+    extension: str = Field(pattern=_EXTENSION_PATTERN)
     step: int = Field(ge=0)
 
 

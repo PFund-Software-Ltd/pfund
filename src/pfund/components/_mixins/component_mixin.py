@@ -102,6 +102,14 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
             "component_id": self.component_id,
             # the same snapshot component_id was hashed from, not recomputed, see _identity
             **self._identity,
+            "engine_name": self.context.name,
+            # recorded, not hashed: editing the code keeps the component, each artifact is stamped
+            # with the hash of the code that wrote it instead, see PFundComponentDataMetadata
+            "source_sha256": self._source_sha256,
+            # recorded, not hashed: a new data range keeps the component, the trading df is stamped
+            # with the range it was computed on instead, see PFundComponentDataMetadata
+            "data_start": self.context.data_start,
+            "data_end": self.context.data_end,
             "signal_cols": self._signal_cols,
             "run_mode": self.run_mode,
             "settings": self.settings.model_dump(),
@@ -110,9 +118,7 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
     def _identity_fields(self) -> dict[str, Any]:
         return {
             "class_name": self.__class__.__name__,
-            "engine_name": self.context.name,
             "component_name": self.name,
-            "source_sha256": self._hash_source_files(),
             "resolution": repr(self.resolution),
             "component_type": self.component_type,
             "df_form": self._df_form,
@@ -120,8 +126,6 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
             "config": self.config,
             "params": self.params,
             "datas": [data.to_dict() for data in self.get_datas()],
-            "data_start": self.context.data_start,
-            "data_end": self.context.data_end,
             # child ids, not names: a change in a child (e.g. params loaded from a TOML file)
             # must change the parent's id too, otherwise a non-top component reuses its
             # persisted df computed from the old child, see BacktestMixin._materialize()
