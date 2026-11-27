@@ -50,7 +50,7 @@ class TradingStore:
     def setup_lakehouse(self) -> None:
         """Sets up the lakehouse's IOs: the component's datalake (table IO) and the blob IO.
 
-        Called after component_id is final, it is in the datalake's path:
+        Called after the component's name is final, it is in the datalake's path:
         - <lakehouse_path>/<PFundBaseDataModel.RUNS_DIR_NAME>: the blob IO, with plain dataset dirs, i.e. runs/BACKTEST/...
         - <lakehouse_path>/<component_path>/<TRADING_DF_DIR_NAME>: the component's datalake, inside its component dir
         lakehouse_path is pfund's engine-scoped data_path by default,
@@ -277,8 +277,8 @@ class TradingStore:
 
         Raises:
             FileNotFoundError: the trading_df isn't stored.
-            StaleArtifactError: the trading_df was written by different code or on a different data range,
-                its signals can't be reused.
+            StaleArtifactError: the trading_df was written with a different setup, by different code
+                or on a different data range, its signals can't be reused, see _get_stale_reason().
         """
         from pfund.errors import StaleArtifactError
 
@@ -288,15 +288,9 @@ class TradingStore:
         )
         if lf is None:
             raise FileNotFoundError(f"no saved trading df found for '{component.name}'")
-        if metadata is None or metadata.source_sha256 != component._source_sha256:
+        if reason := component._get_stale_reason(metadata, check_data_range=True):
             raise StaleArtifactError(
-                f"'{component.name}' code has changed since its trading df was saved"
-            )
-        data_range = (component.context.data_start, component.context.data_end)
-        if (metadata.data_start, metadata.data_end) != data_range:
-            raise StaleArtifactError(
-                f"'{component.name}' trading df was saved on data range ({metadata.data_start}, {metadata.data_end}), "
-                + f"not on ({data_range[0]}, {data_range[1]})"
+                f"'{component.name}' saved trading df is stale: {reason}"
             )
         self._df = cast("pl.LazyFrame", lf).collect()
         pfund_metadata = self._component._feed.load_metadata(self._component)

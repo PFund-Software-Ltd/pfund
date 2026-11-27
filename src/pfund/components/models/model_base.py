@@ -225,9 +225,9 @@ class BaseModel[UnderlyingModelT: UnderlyingModel = Any](
                 f"saved model for '{self.name}' returned {type(data).__name__}, expected bytes"
             )
         # warn only: the trained weights are still valid data, the user decides whether to retrain
-        if metadata is None or metadata.source_sha256 != self._source_sha256:
+        if reason := self._get_stale_reason(metadata):
             self.logger.warning(
-                f"'{self.name}' code has changed since the loaded model was saved; "
+                f"'{self.name}' saved model is stale: {reason}; "
                 + "retrain and save() it if the change affects the model"
             )
         self._decode(data)

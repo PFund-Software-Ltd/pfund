@@ -40,6 +40,9 @@ class PFundComponentDataMetadata(BaseDataMetadata):
     # metadata.json is rewritten every run, the artifact only when it is rewritten, so a match means it came from this code.
     # None for an artifact written before it was stamped, i.e. unknown code
     source_sha256: str | None = None
+    # hash of the component's setup that wrote the artifact (component._setup_sha256), stamped for the same reason:
+    # the component's dir is reused across reruns, so an artifact written with other params/config/data/children is stale
+    setup_sha256: str | None = None
     # the engine's data range the artifact was written in (component.context.data_start/data_end), stamped for the
     # same reason: a trading df computed on another range is stale, see TradingStore.materialize()
     data_start: datetime.date | None = None
@@ -71,7 +74,7 @@ class PFundComponentDataHandler(
                         pfund.db (engine states (e.g. used to match back client order ids),
                                   also used to host a fake server in SANDBOX trading)
                         {component_type plural}/  (e.g. strategies/)
-                            {component_id}/  ({component_class_name}-{hash}, see PFundComponentDataModel.component_path)
+                            {component_name}/  (see PFundComponentDataModel.component_path)
                                 _pfeed_metadata.json  (BlobIO's manifest of the files below)
                                 metadata.json  (pfund's own metadata of the run)
                                 {component}.py  (component source code)
@@ -178,7 +181,7 @@ class PFundComponentDataHandler(
         # and the chunks are written together, once, see BacktestEngine._backtest()
         name = {
             "component_type": component.component_type.to_plural(),
-            "component_id": component.component_id,
+            "component_name": component.name,
         }
         # the other bytes artifacts are files of the component's dir (the same dataset, see _blob_file_name()),
         # checkpoints are their own dataset in the component's checkpoints/ dir, partitioned by step
@@ -240,6 +243,7 @@ class PFundComponentDataHandler(
     def _create_metadata(self) -> PFundComponentDataMetadata:
         component = self._data_model.component
         return PFundComponentDataMetadata(
+            setup_sha256=component._setup_sha256,
             source_sha256=component._source_sha256,
             data_start=component.context.data_start,
             data_end=component.context.data_end,
@@ -260,7 +264,7 @@ class PFundComponentDataHandler(
             **self._data_model.component.to_dict(),
         }
         # default=str: the signature/config/params can hold objects JSON can't express, e.g. a torch module,
-        # stored as their str, same as component_id hashes them
+        # stored as their str
         blob = json.dumps(component_metadata, default=str).encode()
         self._component_metadata_io.write(
             self._create_component_dataset_key(),

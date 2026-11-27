@@ -99,15 +99,12 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "component_id": self.component_id,
-            # the same snapshot component_id was hashed from, not recomputed, see _identity
-            **self._identity,
+            # the same snapshot _setup_sha256 was hashed from, not recomputed, see _setup
+            **self._setup,
             "engine_name": self.context.name,
-            # recorded, not hashed: editing the code keeps the component, each artifact is stamped
-            # with the hash of the code that wrote it instead, see PFundComponentDataMetadata
+            # recorded here, each artifact is also stamped with them, see PFundComponentDataMetadata
+            "setup_sha256": self._setup_sha256,
             "source_sha256": self._source_sha256,
-            # recorded, not hashed: a new data range keeps the component, the trading df is stamped
-            # with the range it was computed on instead, see PFundComponentDataMetadata
             "data_start": self.context.data_start,
             "data_end": self.context.data_end,
             "signal_cols": self._signal_cols,
@@ -115,7 +112,12 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
             "settings": self.settings.model_dump(),
         }
 
-    def _identity_fields(self) -> dict[str, Any]:
+    def _setup_fields(self) -> dict[str, Any]:
+        """What the component is declared as, hashed by _setup_sha256.
+
+        Only what is declared on the component itself: anything on self.context (e.g. the data range,
+        the engine name) belongs to the run, which the run path already separates.
+        """
         return {
             "class_name": self.__class__.__name__,
             "component_name": self.name,
@@ -126,15 +128,15 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
             "config": self.config,
             "params": self.params,
             "datas": [data.to_dict() for data in self.get_datas()],
-            # child ids, not names: a change in a child (e.g. params loaded from a TOML file)
-            # must change the parent's id too, otherwise a non-top component reuses its
+            # child stamps, not names: a change in a child (e.g. params loaded from a TOML file, or its code)
+            # must make the parent's artifacts stale too, otherwise a non-top component reuses its
             # persisted df computed from the old child, see BacktestMixin._materialize()
             "models": {
-                name: model.get_component_id()
+                name: model.get_artifact_stamp()
                 for name, model in sorted(self.models.items())
             },
             "features": {
-                name: feature.get_component_id()
+                name: feature.get_artifact_stamp()
                 for name, feature in sorted(self.features.items())
             },
         }
@@ -604,15 +606,17 @@ class ComponentMixin(DataFrameMixin, ComponentBaseMixin):
             for component in self.components:
                 component._build()
 
-            # 2. Materialize this component from its built dependencies.
+            # 2. Freeze the setup before materializing: during materialization, pfeed normalizes
+            # data.config.storage_config.data_domain from "" to "MARKET_DATA", which changes the `datas`
+            # in the setup. Hashed after it, the stamp written and the stamp checked could differ,
+            # and every rerun would find its artifacts stale.
+            _ = self._setup_sha256
+
+            # 3. Materialize this component from its built dependencies.
             self.store.setup_lakehouse()
             self._materialize()
 
-            # 3. Persist provenance only after successful build.
-            # NOTE: Keep this as the last build step. During materialization,
-            # pfeed normalizes data.config.storage_config.data_domain from "" to
-            # "MARKET_DATA"; that changes the `datas` payload in component_id.
-            # Save only after such mutations so every artifact uses the same ID.
+            # 4. Persist provenance only after successful build.
             self._feed.save_artifact(
                 cast("Component", self),
                 ArtifactType.source,

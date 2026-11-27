@@ -18,7 +18,7 @@ def _resolve_base_path(
     project: str,
     run: str,
     component_type: str,
-    component_id: str | None,
+    component_name: str | None,
 ) -> Path:
     """A component's datalake dir of a run, see TradingStore.setup_lakehouse().
 
@@ -28,9 +28,9 @@ def _resolve_base_path(
     from pfund.config import get_config
     from pfund.stores.trading_store import TradingStore
 
-    if component_id is None:
+    if component_name is None:
         raise click.UsageError(
-            "--component-id is required, unless --base-path is given"
+            "--component-name is required, unless --base-path is given"
         )
     # the same dirs as PFundComponentDataModel.component_path, which needs a component instance
     return (
@@ -40,7 +40,7 @@ def _resolve_base_path(
         / project.lower()
         / run.lower()
         / ComponentType(component_type.lower()).to_plural()
-        / component_id
+        / component_name
         / TradingStore.TRADING_DF_DIR_NAME
     )
 
@@ -84,9 +84,9 @@ ducklake = create_table_io_command(
             help="Type of the component",
         ),
         click.option(
-            "--component-id",
+            "--component-name",
             default=None,
-            help="Component id, e.g. SMACross-a1b2c3d4e5f6 (the component's dir name)",
+            help="Component name, e.g. SMACross (the component's dir name)",
         ),
     ),
 )

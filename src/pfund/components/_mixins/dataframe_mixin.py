@@ -56,12 +56,17 @@ class DataFrameMixin(ComponentBaseMixin):
         """Reads back the trading df saved by save_df(), i.e. the component's data artifact.
 
         Returns the df only, the component's trading df in memory is left as is.
+        Warns if the df is stale, it is still returned, e.g. to inspect an older run's df.
         """
-        data = self._feed.load_artifact(cast("Component", self), ArtifactType.data)
+        data, metadata = self._feed.load_artifact(
+            cast("Component", self), ArtifactType.data, include_metadata=True
+        )
         if data is None:
             raise FileNotFoundError(
                 f"no saved trading df found for '{self.name}'; call save_df() first"
             )
+        if reason := self._get_stale_reason(metadata, check_data_range=True):
+            self.logger.warning(f"'{self.name}' saved trading df is stale: {reason}")
         return cast("pl.LazyFrame", data)
 
     def save_df(self) -> None:

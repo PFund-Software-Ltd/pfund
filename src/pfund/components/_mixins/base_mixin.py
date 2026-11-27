@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from pfund_blocks.typing import ProductName, TradingVenue
     from pfund_kit.logging.loggers import ColoredLogger
 
+    from pfund._pfeed_source.component.data_handler import PFundComponentDataMetadata
     from pfund._pfeed_source.component.feed import PFundComponentFeed
     from pfund.components._mixins.component_mixin import ComponentMixin
     from pfund.components.features.feature_base import BaseFeature
@@ -54,7 +55,9 @@ class ComponentBaseMixin:
     }
     params: dict[str, Any] = {}  # noqa: RUF012
 
-    def __mixin_post_init__(self, component_type: ComponentType, *args: Any, **kwargs: Any):
+    def __mixin_post_init__(
+        self, component_type: ComponentType, *args: Any, **kwargs: Any
+    ):
         import pfeed as pe
 
         self.__pfund_args__ = args
@@ -187,8 +190,8 @@ class ComponentBaseMixin:
     ) -> dict[str, Any]:
         from pfund_kit.utils import toml
 
-        # config and params are part of component_id and are validated in _gather(),
-        # changing them afterwards would leave them unchecked and mismatch the saved artifacts
+        # config and params are part of the setup and are validated in _gather(),
+        # changing them afterwards would leave them unchecked and mismatch the saved artifacts' stamps
         if self._is_gathered:
             raise ValueError(
                 f"{self} has already gathered, {kind} must be loaded before running"
@@ -382,29 +385,61 @@ class ComponentBaseMixin:
     def store(self) -> TradingStore:
         return self._store
 
-    @property
-    def component_id(self) -> str:
-        """Finds the component's artifacts, validated by _source_sha256 once found.
+    @cached_property
+    def _setup_sha256(self) -> str:
+        """Hashes the component's setup, see _setup_fields().
 
-        - `component_id` finds the artifacts. It decides the folder, so it answers
-          "which component's artifacts are these?" It's built from what defines the component:
-          class name, name, params, config, data and children, see _identity_fields().
-          It's coarse and changes rarely.
-        - `_source_sha256` validates the artifacts that were found. It answers
-          "were these produced by the code that's running now?" It covers the source of the
-          user classes in the MRO (plus the underlying model's classes).
-          It's strict and changes on every edit inside those classes.
+        The artifacts are found by the component's name (its dir, unique across the engine, see
+        PFundComponentDataModel.component_path), then validated by stamps written on each of them:
+        - `_setup_sha256` answers "were these produced by this component as it is set up now?",
+          i.e. the same params, config, data and children.
+        - `_source_sha256` answers "were these produced by the code that's running now?"
+        - the data range answers "were these produced on the data this run uses?", trading df only.
+        See _get_stale_reason().
         """
         payload = json.dumps(
-            self._identity, sort_keys=True, separators=(",", ":")
+            self._setup, sort_keys=True, separators=(",", ":")
         ).encode()
-        digest = hashlib.sha256(payload).hexdigest()[:12]
-        return f"{self._identity['class_name']}-{digest}"
+        return hashlib.sha256(payload).hexdigest()
 
     @ray_method
-    def get_component_id(self) -> str:
-        """component_id as a method, so it also works through ActorProxy (Ray only forwards methods)."""
-        return self.component_id
+    def get_artifact_stamp(self) -> dict[str, str]:
+        """The setup and source hashes, as a method so it also works through ActorProxy (Ray only forwards methods).
+
+        A parent's setup holds its children's stamps, so a change in a child (its params or its code)
+        makes the parent's artifacts stale too.
+        """
+        return {
+            "setup_sha256": self._setup_sha256,
+            "source_sha256": self._source_sha256,
+        }
+
+    def _get_stale_reason(
+        self,
+        metadata: PFundComponentDataMetadata | None,
+        *,
+        check_data_range: bool = False,
+    ) -> str | None:
+        """Why an artifact stamped with `metadata` doesn't belong to the component as it runs now, None if it does.
+
+        Args:
+            metadata: the artifact's per-partition metadata, None if it has none.
+            check_data_range: also require the artifact to be written on the engine's data range,
+                for a trading df, whose rows depend on it. A trained model doesn't.
+        """
+        if metadata is None:
+            return "it has no stamp"
+        if metadata.setup_sha256 != self._setup_sha256:
+            return "its setup (params, config, data or child components) has changed"
+        if metadata.source_sha256 != self._source_sha256:
+            return "its code has changed"
+        data_range = (self.context.data_start, self.context.data_end)
+        if check_data_range and (metadata.data_start, metadata.data_end) != data_range:
+            return (
+                f"it was saved on data range ({metadata.data_start}, {metadata.data_end}), "
+                + f"not on ({data_range[0]}, {data_range[1]})"
+            )
+        return None
 
     def _hydrate(
         self,
@@ -517,7 +552,9 @@ class ComponentBaseMixin:
     def get_trading_store(self) -> TradingStore:
         return self.store
 
-    def get_data(self, product: ProductName, resolution: Resolution | str) -> MarketData | None:
+    def get_data(
+        self, product: ProductName, resolution: Resolution | str
+    ) -> MarketData | None:
         return self.market_data_store.get_data(product, resolution)
 
     def get_datas(self) -> list[BaseData]:
@@ -575,18 +612,19 @@ class ComponentBaseMixin:
     def get_signal_cols(self) -> list[str]:
         return self._signal_cols
 
-    # Frozen at first use, so the component keeps one component_id for its lifetime: runtime work
-    # can mutate objects in the identity (e.g. a PyTorch LazyLinear materializing on its first
-    # forward pass), and recomputing it would write the component's artifacts under different ids,
+    # Frozen at first use, so the component keeps one setup for its lifetime: runtime work
+    # can mutate objects in the setup (e.g. a PyTorch LazyLinear materializing on its first
+    # forward pass), and recomputing it would stamp the component's artifacts with different hashes,
     # or record to_dict() fields that differ from the hashed ones.
+    # NOTE: _build() freezes it before _materialize(), which mutates the datas, see ComponentMixin._build()
     @cached_property
-    def _identity(self) -> dict[str, Any]:
+    def _setup(self) -> dict[str, Any]:
         # NOTE: the json round trip turns every value into plain data, caching the dict alone would
         # still hold the live objects, which can change later
         return json.loads(
             json.dumps(
-                cast("ComponentMixin", self)._identity_fields(),
-                default=self._encode_identity_value,
+                cast("ComponentMixin", self)._setup_fields(),
+                default=self._encode_setup_value,
             )
         )
 
@@ -598,13 +636,12 @@ class ComponentBaseMixin:
         """
         return list(type(self).__mro__)
 
-    # Frozen at first use like _identity, every artifact of the run is stamped with the same hash
+    # Frozen at first use like _setup, every artifact of the run is stamped with the same hash
     @cached_property
     def _source_sha256(self) -> str:
         """Hashes the source of every user-written class in _get_source_classes().
 
-        Validates the artifacts component_id found, see component_id for how the two differ:
-        each artifact is stamped with it when written, and compared on load.
+        Each artifact is stamped with it when written, and compared on load, see _setup_sha256.
         Only the classes' source, not their whole files: editing a script that defines a component
         (e.g. uncommenting a line that runs it) must not mark the component's artifacts as stale.
         Classes from pfund, the standard library and installed packages are skipped.
@@ -642,11 +679,11 @@ class ComponentBaseMixin:
             digest.update(source.encode())
         return digest.hexdigest()
 
-    def _encode_identity_value(self, value: Any) -> Any:
-        """Encodes a value json can't, used by component_id.
+    def _encode_setup_value(self, value: Any) -> Any:
+        """Encodes a value json can't, used by _setup.
 
         Only encodings that are the same in every run are allowed, otherwise the same
-        component setup would get a new component_id (and a new artifact folder) each run.
+        component setup would get a new _setup_sha256 each run, and its artifacts would always be stale.
         """
         if isinstance(value, (set, frozenset)):
             # NOTE: set order changes across processes (hash randomization), sort it
@@ -664,7 +701,7 @@ class ComponentBaseMixin:
             return repr(value)
         # object.__repr__ includes the memory address, which changes every run
         raise TypeError(
-            f"{self} component_id: cannot encode {type(value).__name__} {value!r} stably, "
+            f"{self} setup: cannot encode {type(value).__name__} {value!r} stably, "
             + f"define {type(value).__name__}.__repr__ to return a value that is the same in every run"
         )
 

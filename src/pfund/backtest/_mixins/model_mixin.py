@@ -52,8 +52,11 @@ class BacktestModelMixin(BacktestMixin):
             raise NotImplementedError(
                 "load_checkpoint is not implemented for this model"
             )
-        data = self._feed.load_artifact(
-            cast("BaseModel", self), ArtifactType.checkpoint, checkpoint_step=step
+        data, metadata = self._feed.load_artifact(
+            cast("BaseModel", self),
+            ArtifactType.checkpoint,
+            checkpoint_step=step,
+            include_metadata=True,
         )
         if data is None:
             raise FileNotFoundError(
@@ -63,6 +66,11 @@ class BacktestModelMixin(BacktestMixin):
             raise TypeError(
                 f"checkpoint for '{self.name}' at step {step} returned "
                 + f"{type(data).__name__}, expected bytes"
+            )
+        # warn only, like BaseModel.load(): the user decides whether to resume from it
+        if reason := self._get_stale_reason(metadata):
+            self.logger.warning(
+                f"'{self.name}' checkpoint at step {step} is stale: {reason}"
             )
         return self._decode_checkpoint(data)
 

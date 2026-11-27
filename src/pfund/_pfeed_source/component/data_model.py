@@ -41,14 +41,17 @@ class PFundComponentDataModel(PFundBaseDataModel):
 
     @property
     def component_path(self) -> Path:
-        """The component's dir, relative to the lakehouse path, e.g. runs/BACKTEST/default_project/default_run/strategies/SMACross-a1b2c3d4e5f6.
+        """The component's dir, relative to the lakehouse path, e.g. runs/BACKTEST/default_project/default_run/strategies/SMACross.
 
+        Named after the component, which is unique across the engine, so a run has one dir per component,
+        always holding its latest artifacts. Whether they still match the component is checked by their stamps,
+        see ComponentBaseMixin._setup_sha256.
         The same as the namespace + name of the component's DatasetKey, see PFundComponentDataHandler._create_dataset_key().
         """
         return (
             self.run_path
             / self.component.component_type.to_plural()
-            / self.component.component_id
+            / self.component.name
         )
 
     @classmethod
