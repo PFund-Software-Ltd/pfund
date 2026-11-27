@@ -167,8 +167,10 @@ class PFundComponentDataHandler(
         """The bytes artifact's file name in storage, e.g. 'model.joblib', so it can be opened as is."""
         data_model = self._data_model
         match data_model.artifact_type:
+            # NOTE: a fixed name, not the user's file name, so each run overwrites it and the component dir
+            # holds only the source of its current artifacts, the user's file name is in metadata.json
             case ArtifactType.source:
-                return cast("SourceArtifact", data_model).filename
+                return f"source{cast('SourceArtifact', data_model).extension}"
             case ArtifactType.model:
                 return f"model{cast('ModelArtifact', data_model).extension}"
             case ArtifactType.checkpoint:

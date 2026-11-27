@@ -83,9 +83,7 @@ class PFundComponentDataModel(PFundBaseDataModel):
             case ArtifactType.data:
                 return DataArtifact(**artifact_kwargs)
             case ArtifactType.source:
-                return SourceArtifact(
-                    filename=component._source_file_path.name, **artifact_kwargs
-                )
+                return SourceArtifact(**artifact_kwargs)
             case ArtifactType.checkpoint:
                 if checkpoint_step is None:
                     raise ValueError("checkpoint_step is required for a checkpoint")
@@ -110,7 +108,6 @@ class PFundComponentDataModel(PFundBaseDataModel):
 # their storage format is decided by the IO, so they have no extension
 class SourceArtifact(PFundComponentDataModel):
     extension: Literal[".py"] = ".py"  # python source code
-    filename: str  # e.g. "my_alpha.py"
 
 
 # NOTE: extension is a free str, the model sets it (BaseModel._artifact_extension / _checkpoint_extension),

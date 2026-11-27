@@ -107,6 +107,8 @@ class ComponentMixin(DataFrameMixin, ArtifactMixin, ComponentBaseMixin):
             # recorded here, each artifact is also stamped with them, see PFundComponentDataMetadata
             "setup_sha256": self._setup_sha256,
             "source_sha256": self._source_sha256,
+            # the source artifact is stored as source.py, see PFundComponentDataHandler._blob_file_name()
+            "source_file_name": self._source_file_path.name,
             "data_start": self.context.data_start,
             "data_end": self.context.data_end,
             "run_mode": self.run_mode,
