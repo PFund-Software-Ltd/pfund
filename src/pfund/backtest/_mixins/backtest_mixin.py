@@ -1,7 +1,7 @@
 # ty: ignore[incompatible-property-override]
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, cast, override
+from typing import TYPE_CHECKING, Any, Literal, Self, cast, override
 
 if TYPE_CHECKING:
     from pfund_blocks.datas import BarData, BaseData
@@ -21,10 +21,30 @@ from pathlib import Path
 import polars as pl
 from pfund_kit.style import RichColor, TextStyle
 
+from pfund.backtest._mixins.portfolio_backtest_mixin import PortfolioBacktestMixin
+from pfund.backtest._mixins.product_backtest_mixin import ProductBacktestMixin
 from pfund.backtest.cv.indexing import SplittableData, take_rows
 from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.enums import BacktestMode
 from pfund.errors import StaleArtifactError
+
+
+class BacktestDataFrame(ProductBacktestMixin, PortfolioBacktestMixin, pl.DataFrame):
+    """Annotation-only type: at runtime the df is a plain native DataFrame
+    whose class has the backtest methods attached by _setup_backtest_df_for_vectorized_mode()."""
+
+    # Both mixins define backtest() with different signatures; at runtime only
+    # one is attached (by create_signal() or create_weight()). This merged stub
+    # accepts both call shapes: product mode takes no args, portfolio mode uses them.
+    def backtest(
+        self,
+        initial_capital: float = 1_000_000,
+        compound: bool = True,
+        check: bool = True,
+    ) -> Self:
+        raise NotImplementedError(
+            "BacktestDataFrame is an annotation-only type."
+        )
 
 
 class BacktestMixin(ComponentMixin):

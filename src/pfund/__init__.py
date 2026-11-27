@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     # from pfund_binance import Binance
     # from pfund_okx import OKX
     import pfund.hub as hub
+    from pfund.backtest._mixins.backtest_mixin import BacktestDataFrame
     from pfund.backtest.cv.cross_validation import WalkForward
     from pfund.components.features.feature_base import BaseFeature as Feature
     from pfund.components.features.feature_talib import (
@@ -35,7 +36,6 @@ if TYPE_CHECKING:
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.engines.trade_engine import TradeEngine
     from pfund.simulated.simulated_account import SimulatedAccount
-    from pfund.typing import BacktestDataFrame
 
 from pfund.config import configure, configure_logging, get_config
 
@@ -66,7 +66,7 @@ def __getattr__(name: str):
 
         return DataConfig
     elif name == "BacktestDataFrame":
-        from pfund.typing import BacktestDataFrame
+        from pfund.backtest._mixins.backtest_mixin import BacktestDataFrame
 
         return BacktestDataFrame
     elif name == "SimulatedAccount":
