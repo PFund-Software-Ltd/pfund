@@ -19,20 +19,23 @@ def _resolve_base_path(
     run: str,
     component_type: str,
     component_name: str | None,
+    data_sha256: str | None,
 ) -> Path:
     """A component's datalake dir of a run, see TradingStore.setup_lakehouse().
 
     dir_name (DuckLakeIO.DEFAULT_DIR_NAME) is ignored, pfund names the dir after what it holds.
     """
     from pfund._pfeed_source.base.data_model import PFundBaseDataModel
+    from pfund._pfeed_source.component.data_model import DataArtifact
     from pfund.config import get_config
-    from pfund.stores.trading_store import TradingStore
 
     if component_name is None:
         raise click.UsageError(
             "--component-name is required, unless --base-path is given"
         )
-    # the same dirs as PFundComponentDataModel.component_path, which needs a component instance
+    if data_sha256 is None:
+        raise click.UsageError("--data-sha256 is required, unless --base-path is given")
+    # the same dirs as DataArtifact.artifact_dir, which needs a component instance
     return (
         get_config().scoped(engine_name).data_path
         / PFundBaseDataModel.RUNS_DIR_NAME
@@ -41,7 +44,8 @@ def _resolve_base_path(
         / run.lower()
         / ComponentType(component_type.lower()).to_plural()
         / component_name
-        / TradingStore.TRADING_DF_DIR_NAME
+        / f"data={data_sha256}"
+        / DataArtifact.TRADING_DF_DIR_NAME
     )
 
 
@@ -87,6 +91,11 @@ ducklake = create_table_io_command(
             "--component-name",
             default=None,
             help="Component name, e.g. SMACross (the component's dir name)",
+        ),
+        click.option(
+            "--data-sha256",
+            default=None,
+            help="Data selection of the component: its data=<data_sha256> dir name, without 'data='",
         ),
     ),
 )

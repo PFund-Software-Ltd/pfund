@@ -142,38 +142,18 @@ class ArtifactMixin:
             )
         return inputs
 
-    @property
-    def _data_sha256(self) -> str:
-        """Hashes the declared data, engine range, resolved splits and current selection."""
-        from pfund.engines.contexts.backtest_engine_context import BacktestEngineContext
-
+    def _data_fields(self) -> dict[str, Any]:
+        """The declared data and engine range used to compute the data hash."""
         context = cast("ComponentMixin", self).context
-        fields: dict[str, Any] = {
+        return {
             "datas": self._data_inputs,
             "data_start": context.data_start,
             "data_end": context.data_end,
         }
-        if isinstance(context, BacktestEngineContext):
-            splits = context.dataset_splits
-            fields["dataset_splits"] = {
-                "resolution": repr(splits.split_resolution),
-                "is_holdout": splits.is_holdout,
-                "test": splits.intervals("test"),
-                "folds": [
-                    {
-                        "train": splits.intervals("train", fold),
-                        "val": splits.intervals("val", fold),
-                    }
-                    for fold in range(splits.num_folds)
-                ],
-            }
-            active_split = context._active_split
-            if active_split is not None:
-                part, fold = active_split
-                if splits.is_holdout and part in ("train", "val") and fold is None:
-                    active_split = (part, 0)
-            fields["active_split"] = active_split
-        return hashlib.sha256(stable_dumps(fields).encode()).hexdigest()
+
+    @property
+    def _data_sha256(self) -> str:
+        return hashlib.sha256(stable_dumps(self._data_fields()).encode()).hexdigest()
 
     def get_artifact_stamp(self) -> dict[str, str]:
         """Return the component, source and data hashes, also callable through ActorProxy."""

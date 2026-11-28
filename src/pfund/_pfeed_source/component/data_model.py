@@ -41,13 +41,6 @@ class PFundComponentDataModel(PFundBaseDataModel):
 
     @property
     def component_path(self) -> Path:
-        """The component's dir, relative to the lakehouse path, e.g. runs/BACKTEST/default_project/default_run/strategies/SMACross.
-
-        Named after the component, which is unique across the engine, so a run has one dir per component,
-        always holding its latest artifacts. Whether they still match the component is checked by their stamps,
-        see ArtifactMixin._component_sha256.
-        The same as the namespace + name of the component's DatasetKey, see PFundComponentDataHandler._create_dataset_key().
-        """
         return (
             self.run_path
             / self.component.component_type.to_plural()
@@ -115,14 +108,36 @@ class SourceArtifact(PFundComponentDataModel):
 _EXTENSION_PATTERN = r"^\.[A-Za-z0-9]+$"
 
 
-class ModelArtifact(PFundComponentDataModel):
+class DatasetArtifact(PFundComponentDataModel):
+    """An artifact produced from the component's data selection: its trading df, model and checkpoints."""
+
+    @property
+    def data_sha256_path(self) -> Path:
+        """The dir of the component's current data selection, e.g. .../strategies/SMACross/data=<data_sha256>.
+
+        One dir per data selection (data, data range, dataset splits, split in use, see ArtifactMixin._data_fields()),
+        so e.g. each cross-validation fold keeps its own trading df, model and checkpoints.
+        """
+        return self.component_path / f"data={self.component._data_sha256}"
+
+
+class ModelArtifact(DatasetArtifact):
     extension: str = Field(pattern=_EXTENSION_PATTERN)
 
 
-class CheckpointArtifact(PFundComponentDataModel):
+class CheckpointArtifact(DatasetArtifact):
+    # the dir of the checkpoints in the data selection's dir, see PFundComponentDataHandler._create_dataset_key()
+    CHECKPOINTS_DIR_NAME: ClassVar[str] = "checkpoints"
+
     extension: str = Field(pattern=_EXTENSION_PATTERN)
     step: int = Field(ge=0)
 
 
-class DataArtifact(PFundComponentDataModel):
+class DataArtifact(DatasetArtifact):
     """The output frame of a component (strategy / model / feature)."""
+
+    TRADING_DF_DIR_NAME: ClassVar[str] = "trading_df"
+
+    @property
+    def artifact_dir(self) -> Path:
+        return self.data_sha256_path / self.TRADING_DF_DIR_NAME

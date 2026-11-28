@@ -242,11 +242,26 @@ class BacktestMixin(ComponentMixin):
             raise ValueError(f"cannot locate source file for {source_class.__name__}")
         return Path(source_file)
 
+    @override
+    def _data_fields(self) -> dict[str, Any]:
+        splits = self.dataset_splits
+        active_split = self.context._active_split
+        if active_split is not None:
+            part, fold = active_split
+            if splits.is_holdout and part in ("train", "val") and fold is None:
+                active_split = (part, 0)
+        return {
+            **super()._data_fields(),
+            "dataset_splits": splits.to_dict(),
+            "active_split": active_split,
+        }
+
     def to_dict(self) -> dict[str, Any]:
         """Adds how the component was backtested, e.g. so a vectorized df can't seed live trading."""
         return {
             **super().to_dict(),
             "backtest_mode": self.backtest_mode,
+            "dataset_splits": self.dataset_splits.to_dict(),
         }
 
     @override

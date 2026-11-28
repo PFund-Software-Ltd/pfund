@@ -1,15 +1,21 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any, Literal, cast
+
 from collections.abc import Callable
-from functools import partial
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from pfeed.io.blob_io import BlobIO
     from pfeed.io.table_io import TableIO, VacuumResult
     from pfund_blocks.datas import BarData
 
+    from pfund._pfeed_source.component.data_model import DataArtifact
     from pfund.typing import ColumnName, Component
+
+    # a component's ArtifactMixin._data_sha256, i.e. its data selection
+    type DataSHA256 = str
 
 import datetime
 
@@ -21,9 +27,6 @@ from pfund.signals import Signals
 
 
 class TradingStore:
-    # the dir of the component's datalake in its component dir, named after what it holds, not the IO type
-    TRADING_DF_DIR_NAME: ClassVar[str] = "trading_df"
-
     def __init__(self, component: Component):
         self._component: Component = component
         # trading_df = [features_df] + [signals_df], in the component's df_form:
@@ -33,8 +36,10 @@ class TradingStore:
         self._df: pl.DataFrame | None = None
         # child components signals = component's feature columns
         self._features: dict[ColumnName, Any] = {}
-        self._datalake: TableIO | None = None
-        self._datalake_factory: Callable[[], TableIO] | None = None
+        # one datalake per data selection, keyed by its data_sha256, see datalake
+        self._datalakes: dict[DataSHA256, TableIO] = {}
+        # builds the datalake of a data selection from its DataArtifact.artifact_dir, set by setup_lakehouse()
+        self._datalake_factory: Callable[[Path], TableIO] | None = None
         self._blob_io: BlobIO | None = None
 
     @property
@@ -43,10 +48,19 @@ class TradingStore:
 
     @property
     def datalake(self) -> TableIO:
-        if self._datalake is None:
-            assert self._datalake_factory is not None, "lakehouse has not been set up"
-            self._datalake = self._datalake_factory()
-        return self._datalake
+        """The datalake of the component's current data selection, i.e. its data=<data_sha256>/trading_df dir.
+
+        The data selection changes with the split in use (engine.use_split()), so the datalake isn't fixed:
+        it's resolved on each access, and built once per data selection.
+        """
+        assert self._datalake_factory is not None, "lakehouse has not been set up"
+        component = self._component
+        data_sha256 = component._data_sha256
+        if data_sha256 not in self._datalakes:
+            data_model = component._feed.create_data_model(component, ArtifactType.data)
+            artifact_dir = cast("DataArtifact", data_model).artifact_dir
+            self._datalakes[data_sha256] = self._datalake_factory(artifact_dir)
+        return self._datalakes[data_sha256]
 
     @property
     def blob_io(self) -> BlobIO:
@@ -54,11 +68,12 @@ class TradingStore:
         return self._blob_io
 
     def setup_lakehouse(self) -> None:
-        """Creates the blob IO and configures the table IO for initialization on first access.
+        """Creates the blob IO and configures the table IO, built per data selection on first access, see datalake.
 
         Called after the component's name is final, it is in the datalake's path:
         - <lakehouse_path>/<PFundBaseDataModel.RUNS_DIR_NAME>: the blob IO, with plain dataset dirs, i.e. runs/BACKTEST/...
-        - <lakehouse_path>/<component_path>/<TRADING_DF_DIR_NAME>: the component's datalake, inside its component dir
+        - <lakehouse_path>/<DataArtifact.artifact_dir>: the component's datalake of a data selection,
+          i.e. <component_path>/data=<data_sha256>/trading_df
         lakehouse_path is pfund's engine-scoped data_path by default,
         or <datalake template's base_path>/<engine name> when the user passes a datalake.
         """
@@ -90,17 +105,15 @@ class TradingStore:
             }
             # NOTE: posixpath, not Path, which collapses the "//" of a URI (e.g. s3://)
             lakehouse_path = posixpath.join(datalake._base_path, context.name)
-        component_path = self._component._feed.create_data_model(
-            self._component, ArtifactType.data
-        ).component_path
-        # DuckLakeIO creates its catalog (pfeed.db) on construction. Defer it
-        self._datalake_factory = partial(
-            DataLakeIO,
-            base_path=posixpath.join(
-                lakehouse_path, component_path.as_posix(), self.TRADING_DF_DIR_NAME
-            ),
-            **options,
-        )
+
+        # DuckLakeIO creates its catalog (pfeed.db) on construction, so it's deferred to the first access of a data selection
+        def datalake_factory(artifact_dir: Path) -> TableIO:
+            return DataLakeIO(
+                base_path=posixpath.join(lakehouse_path, artifact_dir.as_posix()),
+                **options,
+            )
+
+        self._datalake_factory = datalake_factory
         self._blob_io = BlobIO(
             base_path=posixpath.join(lakehouse_path, PFundBaseDataModel.RUNS_DIR_NAME),
             hive_dataset_dirs=False,
@@ -328,13 +341,13 @@ class TradingStore:
         self._component.save_df()
 
     def optimize_datalake(self) -> None:
-        """Compacts the datalake's tables, see ``TableIO.optimize()``."""
+        """Compacts the current data selection's datalake tables, see ``TableIO.optimize()``."""
         self.datalake.optimize()
 
     def vacuum_datalake(
         self, retention_hours: int | None = None, dry_run: bool = True
     ) -> VacuumResult:
-        """Deletes the datalake's history older than ``retention_hours``, see ``TableIO.vacuum()``.
+        """Deletes the current data selection's datalake history older than ``retention_hours``, see ``TableIO.vacuum()``.
 
         Pfeed's safe defaults apply: ``dry_run=True`` and ``TableIO.DEFAULT_VACUUM_RETENTION``.
         """

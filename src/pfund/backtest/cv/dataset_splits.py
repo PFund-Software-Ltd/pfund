@@ -134,6 +134,18 @@ class DatasetSplits:
             )
         return getattr(self.folds[fold], part)
 
+    def to_dict(self) -> dict[str, Any]:
+        """Describe the resolved split grid and intervals for every fold."""
+        return {
+            "resolution": repr(self.split_resolution),
+            "is_holdout": self.is_holdout,
+            "test": self.intervals("test"),
+            "folds": [
+                {"train": self.intervals("train", fold), "val": self.intervals("val", fold)}
+                for fold in range(self.num_folds)
+            ],
+        }
+
     def intervals(
         self, part: SplitPart, fold: FoldNum | None = None
     ) -> list[tuple[datetime.datetime, datetime.datetime]]:

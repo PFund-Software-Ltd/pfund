@@ -7,6 +7,7 @@ if TYPE_CHECKING:
 
     from pfund._pfeed_source.component.data_model import (
         CheckpointArtifact,
+        DatasetArtifact,
         ModelArtifact,
         PFundComponentDataModel,
         SourceArtifact,
@@ -88,14 +89,16 @@ class PFundComponentDataHandler(
                             {component_name}/  (see PFundComponentDataModel.component_path)
                                 _pfeed_metadata.json  (BlobIO's manifest of the files below)
                                 metadata.json  (pfund's own metadata of the run)
-                                {component}.py  (component source code)
-                                model.safetensors or model.joblib  (trained model)
-                                trading_df/  (the component's own DuckLakeIO, catalog pfeed.db + data/ inside,
-                                              see TradingStore.setup_lakehouse())
-                                checkpoints/
-                                    step=0/
-                                        _pfeed_metadata.json
-                                        checkpoint.pth
+                                source.py  (component source code)
+                                data={data_sha256}/  (one per data selection, see DatasetArtifact.data_sha256_path)
+                                    _pfeed_metadata.json
+                                    model.safetensors or model.joblib  (trained model)
+                                    trading_df/  (the component's own DuckLakeIO of this data selection,
+                                                  catalog pfeed.db + data/ inside, see TradingStore.datalake)
+                                    checkpoints/
+                                        step=0/
+                                            _pfeed_metadata.json
+                                            checkpoint.pth
     """
 
     Metadata = PFundComponentDataMetadata
@@ -103,7 +106,6 @@ class PFundComponentDataHandler(
     # the ones below are for pfund's metadata.json of the component, written once per run per component
     METADATA_FILE_NAME: ClassVar[str] = "metadata.json"
     METADATA_SCHEMA_VERSION: ClassVar[int] = 1
-    CHECKPOINTS_DIR_NAME: ClassVar[str] = "checkpoints"
 
     def __init__(
         self,
@@ -196,11 +198,24 @@ class PFundComponentDataHandler(
             "component_type": component.component_type.to_plural(),
             "component_name": component.name,
         }
-        # the other bytes artifacts are files of the component's dir (the same dataset, see _blob_file_name()),
-        # checkpoints are their own dataset in the component's checkpoints/ dir, partitioned by step
+        # a model and its checkpoints are stored per data selection (data, data range, splits, split in use),
+        # in the component's data={data_sha256} dir, see DatasetArtifact.data_sha256_path,
+        # so e.g. each cross-validation fold keeps its own model and checkpoints.
+        # NOTE: the blob IO has plain dataset dirs, so the value is the dir name itself, i.e. "data={data_sha256}".
+        # the data artifact (trading_df) is already in that dir: its IO is the data selection's datalake, see TradingStore.datalake
+        is_data_scoped = data_model.artifact_type in (
+            ArtifactType.model,
+            ArtifactType.checkpoint,
+        )
+        if is_data_scoped:
+            name["data"] = cast("DatasetArtifact", data_model).data_sha256_path.name
+        # source is a file of the component's dir, the model a file of its data dir (see _blob_file_name()),
+        # checkpoints are their own dataset in the data dir's checkpoints/ dir, partitioned by step
         partition_by: tuple[str, ...] = ()
         if data_model.artifact_type == ArtifactType.checkpoint:
-            name["artifact"] = self.CHECKPOINTS_DIR_NAME
+            name["artifact"] = cast(
+                "CheckpointArtifact", data_model
+            ).CHECKPOINTS_DIR_NAME
             partition_by = ("step",)
         return DatasetKey(
             namespace={
@@ -213,9 +228,9 @@ class PFundComponentDataHandler(
         )
 
     def _create_component_dataset_key(self) -> DatasetKey:
-        """The key of pfund's metadata.json: the component's dir, where the source and model files are too."""
+        """The key of pfund's metadata.json: the component's dir, where the source file is too."""
         key = self._dataset_key
-        name = {k: v for k, v in key.name.items() if k != "artifact"}
+        name = {k: v for k, v in key.name.items() if k not in ("data", "artifact")}
         return DatasetKey(namespace=key.namespace, name=name, partition_by=())
 
     def _validate_schema(self, df: pl.DataFrame) -> pl.DataFrame:
