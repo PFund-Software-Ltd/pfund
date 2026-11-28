@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 if TYPE_CHECKING:
+    import polars as pl
     from mtflow.tracking.run import MTFlowRun
     from pfund_blocks.resolution import Resolution
 
@@ -364,7 +365,8 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         self,
         *,
         run: MTFlowRun | None = None,
-    ) -> None:
+    ) -> pl.DataFrame | None:
+        is_event_driven = self.backtest_mode == BacktestMode.EVENT_DRIVEN
         try:
             # NOTE: inside the try, so the engine still ends if the component setup fails
             super().run(run=run)
@@ -377,7 +379,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             from pfund_kit.style import RichColor
             from pfund_kit.utils.progress_bar import track
 
-            if self.backtest_mode == BacktestMode.EVENT_DRIVEN:
+            if is_event_driven:
                 backtestee = self._backtestee
                 market_data_df = backtestee.get_df(kind="data", data_category=DataCategory.MARKET_DATA)
 
@@ -408,3 +410,4 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             raise
         finally:
             self.end()
+        return self._backtestee.df if is_event_driven else None

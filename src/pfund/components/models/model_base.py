@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from torch import Tensor
 
     from pfund.backtest._mixins.model_mixin import TrainedOn
-    from pfund.typing import Signals
 
     type UnderlyingModel = nn.Module | BaseEstimator | linen.Module | eqx.Module
 
@@ -25,6 +24,7 @@ import numpy as np
 from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.components.models.model_meta import MetaModel
 from pfund.enums import ArtifactType, ComponentType
+from pfund.signals import Signals
 
 
 def _get_caller_source_file_path() -> str | None:
@@ -144,7 +144,7 @@ class BaseModel[UnderlyingModelT: UnderlyingModel = Any](
             pred: the prediction returned by predict()
 
         Returns:
-            dict[ColumnName, Any]: The predicted signals.
+            Signals: The predicted signals.
         """
         torch = sys.modules.get("torch")
         is_tensor = torch is not None and isinstance(pred, torch.Tensor)
@@ -167,14 +167,14 @@ class BaseModel[UnderlyingModelT: UnderlyingModel = Any](
                 raise ValueError(
                     f"prediction is 1D but {self.name} has {num_signal_cols} signal columns: {signal_cols}"
                 )
-            signals = {signal_cols[0]: pred}
+            signals = Signals({signal_cols[0]: pred})
         else:
             # last dimension = signal columns, everything in between is packed into cells
             if num_signal_cols != pred.shape[-1]:
                 raise ValueError(
                     f"Expected {num_signal_cols} signal columns for {self.name}, but prediction has shape {pred.shape}"
                 )
-            signals = {}
+            signals = Signals()
             for i, col in enumerate(signal_cols):
                 values = pred[..., i]
                 # NOTE: list() converts 2D+ array into per-row sub-arrays, needed because pandas rejects >1D per-column arrays

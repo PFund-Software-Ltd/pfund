@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from pfund.engines.settings.trade_engine_settings import TradeEngineSettings
     from pfund.stores.base_data_store import BaseDataStore
     from pfund.stores.market_data_store import MarketDataStore
-    from pfund.typing import Component, ComponentName, ComponentProxy, Signals
+    from pfund.typing import Component, ComponentName, ComponentProxy
 
 import copy
 import datetime
@@ -32,6 +32,7 @@ from pfund_kit.style import RichColor, TextStyle
 from pfund.components.actor_proxy import ActorProxy
 from pfund.databoy import DataBoy
 from pfund.enums import ComponentType, RunMode
+from pfund.signals import Signals
 from pfund.stores.trading_store import TradingStore
 from pfund.utils.decorators import ray_method
 
@@ -77,7 +78,7 @@ class ComponentBaseMixin:
 
         self._signal_cols: list[str] = []
         # Last successfully computed signals; may not belong to the current bar.
-        self._latest_signals: Signals = {}
+        self._latest_signals: Signals = Signals()
 
         self.models: dict[str, BaseModel | ActorProxy[BaseModel]] = {}
         self.features: dict[str, BaseFeature | ActorProxy[BaseFeature]] = {}

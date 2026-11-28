@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from pfeed.io.table_io import TableIO, VacuumResult
     from pfund_blocks.datas import BarData
 
-    from pfund.typing import ColumnName, Component, Signals
+    from pfund.typing import ColumnName, Component
 
 import datetime
 
@@ -17,6 +17,7 @@ import polars as pl
 
 from pfund.components.bar_dataframe import KEY_COLS
 from pfund.enums import ArtifactType
+from pfund.signals import Signals
 
 
 class TradingStore:
@@ -195,7 +196,7 @@ class TradingStore:
         if not signal_cols:
             return None
 
-        return {col: row.item(0, col) for col in signal_cols}
+        return Signals({col: row.item(0, col) for col in signal_cols})
 
     # TODO: need to handle if data_as_features is True, i.e. if data is also a feature
     # TODO: check if the data.is_closed() is False (incomplete bar)

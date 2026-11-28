@@ -21,7 +21,6 @@ if TYPE_CHECKING:
         Component,
         ComponentName,
         ComponentProxy,
-        Signals,
     )
 
 from abc import ABC, abstractmethod
@@ -32,6 +31,7 @@ from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.components.strategies.strategy_meta import MetaStrategy
 from pfund.enums import ComponentType
 from pfund.managers import OrderManager, PortfolioManager, RiskManager
+from pfund.signals import Signals
 
 
 class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
@@ -235,7 +235,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
             orders: the orders returned by trade()
 
         Returns:
-            dict[ColumnName, Any]: The signals.
+            Signals: The signals.
         """
         if orders is None:
             orders = []
@@ -256,7 +256,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
             signal = sides.pop()
         signal_col = self._signal_cols[0]
         # TODO: add 'order_type', 'order_price', 'order_quantity' to signals
-        return {signal_col: signal}
+        return Signals({signal_col: signal})
 
     # TODO:
     def _on_update(self, update: Any):

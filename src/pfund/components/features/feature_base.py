@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
     from torch import Tensor
 
-    from pfund.typing import ColumnName, Signals
+    from pfund.typing import ColumnName
 
     type FeatureValue = "NDArray[Any] | Tensor | Sequence[Any] | pl.Series"
 
@@ -20,6 +20,7 @@ import numpy as np
 from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.components.features.feature_meta import MetaFeature
 from pfund.enums import ComponentType
+from pfund.signals import Signals
 
 
 class BaseFeature(ComponentMixin, ABC, metaclass=MetaFeature):
@@ -45,7 +46,7 @@ class BaseFeature(ComponentMixin, ABC, metaclass=MetaFeature):
             features: the features returned by transform()
 
         Returns:
-            dict[ColumnName, Any]: The signals.
+            Signals: The signals.
         """
         if features is None:
             raise ValueError(
@@ -73,7 +74,7 @@ class BaseFeature(ComponentMixin, ABC, metaclass=MetaFeature):
                 + f"expected {self._signal_cols}, got {list(features)}"
             )
 
-        signals: Signals = {}
+        signals = Signals()
         for col, value in features.items():
             is_from_pytorch = type(value).__module__.startswith("torch")
             if is_from_pytorch:

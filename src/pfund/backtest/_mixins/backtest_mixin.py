@@ -10,11 +10,14 @@ if TYPE_CHECKING:
 
     from pfund.backtest.cv.dataset_splits import DatasetSplits, FoldNum, SplitPart
     from pfund.components.actor_proxy import ActorProxy
-    from pfund.components.features.feature_base import BaseFeature
-    from pfund.components.models.model_base import BaseModel
     from pfund.engines.contexts.backtest_engine_context import BacktestEngineContext
     from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
-    from pfund.typing import Component, ComponentName, Signals
+    from pfund.typing import (
+        BaseFeature,
+        BaseModel,
+        Component,
+        ComponentName,
+    )
 
 from pathlib import Path
 
@@ -28,6 +31,7 @@ from pfund.backtest.cv.indexing import SplittableData, take_rows
 from pfund.components._mixins.component_mixin import ComponentMixin
 from pfund.enums import BacktestMode
 from pfund.errors import StaleArtifactError
+from pfund.signals import Signals
 
 
 class BacktestDataFrame(ProductBacktestMixin, PortfolioBacktestMixin, pl.DataFrame):
@@ -329,6 +333,19 @@ class BacktestMixin(ComponentMixin):
     def _publish_signals(self, signals: Signals, data: BarData):
         pass
 
+    def update_df(self, data: Any) -> None:
+        """Store a trading DataFrame, collect a LazyFrame, or build from X and signals."""
+        if isinstance(data, pl.LazyFrame):
+            data = data.collect()
+        if isinstance(data, pl.DataFrame):
+            self.store.set_df(data)
+            return
+        if not isinstance(data, Signals):
+            data = cast("Component", self).to_signals(data)
+        signals_df = pl.DataFrame(data)
+        trading_df = pl.concat([self.X, signals_df], how="horizontal")
+        self.store.set_df(trading_df)
+
     def _compute_signals_on_the_fly(self, reason: str):
         """Computes the trading df of a child whose persisted one can't be reused, and persists it.
 
@@ -339,11 +356,8 @@ class BacktestMixin(ComponentMixin):
             f"{reason}. Running its vectorized backtest on the fly...",
             style=TextStyle.BOLD + RichColor.YELLOW,
         )
-        X = self.X
-        signals = cast("Component", self)._signalize(X)
-        signals_df = pl.DataFrame(signals)
-        trading_df = pl.concat([X, signals_df], how="horizontal")
-        self.store.set_df(trading_df)
+        signals = self._signalize(self.X)
+        self.update_df(signals)
         self.save_df()
 
     @override

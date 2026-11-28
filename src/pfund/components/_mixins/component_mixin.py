@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from pfund.typing import (
         Component,
         ComponentName,
-        Signals,
     )
 
 from pathlib import Path
@@ -28,6 +27,7 @@ from pfund.components._mixins.dataframe_mixin import DataFrameMixin
 from pfund.components.actor_proxy import ActorProxy
 from pfund.data_config import DataConfig
 from pfund.enums import ArtifactType, ComponentType, RunMode
+from pfund.signals import Signals
 from pfund.utils.decorators import ray_method
 
 
@@ -58,7 +58,6 @@ class ComponentMixin(DataFrameMixin, ArtifactMixin, ComponentBaseMixin):
                 return
             if not self.is_ready(data=data):
                 return
-            signals: Signals = {}
             signals_per_component = self._get_components_signals(data)
             for component_signals in signals_per_component.values():
                 self.store.update_df(component_signals, data=data)
@@ -80,7 +79,7 @@ class ComponentMixin(DataFrameMixin, ArtifactMixin, ComponentBaseMixin):
             X: features df
 
         Returns:
-            dict[ColumnName, Any]: The signals.
+            Signals: The signals.
         """
         if self.is_strategy():
             strategy = cast("BaseStrategy", self)

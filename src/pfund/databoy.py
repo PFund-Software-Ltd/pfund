@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from pfund.typing import (
         Component,
         ComponentName,
-        Signals,
     )
 
     type ComponentID = int
@@ -26,6 +25,7 @@ from pfund_blocks.enums import DataCategory
 from pfund_blocks.enums.channel import PrivateChannel
 
 from pfund.enums import PFundChannel
+from pfund.signals import Signals
 
 
 class DataBoy:
@@ -392,9 +392,9 @@ class DataBoy:
                     + f"likely exceeds the {data.resolution} data resolution"
                 )
                 continue
-            signals: Signals = payload["signals"]
+            signals = payload["signals"]
             if signals:  # empty = child still warming up, nothing to apply
-                child_signals[component_name] = signals
+                child_signals[component_name] = Signals(signals)
             pending.discard(component_name)
         return child_signals
 

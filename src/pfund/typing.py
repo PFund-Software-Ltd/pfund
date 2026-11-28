@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
 from pfund.components.actor_proxy import ActorProxy
 from pfund.components.features.feature_base import BaseFeature
 from pfund.components.models.model_base import BaseModel
 from pfund.components.strategies.strategy_base import BaseStrategy
+from pfund.signals import Signals as Signals
 
 type Component = BaseStrategy | BaseModel | BaseFeature
 type ComponentProxy = (
@@ -14,7 +15,6 @@ type ComponentProxy = (
 type EngineName = str
 type ComponentName = str
 type ColumnName = str
-type Signals = dict[ColumnName, Any]
 
 
 type EngineNameWithProxy = EngineName

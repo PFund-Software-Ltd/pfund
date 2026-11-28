@@ -129,7 +129,6 @@ class ArtifactMixin:
             raise TypeError(f"{self} setup: {err}") from err
         return hashlib.sha256(payload.encode()).hexdigest()
 
-    @ray_method
     def get_artifact_stamp(self) -> dict[str, str]:
         """The setup and source hashes, as a method so it also works through ActorProxy (Ray only forwards methods).
 
