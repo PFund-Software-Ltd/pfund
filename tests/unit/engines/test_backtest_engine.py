@@ -1249,7 +1249,7 @@ class TestTrainedOnProperty:
         )
 
         metadata = PFundComponentDataMetadata(
-            setup_sha256=split_model._setup_sha256,
+            component_sha256=split_model._component_sha256,
             source_sha256=split_model._source_sha256,
             trained_on=_trained_on((JAN[0], JAN[7])),
         )

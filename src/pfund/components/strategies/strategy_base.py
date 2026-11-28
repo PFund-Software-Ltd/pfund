@@ -124,7 +124,7 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
 
     @override
     def to_dict(self) -> dict[str, Any]:
-        """Adds strategy-only fields, kept out of _setup_fields() so they don't change _setup_sha256."""
+        """Adds strategy-only fields, kept out of _component_fields() so they don't change _component_sha256."""
         return {
             **super().to_dict(),
             "is_substrategy": self.is_substrategy(),
@@ -135,10 +135,10 @@ class BaseStrategy(ComponentMixin, ABC, metaclass=MetaStrategy):
             "venues": sorted(self._venues),
         }
 
-    def _setup_fields(self) -> dict[str, Any]:
+    def _component_fields(self) -> dict[str, Any]:
         return {
-            **super()._setup_fields(),
-            # child stamps, not names, see ComponentMixin._setup_fields()
+            **super()._component_fields(),
+            # child stamps, not names, see ComponentMixin._component_fields()
             "strategies": {
                 name: strategy.get_artifact_stamp()
                 for name, strategy in sorted(self.strategies.items())

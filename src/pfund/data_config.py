@@ -11,7 +11,7 @@ import functools
 from pfeed.io.base_io import BaseIO
 from pfund_blocks.datas.bar_data import BarData, parse_shift
 from pfund_blocks.resolution import Resolution
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 # fraction of a bar's duration to wait past its close (bar.end_ts) for delayed
 # updates before flushing the bar; used when stale_bar_timeout has no entry for a resolution.
@@ -117,6 +117,14 @@ class DataConfig(BaseModel):
             If a resolution has no entry, see get_stale_bar_timeout().
         """,
     )
+
+    @field_serializer("io", when_used="json")
+    def _serialize_io(self, io: BaseIO) -> dict[str, str]:
+        io_type = type(io)
+        return {
+            "type": f"{io_type.__module__}.{io_type.__qualname__}",
+            "base_path": io.base_path,
+        }
 
     @field_validator("data_source", mode="before")
     @classmethod

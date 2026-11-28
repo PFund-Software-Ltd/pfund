@@ -99,14 +99,9 @@ class ComponentMixin(DataFrameMixin, ArtifactMixin, ComponentBaseMixin):
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            # the fields _setup_sha256 hashes, recomputed here, so a value mutated since the build
-            # (e.g. the datas, see _build()) is recorded as it is now
-            **self._setup_fields(),
+            **self.get_artifact_stamp(),
+            **self._component_fields(),
             "engine_name": self.context.name,
-            # recorded here, each artifact is also stamped with them, see PFundComponentDataMetadata
-            "setup_sha256": self._setup_sha256,
-            "source_sha256": self._source_sha256,
-            # the source artifact is stored as source.py, see PFundComponentDataHandler._blob_file_name()
             "source_file_name": self._source_file_path.name,
             "data_start": self.context.data_start,
             "data_end": self.context.data_end,
@@ -114,8 +109,8 @@ class ComponentMixin(DataFrameMixin, ArtifactMixin, ComponentBaseMixin):
             "settings": self.settings.model_dump(),
         }
 
-    def _setup_fields(self) -> dict[str, Any]:
-        """What the component is declared as, hashed by _setup_sha256.
+    def _component_fields(self) -> dict[str, Any]:
+        """Declare how the component is used, hashed by _component_sha256.
 
         Only what is declared on the component itself: anything on self.context (e.g. the data range,
         the engine name) belongs to the run, which the run path already separates.
@@ -129,9 +124,9 @@ class ComponentMixin(DataFrameMixin, ArtifactMixin, ComponentBaseMixin):
             "signature": (self.__pfund_args__, self.__pfund_kwargs__),
             "config": self.config,
             "params": self.params,
+            "datas": self._data_inputs,
             # the names the user declared via set_signal_cols(), [] when left to the default
             "signal_cols": list(self._signal_cols),
-            "datas": [data.to_dict() for data in self.get_datas()],
             # child stamps, not names: a change in a child (e.g. params loaded from a TOML file, or its code)
             # must make the parent's artifacts stale too, otherwise a non-top component reuses its
             # persisted df computed from the old child, see BacktestMixin._materialize()
@@ -610,11 +605,9 @@ class ComponentMixin(DataFrameMixin, ArtifactMixin, ComponentBaseMixin):
             for component in self.components:
                 component._build()
 
-            # 2. Freeze the setup before materializing: during materialization, pfeed normalizes
-            # data.config.storage_config.data_domain from "" to "MARKET_DATA", which changes the `datas`
-            # in the setup. Hashed after it, the stamp written and the stamp checked could differ,
-            # and every rerun would find its artifacts stale.
-            _ = self._setup_sha256
+            # 2. Capture the component definition and declared inputs before materialization.
+            _ = self._component_sha256
+            _ = self._data_inputs
 
             # 3. Materialize this component from its built dependencies.
             self.store.setup_lakehouse()

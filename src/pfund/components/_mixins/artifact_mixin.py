@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from pfund._pfeed_source.component.data_handler import PFundComponentDataMetadata
@@ -11,8 +11,6 @@ from functools import cached_property
 from pathlib import Path
 
 from pfund_kit.utils.json import stable_dumps
-
-from pfund.utils.decorators import ray_method
 
 
 def _normalize_source(source: str) -> str:
@@ -61,12 +59,12 @@ class ArtifactMixin:
         """
         return list(type(self).__mro__)
 
-    # Frozen at first use like _setup_sha256, every artifact of the run is stamped with the same hash
+    # Frozen at first use like _component_sha256, every artifact of the run is stamped with the same hash
     @cached_property
     def _source_sha256(self) -> str:
         """Hashes the source of every user-written class in _get_source_classes().
 
-        Each artifact is stamped with it when written, and compared on load, see _setup_sha256.
+        Each artifact is stamped with it when written, and compared on load, see _component_sha256.
         Only the classes' source, not their whole files: editing a script that defines a component
         (e.g. uncommenting a line that runs it) must not mark the component's artifacts as stale.
         Comments, formatting and docstrings inside a class don't count either, see _normalize_source().
@@ -105,39 +103,84 @@ class ArtifactMixin:
             digest.update(source.encode())
         return digest.hexdigest()
 
-    # Frozen at first use, so the component keeps one setup hash for its lifetime: runtime work
+    # Frozen at first use, so the component keeps one component hash for its lifetime: runtime work
     # can mutate objects in the setup (e.g. a PyTorch LazyLinear materializing on its first
     # forward pass), and rehashing it would stamp the component's artifacts with different hashes.
-    # NOTE: _build() freezes it before _materialize(), which mutates the datas, see ComponentMixin._build()
     @cached_property
-    def _setup_sha256(self) -> str:
-        """Hashes the component's setup, see _setup_fields().
+    def _component_sha256(self) -> str:
+        """Hashes the component's setup, see _component_fields().
 
         The artifacts are found by the component's name (its dir, unique across the engine, see
         PFundComponentDataModel.component_path), then validated by stamps written on each of them:
-        - `_setup_sha256` answers "were these produced by this component as it is set up now?",
-          i.e. the same params, config, data and children.
+        - `_component_sha256` answers "were these produced by this component as it is set up now?",
+          i.e. the same params, config and children.
         - `_source_sha256` answers "were these produced by the code that's running now?"
         - the data range answers "were these produced on the data this run uses?", trading df only.
         See _get_stale_reason().
         """
         try:
-            payload = stable_dumps(cast("ComponentMixin", self)._setup_fields())
+            payload = stable_dumps(cast("ComponentMixin", self)._component_fields())
         except TypeError as err:
             # stable_dumps() only allows encodings that are the same in every run,
             # otherwise the same setup would get a new hash each run and its artifacts would always be stale
             raise TypeError(f"{self} setup: {err}") from err
         return hashlib.sha256(payload.encode()).hexdigest()
 
-    def get_artifact_stamp(self) -> dict[str, str]:
-        """The setup and source hashes, as a method so it also works through ActorProxy (Ray only forwards methods).
+    @cached_property
+    def _data_inputs(self) -> list[dict[str, Any]]:
+        """The declared data and resolved configs, captured with the setup before materialization."""
+        component = cast("ComponentMixin", self)
+        inputs = []
+        for data, config in component.get_data_configs().items():
+            data_store = component.get_data_store(data.category)
+            inputs.append(
+                {
+                    **data.to_dict(),
+                    "as_features": data_store.data_as_features,
+                    "config": config.model_dump(mode="json"),
+                }
+            )
+        return inputs
 
-        A parent's setup holds its children's stamps, so a change in a child (its params or its code)
-        makes the parent's artifacts stale too.
-        """
+    @property
+    def _data_sha256(self) -> str:
+        """Hashes the declared data, engine range, resolved splits and current selection."""
+        from pfund.engines.contexts.backtest_engine_context import BacktestEngineContext
+
+        context = cast("ComponentMixin", self).context
+        fields: dict[str, Any] = {
+            "datas": self._data_inputs,
+            "data_start": context.data_start,
+            "data_end": context.data_end,
+        }
+        if isinstance(context, BacktestEngineContext):
+            splits = context.dataset_splits
+            fields["dataset_splits"] = {
+                "resolution": repr(splits.split_resolution),
+                "is_holdout": splits.is_holdout,
+                "test": splits.intervals("test"),
+                "folds": [
+                    {
+                        "train": splits.intervals("train", fold),
+                        "val": splits.intervals("val", fold),
+                    }
+                    for fold in range(splits.num_folds)
+                ],
+            }
+            active_split = context._active_split
+            if active_split is not None:
+                part, fold = active_split
+                if splits.is_holdout and part in ("train", "val") and fold is None:
+                    active_split = (part, 0)
+            fields["active_split"] = active_split
+        return hashlib.sha256(stable_dumps(fields).encode()).hexdigest()
+
+    def get_artifact_stamp(self) -> dict[str, str]:
+        """Return the component, source and data hashes, also callable through ActorProxy."""
         return {
-            "setup_sha256": self._setup_sha256,
+            "component_sha256": self._component_sha256,
             "source_sha256": self._source_sha256,
+            "data_sha256": self._data_sha256,
         }
 
     def _get_stale_reason(
@@ -155,8 +198,8 @@ class ArtifactMixin:
         """
         if metadata is None:
             return "it has no stamp"
-        if metadata.setup_sha256 != self._setup_sha256:
-            return "its setup (params, config, data or child components) has changed"
+        if metadata.component_sha256 != self._component_sha256:
+            return "its setup (params, config or child components) has changed"
         if metadata.source_sha256 != self._source_sha256:
             return "its code has changed"
         context = cast("ComponentMixin", self).context

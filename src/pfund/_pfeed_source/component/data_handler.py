@@ -23,7 +23,7 @@ from pfeed.enums import DataLayer
 from pfeed.io.base_io import BaseIO, DatasetKey
 from pfeed.io.blob_io import BlobIO
 from pfund_kit.utils.temporal import get_utc_now
-from pydantic import Field
+from pydantic import AliasChoices, Field
 
 from pfund._pfeed_source.base.data_handler import PFundBaseDataHandler
 from pfund._pfeed_source.data_category import PFundDataCategory
@@ -42,9 +42,11 @@ class PFundComponentDataMetadata(BaseDataMetadata):
     # metadata.json is rewritten every run, the artifact only when it is rewritten, so a match means it came from this code.
     # None for an artifact written before it was stamped, i.e. unknown code
     source_sha256: str | None = None
-    # hash of the component's setup that wrote the artifact (component._setup_sha256), stamped for the same reason:
+    # hash of the component's setup that wrote the artifact (component._component_sha256), stamped for the same reason:
     # the component's dir is reused across reruns, so an artifact written with other params/config/data/children is stale
-    setup_sha256: str | None = None
+    component_sha256: str | None = Field(
+        default=None, validation_alias=AliasChoices("component_sha256", "setup_sha256")
+    )
     # the engine's data range the artifact was written in (component.context.data_start/data_end), stamped for the
     # same reason: a trading df computed on another range is stale, see TradingStore.materialize()
     data_start: datetime.date | None = None
@@ -259,7 +261,7 @@ class PFundComponentDataHandler(
             ArtifactType.checkpoint,
         )
         return PFundComponentDataMetadata(
-            setup_sha256=component._setup_sha256,
+            component_sha256=component._component_sha256,
             source_sha256=component._source_sha256,
             data_start=component.context.data_start,
             data_end=component.context.data_end,

@@ -500,7 +500,6 @@ class ComponentBaseMixin:
             datas.extend(data_store.get_datas())
         return datas
 
-    @ray_method
     def get_data_configs(self) -> dict[BaseData, DataConfig]:
         """Returns every data of the component with its config.
         A method (not the stores' get_config()) so that the engine can also call it on a remote component."""

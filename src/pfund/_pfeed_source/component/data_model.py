@@ -45,7 +45,7 @@ class PFundComponentDataModel(PFundBaseDataModel):
 
         Named after the component, which is unique across the engine, so a run has one dir per component,
         always holding its latest artifacts. Whether they still match the component is checked by their stamps,
-        see ComponentBaseMixin._setup_sha256.
+        see ArtifactMixin._component_sha256.
         The same as the namespace + name of the component's DatasetKey, see PFundComponentDataHandler._create_dataset_key().
         """
         return (
