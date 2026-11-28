@@ -36,6 +36,8 @@ from pfund_kit.style import TextStyle, cprint
 from pfund.backtest.cv.cross_validation import CrossValidator
 from pfund.backtest.cv.holdout import Holdout, _round_half_up
 
+type FoldNum = int
+
 
 @dataclass(frozen=True)
 class Fold:
@@ -91,7 +93,15 @@ class DatasetSplits:
     def num_folds(self) -> int:
         return len(self.folds)
 
-    def positions(self, part: SplitPart, fold: int | None = None) -> NDArray[np.int64]:
+    def is_training_set_only(self) -> bool:
+        """True if the whole grid is the train set, e.g. ``dataset_splits=100`` (the default),
+        or a holdout whose val and test round to empty.
+
+        With one part only, the split in use is known without engine.use_split(): it's ``train``.
+        """
+        return self.is_holdout and self.test.size == 0 and self.folds[0].val.size == 0
+
+    def positions(self, part: SplitPart, fold: FoldNum | None = None) -> NDArray[np.int64]:
         """Grid positions of one split part.
 
         Args:
@@ -125,7 +135,7 @@ class DatasetSplits:
         return getattr(self.folds[fold], part)
 
     def intervals(
-        self, part: SplitPart, fold: int | None = None
+        self, part: SplitPart, fold: FoldNum | None = None
     ) -> list[tuple[datetime.datetime, datetime.datetime]]:
         """Time intervals of one split part, ``[start, end)``, one per contiguous run of its grid bars.
 
@@ -147,7 +157,7 @@ class DatasetSplits:
         ]
 
     def row_indices(
-        self, X: IntoDataFrame, part: SplitPart, fold: int | None = None
+        self, X: IntoDataFrame, part: SplitPart, fold: FoldNum | None = None
     ) -> NDArray[np.int64]:
         """Positions of the rows of ``X`` that fall in one split part.
 

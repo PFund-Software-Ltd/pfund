@@ -23,45 +23,12 @@ from pfeed.enums import DataLayer
 from pfeed.io.base_io import BaseIO, DatasetKey
 from pfeed.io.blob_io import BlobIO
 from pfund_kit.utils.temporal import get_utc_now
-from pydantic import BaseModel as PydanticModel, Field
+from pydantic import Field
 
 from pfund._pfeed_source.base.data_handler import PFundBaseDataHandler
 from pfund._pfeed_source.data_category import PFundDataCategory
+from pfund.backtest._mixins.model_mixin import TrainedOn
 from pfund.enums import ArtifactType
-
-
-class TrainedOn(PydanticModel):
-    """The rows a model was trained on, stamped on its model and checkpoint artifacts.
-
-    The engine's data range alone doesn't say it: a model trained on the train set of
-    T1-T100 only saw e.g. T1-T70, see BacktestModelMixin._get_trained_on().
-    """
-
-    # the split part set by engine.use_split(), e.g. "train", None if the engine has no dataset_splits,
-    # i.e. trained on the whole data range
-    part: str | None = None
-    # the cross-validation fold, None under holdout or with no dataset_splits
-    fold: int | None = None
-    # the grid the split was cut on, e.g. "1d", None with no dataset_splits
-    split_resolution: str | None = None
-    # [start, end) of each contiguous run of the rows, a cross-validation fold may have gaps
-    intervals: list[tuple[datetime.datetime, datetime.datetime]]
-
-    @classmethod
-    def whole_range(
-        cls, data_start: datetime.date, data_end: datetime.date
-    ) -> TrainedOn:
-        """Trained on the whole data range, data_end inclusive."""
-        return cls(
-            intervals=[
-                (
-                    datetime.datetime.combine(data_start, datetime.time.min),
-                    datetime.datetime.combine(
-                        data_end + datetime.timedelta(days=1), datetime.time.min
-                    ),
-                )
-            ]
-        )
 
 
 class PFundComponentDataMetadata(BaseDataMetadata):

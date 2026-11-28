@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from sklearn.base import BaseEstimator
     from torch import Tensor
 
-    from pfund._pfeed_source.component.data_handler import TrainedOn
+    from pfund.backtest._mixins.model_mixin import TrainedOn
     from pfund.typing import Signals
 
     type UnderlyingModel = nn.Module | BaseEstimator | linen.Module | eqx.Module

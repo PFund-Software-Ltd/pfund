@@ -1,7 +1,10 @@
 """Dataset splitting for backtesting: holdout and cross-validation.
 
 Users pass ``dataset_splits`` (``DatasetSplitsInput``) to the engine; ``None`` means
-no split, the whole dataset is the training set.
+100% train, the whole dataset is the training set. There is always a split, so what a
+component ran on is always known: with 100% train the train set is in use by default,
+with any other split, call ``engine.use_split()`` before accessing a component's ``X``
+or saving a model.
 
 The grid is one bar per ``split_resolution`` (backtest engine settings) over the
 engine's data range. A sealed ``test`` tail is carved first, then ``folds`` are

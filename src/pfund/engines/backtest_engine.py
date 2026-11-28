@@ -7,7 +7,12 @@ if TYPE_CHECKING:
     from pfund_blocks.resolution import Resolution
 
     from pfund.backtest._mixins.backtest_mixin import BacktestMixin
-    from pfund.backtest.cv.dataset_splits import DatasetSplitsInput, SplitPart
+    from pfund.backtest.cv.dataset_splits import (
+        DatasetSplits,
+        DatasetSplitsInput,
+        FoldNum,
+        SplitPart,
+    )
     from pfund.backtest.cv.indexing import SplittableData
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel, UnderlyingModel
@@ -73,9 +78,11 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             dataset_splits:
                 how to split the dataset into train/val/test sets, e.g. a
                 three-digit ratio such as 721, a ratio dict, Holdout, or an
-                sklearn-compatible cross-validator. Defaults to None (no split),
-                i.e. the complete dataset is the training data. Dataset
-                splitting is only available in vectorized mode.
+                sklearn-compatible cross-validator. Defaults to None, i.e. 100% train
+                (same as 100), where the train set is in use without engine.use_split().
+                With any other split, select a split with engine.use_split() before
+                accessing a component's X or saving a model.
+                Dataset splitting is only available in vectorized mode.
         """
         env = Environment.BACKTEST
         super().__init__(
@@ -86,10 +93,16 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             mode=mode,
             dataset_splits=dataset_splits,
         )
+        if self.dataset_splits.is_training_set_only():
+            self.context.set_active_split(('train', None))
 
     @property
     def backtest_mode(self) -> BacktestMode:
         return self.context.mode
+
+    @property
+    def dataset_splits(self) -> DatasetSplits:
+        return self.context.dataset_splits
 
     @property
     def _dummy_strategy_name(self) -> str:
@@ -274,7 +287,7 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         cast("BacktestMixin", feature).set_as_backtestee()
         return feature
 
-    def use_split(self, part: SplitPart, fold: int | None = None) -> _SplitScope:
+    def use_split(self, part: SplitPart, fold: FoldNum | None = None) -> _SplitScope:
         """Sets the trading df of every component to its rows in one split part, so X (its features) holds that split.
 
         pfund's internal flow reads X (features df, backtest()), so it then works on that
@@ -308,16 +321,20 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
             # e.g. a child has no rows in the part: undo the components already split
             self.clear_split()
             raise
-        self.context.active_split = (part, fold)
+        self.context.set_active_split((part, fold))
         return _SplitScope(self)
 
     def clear_split(self) -> None:
         """Sets the trading df of every component back to the whole data range, ending use_split().
 
-        A no-op if no split is in use.
+        The split in use goes back to the default: train if it's the only part, otherwise none.
+        A no-op if use_split() isn't in use.
         """
         cast("BacktestMixin", self._backtestee)._clear_split()
-        self.context.active_split = None
+        if self.dataset_splits.is_training_set_only():
+            self.context.set_active_split(('train', None))
+        else:
+            self.context.set_active_split(None)
 
     def apply_split[DataT: SplittableData](self, data: DataT) -> DataT:
         """The rows of `data` in the split set by use_split(), i.e. row-aligned with X.
@@ -335,14 +352,9 @@ class BacktestEngine(BaseEngine[BacktestEngineSettings, BacktestEngineContext]):
         """
         from pfund.backtest.cv.indexing import validate_aligned
 
-        active_split = self.context.active_split
-        if active_split is None:
-            raise RuntimeError(
-                "no split is in use, call engine.use_split() before apply_split()"
-            )
+        part, fold = self.context.active_split
         backtestee = cast("BacktestMixin", self._backtestee)
         validate_aligned(data, backtestee._get_trading_df())
-        part, fold = active_split
         split_data = backtestee._take_split(data, part, fold)
         # use_split() has already rejected an empty split part
         assert split_data is not None

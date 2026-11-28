@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from functools import partial
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 if TYPE_CHECKING:
@@ -31,6 +33,7 @@ class TradingStore:
         # child components signals = component's feature columns
         self._features: dict[ColumnName, Any] = {}
         self._datalake: TableIO | None = None
+        self._datalake_factory: Callable[[], TableIO] | None = None
         self._blob_io: BlobIO | None = None
 
     @property
@@ -39,7 +42,9 @@ class TradingStore:
 
     @property
     def datalake(self) -> TableIO:
-        assert self._datalake is not None, "datalake has not been initialized"
+        if self._datalake is None:
+            assert self._datalake_factory is not None, "lakehouse has not been set up"
+            self._datalake = self._datalake_factory()
         return self._datalake
 
     @property
@@ -48,7 +53,7 @@ class TradingStore:
         return self._blob_io
 
     def setup_lakehouse(self) -> None:
-        """Sets up the lakehouse's IOs: the component's datalake (table IO) and the blob IO.
+        """Creates the blob IO and configures the table IO for initialization on first access.
 
         Called after the component's name is final, it is in the datalake's path:
         - <lakehouse_path>/<PFundBaseDataModel.RUNS_DIR_NAME>: the blob IO, with plain dataset dirs, i.e. runs/BACKTEST/...
@@ -87,7 +92,9 @@ class TradingStore:
         component_path = self._component._feed.create_data_model(
             self._component, ArtifactType.data
         ).component_path
-        self._datalake = DataLakeIO(
+        # DuckLakeIO creates its catalog (pfeed.db) on construction. Defer it
+        self._datalake_factory = partial(
+            DataLakeIO,
             base_path=posixpath.join(
                 lakehouse_path, component_path.as_posix(), self.TRADING_DF_DIR_NAME
             ),

@@ -3,50 +3,56 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast, override
 
 if TYPE_CHECKING:
-    from pfund._pfeed_source.component.data_handler import TrainedOn
     from pfund.components.models.model_base import BaseModel
 
 import datetime
 
+from pydantic import BaseModel as PydanticModel
+
 from pfund.backtest._mixins.backtest_mixin import BacktestMixin
+from pfund.backtest.cv.dataset_splits import FoldNum
 from pfund.enums import ArtifactType
 
 
+class TrainedOn(PydanticModel):
+    """The rows a model was trained on, stamped on its model and checkpoint artifacts.
+
+    The engine's data range alone doesn't say it: a model trained on the train set of
+    T1-T100 only saw e.g. T1-T70, see BacktestModelMixin._get_trained_on().
+    """
+
+    # the split part in use, e.g. "train", set by engine.use_split() or the default 100% train
+    part: str
+    # the cross-validation fold, None under holdout
+    fold: FoldNum | None = None
+    # the grid the split was cut on, e.g. "1d"
+    split_resolution: str
+    # [start, end) of each contiguous run of the rows, a cross-validation fold may have gaps
+    intervals: list[tuple[datetime.datetime, datetime.datetime]]
+
+
 class BacktestModelMixin(BacktestMixin):
-    """Backtest behavior specific to models, e.g. training detection and checkpoints.
+    """Backtest behavior specific to models, including training provenance and checkpoints.
 
     Adopted onto a model via ``BacktestModelMixin._adopt(model)``.
     """
 
-    _is_training: bool = False
-
-    def is_training(self) -> bool:
-        return self._is_training
-
     @override
     def _materialize(self):
-        # load first: super()._materialize() may predict on the fly, which needs the trained model
-        try:
-            # the mixin only ever runs as part of a model
-            cast("BaseModel", self).load()
-        except FileNotFoundError:
-            from pfund_kit.style import RichColor, TextStyle
-
-            # only the backtestee can be trained, a child model must already be trained
-            if not self._is_backtestee:
+        # Child models may need their weights to generate signals during build.
+        if not self._is_backtestee:
+            try:
+                self.load()
+            except FileNotFoundError:
                 raise FileNotFoundError(
                     f"No trained model found for model '{self.name}'. "
                 ) from None
-            else:
-                self.logger.warning(
-                    f"No trained model found for '{self.name}' — treating this run as a training session. "
-                    + "Fit your model, then call save() so future runs can load it and generate predictions.",
-                    style=TextStyle.BOLD + RichColor.YELLOW,
-                )
-                self._is_training = True
-        else:
-            self._warn_in_sample()
         super()._materialize()
+
+    def load(self) -> None:
+        """Loads saved weights and checks for overlap with the backtest data range."""
+        cast("BaseModel", super()).load()
+        self._warn_in_sample()
 
     def _get_in_sample_intervals(
         self,
@@ -103,41 +109,16 @@ class BacktestModelMixin(BacktestMixin):
         """What the model was trained on (BaseModel.trained_on), from the split set by engine.use_split(),
         set before it's stamped on a model or checkpoint artifact.
 
-        pfund doesn't see what fit() receives, so with dataset_splits on the engine the model must be
-        trained and saved under engine.use_split(), with engine.apply_split() for its target etc.
+        pfund doesn't see what fit() receives, so with dataset_splits beyond 100% train on the engine,
+        the model must be trained and saved under engine.use_split(), with engine.apply_split() for its target etc.
+        With 100% train (the default), the train set is in use without use_split().
 
         Raises:
-            RuntimeError: the engine has dataset_splits but no split is in use, i.e. it's unknown what
-                the model was trained on, and the whole data range would include the test set.
+            RuntimeError: no split is in use.
             ValueError: the split in use is the val or test set.
         """
-        from pfund._pfeed_source.component.data_handler import TrainedOn
-
         dataset_splits = self.dataset_splits
-        context = self.context
-        if dataset_splits is None:
-            from pfund_kit.style import RichColor, TextStyle
-
-            # no dataset_splits: assumed to be trained on the whole data range, pfund doesn't see fit()
-            assert context.data_start is not None and context.data_end is not None
-            self.logger.warning(
-                f"'{self.name}' is saved with no dataset_splits on the engine, so it's assumed to be trained on "
-                + f"the whole data range ({context.data_start} -> {context.data_end}). "
-                + "To make it explicit, pass dataset_splits=100 (100% train) to BacktestEngine() "
-                + "and save the model under engine.use_split('train')",
-                style=TextStyle.BOLD + RichColor.YELLOW,
-            )
-            return TrainedOn.whole_range(context.data_start, context.data_end)
-        if context.active_split is None:
-            raise RuntimeError(
-                f"'{self.name}' is saved with dataset_splits on the engine but no split in use, "
-                + "so what it was trained on is unknown, and the whole data range includes the test set. "
-                + "Train and save it under the split instead:\n"
-                + "    with engine.use_split('train'):\n"
-                + "        model.fit(model.X, engine.apply_split(y))\n"
-                + "        model.save()"
-            )
-        part, fold = context.active_split
+        part, fold = self.active_split
         if part in ("val", "test"):
             raise ValueError(
                 f"'{self.name}' is saved under engine.use_split({part!r}), "

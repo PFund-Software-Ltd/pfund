@@ -28,7 +28,7 @@ from sklearn.linear_model import LinearRegression
 import pfund as pf
 from pfund.backtest._mixins.backtest_mixin import BacktestMixin
 from pfund.backtest._mixins.feature_mixin import BacktestFeatureMixin
-from pfund.backtest._mixins.model_mixin import BacktestModelMixin
+from pfund.backtest._mixins.model_mixin import BacktestModelMixin, TrainedOn
 from pfund.backtest._mixins.strategy_mixin import (
     BacktestStrategyMixin,
     _split_df_into_time_chunks,
@@ -94,7 +94,7 @@ class TestInit:
     def test_defaults(self, engine: BacktestEngine):
         assert engine.env == Environment.BACKTEST
         assert engine.backtest_mode == BacktestMode.VECTORIZED
-        assert engine.context.dataset_splits is None
+        assert engine.dataset_splits.is_training_set_only()
         assert not engine.is_running()
 
     def test_mode_accepts_a_string(self):
@@ -993,6 +993,7 @@ def _seed_model(engine: BacktestEngine) -> Any:
     """A model as the backtestee with its trading df seeded, as if the engine had built it."""
     model = engine.add_model(_SplitModel(LinearRegression()), "1d", name="model")
     model.store.set_df(pl.DataFrame({"date": SPLIT_DATES, "x": list(range(10))}))
+    model._is_built = True
     engine._is_built = True
     return model
 
@@ -1013,7 +1014,7 @@ class TestUseSplit:
         split_engine.use_split("train")
 
         assert _x_values(split_model) == list(range(7))
-        assert split_engine.context.active_split == ("train", None)
+        assert split_engine.context._active_split == ("train", None)
 
     def test_clear_split_restores_the_whole_range(
         self, split_engine: BacktestEngine, split_model: Any
@@ -1021,15 +1022,17 @@ class TestUseSplit:
         split_engine.use_split("test")
         split_engine.clear_split()
 
-        assert _x_values(split_model) == list(range(10))
-        assert split_engine.context.active_split is None
+        assert split_model.df.get_column("x").to_list() == list(range(10))
+        assert split_engine.context._active_split is None
+        with pytest.raises(RuntimeError, match=r"call engine.use_split\(\)"):
+            _x_values(split_model)
 
     def test_clear_split_without_a_split_is_a_no_op(
         self, split_engine: BacktestEngine, split_model: Any
     ):
         split_engine.clear_split()
 
-        assert _x_values(split_model) == list(range(10))
+        assert split_model.df.get_column("x").to_list() == list(range(10))
 
     def test_switching_splits_maps_on_the_whole_range(
         self, split_engine: BacktestEngine, split_model: Any
@@ -1045,8 +1048,8 @@ class TestUseSplit:
         with split_engine.use_split("train"):
             assert _x_values(split_model) == list(range(7))
 
-        assert _x_values(split_model) == list(range(10))
-        assert split_engine.context.active_split is None
+        assert split_model.df.get_column("x").to_list() == list(range(10))
+        assert split_engine.context._active_split is None
 
     def test_context_manager_clears_on_error(
         self, split_engine: BacktestEngine, split_model: Any
@@ -1054,8 +1057,8 @@ class TestUseSplit:
         with pytest.raises(RuntimeError, match="boom"), split_engine.use_split("train"):
             raise RuntimeError("boom")
 
-        assert _x_values(split_model) == list(range(10))
-        assert split_engine.context.active_split is None
+        assert split_model.df.get_column("x").to_list() == list(range(10))
+        assert split_engine.context._active_split is None
 
 
 class TestApplySplit:
@@ -1120,16 +1123,15 @@ class TestTrainedOn:
         ):
             split_model._get_trained_on()
 
-    def test_without_dataset_splits_it_warns(self, mocker: MockerFixture):
+    def test_without_dataset_splits_train_is_in_use(self):
         engine = BacktestEngine(
             data_range=("2024-01-01", "2024-01-10"), settings=BacktestEngineSettings()
         )
         model = _seed_model(engine)
-        warning = mocker.patch.object(model.logger, "warning")
 
-        model._get_trained_on()
-
-        assert "dataset_splits=100" in warning.call_args.args[0]
+        assert engine.context._active_split == ("train", None)
+        assert _x_values(model) == list(range(10))
+        assert model._get_trained_on().part == "train"
 
     def test_all_train_split_is_explicit(self, mocker: MockerFixture):
         engine = BacktestEngine(
@@ -1159,16 +1161,14 @@ class TestTrainedOn:
 
         trained_on = model._get_trained_on()
 
-        assert trained_on.part is None
+        assert trained_on.part == "train"
         assert trained_on.intervals == [
             (SPLIT_DATES[0], SPLIT_DATES[-1] + datetime.timedelta(days=1))
         ]
 
 
 def _trained_on(*intervals: tuple[datetime.datetime, datetime.datetime]) -> Any:
-    from pfund._pfeed_source.component.data_handler import TrainedOn
-
-    return TrainedOn(part="train", intervals=list(intervals))
+    return TrainedOn(part="train", split_resolution="1d", intervals=list(intervals))
 
 
 JAN = [datetime.datetime(2024, 1, day) for day in range(1, 12)]  # JAN[0] = 2024-01-01

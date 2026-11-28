@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
-    from pfund.backtest.cv.dataset_splits import DatasetSplitsInput, SplitPart
+    from pfund.backtest.cv.dataset_splits import DatasetSplitsInput, FoldNum, SplitPart
     from pfund.engines.base_engine import DataRangeDict
 
 import os
@@ -13,6 +13,7 @@ from pfund_blocks.enums.env import Environment
 from pfund_blocks.resolution import Resolution
 
 from pfund.backtest.cv.dataset_splits import DatasetSplits
+from pfund.backtest.cv.holdout import Holdout
 from pfund.engines.contexts.base_engine_context import BaseEngineContext
 from pfund.engines.settings.backtest_engine_settings import BacktestEngineSettings
 from pfund.enums import BacktestMode
@@ -58,15 +59,25 @@ class BacktestEngineContext(BaseEngineContext[BacktestEngineSettings]):
                     os.path.dirname(pfund_kit.__file__),
                 ),
             )
-        # None means no split: the whole dataset is the training set
-        self.dataset_splits: DatasetSplits | None = None
-        if dataset_splits is not None:
-            assert self.data_start is not None and self.data_end is not None
-            self.dataset_splits = DatasetSplits(
-                dataset_splits,
-                data_start=self.data_start,
-                data_end=self.data_end,
-                split_resolution=self.settings.split_resolution,
+        # None means 100% train, so there's always a split to record what a component ran on
+        assert self.data_start is not None and self.data_end is not None
+        self.dataset_splits = DatasetSplits(
+            Holdout(train=1.0, val=0.0, test=0.0)
+            if dataset_splits is None
+            else dataset_splits,
+            data_start=self.data_start,
+            data_end=self.data_end,
+            split_resolution=self.settings.split_resolution,
+        )
+        self._active_split: tuple[SplitPart, FoldNum | None] | None = None
+
+    def set_active_split(self, split: tuple[SplitPart, FoldNum | None] | None):
+        self._active_split = split
+
+    @property
+    def active_split(self) -> tuple[SplitPart, FoldNum | None]:
+        if self._active_split is None:
+            raise RuntimeError(
+                "No dataset split is active. Call engine.use_split() to select 'train', 'val' or 'test"
             )
-        # the (part, fold) set by engine.use_split(), None when X holds the whole data range
-        self.active_split: tuple[SplitPart, int | None] | None = None
+        return self._active_split

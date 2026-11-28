@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund_blocks.resolution import Resolution
 
-    from pfund.backtest.cv.dataset_splits import DatasetSplits, SplitPart
+    from pfund.backtest.cv.dataset_splits import DatasetSplits, FoldNum, SplitPart
     from pfund.components.actor_proxy import ActorProxy
     from pfund.components.features.feature_base import BaseFeature
     from pfund.components.models.model_base import BaseModel
@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 from pathlib import Path
 
 import polars as pl
+from pfund_blocks.enums import DataCategory
 from pfund_kit.style import RichColor, TextStyle
 
 from pfund.backtest._mixins.portfolio_backtest_mixin import PortfolioBacktestMixin
@@ -136,14 +137,35 @@ class BacktestMixin(ComponentMixin):
         return self.context.mode
 
     @property
-    def dataset_splits(self) -> DatasetSplits | None:
+    def dataset_splits(self) -> DatasetSplits:
         return self.context.dataset_splits
+
+    @property
+    def active_split(self) -> tuple[SplitPart, FoldNum | None]:
+        return self.context.active_split
+
+    @override
+    def get_df(
+        self,
+        *,
+        kind: Literal["data", "features", "signals", "trading", "full"] = "full",
+        data_category: DataCategory | str | None = DataCategory.MARKET_DATA,
+        window_size: int | None = None,
+    ) -> pl.DataFrame:
+        """Requires an active split when reading a built component's features."""
+        # During build, child components compute signals over the full range.
+        if kind == "features" and self._is_built:
+            _ = self.context.active_split
+        return super().get_df(
+            kind=kind, data_category=data_category, window_size=window_size
+        )
 
     def _assert_split_resolution(self) -> None:
         """Raises if split boundaries could fall inside one of this component's bars."""
         from pfund_blocks.resolution import Resolution
 
-        if self.dataset_splits is None:
+        # no cut inside the data range, so no bar can straddle one
+        if self.dataset_splits.is_training_set_only():
             return
         split_resolution = Resolution(self.settings.split_resolution)
         if split_resolution > self.resolution:
@@ -161,28 +183,22 @@ class BacktestMixin(ComponentMixin):
         return self.get_df(kind="trading")
 
     def _take_split[DataT: SplittableData](
-        self, data: DataT, part: SplitPart, fold: int | None = None
+        self, data: DataT, part: SplitPart, fold: FoldNum | None = None
     ) -> DataT | None:
         """Rows of ``data`` in one split part, None if empty.
 
         ``data`` is row-aligned with the unsplit trading df, whose dates map its rows onto the split grid,
         so the result doesn't depend on which split use_split() has set.
         """
-        dataset_splits = self.dataset_splits
-        assert dataset_splits is not None, "no dataset_splits on the backtest engine"
-        rows = dataset_splits.row_indices(self._get_trading_df(), part, fold)
+        rows = self.dataset_splits.row_indices(self._get_trading_df(), part, fold)
         return None if rows.size == 0 else take_rows(data, rows)
 
-    def _use_split(self, part: SplitPart, fold: int | None = None) -> None:
+    def _use_split(self, part: SplitPart, fold: FoldNum | None = None) -> None:
         """Sets the trading df of this component and its children to their rows in one split part, so X (its features) holds that split.
 
         Internal, called by BacktestEngine.use_split(): the split is engine state,
         so a component never sits on a different split from its parent.
         """
-        if self.dataset_splits is None:
-            raise ValueError(
-                "no dataset_splits on the backtest engine, pass dataset_splits=... to BacktestEngine()"
-            )
         # raises if the trading df is not ready, i.e. the engine hasn't run yet
         trading_df = self._get_trading_df()
         split_df = self._take_split(trading_df, part, fold)
